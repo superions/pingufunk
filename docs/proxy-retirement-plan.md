@@ -1,4 +1,4 @@
-# RundfunkArr ohne Kompatibilitätsproxy
+# Pingufunk: RundfunkArr ohne Kompatibilitätsproxy
 
 ## Ziel und Arbeitsweise
 
@@ -8,7 +8,8 @@ separates Codex-Projekt. Bevorzugt werden kleine Änderungen, die auch im
 Originalprojekt übernommen werden können. Ein dauerhafter Fork ist nur der
 Rückfallweg, falls Upstream Änderungen nicht übernimmt.
 
-- Fork: https://github.com/superions/rundfunkarr
+- Projektname in Codex und GitHub: `pingufunk`.
+- Fork: https://github.com/superions/pingufunk
 - Original: https://github.com/rundfunkarr/rundfunkarr
 - Ausgangspunkt am 28.09.2026: `a3b02a6e6ad827d6483700480b9bfbcc59a5823c`
 - Versionsangabe in `package.json`: `1.3.0`; Node.js mindestens 24.

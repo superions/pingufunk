@@ -1,4 +1,4 @@
-# RundfunkArr fork development
+# Pingufunk (RundfunkArr fork) development
 
 ## Purpose
 
@@ -9,7 +9,7 @@ before implementing a workaround: some historical defects are already fixed.
 
 ## Repository workflow
 
-- `origin`: `superions/rundfunkarr`; `upstream`: `rundfunkarr/rundfunkarr`.
+- `origin`: `superions/pingufunk`; `upstream`: `rundfunkarr/rundfunkarr`.
 - Keep `main` compatible with upstream. Work on focused `codex/<topic>` branches.
 - Prefer small, upstreamable commits and regression tests over a permanent fork.
 - Follow `CONTRIBUTING.md`: German documentation, English code/comments and
