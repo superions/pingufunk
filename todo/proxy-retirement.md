@@ -55,7 +55,7 @@ erledigte Implementierung.
 Ergebnis: eine eigenständig nutzbare Testbasis für native Fixes. Keine
 Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
 
-- [ ] **P00.1 — Dauerhafte Charakterisierung mit echten Consumerfällen.** In
+- [x] **P00.1 — Dauerhafte Charakterisierung mit echten Consumerfällen.** In
       `src/services/newznab.test.ts`, `mediathek.test.ts` und passenden neuen
       Tests an den jeweiligen vorhandenen Ownern A1–A6 synthetisch reproduzieren,
       A7 als positiven ID-Episodenfilter sichern. Route-/RSS-/NZB-Verknüpfung,
@@ -64,6 +64,10 @@ Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
       jeweiligen Fixpunkten in Soll-Regressionen drehen. Abnahme: sieben belegte
       Fälle ohne Netz/Live-DB reproduzierbar; bestehende Suite bleibt unverändert
       belastbar, kein Fix bereits behauptet.
+      Abgenommen am 28.09.2026: A1–A6 charakterisiert, A7 positiv samt
+      Ausschluss der Nachbarfolge geprüft; Newznab-Route, RSS und NZB-Parser
+      synthetisch verbunden. Der Pfadtest dokumentiert die noch offene
+      Producer-/Parserabweichung für P02.3.
 - [ ] **P00.2 — Fork-eigene, nicht publizierende Verifikation.**
       `.github/workflows/ci.yml`, `docker-build.yml`, `package.json` und
       `vitest.config.ts` gemeinsam reviewen; nutzbare eigene Runner für Test-CI

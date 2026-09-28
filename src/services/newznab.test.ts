@@ -331,3 +331,80 @@ describe("generateGenericRssItems - edge cases", () => {
     expect(items[0].guid.value).toBe("https://example.com/video#720p");
   });
 });
+
+describe("P00 historical release characterizations", () => {
+  it("characterizes A1: Staffel 2 with only a 2/6 fraction is mislabeled as season 1", () => {
+    const [item] = generateGenericRssItems(
+      {
+        channel: "ARD",
+        topic: "Example Show",
+        title: "Example - Staffel 2 (2/6)",
+        description: "Synthetic characterization input",
+        filmlisteTimestamp: 1_700_000_000,
+        duration: 2700,
+        size: 1_000_000_000,
+        url_website: "https://example.org/show/episode-2",
+        url_video: "https://example.org/episode-2-720.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      },
+      "720p"
+    );
+
+    expect(item.title).toContain("Example.Show.S01E02");
+    expect(item.attributes.find((attribute) => attribute.name === "season")).toEqual({
+      name: "season",
+      value: "01",
+    });
+    expect(item.attributes.find((attribute) => attribute.name === "episode")).toEqual({
+      name: "episode",
+      value: "02",
+    });
+  });
+
+  it("characterizes A2: an ARTE.FR release is labeled GERMAN without language evidence", () => {
+    const [item] = generateGenericRssItems(
+      {
+        channel: "ARTE.FR",
+        topic: "Example Show",
+        title: "Example episode",
+        description: "Synthetic French-language characterization input",
+        filmlisteTimestamp: 1_700_000_000,
+        duration: 2700,
+        size: 1_000_000_000,
+        url_website: "https://www.arte.tv/fr/videos/example",
+        url_video: "https://example.org/example-720.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      },
+      "720p"
+    );
+
+    expect(item.title).toContain("GERMAN");
+    expect(item.comments).toContain("/fr/videos/");
+  });
+
+  it("characterizes A3: different same-quality URLs receive the same GUID", () => {
+    const source = {
+      channel: "ARD",
+      topic: "Example Show",
+      title: "Example episode",
+      description: "Synthetic rendition characterization input",
+      filmlisteTimestamp: 1_700_000_000,
+      duration: 2700,
+      size: 1_000_000_000,
+      url_website: "https://example.org/show/episode-1",
+      url_video: "https://example.org/edition-a-720.mp4",
+      url_video_low: "",
+      url_video_hd: "",
+    };
+    const [firstEdition] = generateGenericRssItems(source, "720p");
+    const [secondEdition] = generateGenericRssItems(
+      { ...source, url_video: "https://example.org/edition-b-720.mp4" },
+      "720p"
+    );
+
+    expect(firstEdition.link).not.toBe(secondEdition.link);
+    expect(firstEdition.guid).toEqual(secondEdition.guid);
+  });
+});

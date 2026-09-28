@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { parseStringPromise } from "xml2js";
+import type { ApiResultItem } from "@/types";
+import { convertItemsToRss, generateGenericRssItems } from "@/services/newznab";
+import { parseNzbContent } from "@/services/download";
+import { GET as downloadNzb } from "./fake_nzb_download/route";
 
 const mediathekMocks = vi.hoisted(() => ({
   fetchSearchResultsById: vi.fn(),
@@ -33,6 +38,80 @@ beforeEach(() => {
 });
 
 describe("Newznab indexer validation", () => {
+  it("passes TVDB, season and episode coordinates from the indexer route to its owner", async () => {
+    const show = {
+      id: 12345,
+      name: "Example Show",
+      germanName: "Beispielserie",
+      aliases: [],
+      episodes: [],
+    };
+    showMocks.getShowInfoByTvdbId.mockResolvedValue(show);
+    mediathekMocks.fetchSearchResultsById.mockResolvedValue(EMPTY_RSS);
+
+    const response = await GET(
+      new NextRequest(
+        "http://localhost/api/newznab/api?t=tvsearch&tvdbid=12345&season=02&ep=2&limit=25&offset=5"
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(showMocks.getShowInfoByTvdbId).toHaveBeenCalledWith(12345);
+    expect(mediathekMocks.fetchSearchResultsById).toHaveBeenCalledWith(show, "02", "2", 25, 5);
+    expect(await response.text()).toBe(EMPTY_RSS);
+  });
+
+  it("characterizes the Newznab RSS to NZB route and queue-parser boundary", async () => {
+    const source: ApiResultItem = {
+      channel: "ARD",
+      topic: "Example Show",
+      title: "Episode with a tricky URL",
+      description: "Synthetic release identity",
+      filmlisteTimestamp: 1_700_000_000,
+      duration: 2700,
+      size: 1_000_000_000,
+      url_website: "https://example.org/show/episode-1",
+      url_video: "https://example.org/a--b/~~~.mp4?quality=720p",
+      url_video_low: "",
+      url_video_hd: "",
+    };
+    const [release] = generateGenericRssItems(source, "720p");
+    const rss = convertItemsToRss([release], 100, 0);
+    mediathekMocks.fetchSearchResultsByString.mockResolvedValue(rss);
+
+    const searchResponse = await GET(
+      new NextRequest("http://localhost/api/newznab/api?t=search&q=Example")
+    );
+    const searchXml = await searchResponse.text();
+    const parsedRss = await parseStringPromise(searchXml);
+    const rssItem = parsedRss.rss.channel[0].item[0];
+    const enclosureUrl = rssItem.enclosure[0].$.url as string;
+    const downloadResponse = await downloadNzb(new NextRequest(`http://localhost${enclosureUrl}`));
+    const nzbContent = await downloadResponse.text();
+
+    expect(searchResponse.status).toBe(200);
+    expect(rssItem.title[0]).toBe(release.title);
+    expect(rssItem.link[0]).toBe(source.url_video);
+    expect(downloadResponse.status).toBe(200);
+    expect(nzbContent).toContain(Buffer.from(release.title).toString("base64"));
+    expect(nzbContent).toContain(Buffer.from(source.url_video).toString("base64"));
+    // P02.3 owns closing this existing gap: the queue parser requires a filename attribute.
+    expect(parseNzbContent(nzbContent)).toBeNull();
+  });
+
+  it("returns an HTTP error when the search owner rejects", async () => {
+    mediathekMocks.fetchSearchResultsByString.mockRejectedValue(
+      new Error("synthetic provider failure")
+    );
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab/api?t=search&q=Example")
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "synthetic provider failure" });
+  });
+
   it("routes t=movie text queries through provider-aware movie search", async () => {
     mediathekMocks.fetchMovieSearchByQuery.mockResolvedValue(EMPTY_RSS);
     const response = await GET(
