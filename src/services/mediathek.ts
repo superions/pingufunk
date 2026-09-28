@@ -1,7 +1,8 @@
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
-import { queryContent } from "./content-search";
+import { getConfiguredLanguagePolicy, queryContent } from "./content-search";
+import { selectLanguageVariants } from "./language-editions";
 import { getShowInfoByTvdbId } from "./shows";
 import {
   ensureRulesetsLoaded,
@@ -14,6 +15,8 @@ import {
   generateRssItems,
   generateMovieRssItems,
   generateGenericRssItems,
+  applyLanguageEdition,
+  buildReleaseGuid,
   convertItemsToRss,
   serializeRss,
   getEmptyRssResult,
@@ -772,8 +775,9 @@ async function queryTvSearchCandidates(context: TvSearchContext): Promise<ApiRes
     if (!uniqueCandidates.has(identity)) uniqueCandidates.set(identity, item);
   }
 
-  return [...uniqueCandidates.values()].sort(
-    (first, second) => second.filmlisteTimestamp - first.filmlisteTimestamp
+  return selectLanguageVariants(
+    [...uniqueCandidates.values()],
+    await getConfiguredLanguagePolicy()
   );
 }
 
@@ -1069,18 +1073,13 @@ export async function fetchMovieSearchResults(
   const resultsPerTerm = await Promise.all(searchTerms.map(fetchForTerm));
   const hasFailedTerm = resultsPerTerm.some((results) => results === null);
 
-  // Merge results, avoiding duplicates by URL
-  const allResults: ApiResultItem[] = [];
-  const existingUrls = new Set<string>();
+  // Merge search terms before choosing the best edition and deduplicating media URLs.
+  const collectedResults: ApiResultItem[] = [];
   for (const results of resultsPerTerm) {
     if (results === null) continue;
-    for (const result of results) {
-      if (!existingUrls.has(result.url_video)) {
-        existingUrls.add(result.url_video);
-        allResults.push(result);
-      }
-    }
+    collectedResults.push(...results);
   }
+  const allResults = selectLanguageVariants(collectedResults, await getConfiguredLanguagePolicy());
 
   if (allResults.length === 0) {
     console.log(`[Mediathek] No results found for movie`);
@@ -1123,7 +1122,7 @@ export async function fetchMovieSearchResults(
     `[Mediathek] Generated ${newznabItems.length} Newznab items for movie (quality: ${quality})`
   );
 
-  const response = convertItemsToRss(newznabItems, limit, offset);
+  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
   if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
   return response;
 }
@@ -1264,7 +1263,10 @@ export async function fetchMovieSearchByQuery(
     }
 
     for (const q of qualities) {
-      const releaseTitle = `${baseTitle}.${year}.GERMAN.${q.qualityName}.WEB.h264-MEDiATHEK`;
+      const releaseTitle = applyLanguageEdition(
+        `${baseTitle}.${year}.${q.qualityName}.WEB.h264-MEDiATHEK`,
+        item
+      );
       const adjustedSize = Math.floor(size * q.sizeMultiplier);
 
       const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: releaseTitle, url: q.url });
@@ -1273,7 +1275,12 @@ export async function fetchMovieSearchByQuery(
         title: releaseTitle,
         guid: {
           isPermaLink: true,
-          value: `${item.url_website || q.url}#movie-${q.qualityName}`,
+          value: buildReleaseGuid(
+            item,
+            q.qualityName,
+            q.url,
+            `movie-text:${tmdbMovie?.tmdbId ?? "unmatched"}:${cleanedQuery}:${year}`
+          ),
         },
         link: q.url,
         comments: item.url_website || "",
@@ -1299,7 +1306,7 @@ export async function fetchMovieSearchByQuery(
     `[Mediathek] Generated ${newznabItems.length} Newznab items for movie query (quality: ${quality})`
   );
 
-  const response = convertItemsToRss(newznabItems, limit, offset);
+  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
   mediathekCache.set(cacheKey, { response });
   return response;
 }

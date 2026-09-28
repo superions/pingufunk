@@ -7,7 +7,7 @@ import {
 } from "./language-policy";
 
 describe("versioned language policy", () => {
-  it("defaults uncertain audio and legacy variants off while allowing proven German variants", () => {
+  it("defaults optional editions conservatively while keeping unknown legacy releases neutral-visible", () => {
     expect(DEFAULT_LANGUAGE_POLICY).toEqual({
       version: 1,
       includeOriginalAudio: false,
@@ -15,7 +15,7 @@ describe("versioned language policy", () => {
       includeAudioDescription: true,
       includeSignLanguage: true,
       includeClearSpeech: true,
-      includeUnverifiedLegacy: false,
+      includeUnverifiedLegacy: true,
     });
   });
 

@@ -197,9 +197,7 @@ export async function convertMp4ToMkv(
     // FFmpeg arguments:
     // -i input: input file
     // -map 0:v -map 0:a: copy video and audio streams
-    // -c copy: stream copy (no re-encoding)
-    // -metadata:s:v:0 language=ger: set German language for video
-    // -metadata:s:a:0 language=ger: set German language for audio
+    // -c copy: stream copy preserves any source track metadata without inventing language.
     const args = [
       "-i",
       mp4Path,
@@ -209,10 +207,6 @@ export async function convertMp4ToMkv(
       "0:a",
       "-c",
       "copy",
-      "-metadata:s:v:0",
-      "language=ger",
-      "-metadata:s:a:0",
-      "language=ger",
       "-y", // Overwrite output
       mkvPath,
     ];
@@ -289,6 +283,8 @@ export async function mergeVideoAudio(
   }
 
   return new Promise((resolve) => {
+    // The HLS consumer selects the audio stream but has no language evidence;
+    // stream-copy its metadata rather than assigning a synthetic German tag.
     const args = [
       "-i",
       videoPath,

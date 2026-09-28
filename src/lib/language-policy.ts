@@ -6,6 +6,15 @@
 export const LANGUAGE_POLICY_SETTING_KEY = "matching.languagePolicy";
 export const LANGUAGE_POLICY_VERSION = 1 as const;
 
+/** Recognize an explicit German language code/name; source locale is not evidence. */
+export function isGermanLanguageCode(value: unknown): boolean {
+  if (typeof value !== "string" || !value.trim()) return false;
+  const normalized = value.trim().replaceAll("_", "-").toLowerCase();
+  return (
+    /^(?:de|deu|ger)(?:-|$)/.test(normalized) || normalized === "german" || normalized === "deutsch"
+  );
+}
+
 export interface LanguagePolicy {
   version: typeof LANGUAGE_POLICY_VERSION;
   includeOriginalAudio: boolean;
@@ -23,7 +32,7 @@ export const DEFAULT_LANGUAGE_POLICY: LanguagePolicy = {
   includeAudioDescription: true,
   includeSignLanguage: true,
   includeClearSpeech: true,
-  includeUnverifiedLegacy: false,
+  includeUnverifiedLegacy: true,
 };
 
 const POLICY_BOOLEAN_KEYS = [

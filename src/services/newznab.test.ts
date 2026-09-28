@@ -150,6 +150,7 @@ describe("Newznab validation categories", () => {
     expect(xml).toContain('name="category" value="2040"');
     expect(xml).toContain('name="category" value="2000"');
     expect(xml).not.toContain('name="category" value="5000"');
+    expect(xml).not.toContain(".GERMAN.");
   });
 });
 
@@ -277,16 +278,16 @@ describe("generateGenericRssItems", () => {
 
     expect(items).toHaveLength(3);
     const guids = items.map((i) => i.guid.value);
-    expect(guids.some((g) => g.endsWith("#1080p"))).toBe(true);
-    expect(guids.some((g) => g.endsWith("#720p"))).toBe(true);
-    expect(guids.some((g) => g.endsWith("#480p"))).toBe(true);
+    expect(guids.some((g) => /#1080p-[a-f0-9]{20}$/.test(g))).toBe(true);
+    expect(guids.some((g) => /#720p-[a-f0-9]{20}$/.test(g))).toBe(true);
+    expect(guids.some((g) => /#480p-[a-f0-9]{20}$/.test(g))).toBe(true);
   });
 
   it("picks only the highest quality with preference best", () => {
     const items = generateGenericRssItems(baseItem, "best");
 
     expect(items).toHaveLength(1);
-    expect(items[0].guid.value).toBe("https://example.com/video#1080p");
+    expect(items[0].guid.value).toMatch(/^https:\/\/example\.com\/video#1080p-[a-f0-9]{20}$/);
   });
 
   it("parses an episode-only title without inventing a season", () => {
@@ -355,7 +356,7 @@ describe("generateGenericRssItems - edge cases", () => {
     const items = generateGenericRssItems(only720, "all");
 
     expect(items).toHaveLength(1);
-    expect(items[0].guid.value).toBe("https://example.com/video#720p");
+    expect(items[0].guid.value).toMatch(/^https:\/\/example\.com\/video#720p-[a-f0-9]{20}$/);
   });
 });
 
@@ -483,13 +484,13 @@ describe("P01.1 explicit episode coordinates", () => {
 });
 
 describe("P00 historical release characterizations", () => {
-  it("characterizes A2: an ARTE.FR release is labeled GERMAN without language evidence", () => {
+  it("fixes A2: a neutral ARTE.FR legacy release is visible without a false GERMAN label", () => {
     const [item] = generateGenericRssItems(
       {
         channel: "ARTE.FR",
         topic: "Example Show",
-        title: "Example episode",
-        description: "Synthetic French-language characterization input",
+        title: "Example episode GERMAN",
+        description: "Synthetic unverified language characterization input",
         filmlisteTimestamp: 1_700_000_000,
         duration: 2700,
         size: 1_000_000_000,
@@ -501,11 +502,11 @@ describe("P00 historical release characterizations", () => {
       "720p"
     );
 
-    expect(item.title).toContain("GERMAN");
+    expect(item.title).not.toMatch(/(?:^|\.)GERMAN(?:\.|$)/);
     expect(item.comments).toContain("/fr/videos/");
   });
 
-  it("characterizes A3: different same-quality URLs receive the same GUID", () => {
+  it("fixes A3: distinct same-quality source renditions receive distinct stable GUIDs", () => {
     const source = {
       channel: "ARD",
       topic: "Example Show",
@@ -526,7 +527,133 @@ describe("P00 historical release characterizations", () => {
     );
 
     expect(firstEdition.link).not.toBe(secondEdition.link);
-    expect(firstEdition.guid).toEqual(secondEdition.guid);
+    expect(firstEdition.guid).not.toEqual(secondEdition.guid);
+    expect(generateGenericRssItems(source, "720p")[0].guid).toEqual(firstEdition.guid);
+  });
+
+  it("carries proven audio language through RSS and its encoded fake NZB title", () => {
+    const [item] = generateGenericRssItems(
+      {
+        channel: "ARD",
+        topic: "Example Show",
+        title: "Example episode",
+        description: "Synthetic German audio evidence",
+        filmlisteTimestamp: 1_700_000_000,
+        duration: 2700,
+        size: 1_000_000_000,
+        audioLanguage: "de",
+        url_website: "https://example.org/show/episode-1",
+        url_video: "https://example.org/episode-720.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      },
+      "720p"
+    );
+    const encodedTitle = new URL(item.enclosure.url, "http://localhost").searchParams.get(
+      "encodedTitle"
+    );
+
+    expect(item.title).toContain("GERMAN");
+    expect(Buffer.from(encodedTitle!, "base64").toString("utf-8")).toBe(item.title);
+  });
+
+  it("normalizes original-audio and subtitle source markers into neutral release tokens", () => {
+    const [item] = generateGenericRssItems(
+      {
+        channel: "ARTE.FR",
+        topic: "Example Show",
+        title: "Example episode (OV, deutsche Untertitel)",
+        description: "Synthetic OV subtitle edition",
+        filmlisteTimestamp: 1_700_000_000,
+        duration: 2700,
+        size: 1_000_000_000,
+        url_website: "https://www.arte.tv/fr/videos/123456/example",
+        url_video: "https://example.org/episode-720.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      },
+      "720p"
+    );
+
+    expect(item.title).toContain(".OV.SUBBED.720p");
+    expect(item.title).not.toContain("GERMAN");
+    expect(item.title).not.toContain("deutsche.Untertitel");
+  });
+
+  it("applies the same evidence rule to matched TV and movie RSS producers", () => {
+    const item: ApiResultItem = {
+      channel: "ARD",
+      topic: "Example Show",
+      title: "Example episode",
+      description: "Synthetic RSS item",
+      filmlisteTimestamp: 1_700_000_000,
+      duration: 2700,
+      size: 1_000_000_000,
+      url_website: "https://example.org/example",
+      url_video: "https://example.org/example-720.mp4",
+      url_video_low: "",
+      url_video_hd: "",
+    };
+    const movieData: TmdbMovieData = {
+      tmdbId: 123,
+      imdbId: null,
+      title: "Example Movie",
+      germanTitle: "Example Movie",
+      runtime: 60,
+      releaseDate: "2024-01-01",
+    };
+    const episodeInfo: MatchedEpisodeInfo = {
+      episode: {
+        name: "Episode",
+        aired: new Date("2024-01-01T00:00:00Z"),
+        runtime: 45,
+        seasonNumber: 1,
+        episodeNumber: 1,
+      },
+      item,
+      showName: "Example Show",
+      matchedTitle: "Example Show",
+      tvdbId: 123,
+    };
+    const movieMatch = { item, score: 100, titleMatch: "exact" as const, durationDiff: 0 };
+    const neutralTv = generateRssItems(episodeInfo, "720p")[0];
+    const neutralMovie = generateMovieRssItems(movieMatch, movieData, "720p")[0];
+    const provenItem = { ...item, audioLanguage: "de" };
+    const germanTv = generateRssItems({ ...episodeInfo, item: provenItem }, "720p")[0];
+    const germanMovie = generateMovieRssItems(
+      { ...movieMatch, item: provenItem },
+      movieData,
+      "720p"
+    )[0];
+
+    expect(neutralTv.title).not.toContain("GERMAN");
+    expect(neutralMovie.title).not.toContain("GERMAN");
+    expect(germanTv.title).toContain("GERMAN");
+    expect(germanMovie.title).toContain("GERMAN");
+  });
+
+  it("keeps 720p and 1080p as separate GUID identities", () => {
+    const items = generateGenericRssItems(
+      {
+        channel: "ARD",
+        topic: "Example Show",
+        title: "Example episode",
+        description: "Synthetic multi-quality input",
+        filmlisteTimestamp: 1_700_000_000,
+        duration: 2700,
+        size: 1_000_000_000,
+        url_website: "https://example.org/show/episode-1",
+        url_video: "https://example.org/episode-720.mp4",
+        url_video_low: "https://example.org/episode-480.mp4",
+        url_video_hd: "https://example.org/episode-1080.mp4",
+      },
+      "all"
+    );
+
+    expect(items.map((item) => item.title)).toEqual(
+      expect.arrayContaining([expect.stringContaining("720p"), expect.stringContaining("1080p")])
+    );
+    expect(new Set(items.map((item) => item.guid.value)).size).toBe(items.length);
   });
 });
 

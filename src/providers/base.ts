@@ -1,4 +1,5 @@
 import { getSetting } from "@/lib/settings";
+import { isGermanLanguageCode } from "@/lib/language-policy";
 import { isHlsUrl } from "@/server/ytdlp";
 import type {
   ContentProvider,
@@ -106,12 +107,13 @@ export abstract class BaseProvider implements ContentProvider {
    * Generate a standardized filename for downloads
    */
   protected generateFilename(item: ProviderContentItem, quality: string): string {
-    // Format: Topic.Title.GERMAN.Quality.WEB.h264-PROVIDER
+    // Provider locale and channel do not prove track language; unknown stays neutral.
     const sanitizedTopic = this.sanitizeForFilename(item.topic);
     const sanitizedTitle = this.sanitizeForFilename(item.title);
     const year = new Date(item.timestamp * 1000).getFullYear();
 
-    const suffix = `.${year}.GERMAN.${quality}.WEB.h264-${this.id.toUpperCase()}`;
+    const languageSuffix = isGermanLanguageCode(item.audioLanguage) ? ".GERMAN" : "";
+    const suffix = `.${year}${languageSuffix}.${quality}.WEB.h264-${this.id.toUpperCase()}`;
     const characters = Array.from(`${sanitizedTopic}.${sanitizedTitle}`);
     while (Buffer.byteLength(characters.join("") + suffix, "utf8") > 200) characters.pop();
     return characters.join("") + suffix;

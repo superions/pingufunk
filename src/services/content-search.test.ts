@@ -131,8 +131,42 @@ it("restricts ORF-only upstream searches before applying the requested limit", a
   await queryContent(queries, 5);
   expect(queryMediathekView).toHaveBeenCalledWith(
     [...queries, { fields: ["channel"], query: "ORF" }],
-    5,
+    10,
     {}
   );
   expect(queries).toHaveLength(1);
+});
+
+it("selects a verified German source edition before URL deduplication and pagination", async () => {
+  settings.set("provider.srf.enabled", "false");
+  const french = {
+    channel: "ARTE.FR",
+    topic: "Example",
+    title: "Example programme",
+    description: "Synthetic French variant",
+    filmlisteTimestamp: 100,
+    duration: 1800,
+    size: 500_000_000,
+    id: "fr-source-id",
+    url_website: "https://www.arte.tv/fr/videos/123456-001-A/example-fr/",
+    url_video: "https://example.org/shared.mp4",
+    url_video_low: "",
+    url_video_hd: "",
+  };
+  const german = {
+    ...french,
+    channel: "ARTE.DE",
+    title: "Example programme Deutsch",
+    audioLanguage: "de",
+    id: "de-source-id",
+    url_website: "https://www.arte.tv/de/videos/123456-001-A/example-de/",
+  };
+  vi.mocked(queryMediathekView).mockImplementation(async (_queries, size) =>
+    [french, german].slice(0, size)
+  );
+
+  const results = await queryContent([], 1);
+
+  expect(queryMediathekView).toHaveBeenCalledWith([], 2, {});
+  expect(results).toEqual([german]);
 });

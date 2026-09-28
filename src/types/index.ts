@@ -17,6 +17,7 @@ export interface QueryInfo {
 }
 
 export interface ApiResultItem {
+  id?: string;
   channel: string;
   topic: string;
   title: string;
@@ -28,6 +29,12 @@ export interface ApiResultItem {
   url_video: string;
   url_video_low: string;
   url_video_hd: string;
+  audioLanguage?: string | null;
+  subtitleLanguage?: string | null;
+  originalVersion?: boolean;
+  audioDescription?: boolean;
+  signLanguage?: boolean;
+  clearSpeech?: boolean;
 }
 
 // TVDB Types

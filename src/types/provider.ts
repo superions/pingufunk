@@ -31,6 +31,8 @@ export interface ProviderContentItem {
   duration: number;
   /** File size in bytes (0 if unknown) */
   size: number;
+  /** Audio-language evidence supplied by the provider; locale/channel are not substitutes. */
+  audioLanguage?: string | null;
   /** URL to the website page for this content */
   websiteUrl: string;
   /** Available video URLs by quality */

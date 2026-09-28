@@ -164,7 +164,9 @@ Resume-Regeln; keine Behauptung eines vollständig atomaren Gesamtcutovers.
   Verlusten und Wartungsfenster; kein stilles Verwerfen von History/Downloads.
 - **Spätere Proxy-Umschaltung:** Rücknahme der URL-/Host-/Mapping-Änderungen
   bleibt unabhängig; dabei grundsätzlich PostgreSQL beibehalten. Proxy- oder
-  Matching-Rollback erfordert nicht automatisch einen DB-Rollback.
+  Matching-Rollback erfordert nicht automatisch einen DB-Rollback. Für P10.6 gilt
+  zusätzlich das [GUID-Übergangsgate](proxy-retirement-cutover.md); es ist keine
+  Betriebs- oder Deploymentfreigabe.
 - Keine produktive Datenbank löschen und kein SQLite-Backup entfernen. Aufbewahrung
   und spätere Bereinigung brauchen eigene Freigabe. Dump/Backup kann Settings,
   Tokens und private Medien-URLs enthalten und gehört in geschützte Ablage.

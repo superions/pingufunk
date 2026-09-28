@@ -250,7 +250,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(xml).not.toContain("Requested.Show.S02E03");
   });
 
-  it("characterizes A5: a long unrelated text result is published as a movie", async () => {
+  it("characterizes A5: a long unrelated text result is still published neutrally as a movie", async () => {
     mockedGetMinDuration.mockResolvedValue(300);
     mockedGetSetting.mockImplementation(async (key) =>
       key === "download.quality" ? "720p" : null
@@ -266,7 +266,8 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     const xml = await fetchMovieSearchByQuery("Example Film 1998", 100, 0);
 
     expect(xml).toContain('total="1"');
-    expect(xml).toContain("Magazine.Feature.2024.GERMAN");
+    expect(xml).toContain("Magazine.Feature.2024.720p");
+    expect(xml).not.toMatch(/Magazine\.Feature\.2024\.GERMAN(?:\.|<)/);
     expect(xml).not.toContain("Example.Film.1998");
   });
 

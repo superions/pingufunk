@@ -6,6 +6,8 @@ import {
   LANGUAGE_POLICY_SETTING_KEY,
   serializeLanguagePolicy,
 } from "@/lib/language-policy";
+import { clearSettingsCache } from "@/lib/settings";
+import { mediathekCache } from "@/lib/cache";
 
 const { values, upsert, clearSrfTokenCache } = vi.hoisted(() => ({
   values: new Map<string, string>(),
@@ -91,6 +93,8 @@ it("persists and reads back validated language preferences", async () => {
 
   expect(response.status).toBe(200);
   expect(settings[LANGUAGE_POLICY_SETTING_KEY]).toBe(serializeLanguagePolicy(policy));
+  expect(clearSettingsCache).toHaveBeenCalled();
+  expect(mediathekCache.clear).toHaveBeenCalled();
 });
 
 it("rejects unsafe language-policy updates atomically", async () => {

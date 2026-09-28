@@ -204,6 +204,12 @@ B05/B07, A2/A3, R4.
       und Nutzerentscheidung einholen**, nicht permissiv raten. Abnahme:
       versionierter serverseitiger Entscheidungsvertrag; deutsche Domain/Locale
       allein gilt nicht als Tonsprachbeweis, unbekannt wird nicht GERMAN.
+      Nutzerentscheidung vom 28.09.2026: OV und nur deutsche Untertitel zunächst
+      aus; Audiodeskription/Gebärde/Klare Sprache an, aber nur als eigene Variante
+      bei belegtem deutschem Ton; unbekannter Altbestand neutral sichtbar. Das
+      kann Sonarr-Matching/Autoabrufe auch ohne `GERMAN` auslösen. Nur ein expliziter
+      Tonsprachenbeleg darf `GERMAN` setzen; die Oberfläche lässt Sichtbarkeit
+      dauerhaft ändern, nicht diese Invariante.
 - [ ] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
       `content-search.ts` vor `Map(url_video)`/frühem Slice und in allen RSS-Pfaden
       Sprach-/Fassungsstatus vor Titelbereinigung ableiten; bekannte deutsche
@@ -212,7 +218,8 @@ B05/B07, A2/A3, R4.
       Fassung/Quellidentität bilden; 720/1080 bleiben verschieden. Abnahme:
       vertauschte Kandidatenreihenfolge gleichwertig, FR/OV+DE-Untertitel nicht
       GERMAN, unterschiedliche Fassungen kollidieren nicht; RSS-Wiederauftauchen/
-      Dupegrab-Risiko der GUID-Umstellung im Cutover-Runbook dokumentiert.
+      Dupegrab-Risiko der GUID-Umstellung im [Cutover-Runbook](../docs/proxy-retirement-cutover.md)
+      dokumentiert.
 - [ ] **P03.3 — Sprachvertrag bis in die Medienspuren erhalten.**
       `src/server/ffmpeg.ts::{convertMp4ToMkv,mergeVideoAudio}` und deren
       Downloadconsumer von blindem `language=ger` befreien; nur nachgewiesene

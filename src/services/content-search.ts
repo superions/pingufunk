@@ -4,8 +4,14 @@ import {
   type MediathekQueryOptions,
 } from "@/lib/mediathek-client";
 import { getSetting } from "@/lib/settings";
+import { LANGUAGE_POLICY_SETTING_KEY, readLanguagePolicy } from "@/lib/language-policy";
 import { srfProvider } from "@/providers/srf";
+import { selectLanguageVariants } from "@/services/language-editions";
 import type { ApiResultItem } from "@/types";
+
+export async function getConfiguredLanguagePolicy() {
+  return readLanguagePolicy(await getSetting(LANGUAGE_POLICY_SETTING_KEY));
+}
 
 /** Shared source for UI, Newznab and ruleset discovery, before episode/movie matching. */
 export async function queryContent(
@@ -18,18 +24,22 @@ export async function queryContent(
     getSetting("provider.orf.enabled"),
     getSetting("download.enableHLS"),
   ]);
+  const languagePolicy = await getConfiguredLanguagePolicy();
   const mvEnabled = mvSetting !== "false";
   const orfEnabled = orfSetting === "true" && hlsSetting === "true";
   const srfEnabled = await srfProvider.isEnabled();
 
   try {
+    // Fetch a bounded candidate window so a preferred language edition is not
+    // lost merely because its duplicate appeared just beyond the requested page.
+    const candidateLimit = size > 0 ? Math.max(size, Math.min(size * 2, 5000)) : 0;
     const [indexed, swiss] = await Promise.all([
       mvEnabled || orfEnabled
         ? queryMediathekView(
             !mvEnabled && orfEnabled
               ? [...queries, { fields: ["channel"], query: "ORF" }]
               : queries,
-            size,
+            candidateLimit,
             options
           )
         : Promise.resolve([]),
@@ -68,9 +78,7 @@ export async function queryContent(
       )
         items.push(converted);
     }
-    return [...new Map(items.map((item) => [item.url_video, item])).values()]
-      .sort((a, b) => b.filmlisteTimestamp - a.filmlisteTimestamp)
-      .slice(0, size);
+    return selectLanguageVariants(items, languagePolicy).slice(0, size);
   } catch (error) {
     console.error("[ContentSearch] Provider failed:", error);
     return null;
