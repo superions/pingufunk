@@ -11,6 +11,9 @@ import type {
   ApiResultItem,
 } from "@/types";
 import type { MovieMatchResult } from "./movie-matcher";
+import { createFakeNzbDownloadUrl } from "./nzb-release";
+
+export { generateFakeNzb } from "./nzb-release";
 
 const XML_BUILDER = new Builder({
   xmldec: { version: "1.0", encoding: "UTF-8" },
@@ -268,10 +271,7 @@ function createRssItem(
   const parsedTitle = generateTitle(info, quality, episodeType);
   const formattedTitle = formatTitle(parsedTitle);
 
-  const encodedTitle = Buffer.from(formattedTitle).toString("base64");
-  const encodedUrl = Buffer.from(url).toString("base64");
-
-  const fakeDownloadUrl = `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}`;
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
   const item = info.item;
 
   return {
@@ -465,10 +465,7 @@ function createMovieRssItem(
   const parsedTitle = generateMovieTitle(movieData, quality);
   const formattedTitle = formatTitle(parsedTitle);
 
-  const encodedTitle = Buffer.from(formattedTitle).toString("base64");
-  const encodedUrl = Buffer.from(url).toString("base64");
-
-  const fakeDownloadUrl = `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}`;
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
 
   return {
     title: formattedTitle,
@@ -776,10 +773,7 @@ function createGenericRssItem(
 
   const formattedTitle = formatTitle(rawTitle);
 
-  const encodedTitle = Buffer.from(formattedTitle).toString("base64");
-  const encodedUrl = Buffer.from(url).toString("base64");
-
-  const fakeDownloadUrl = `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}`;
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
 
   const attributes: NewznabAttribute[] = categoryValues.map((v) => ({
     name: "category",
@@ -819,26 +813,6 @@ function createGenericRssItem(
     },
     attributes,
   };
-}
-
-// Generate fake NZB file content
-export function generateFakeNzb(url: string, title: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">
-<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">
-  <!-- ${url} -->
-  <head>
-    <meta type="title">${title}</meta>
-  </head>
-  <file poster="RundfunkArr" date="${Math.floor(Date.now() / 1000)}" subject="${title}">
-    <groups>
-      <group>alt.binaries.mediathek</group>
-    </groups>
-    <segments>
-      <segment bytes="1024" number="1">${Buffer.from(url).toString("base64")}</segment>
-    </segments>
-  </file>
-</nzb>`;
 }
 
 // Capabilities XML

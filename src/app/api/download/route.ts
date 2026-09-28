@@ -75,10 +75,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid NZB format" }, { status: 400 });
     }
 
-    const { fileName, url } = parsed;
+    const { title, url } = parsed;
 
     // Add to the download queue
-    const queueItem = await addToQueue(url, fileName, cat);
+    const queueItem = await addToQueue(url, title, cat);
 
     return NextResponse.json({
       status: true,

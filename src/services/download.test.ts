@@ -10,13 +10,13 @@ describe("parseNzbContent", () => {
     "accepts a saved legacy NZB with raw URL %s",
     (url) => {
       const content = `filename="Show.S01E01.nzb"\n<!-- Show title -->\n<!-- ${url} -->`;
-      expect(parseNzbContent(content)).toEqual({ fileName: "Show.S01E01", url });
+      expect(parseNzbContent(content)).toEqual({ title: "Show.S01E01", url });
     }
   );
 
   it("accepts a legacy NZB with a single URL comment", () => {
     expect(parseNzbContent('filename="Show.nzb"\n<!-- https://example.com/video.mp4 -->')).toEqual({
-      fileName: "Show",
+      title: "Show",
       url: "https://example.com/video.mp4",
     });
   });
@@ -44,7 +44,7 @@ describe("parseNzbContent", () => {
     const result = parseNzbContent(nzbContent);
 
     expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("Show.S01E01.720p.WEB.h264-GROUP");
+    expect(result?.title).toBe("Show.S01E01.720p.WEB.h264-GROUP");
     expect(result?.url).toBe("https://example.com/video.mp4");
   });
 
@@ -62,6 +62,7 @@ describe("parseNzbContent", () => {
     const result = parseNzbContent(nzbContent);
 
     expect(result).not.toBeNull();
+    expect(result?.title).toBe("Boesterreich.S01E06");
     expect(result?.url).toBe(trickyUrl);
   });
 
@@ -72,7 +73,7 @@ describe("parseNzbContent", () => {
     const result = parseNzbContent(nzbContent);
 
     expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("Der.Tatort.S2024E01.German.720p.WEB.h264-MEDiATHEK");
+    expect(result?.title).toBe("Der.Tatort.S2024E01.German.720p.WEB.h264-MEDiATHEK");
   });
 
   it("should return null when filename is missing", () => {
@@ -89,6 +90,29 @@ describe("parseNzbContent", () => {
     const result = parseNzbContent(nzbContent);
 
     expect(result).toBeNull();
+  });
+
+  it("recovers the exact title from current-format comments without a filename subject", () => {
+    const title = `März & \"Heute\" + Finale`;
+    const url = "https://example.org/a--b/clip.m3u8?token=a+b&quality=720p";
+    const content = `<!-- ${b64(title)} -->\n<!-- ${b64(url)} -->`;
+
+    expect(parseNzbContent(content)).toEqual({ title, url });
+  });
+
+  it("accepts older fake NZBs with a plain URL comment and title metadata", () => {
+    const content = `<meta type="title">Legacy.Show.S01E02</meta>\n<!-- https://example.org/legacy.mp4 -->`;
+
+    expect(parseNzbContent(content)).toEqual({
+      title: "Legacy.Show.S01E02",
+      url: "https://example.org/legacy.mp4",
+    });
+  });
+
+  it("does not accept an invalid encoded title even when a valid URL is present", () => {
+    const content = `<!-- Zh== -->\n<!-- ${b64("https://example.org/video.mp4")} -->`;
+
+    expect(parseNzbContent(content)).toBeNull();
   });
 
   it("should return null for empty content", () => {

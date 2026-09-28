@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { parseStringPromise } from "xml2js";
 import type { ApiResultItem, TvSearchContext } from "@/types";
-import { convertItemsToRss, generateGenericRssItems } from "@/services/newznab";
+import { convertItemsToRss, generateGenericRssItems, generateRssItems } from "@/services/newznab";
 import { parseNzbContent } from "@/services/download";
 import { GET as downloadNzb } from "./fake_nzb_download/route";
 import { GET as GETApiAlias } from "./api/route";
@@ -21,12 +21,18 @@ const tmdbMocks = vi.hoisted(() => ({
   getMovieInfoByTmdbId: vi.fn(),
   getMovieInfoByImdbId: vi.fn(),
 }));
+const downloadMocks = vi.hoisted(() => ({ addToQueue: vi.fn() }));
 
 vi.mock("@/services/mediathek", () => mediathekMocks);
 vi.mock("@/services/shows", () => showMocks);
 vi.mock("@/services/tmdb", () => tmdbMocks);
+vi.mock("@/services/download", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/download")>();
+  return { ...actual, addToQueue: downloadMocks.addToQueue };
+});
 
 import { GET } from "./route";
+import { POST as addToQueue } from "../route";
 
 const EMPTY_RSS = `<?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
@@ -36,6 +42,7 @@ const EMPTY_RSS = `<?xml version="1.0" encoding="UTF-8"?>
 beforeEach(() => {
   vi.clearAllMocks();
   mediathekMocks.fetchSearchResultsForRssSync.mockResolvedValue(EMPTY_RSS);
+  downloadMocks.addToQueue.mockResolvedValue({ id: "synthetic-queue-item" });
 });
 
 describe("Newznab indexer validation", () => {
@@ -150,6 +157,12 @@ describe("Newznab indexer validation", () => {
     const encodedTitle = new URL(enclosureUrl, "http://localhost").searchParams.get("encodedTitle");
     const downloadResponse = await downloadNzb(new NextRequest(`http://localhost${enclosureUrl}`));
     const nzbContent = await downloadResponse.text();
+    const queueResponse = await addToQueue(
+      new NextRequest("http://localhost/api?mode=addfile&cat=sonarr", {
+        method: "POST",
+        body: nzbContent,
+      })
+    );
 
     expect(searchResponse.status).toBe(200);
     expect(rssItem.title[0]).toBe(release.title);
@@ -159,8 +172,89 @@ describe("Newznab indexer validation", () => {
     expect(downloadResponse.status).toBe(200);
     expect(nzbContent).toContain(`<!-- ${encodedTitle} -->`);
     expect(nzbContent).toContain(Buffer.from(source.url_video).toString("base64"));
-    // P02.3 owns closing this existing gap: the queue parser requires a filename attribute.
-    expect(parseNzbContent(nzbContent)).toBeNull();
+    expect(parseNzbContent(nzbContent)).toEqual({ title: release.title, url: source.url_video });
+    expect(queueResponse.status).toBe(200);
+    expect(downloadMocks.addToQueue).toHaveBeenCalledWith(
+      source.url_video,
+      release.title,
+      "sonarr"
+    );
+  });
+
+  it("round-trips matched standard and daily TV titles from RSS through the NZB parser", async () => {
+    const source: ApiResultItem = {
+      channel: "ARD",
+      topic: "Example Show",
+      title: "März & Heute",
+      description: "Synthetic matched episode",
+      filmlisteTimestamp: 1_700_000_000,
+      duration: 2700,
+      size: 1_000_000_000,
+      url_website: "https://example.org/show/episode-1",
+      url_video: "https://example.org/a--b/~~~.mp4?token=a+b",
+      url_video_low: "",
+      url_video_hd: "",
+    };
+    const releases = generateRssItems(
+      {
+        episode: {
+          name: `März & "Heute" + Finale`,
+          aired: new Date("2026-03-31T00:00:00Z"),
+          runtime: 30,
+          seasonNumber: 2026,
+          episodeNumber: 12,
+        },
+        item: source,
+        showName: "Example & Show",
+        matchedTitle: "Example Show",
+        tvdbId: 12345,
+      },
+      "720p"
+    );
+    mediathekMocks.fetchSearchResultsById.mockResolvedValue(convertItemsToRss(releases, 100, 0));
+    showMocks.getShowInfoByTvdbId.mockResolvedValue({
+      id: 12345,
+      name: "Example Show",
+      germanName: null,
+      aliases: [],
+      episodes: [],
+    });
+
+    const searchResponse = await GET(
+      new NextRequest("http://localhost/api/newznab/api?t=tvsearch&tvdbid=12345&season=2026&ep=12")
+    );
+    const rss = await parseStringPromise(await searchResponse.text());
+    const rssItems = rss.rss.channel[0].item;
+
+    expect(searchResponse.status).toBe(200);
+    expect(rssItems).toHaveLength(2);
+    for (const [index, rssItem] of rssItems.entries()) {
+      const title = rssItem.title[0] as string;
+      const enclosureUrl = rssItem.enclosure[0].$.url as string;
+      const encodedTitle = new URL(enclosureUrl, "http://localhost").searchParams.get(
+        "encodedTitle"
+      );
+      const downloadResponse = await downloadNzb(
+        new NextRequest(`http://localhost${enclosureUrl}`)
+      );
+      const nzbContent = await downloadResponse.text();
+      const parsed = parseNzbContent(nzbContent);
+      const queueResponse = await addToQueue(
+        new NextRequest("http://localhost/api?mode=addfile&cat=sonarr", {
+          method: "POST",
+          body: nzbContent,
+        })
+      );
+
+      expect(title).toBe(releases[index].title);
+      expect(encodedTitle).toBe(Buffer.from(title, "utf-8").toString("base64"));
+      expect(downloadResponse.status).toBe(200);
+      expect(parsed).toEqual({ title, url: source.url_video });
+      expect(queueResponse.status).toBe(200);
+      expect(downloadMocks.addToQueue).toHaveBeenLastCalledWith(source.url_video, title, "sonarr");
+    }
+    expect(rssItems[0].title[0]).toContain("S2026E12");
+    expect(rssItems[1].title[0]).toContain("2026-03-31");
   });
 
   it("returns an HTTP error when the search owner rejects", async () => {

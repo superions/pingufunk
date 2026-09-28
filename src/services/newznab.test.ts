@@ -155,7 +155,10 @@ describe("Newznab validation categories", () => {
 
 describe("generateFakeNzb", () => {
   it("should generate valid NZB XML", () => {
-    const nzb = generateFakeNzb("http://example.com/video.mp4", "Test.Show.S01E01");
+    const nzb = generateFakeNzb({
+      url: "http://example.com/video.mp4",
+      title: "Test.Show.S01E01",
+    });
 
     expect(nzb).toContain('<?xml version="1.0" encoding="UTF-8"?>');
     expect(nzb).toContain("<!DOCTYPE nzb");
@@ -164,24 +167,42 @@ describe("generateFakeNzb", () => {
 
   it("should include URL in comment", () => {
     const url = "http://example.com/video.mp4";
-    const nzb = generateFakeNzb(url, "Test");
+    const nzb = generateFakeNzb({ url, title: "Test" });
 
-    expect(nzb).toContain(`<!-- ${url} -->`);
+    expect(nzb).toContain(`<!-- ${Buffer.from("Test").toString("base64")} -->`);
+    expect(nzb).toContain(`<!-- ${Buffer.from(url).toString("base64")} -->`);
   });
 
   it("should include title in meta", () => {
     const title = "My.Show.S01E01.720p";
-    const nzb = generateFakeNzb("http://example.com", title);
+    const nzb = generateFakeNzb({ url: "http://example.com", title });
 
     expect(nzb).toContain(`<meta type="title">${title}</meta>`);
   });
 
-  it("should include base64 encoded URL in segment", () => {
+  it("should include the base64-encoded URL comment", () => {
     const url = "http://example.com/test.mp4";
-    const nzb = generateFakeNzb(url, "Test");
-    const encoded = Buffer.from(url).toString("base64");
+    const nzb = generateFakeNzb({ url, title: "Test" });
+    const encoded = Buffer.from(url, "utf-8").toString("base64");
 
-    expect(nzb).toContain(encoded);
+    expect(nzb).toContain(`<!-- ${encoded} -->`);
+  });
+
+  it("escapes display metadata while comments preserve the exact release title", () => {
+    const title = `März & \"Heute\" <Finale>`;
+    const nzb = generateFakeNzb({ url: "https://example.org/a--b?x=1&y=2", title });
+
+    expect(nzb).toContain(`<!-- ${Buffer.from(title, "utf-8").toString("base64")} -->`);
+    expect(nzb).toContain("März &amp; &quot;Heute&quot; &lt;Finale&gt;");
+    expect(nzb).not.toContain("a--b");
+  });
+
+  it("keeps invalid XML control characters out of display metadata", () => {
+    const title = "Example\u0001.Show";
+    const nzb = generateFakeNzb({ url: "https://example.org/video.mp4", title });
+
+    expect(nzb).not.toContain("\u0001");
+    expect(nzb).toContain(`<!-- ${Buffer.from(title, "utf-8").toString("base64")} -->`);
   });
 });
 
@@ -443,6 +464,14 @@ describe("P01.1 explicit episode coordinates", () => {
     expect(items).toHaveLength(2);
     expect(items[0].title).toContain("Tagesschau.S2026E12");
     expect(items[1].title).toContain("Tagesschau.2026-09-01");
+    expect(
+      items.map((item) => {
+        const encodedTitle = new URL(item.enclosure.url, "http://localhost").searchParams.get(
+          "encodedTitle"
+        );
+        return Buffer.from(encodedTitle!, "base64").toString("utf-8");
+      })
+    ).toEqual(items.map((item) => item.title));
     expect(
       items.every((item) =>
         item.attributes.some(

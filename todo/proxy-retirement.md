@@ -171,7 +171,7 @@ applyDesiredEpisodeFilter,fetchSearchResultsById,fetchSearchResultsByString}`
       fremde Titelidentität, Dubletten und Seitenfenster. Vollständiger Owner-Review
       ohne offene Findings. Node 24.21.0: 215 Tests in 20 Dateien, Lint, Typecheck,
       Formatcheck und Production-Build erfolgreich.
-- [ ] **P02.3 — Gemeinsame Release-Identität bis zum Download.**
+- [x] **P02.3 — Gemeinsame Release-Identität bis zum Download.**
       `newznab.ts::{formatTitle,generateTitle,createRssItem,createGenericRssItem,
 generateFakeNzb}`, `download.ts::parseNzbContent` und vorhandene
       `fake_nzb_download`-Route auf denselben strukturierten Releasevertrag bringen.
@@ -179,6 +179,17 @@ generateFakeNzb}`, `download.ts::parseNzbContent` und vorhandene
       Sonderzeichen und bereits ausgelieferte NZBs kompatibel halten. Abnahme:
       RSS-Name, encodedTitle, decodierter NZB-Name und Queue-Release stimmen
       über alle TV-Einstiege überein; kein neuer Titel-/Encodingbruch.
+      Abgenommen am 28.09.2026: gemeinsamer `NzbRelease`-Vertrag für RSS-Links,
+      NZB-Erzeugung, Parser und Queue; der Fake-Download baut XML nur noch an
+      einer Stelle. Generic-TV sowie matched Standard- und Daily-Titel laufen
+      als synthetischer RSS→NZB→Parser→`/api`-Queue-Roundtrip exakt durch;
+      beide `addfile`-Routen reichen Titel und URL unverändert weiter.
+      Sonderzeichen, Base64-Plus/URL-Encoding, URL mit `--`, ungültige Base64/
+      UTF-8 und Fremdschema sind regressionsgeschützt. Früher ausgelieferte
+      Base64-Kommentar-NZBs ohne Dateinamen sowie Legacy-Roh-URL, Metadaten- und
+      Dateinamenformate bleiben parsebar. Vollständiger Producer-/Consumer-Review
+      ohne offene Findings. Node 24.21.0: 226 Tests in 21 Dateien, Lint,
+      Typecheck, Formatcheck und Production-Build erfolgreich.
 
 ## Phase P03 — Wahrheitsgemäße Sprache und stabile Varianten
 

@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { randomUUID } from "crypto";
 import * as path from "path";
+import { decodeBase64Utf8 } from "./nzb-release";
+import type { NzbRelease } from "./nzb-release";
 
 /**
  * Format seconds remaining as SABnzbd's strict "H:MM:SS" timeleft format.
@@ -54,40 +56,40 @@ const FILE_NAME_REGEX = /filename="([^"]+)\.nzb"/;
 // Accept raw URL comments too, for NZBs saved before the format changed.
 const COMMENT_REGEX = /<!--([\s\S]*?)-->/g;
 
-export function parseNzbContent(nzbContent: string): { fileName: string; url: string } | null {
+export function parseNzbContent(nzbContent: string): NzbRelease | null {
   const filenameMatch = nzbContent.match(FILE_NAME_REGEX);
-  if (!filenameMatch) {
-    return null;
-  }
-
+  const metadataTitleMatch = nzbContent.match(
+    /<meta\s+type=["']title["'][^>]*>([\s\S]*?)<\/meta\s*>/i
+  );
+  let title: string | null = null;
   let url: string | null = null;
+
   for (const match of nzbContent.matchAll(COMMENT_REGEX)) {
     const comment = match[1].trim();
     if (/^https?:\/\/\S+$/.test(comment)) {
-      url = comment;
-      break;
-    }
-    if (!/^[A-Za-z0-9+/=]+$/.test(comment)) {
+      url ??= comment;
       continue;
     }
-    let decoded: string;
-    try {
-      decoded = Buffer.from(comment, "base64").toString("utf-8");
-    } catch {
+
+    const decoded = decodeBase64Utf8(comment);
+    if (decoded === null) {
       continue;
     }
     if (/^https?:\/\/\S+$/.test(decoded)) {
-      url = decoded;
-      break;
+      url ??= decoded;
+    } else if (decoded.trim() && title === null) {
+      title = decoded;
     }
   }
 
-  if (!url) {
+  // Older generators stored the release name in metadata or a filename subject.
+  title ??= metadataTitleMatch?.[1] ?? filenameMatch?.[1] ?? null;
+  if (!url || !title?.trim()) {
     return null;
   }
 
   return {
-    fileName: filenameMatch[1],
+    title,
     url,
   };
 }

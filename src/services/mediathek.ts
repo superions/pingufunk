@@ -21,6 +21,7 @@ import {
   parseEpisodeFromTitle,
 } from "./newznab";
 import { matchMovieItems } from "./movie-matcher";
+import { createFakeNzbDownloadUrl } from "./nzb-release";
 import { searchMovieByTitle } from "./tmdb";
 import type {
   ApiResultItem,
@@ -1266,9 +1267,7 @@ export async function fetchMovieSearchByQuery(
       const releaseTitle = `${baseTitle}.${year}.GERMAN.${q.qualityName}.WEB.h264-MEDiATHEK`;
       const adjustedSize = Math.floor(size * q.sizeMultiplier);
 
-      const encodedTitle = Buffer.from(releaseTitle).toString("base64");
-      const encodedUrl = Buffer.from(q.url).toString("base64");
-      const fakeDownloadUrl = `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}`;
+      const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: releaseTitle, url: q.url });
 
       newznabItems.push({
         title: releaseTitle,
