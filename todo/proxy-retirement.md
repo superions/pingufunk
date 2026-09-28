@@ -210,7 +210,11 @@ B05/B07, A2/A3, R4.
       kann Sonarr-Matching/Autoabrufe auch ohne `GERMAN` auslösen. Nur ein expliziter
       Tonsprachenbeleg darf `GERMAN` setzen; die Oberfläche lässt Sichtbarkeit
       dauerhaft ändern, nicht diese Invariante.
-- [ ] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
+      Server/API-Persistenz und Regressionen sind geprüft. Noch offen bleibt die
+      vorgeschriebene desktop-only Interaktion samt Screenshot/Konsole auf dem
+      tatsächlich servierten Testbundle; ohne Interaction-Harness und disposable
+      PostgreSQL hier nicht als UI-Abnahme behauptet.
+- [x] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
       `content-search.ts` vor `Map(url_video)`/frühem Slice und in allen RSS-Pfaden
       Sprach-/Fassungsstatus vor Titelbereinigung ableiten; bekannte deutsche
       Variante derselben Quellidentität reihenfolgeunabhängig bevorzugen, fremde
@@ -220,12 +224,23 @@ B05/B07, A2/A3, R4.
       GERMAN, unterschiedliche Fassungen kollidieren nicht; RSS-Wiederauftauchen/
       Dupegrab-Risiko der GUID-Umstellung im [Cutover-Runbook](../docs/proxy-retirement-cutover.md)
       dokumentiert.
-- [ ] **P03.3 — Sprachvertrag bis in die Medienspuren erhalten.**
+      Abgenommen am 28.09.2026: Quellfassungen werden vor URL-Dedupe und Pagination
+      nach versionierter Policy gewählt; Variantenreihenfolge und kollidierende
+      Video-URLs regressionsgeprüft. TV-, Film-, Generic- und Validierungs-RSS
+      verwenden beweisgebundene Titel und GUIDs; 720p/1080p bleiben verschieden.
+      GUID-Wiederauftauchen/Doppelgrab-Gate dokumentiert; vollständige Producer-
+      und Consumer-Review ohne offene Findings.
+- [x] **P03.3 — Sprachvertrag bis in die Medienspuren erhalten.**
       `src/server/ffmpeg.ts::{convertMp4ToMkv,mergeVideoAudio}` und deren
       Downloadconsumer von blindem `language=ger` befreien; nur nachgewiesene
       Tracksprachen setzen, unbekannte nicht erfinden. Abnahme: synthetische
       Fremd-/OV-/Mehrspur-/Unbekannt-Fälle haben wahrheitsgemäße Tags, vorhandene
       ORF-Audio/Video-Zusammenführung bleibt funktional.
+      Abgenommen am 28.09.2026: FFmpeg remuxt alle Quell-Audiospuren ohne
+      erfundene Sprachmetadaten; der HLS-Mux behält seine getrennte Video-/Audio-
+      Zuordnung. Provider-Dateinamen bekommen `GERMAN` nur mit explizitem
+      Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
+      keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
