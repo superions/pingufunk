@@ -15,6 +15,56 @@ import {
   isMovieCategoryRequest,
   parseNewznabCategoryIds,
 } from "@/services/newznab";
+import type { TvSearchContext } from "@/types";
+
+function normalizeEpisodeParameter(value: string | null): string | null {
+  const trimmed = value?.trim() || null;
+  if (trimmed === null) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    if (Number.isSafeInteger(numeric)) return String(numeric);
+  }
+  const daily = trimmed.match(/^(\d{1,2})\/(\d{1,2})$/);
+  return daily ? `${Number(daily[1])}/${Number(daily[2])}` : trimmed;
+}
+
+function normalizeSeasonParameter(value: string | null): string | null {
+  const trimmed = value?.trim() || null;
+  if (trimmed === null || !/^\d+$/.test(trimmed)) return trimmed;
+  const numeric = Number(trimmed);
+  return Number.isSafeInteger(numeric) ? String(numeric) : trimmed;
+}
+
+function parseTvSearchContext(searchParams: URLSearchParams): {
+  context: TvSearchContext | null;
+  error: string | null;
+} {
+  const shortEpisode = normalizeEpisodeParameter(searchParams.get("ep"));
+  const longEpisode = normalizeEpisodeParameter(searchParams.get("episode"));
+  if (shortEpisode !== null && longEpisode !== null && shortEpisode !== longEpisode) {
+    return { context: null, error: "Conflicting ep and episode parameters" };
+  }
+
+  const rawTvdbId = searchParams.get("tvdbid")?.trim() || null;
+  let tvdbId: number | null = null;
+  if (rawTvdbId !== null) {
+    const parsedId = Number(rawTvdbId);
+    if (!/^\d+$/.test(rawTvdbId) || !Number.isSafeInteger(parsedId) || parsedId <= 0) {
+      return { context: null, error: "Invalid tvdbid parameter" };
+    }
+    tvdbId = parsedId;
+  }
+
+  return {
+    context: {
+      query: searchParams.get("q")?.trim() || null,
+      tvdbId,
+      season: normalizeSeasonParameter(searchParams.get("season")),
+      episode: shortEpisode ?? longEpisode,
+    },
+    error: null,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -23,11 +73,8 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get("limit") || "100", 10);
   const offset = parseInt(searchParams.get("offset") || "0", 10);
   const q = searchParams.get("q");
-  const tvdbid = searchParams.get("tvdbid");
   const imdbid = searchParams.get("imdbid");
   const tmdbid = searchParams.get("tmdbid");
-  const season = searchParams.get("season");
-  const episode = searchParams.get("ep");
   const categoryIds = parseNewznabCategoryIds(searchParams.get("cat"));
 
   // Handle capabilities request
@@ -164,45 +211,50 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const { context, error: contextError } = parseTvSearchContext(searchParams);
+    if (!context) {
+      return NextResponse.json(
+        { error: contextError ?? "Invalid TV search context" },
+        { status: 400 }
+      );
+    }
+
     console.log(
-      `[Newznab] TV search request: t=${t}, q=${q}, tvdbid=${tvdbid}, season=${season}, episode=${episode}`
+      `[Newznab] TV search request: t=${t}, q=${context.query}, tvdbid=${context.tvdbId}, season=${context.season}, episode=${context.episode}`
     );
 
     try {
       // Search by TVDB ID
-      if (tvdbid) {
-        const parsedTvdbId = parseInt(tvdbid, 10);
-        console.log(`[Newznab] Searching by TVDB ID: ${parsedTvdbId}`);
-        if (!isNaN(parsedTvdbId)) {
-          const tvdbData = await getShowInfoByTvdbId(parsedTvdbId);
-          console.log(
-            `[Newznab] TVDB lookup result: ${tvdbData ? `Found "${tvdbData.name}" (German: "${tvdbData.germanName}")` : "Not found"}`
-          );
+      if (context.tvdbId !== null) {
+        console.log(`[Newznab] Searching by TVDB ID: ${context.tvdbId}`);
+        const tvdbData = await getShowInfoByTvdbId(context.tvdbId);
+        console.log(
+          `[Newznab] TVDB lookup result: ${tvdbData ? `Found "${tvdbData.name}" (German: "${tvdbData.germanName}")` : "Not found"}`
+        );
 
-          if (!tvdbData) {
-            return new NextResponse(serializeRss(getEmptyRssResult()), {
+        if (!tvdbData) {
+          if (context.query || context.season || context.episode) {
+            const fallbackResults = await fetchSearchResultsByString(context, limit, offset);
+            return new NextResponse(fallbackResults, {
               status: 200,
               headers: { "Content-Type": "application/xml; charset=utf-8" },
             });
           }
-
-          const searchResults = await fetchSearchResultsById(
-            tvdbData,
-            season,
-            episode,
-            limit,
-            offset
-          );
-
-          return new NextResponse(searchResults, {
+          return new NextResponse(serializeRss(getEmptyRssResult()), {
             status: 200,
             headers: { "Content-Type": "application/xml; charset=utf-8" },
           });
         }
+
+        const searchResults = await fetchSearchResultsById(tvdbData, context, limit, offset);
+        return new NextResponse(searchResults, {
+          status: 200,
+          headers: { "Content-Type": "application/xml; charset=utf-8" },
+        });
       }
 
       // RSS sync (no params) - return dummy result for Sonarr test
-      if (!q && !season && !imdbid && !tvdbid && !tmdbid) {
+      if (!context.query && !context.season && !context.episode && !imdbid && !tmdbid) {
         const searchResults = await fetchSearchResultsForRssSync(limit, offset);
 
         // If no results, return an item in the categories requested by the *arr app
@@ -220,7 +272,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Search by query string
-      const searchResults = await fetchSearchResultsByString(q, season, limit, offset);
+      const searchResults = await fetchSearchResultsByString(context, limit, offset);
       return new NextResponse(searchResults, {
         status: 200,
         headers: { "Content-Type": "application/xml; charset=utf-8" },

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { parseStringPromise } from "xml2js";
-import type { ApiResultItem } from "@/types";
+import type { ApiResultItem, TvSearchContext } from "@/types";
 import { convertItemsToRss, generateGenericRssItems } from "@/services/newznab";
 import { parseNzbContent } from "@/services/download";
 import { GET as downloadNzb } from "./fake_nzb_download/route";
+import { GET as GETApiAlias } from "./api/route";
 
 const mediathekMocks = vi.hoisted(() => ({
   fetchSearchResultsById: vi.fn(),
@@ -38,7 +39,7 @@ beforeEach(() => {
 });
 
 describe("Newznab indexer validation", () => {
-  it("passes TVDB, season and episode coordinates from the indexer route to its owner", async () => {
+  it("normalizes ep/episode aliases into one TV search context", async () => {
     const show = {
       id: 12345,
       name: "Example Show",
@@ -51,14 +52,61 @@ describe("Newznab indexer validation", () => {
 
     const response = await GET(
       new NextRequest(
-        "http://localhost/api/newznab/api?t=tvsearch&tvdbid=12345&season=02&ep=2&limit=25&offset=5"
+        "http://localhost/api/newznab/api?t=tvsearch&tvdbid=12345&season=02&ep=2&episode=02&limit=25&offset=5"
       )
     );
 
     expect(response.status).toBe(200);
     expect(showMocks.getShowInfoByTvdbId).toHaveBeenCalledWith(12345);
-    expect(mediathekMocks.fetchSearchResultsById).toHaveBeenCalledWith(show, "02", "2", 25, 5);
+    expect(mediathekMocks.fetchSearchResultsById).toHaveBeenCalledWith(
+      show,
+      { query: null, tvdbId: 12345, season: "2", episode: "2" },
+      25,
+      5
+    );
     expect(await response.text()).toBe(EMPTY_RSS);
+  });
+
+  it("rejects conflicting ep and episode aliases before searching", async () => {
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&q=Example&ep=12&episode=13")
+    );
+
+    expect(response.status).toBe(400);
+    expect(mediathekMocks.fetchSearchResultsById).not.toHaveBeenCalled();
+    expect(mediathekMocks.fetchSearchResultsByString).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid TVDB identities before searching", async () => {
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&q=Example&tvdbid=12x")
+    );
+
+    expect(response.status).toBe(400);
+    expect(showMocks.getShowInfoByTvdbId).not.toHaveBeenCalled();
+    expect(mediathekMocks.fetchSearchResultsById).not.toHaveBeenCalled();
+    expect(mediathekMocks.fetchSearchResultsByString).not.toHaveBeenCalled();
+  });
+
+  it("uses the /api alias and keeps ID and coordinates in a text fallback", async () => {
+    const context: TvSearchContext = {
+      query: "Example Show",
+      tvdbId: 12345,
+      season: "2026",
+      episode: "9/28",
+    };
+    showMocks.getShowInfoByTvdbId.mockResolvedValue(null);
+    mediathekMocks.fetchSearchResultsByString.mockResolvedValue(EMPTY_RSS);
+
+    const response = await GETApiAlias(
+      new NextRequest(
+        "http://localhost/api/newznab/api?t=tvsearch&tvdbid=12345&q=Example%20Show&season=2026&ep=09%2F28&episode=9%2F28"
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(mediathekMocks.fetchSearchResultsByString).toHaveBeenCalledWith(context, 100, 0);
+    expect(mediathekMocks.fetchSearchResultsById).not.toHaveBeenCalled();
   });
 
   it("preserves explicit coordinates through RSS/NZB and keeps the queue-parser boundary", async () => {
@@ -186,7 +234,11 @@ describe("Newznab indexer validation", () => {
 
     await expect(response.text()).resolves.toBe("<rss>generic search</rss>");
     expect(mediathekMocks.fetchMovieSearchByQuery).not.toHaveBeenCalled();
-    expect(mediathekMocks.fetchSearchResultsByString).toHaveBeenCalledWith("Test", null, 100, 0);
+    expect(mediathekMocks.fetchSearchResultsByString).toHaveBeenCalledWith(
+      { query: "Test", tvdbId: null, season: null, episode: null },
+      100,
+      0
+    );
   });
 
   it("uses the shared movie validation response for t=movie", async () => {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/search/route";
+import type { TvSearchContext } from "@/types";
 import { queryContent } from "./content-search";
 import {
   fetchSearchResultsByString,
@@ -38,6 +39,13 @@ const video = {
   date: "2026-09-16T12:00:00Z",
 };
 
+const srfSearchContext: TvSearchContext = {
+  query: "Rundschau",
+  tvdbId: null,
+  season: null,
+  episode: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   settings.clear();
@@ -62,7 +70,7 @@ describe("configured providers in normal search flows", () => {
   });
 
   it("includes SRF in Sonarr text searches and Radarr movie searches", async () => {
-    expect(await fetchSearchResultsByString("Rundschau", null, 50, 0)).toContain(
+    expect(await fetchSearchResultsByString(srfSearchContext, 50, 0)).toContain(
       "11111111-1111-4111-8111-111111111111"
     );
     expect(await fetchMovieSearchByQuery("Rundschau", 50, 0)).toContain(
@@ -83,8 +91,8 @@ describe("configured providers in normal search flows", () => {
 
   it("keeps failed SRF searches out of the cache and recovers on the next request", async () => {
     vi.mocked(searchVideos).mockRejectedValueOnce(new Error("unavailable"));
-    expect(await fetchSearchResultsByString("Rundschau", null, 50, 0)).not.toContain("<item>");
-    expect(await fetchSearchResultsByString("Rundschau", null, 50, 0)).toContain(
+    expect(await fetchSearchResultsByString(srfSearchContext, 50, 0)).not.toContain("<item>");
+    expect(await fetchSearchResultsByString(srfSearchContext, 50, 0)).toContain(
       "11111111-1111-4111-8111-111111111111"
     );
     expect(searchVideos).toHaveBeenCalledTimes(2);

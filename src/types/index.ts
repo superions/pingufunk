@@ -62,6 +62,14 @@ export interface TvdbEpisode {
   episodeNumber: number;
 }
 
+/** TV search identity shared by Newznab routing and the episode-result owner. */
+export interface TvSearchContext {
+  query: string | null;
+  tvdbId: number | null;
+  season: string | null;
+  episode: string | null;
+}
+
 // Ruleset Types
 export interface RulesetApiResponse {
   rulesets: Ruleset[];

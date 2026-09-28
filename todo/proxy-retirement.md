@@ -131,7 +131,7 @@ Ergebnis: kleine, hochwirksame RSS-Fixes. Abhängigkeit P00; B03/B10, A1/A6.
 
 Ergebnis: native, konsistente TV-Antworten. Abhängigkeit P01; B01/B02/B04, A4/A7.
 
-- [ ] **P02.1 — Ein Suchkontext für Route, ID und Text.**
+- [x] **P02.1 — Ein Suchkontext für Route, ID und Text.**
       `src/app/api/newznab/route.ts`, der bestehende `/api/newznab/api`-Alias,
       `src/types/index.ts` und `mediathek.ts::{getDesiredEpisodes,
 applyDesiredEpisodeFilter,fetchSearchResultsById,fetchSearchResultsByString}`
@@ -140,6 +140,15 @@ applyDesiredEpisodeFilter,fetchSearchResultsById,fetchSearchResultsByString}`
       Cachekeys um identitätsrelevante Koordinaten erweitern. Abnahme:
       identische ID-/Text-Anfragen liefern nur gewünschte Folgen, A7 bleibt grün,
       E13 trifft weder E12 noch E130/falsche Staffel; Mehrfachfolgen bleiben erlaubt.
+      Abgenommen am 28.09.2026: gemeinsamer Suchkontext für beide Newznab-Routen,
+      ID-/Textsuche und ID-Fehlerfallback; `ep`/`episode` werden kanonisiert,
+      widersprüchliche Aliase und ungültige TVDB-IDs vor der Suche abgewiesen.
+      ID-/Textregressionen decken exakte Folgen, Daily-Datum, falsche Staffel,
+      E12/E130 und erlaubte Mehrfachfolgen ab; ID-gebundener generischer Fallback
+      bleibt geschlossen. Cachekeys unterscheiden Query, ID, Staffel und Folge.
+      Vollständiger Producer-/Consumer-Review ohne offene Findings. Node 24.21.0:
+      209 Tests in 20 Dateien, Lint, Typecheck, Formatcheck und Production-Build
+      erfolgreich; Fork-CI wird mit dem Checkpoint verifiziert.
 - [ ] **P02.2 — Gezielte Kandidatensuche, erst dann Ergebnisfenster.**
       `mediathek.ts::{fetchSearchResultsByString,fetchSearchResultsForRssSync}`
       von zwingendem literal `Sxx` lösen, ohne ungesicherte Serienzuordnung;

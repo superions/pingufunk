@@ -8,7 +8,7 @@ import {
   fetchSearchResultsByString,
   fetchSearchResultsForRssSync,
 } from "./mediathek";
-import type { TmdbMovieData, TvdbData } from "@/types";
+import type { TmdbMovieData, TvdbData, TvSearchContext } from "@/types";
 
 vi.mock("@/lib/fetch-retry", () => ({ fetchWithRetry: vi.fn() }));
 vi.mock("@/lib/settings", () => ({
@@ -32,10 +32,23 @@ const movie: TmdbMovieData = {
   releaseDate: null,
 };
 const emptyResult = () => Response.json({ result: { results: [] }, err: null });
+const tvSearchContext: TvSearchContext = {
+  query: "Show",
+  tvdbId: null,
+  season: null,
+  episode: null,
+};
 const searches = [
   { name: "RSS", run: (limit: number) => fetchSearchResultsForRssSync(limit, 0) },
-  { name: "TV query", run: (limit: number) => fetchSearchResultsByString("Show", null, limit, 0) },
-  { name: "TV ID", run: (limit: number) => fetchSearchResultsById(show, null, null, limit, 0) },
+  {
+    name: "TV query",
+    run: (limit: number) => fetchSearchResultsByString(tvSearchContext, limit, 0),
+  },
+  {
+    name: "TV ID",
+    run: (limit: number) =>
+      fetchSearchResultsById(show, { ...tvSearchContext, query: null, tvdbId: show.id }, limit, 0),
+  },
   { name: "movie query", run: (limit: number) => fetchMovieSearchByQuery("Movie", limit, 0) },
   { name: "movie ID", run: (limit: number) => fetchMovieSearchResults(movie, limit, 0) },
 ];

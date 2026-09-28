@@ -18,6 +18,7 @@ import {
   serializeRss,
   getEmptyRssResult,
   QualityPreference,
+  parseEpisodeFromTitle,
 } from "./newznab";
 import { matchMovieItems } from "./movie-matcher";
 import { searchMovieByTitle } from "./tmdb";
@@ -34,16 +35,25 @@ import type {
   MatchType,
   TitleRegexRuleType,
   MatchingStrategy,
+  TvSearchContext,
 } from "@/types";
-import {
-  findEpisodeByAirDate,
-  findEpisodesByAirYear,
-  findEpisodesBySeason,
-  findEpisodeBySeasonAndNumber,
-} from "@/types";
+import { findEpisodeByAirDate, findEpisodeBySeasonAndNumber } from "@/types";
 
 const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
+
+function tvSearchContextKey(context: TvSearchContext): string {
+  return JSON.stringify([context.query, context.tvdbId, context.season, context.episode]);
+}
+
+function hasEpisodeCoordinates(context: TvSearchContext): boolean {
+  return !!context.season || !!context.episode;
+}
+
+function matchesGenericSearchContext(item: ApiResultItem, context: TvSearchContext): boolean {
+  if (context.tvdbId !== null) return false;
+  return !hasEpisodeCoordinates(context) || matchesSourceCoordinates(item, context);
+}
 
 async function isHlsEnabled(): Promise<boolean> {
   const setting = await getSetting("download.enableHLS");
@@ -479,7 +489,8 @@ async function matchesItemTitleEqualsAirdate(
 async function applyRulesetFilters(
   results: ApiResultItem[],
   tvdbData: TvdbData | undefined,
-  hlsEnabled: boolean
+  hlsEnabled: boolean,
+  tvdbId: number | null = tvdbData?.id ?? null
 ): Promise<{ matchedEpisodes: MatchedEpisodeInfo[]; unmatchedItems: ApiResultItem[] }> {
   await ensureRulesetsLoaded();
   const minDuration = await getMinDurationSeconds();
@@ -533,9 +544,11 @@ async function applyRulesetFilters(
       continue;
     }
 
-    const rulesets = tvdbData
-      ? getRulesetsForTopicAndTvdbId(item.topic, tvdbData.id)
-      : getRulesetsForTopic(item.topic);
+    const targetTvdbId = tvdbData?.id ?? tvdbId;
+    const rulesets =
+      targetTvdbId === null
+        ? getRulesetsForTopic(item.topic)
+        : getRulesetsForTopicAndTvdbId(item.topic, targetTvdbId);
 
     // Log first few items to show what's being checked
     if (checkedCount < 5) {
@@ -598,94 +611,145 @@ async function applyRulesetFilters(
   return { matchedEpisodes, unmatchedItems };
 }
 
-function getDesiredEpisodes(
-  tvdbData: TvdbData,
-  season: string | null,
-  episodeNumber: string | null
-): TvdbEpisode[] | null {
-  if (!season) return null;
+function parseNumericCoordinate(value: string | null): number | null {
+  if (value === null || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
 
-  const desiredEpisodes: TvdbEpisode[] = [];
+function getDailyDateKey(context: TvSearchContext): string | null | undefined {
+  if (!context.episode?.includes("/")) return undefined;
+  if (!context.season || !/^\d{4}$/.test(context.season)) return null;
 
-  if (!episodeNumber) {
-    const seasonNum = parseInt(season);
-    if (!isNaN(seasonNum)) {
-      desiredEpisodes.push(...findEpisodesBySeason(tvdbData, seasonNum));
-    }
+  const match = context.episode.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!match) return null;
+  const year = Number(context.season);
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
+    return null;
 
-    // Check if season is a year
-    if (season.length === 4) {
-      const year = parseInt(season);
-      if (year >= 1900 && year <= 2100) {
-        const yearEpisodes = findEpisodesByAirYear(tvdbData, year);
-        for (const ep of yearEpisodes) {
-          if (
-            !desiredEpisodes.some(
-              (d) => d.seasonNumber === ep.seasonNumber && d.episodeNumber === ep.episodeNumber
-            )
-          ) {
-            desiredEpisodes.push(ep);
-          }
-        }
-      }
-    }
-  } else {
-    // Handle daily format (season is year, episode is MM/DD)
-    if (season.length === 4 && episodeNumber.includes("/")) {
-      const parts = episodeNumber.split("/");
-      if (parts.length === 2) {
-        const dateStr = `${season}-${parts[0]}-${parts[1]}`;
-        const searchDate = new Date(dateStr);
-        if (!isNaN(searchDate.getTime())) {
-          const ep = findEpisodeByAirDate(tvdbData, searchDate);
-          if (ep) desiredEpisodes.push(ep);
-        }
-      }
-    } else {
-      const seasonNum = parseInt(season);
-      const episodeNum = parseInt(episodeNumber);
-      if (!isNaN(seasonNum) && !isNaN(episodeNum)) {
-        const ep = findEpisodeBySeasonAndNumber(tvdbData, seasonNum, episodeNum);
-        if (ep) desiredEpisodes.push(ep);
-      }
-    }
+  return `${context.season}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getAiredDateKey(aired: Date | null): string | null {
+  if (!aired) return null;
+  const date = new Date(aired);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function matchesTvdbEpisode(episode: TvdbEpisode, context: TvSearchContext): boolean {
+  const dailyDate = getDailyDateKey(context);
+  if (dailyDate !== undefined)
+    return dailyDate !== null && getAiredDateKey(episode.aired) === dailyDate;
+
+  const seasonText = context.season?.trim() || null;
+  const episodeText = context.episode?.trim() || null;
+  const season = parseNumericCoordinate(seasonText);
+  const episodeNumber = parseNumericCoordinate(episodeText);
+
+  if (seasonText && season === null) return false;
+  if (episodeText && episodeNumber === null) return false;
+
+  if (season !== null) {
+    const isAiredYear =
+      episodeText === null &&
+      /^\d{4}$/.test(seasonText ?? "") &&
+      season >= 1900 &&
+      season <= 2100 &&
+      getAiredDateKey(episode.aired)?.startsWith(`${season}-`);
+    if (episode.seasonNumber !== season && !isAiredYear) return false;
   }
 
-  return desiredEpisodes;
+  return episodeNumber === null || episode.episodeNumber === episodeNumber;
+}
+
+function matchesSourceCoordinates(item: ApiResultItem, context: TvSearchContext): boolean {
+  const dailyDate = getDailyDateKey(context);
+  if (dailyDate !== undefined) return false;
+
+  const parsed = parseEpisodeFromTitle(item.title);
+  if (parsed.episodes.length === 0) return false;
+
+  const seasonText = context.season?.trim() || null;
+  const episodeText = context.episode?.trim() || null;
+  const season = parseNumericCoordinate(seasonText);
+  const episodeNumber = parseNumericCoordinate(episodeText);
+
+  if (seasonText && (season === null || parsed.season !== season)) return false;
+  if (episodeText && (episodeNumber === null || !parsed.episodes.includes(episodeNumber)))
+    return false;
+  return true;
+}
+
+function getDesiredEpisodes(tvdbData: TvdbData, context: TvSearchContext): TvdbEpisode[] | null {
+  if (!context.season && !context.episode) return null;
+  return tvdbData.episodes.filter((episode) => matchesTvdbEpisode(episode, context));
 }
 
 function applyDesiredEpisodeFilter(
   matchedEpisodes: MatchedEpisodeInfo[],
-  desiredEpisodes: TvdbEpisode[] | null
+  desiredEpisodes: TvdbEpisode[] | null,
+  context: TvSearchContext
 ): MatchedEpisodeInfo[] {
-  if (!desiredEpisodes) return matchedEpisodes;
+  const hasCoordinates = !!context.season || !!context.episode;
+  if (!hasCoordinates && context.tvdbId === null) return matchedEpisodes;
 
-  return matchedEpisodes.filter((matched) =>
-    desiredEpisodes.some(
+  return matchedEpisodes.filter((matched) => {
+    if (context.tvdbId !== null && matched.tvdbId !== context.tvdbId) return false;
+    if (!hasCoordinates) return true;
+    if (desiredEpisodes?.length === 0) return false;
+
+    if (matchesTvdbEpisode(matched.episode, context)) {
+      return (
+        desiredEpisodes === null ||
+        desiredEpisodes.some(
+          (desired) =>
+            desired.seasonNumber === matched.episode.seasonNumber &&
+            desired.episodeNumber === matched.episode.episodeNumber
+        )
+      );
+    }
+
+    if (desiredEpisodes === null) return matchesSourceCoordinates(matched.item, context);
+    const parsed = parseEpisodeFromTitle(matched.item.title);
+    return desiredEpisodes.some(
       (desired) =>
-        desired.seasonNumber === matched.episode.seasonNumber &&
-        desired.episodeNumber === matched.episode.episodeNumber
-    )
-  );
+        parsed.season === desired.seasonNumber && parsed.episodes.includes(desired.episodeNumber)
+    );
+  });
 }
 
 export async function fetchSearchResultsById(
   tvdbData: TvdbData,
-  season: string | null,
-  episodeNumber: string | null,
+  searchContext: TvSearchContext,
   limit: number,
   offset: number
 ): Promise<string> {
+  const context: TvSearchContext = {
+    ...searchContext,
+    query: searchContext.query?.trim() || null,
+    tvdbId: searchContext.tvdbId ?? tvdbData.id,
+  };
+  if (context.tvdbId !== tvdbData.id) return serializeRss(getEmptyRssResult());
+
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
-  const searchQuery = tvdbData.germanName || tvdbData.name;
+  const searchQuery = context.query || tvdbData.germanName || tvdbData.name;
   console.log(
-    `[Mediathek] fetchSearchResultsById: tvdbId=${tvdbData.id}, name="${tvdbData.name}", germanName="${tvdbData.germanName}", season=${season}, episode=${episodeNumber}, quality=${quality}, minDuration=${minDuration}`
+    `[Mediathek] fetchSearchResultsById: tvdbId=${tvdbData.id}, name="${tvdbData.name}", germanName="${tvdbData.germanName}", season=${context.season}, episode=${context.episode}, quality=${quality}, minDuration=${minDuration}`
   );
 
-  const cacheKey = `tvdb_${tvdbData.id}_${season ?? "null"}_${episodeNumber ?? "null"}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const contextKey = tvSearchContextKey(context);
+  const cacheKey = `tvdb_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -693,17 +757,19 @@ export async function fetchSearchResultsById(
     return (cached as { response: string }).response;
   }
 
-  const desiredEpisodes = getDesiredEpisodes(tvdbData, season, episodeNumber);
+  const desiredEpisodes = getDesiredEpisodes(tvdbData, context);
   console.log(`[Mediathek] Desired episodes: ${desiredEpisodes?.length ?? 0}`);
-  if (season && desiredEpisodes?.length === 0) {
-    console.log(`[Mediathek] No desired episodes found for season=${season}, returning empty`);
+  if (hasEpisodeCoordinates(context) && desiredEpisodes?.length === 0) {
+    console.log(
+      `[Mediathek] No desired episodes found for season=${context.season}, episode=${context.episode}, returning empty`
+    );
     const response = serializeRss(getEmptyRssResult());
     mediathekCache.set(cacheKey, { response });
     return response;
   }
 
   // Check for cached API response
-  const apiCacheKey = `mediathekapi_${tvdbData.id}`;
+  const apiCacheKey = `mediathekapi_tvdb_${contextKey}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -729,10 +795,19 @@ export async function fetchSearchResultsById(
     );
   }
 
-  const { matchedEpisodes } = await applyRulesetFilters(results, tvdbData, hlsEnabled);
+  const { matchedEpisodes } = await applyRulesetFilters(
+    results,
+    tvdbData,
+    hlsEnabled,
+    context.tvdbId
+  );
   console.log(`[Mediathek] Matched episodes after ruleset filtering: ${matchedEpisodes.length}`);
 
-  const matchedDesiredEpisodes = applyDesiredEpisodeFilter(matchedEpisodes, desiredEpisodes);
+  const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
+    matchedEpisodes,
+    desiredEpisodes,
+    context
+  );
   console.log(`[Mediathek] Matched desired episodes: ${matchedDesiredEpisodes.length}`);
 
   const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
@@ -747,26 +822,28 @@ export async function fetchSearchResultsById(
 }
 
 export async function fetchSearchResultsByString(
-  q: string | null,
-  season: string | null,
+  searchContext: TvSearchContext,
   limit: number,
   offset: number
 ): Promise<string> {
-  // Normalize once: a whitespace-only q is treated as no query everywhere
-  // (API query, cache keys, and generic gating) so behavior stays consistent.
-  const trimmedQ = q?.trim() || null;
+  const context: TvSearchContext = {
+    ...searchContext,
+    query: searchContext.query?.trim() || null,
+  };
+  const trimmedQ = context.query;
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
-  const cacheKey = `q_${trimmedQ ?? "null"}_${season ?? "null"}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const contextKey = tvSearchContextKey(context);
+  const cacheKey = `q_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
     return (cached as { response: string }).response;
   }
 
-  const apiCacheKey = `mediathekapi_${trimmedQ ?? "null"}_${season ?? "null"}`;
+  const apiCacheKey = `mediathekapi_q_${contextKey}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -779,8 +856,8 @@ export async function fetchSearchResultsByString(
       queries.push({ fields: QUERY_FIELDS, query: trimmedQ });
     }
 
-    if (season) {
-      const zeroPadded = season.length >= 2 ? season : `0${season}`;
+    if (context.season) {
+      const zeroPadded = context.season.length >= 2 ? context.season : `0${context.season}`;
       queries.push({ fields: ["title"], query: `S${zeroPadded}` });
     }
 
@@ -794,9 +871,11 @@ export async function fetchSearchResultsByString(
   const { matchedEpisodes, unmatchedItems } = await applyRulesetFilters(
     results,
     undefined,
-    hlsEnabled
+    hlsEnabled,
+    context.tvdbId
   );
-  const newznabItems: NewznabItem[] = matchedEpisodes.flatMap((info) =>
+  const matchedDesiredEpisodes = applyDesiredEpisodeFilter(matchedEpisodes, null, context);
+  const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
     generateRssItems(info, quality, hlsEnabled)
   );
 
@@ -806,7 +885,9 @@ export async function fetchSearchResultsByString(
   // non-empty q to keep the previous (matched-only) behavior for those queries.
   const hasTextQuery = !!trimmedQ;
   const genericItems: NewznabItem[] = hasTextQuery
-    ? unmatchedItems.flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled))
+    ? unmatchedItems
+        .filter((item) => matchesGenericSearchContext(item, context))
+        .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled))
     : [];
 
   const allItems = [...newznabItems, ...genericItems];

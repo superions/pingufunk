@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MatchingStrategy } from "@/types";
-import type { ApiResultItem, Ruleset, TmdbMovieData, TvdbData } from "@/types";
+import type { ApiResultItem, Ruleset, TmdbMovieData, TvdbData, TvSearchContext } from "@/types";
 
 const mediathekMocks = vi.hoisted(() => ({
   getShowInfoByTvdbId: vi.fn(),
@@ -80,6 +80,16 @@ function makeItem(overrides: Partial<ApiResultItem> = {}): ApiResultItem {
   };
 }
 
+function makeTvSearchContext(overrides: Partial<TvSearchContext> = {}): TvSearchContext {
+  return {
+    query: null,
+    tvdbId: null,
+    season: null,
+    episode: null,
+    ...overrides,
+  };
+}
+
 function mockApi(results: ApiResultItem[]): void {
   mockedFetch.mockResolvedValue({
     ok: true,
@@ -110,7 +120,7 @@ describe("fetchSearchResultsByString – generic result gating", () => {
       makeItem({ topic: "Show B", title: "Show B (S01/E02)" }),
     ]);
 
-    const xml = await fetchSearchResultsByString(null, "01", 100, 0);
+    const xml = await fetchSearchResultsByString(makeTvSearchContext({ season: "1" }), 100, 0);
 
     expect(xml).toContain('total="0"');
     expect(xml).not.toContain("<item>");
@@ -119,7 +129,11 @@ describe("fetchSearchResultsByString – generic result gating", () => {
   it("DOES emit generic results for an actual text query (q set)", async () => {
     mockApi([makeItem({ topic: "Markus Lanz", title: "Markus Lanz (S2026/E70)" })]);
 
-    const xml = await fetchSearchResultsByString("Markus Lanz", null, 100, 0);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Markus Lanz" }),
+      100,
+      0
+    );
 
     expect(xml).not.toContain('total="0"');
     expect(xml).toContain("<item>");
@@ -128,7 +142,11 @@ describe("fetchSearchResultsByString – generic result gating", () => {
   it("treats a whitespace-only q like an empty query (no generic results)", async () => {
     mockApi([makeItem({ topic: "Show C", title: "Show C (S01/E04)" })]);
 
-    const xml = await fetchSearchResultsByString("   ", "01", 100, 0);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "   ", season: "1" }),
+      100,
+      0
+    );
 
     expect(xml).toContain('total="0"');
     expect(xml).not.toContain("<item>");
@@ -155,7 +173,11 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
       return { ok: true, json: async () => ({ result: { results: matched } }) } as Response;
     });
 
-    const xml = await fetchSearchResultsByString("Example", "02", 100, 0);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Example", season: "2" }),
+      100,
+      0
+    );
 
     const requestBody = JSON.parse(String(mockedFetch.mock.calls[0][1]?.body));
     expect(requestBody.queries).toEqual([
@@ -197,7 +219,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     });
     mockApi([mixedRenditions]);
 
-    const xml = await fetchSearchResultsByString("Example", null, 100, 0);
+    const xml = await fetchSearchResultsByString(makeTvSearchContext({ query: "Example" }), 100, 0);
 
     expect(xml).toContain('total="1"');
     expect(xml).toContain("progressive-hd.mp4");
@@ -215,7 +237,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
       }),
     ]);
 
-    const xml = await fetchSearchResultsByString("Example", null, 100, 0);
+    const xml = await fetchSearchResultsByString(makeTvSearchContext({ query: "Example" }), 100, 0);
 
     expect(xml).toContain('total="1"');
     expect(xml).toContain("progressive-standard.mp4");
@@ -233,11 +255,12 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
       }),
     ]);
 
-    const disabledXml = await fetchSearchResultsByString("Example", null, 100, 0);
+    const context = makeTvSearchContext({ query: "Example" });
+    const disabledXml = await fetchSearchResultsByString(context, 100, 0);
     mockedGetSetting.mockImplementation(async (key) =>
       key === "download.enableHLS" ? "true" : null
     );
-    const enabledXml = await fetchSearchResultsByString("Example", null, 100, 0);
+    const enabledXml = await fetchSearchResultsByString(context, 100, 0);
 
     expect(disabledXml).toContain("progressive-hd.mp4");
     expect(disabledXml).not.toContain("standard.m3u8");
@@ -307,13 +330,268 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
       }),
     ]);
 
-    const xml = await fetchSearchResultsById(tvdbData, "02", "2", 100, 0);
+    const xml = await fetchSearchResultsById(
+      tvdbData,
+      makeTvSearchContext({ tvdbId: tvdbData.id, season: "2", episode: "2" }),
+      100,
+      0
+    );
 
     expect(xml).toContain('total="1"');
     expect(xml).toContain("S02E02");
     expect(xml).toContain("episode-2.mp4");
     expect(xml).not.toContain("S02E01");
     expect(xml).not.toContain("Episode-1");
+  });
+
+  it("returns the same exact ID and text episode while retaining an explicit multi-episode release", async () => {
+    const tvdbData: TvdbData = {
+      id: 12345,
+      name: "Example Show",
+      germanName: "Beispielserie",
+      aliases: [],
+      episodes: [12, 13, 130]
+        .map((episodeNumber) => ({
+          name: `Episode ${episodeNumber}`,
+          aired: new Date(
+            `2024-01-${String(episodeNumber === 12 ? 1 : 8).padStart(2, "0")}T00:00:00Z`
+          ),
+          runtime: 45,
+          seasonNumber: 2,
+          episodeNumber,
+        }))
+        .concat({
+          name: "Episode 13, other season",
+          aired: new Date("2024-01-15T00:00:00Z"),
+          runtime: 45,
+          seasonNumber: 3,
+          episodeNumber: 13,
+        }),
+    };
+    const ruleset: Ruleset = {
+      id: 1,
+      mediaId: 1,
+      topic: "Example Show",
+      priority: 1,
+      filters: "[]",
+      titleRegexRules: "[]",
+      seasonRegex: "S(\\d+)",
+      episodeRegex: "E(\\d+)",
+      matchingStrategy: MatchingStrategy.SeasonAndEpisodeNumber,
+      media: {
+        media_id: 1,
+        media_name: "Example Show",
+        media_type: "tv",
+        media_tvdbId: tvdbData.id,
+        media_tmdbId: null,
+        media_imdbId: null,
+      },
+    };
+    const context = makeTvSearchContext({
+      query: "Example Show",
+      tvdbId: tvdbData.id,
+      season: "2",
+      episode: "13",
+    });
+    mockedGetShowInfo.mockResolvedValue(tvdbData);
+    mockedAllTopics.mockReturnValue(["Example Show"]);
+    mockedRulesetsForTopic.mockReturnValue([ruleset]);
+    mockedRulesetsForTopicAndTvdbId.mockImplementation((topic, tvdbId) =>
+      topic === "Example Show" && tvdbId === tvdbData.id ? [ruleset] : []
+    );
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E12",
+        url_video: "https://example.org/episode-12.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E13",
+        url_video: "https://example.org/episode-13.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E130",
+        url_video: "https://example.org/episode-130.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S03/E13",
+        url_video: "https://example.org/season-3-episode-13.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E12E13",
+        url_video: "https://example.org/episode-12-13.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+    ]);
+
+    const idXml = await fetchSearchResultsById(tvdbData, context, 100, 0);
+    const textXml = await fetchSearchResultsByString(context, 100, 0);
+
+    for (const xml of [idXml, textXml]) {
+      expect(xml).toContain('total="2"');
+      expect(xml).toContain("episode-13.mp4");
+      expect(xml).toContain("episode-12-13.mp4");
+      expect(xml).not.toContain("episode-12.mp4");
+      expect(xml).not.toContain("episode-130.mp4");
+      expect(xml).not.toContain("season-3-episode-13.mp4");
+    }
+  });
+
+  it("applies coordinates to generic text fallback and keeps ID-scoped fallback closed", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E12",
+        url_video: "https://example.org/episode-12.mp4",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E13",
+        url_video: "https://example.org/episode-13.mp4",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E130",
+        url_video: "https://example.org/episode-130.mp4",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S03/E13",
+        url_video: "https://example.org/season-3-episode-13.mp4",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E12E13",
+        url_video: "https://example.org/episode-12-13.mp4",
+      }),
+    ]);
+    const textContext = makeTvSearchContext({
+      query: "Example Show",
+      season: "2",
+      episode: "13",
+    });
+
+    const textXml = await fetchSearchResultsByString(textContext, 100, 0);
+    const idFallbackXml = await fetchSearchResultsByString(
+      { ...textContext, tvdbId: 12345 },
+      100,
+      0
+    );
+
+    expect(textXml).toContain('total="2"');
+    expect(textXml).toContain("episode-13.mp4");
+    expect(textXml).toContain("episode-12-13.mp4");
+    expect(textXml).not.toContain("episode-12.mp4");
+    expect(textXml).not.toContain("episode-130.mp4");
+    expect(textXml).not.toContain("season-3-episode-13.mp4");
+    expect(idFallbackXml).toContain('total="0"');
+  });
+
+  it("does not reuse cached text results across episode coordinates", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E13",
+        url_video: "https://example.org/episode-13.mp4",
+      }),
+    ]);
+    const baseContext = makeTvSearchContext({ query: "Example Show", season: "2" });
+
+    const episode13 = await fetchSearchResultsByString({ ...baseContext, episode: "13" }, 100, 0);
+    const episode12 = await fetchSearchResultsByString({ ...baseContext, episode: "12" }, 100, 0);
+
+    expect(episode13).toContain('total="1"');
+    expect(episode13).toContain("episode-13.mp4");
+    expect(episode12).toContain('total="0"');
+    expect(episode12).not.toContain("episode-13.mp4");
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("filters daily text and ID searches by the exact aired date", async () => {
+    const tvdbData: TvdbData = {
+      id: 54321,
+      name: "Daily News",
+      germanName: null,
+      aliases: [],
+      episodes: ["2026-09-27", "2026-09-28"].map((date) => ({
+        name: `Daily News ${date}`,
+        aired: new Date(`${date}T00:00:00Z`),
+        runtime: 10,
+        seasonNumber: 2026,
+        episodeNumber: Number(date.slice(-2)),
+      })),
+    };
+    const ruleset: Ruleset = {
+      id: 2,
+      mediaId: 2,
+      topic: "Daily News",
+      priority: 1,
+      filters: "[]",
+      titleRegexRules: JSON.stringify([
+        { type: "regex", field: "title", pattern: "^(Daily News .*?)$" },
+      ]),
+      seasonRegex: null,
+      episodeRegex: null,
+      matchingStrategy: MatchingStrategy.ItemTitleExact,
+      media: {
+        media_id: 2,
+        media_name: "Daily News",
+        media_type: "tv",
+        media_tvdbId: tvdbData.id,
+        media_tmdbId: null,
+        media_imdbId: null,
+      },
+    };
+    const context = makeTvSearchContext({
+      query: "Daily News",
+      tvdbId: tvdbData.id,
+      season: "2026",
+      episode: "09/28",
+    });
+    mockedGetShowInfo.mockResolvedValue(tvdbData);
+    mockedRulesetsForTopic.mockReturnValue([ruleset]);
+    mockedRulesetsForTopicAndTvdbId.mockReturnValue([ruleset]);
+    mockedAllTopics.mockReturnValue(["Daily News"]);
+    mockApi(
+      ["2026-09-27", "2026-09-28"].map((date) =>
+        makeItem({
+          topic: "Daily News",
+          title: `Daily News ${date}`,
+          filmlisteTimestamp: Date.parse(`${date}T12:00:00Z`) / 1000,
+          url_video: `https://example.org/${date}.mp4`,
+          url_video_low: "",
+          url_video_hd: "",
+        })
+      )
+    );
+
+    const idXml = await fetchSearchResultsById(tvdbData, context, 100, 0);
+    const textXml = await fetchSearchResultsByString(context, 100, 0);
+
+    for (const xml of [idXml, textXml]) {
+      expect(xml).toContain('total="2"');
+      expect(xml).toContain("2026-09-28.mp4");
+      expect(xml).not.toContain("2026-09-27.mp4");
+    }
   });
 
   it("paginates the full generic result set and reuses successful provider data", async () => {
@@ -344,9 +622,10 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
       }),
     ]);
 
-    const secondPage = await fetchSearchResultsByString("Example", null, 1, 1);
-    const samePageFromCache = await fetchSearchResultsByString("Example", null, 1, 1);
-    const thirdPage = await fetchSearchResultsByString("Example", null, 1, 2);
+    const context = makeTvSearchContext({ query: "Example" });
+    const secondPage = await fetchSearchResultsByString(context, 1, 1);
+    const samePageFromCache = await fetchSearchResultsByString(context, 1, 1);
+    const thirdPage = await fetchSearchResultsByString(context, 1, 2);
 
     expect(secondPage).toContain('offset="1"');
     expect(secondPage).toContain('total="3"');
@@ -357,7 +636,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("q_Example_null_1_1_720p_300"),
+      expect.stringContaining('q_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -370,9 +649,10 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
         json: async () => ({ result: { results: [makeItem()] } }),
       } as Response);
 
-    const failedResponse = await fetchSearchResultsByString("Example", null, 100, 0);
+    const context = makeTvSearchContext({ query: "Example" });
+    const failedResponse = await fetchSearchResultsByString(context, 100, 0);
     expect(mockedCacheSet).not.toHaveBeenCalled();
-    const retriedResponse = await fetchSearchResultsByString("Example", null, 100, 0);
+    const retriedResponse = await fetchSearchResultsByString(context, 100, 0);
 
     expect(failedResponse).toContain('total="0"');
     expect(retriedResponse).toContain('total="3"');

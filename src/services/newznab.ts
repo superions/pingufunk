@@ -677,7 +677,7 @@ export function generateGenericRssItems(
  * number or fraction does not establish a season, so callers must not turn an
  * unknown season into S01. Repeated E-numbers stay together for multi-episode titles.
  */
-function parseEpisodeFromTitle(title: string): {
+export function parseEpisodeFromTitle(title: string): {
   season: number | null;
   episodes: number[];
   episodeName: string;
