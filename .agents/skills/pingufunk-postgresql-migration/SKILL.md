@@ -6,8 +6,10 @@ description: Plan, implement or rehearse Pingufunk's mandatory SQLite-to-Postgre
 # Pingufunk PostgreSQL-Migration
 
 PostgreSQL ist Pflichtziel, nicht eine abwägbare Option. Lies AGENTS.md und
-vollständig den [kanonischen P11-Vertrag](../../../docs/postgresql-migration-plan.md)
-vor der entsprechenden Arbeit. Planen/implementieren erlaubt keine Daten-
+vollständig die [PostgreSQL-Fachreferenz](../../../docs/postgresql-migration-plan.md)
+und den betroffenen P11-/P10-Vertrag in den
+[Phasen-TODOs](../../../todo/proxy-retirement.md) vor der entsprechenden Arbeit.
+Planen/implementieren erlaubt keine Daten-
 migration oder Dienständerung an einer bestehenden Installation.
 
 ## Entscheidung und Implementierung
@@ -38,7 +40,7 @@ Rollback prüfen. Roundtrip-Vergleich der semantischen Daten schützt mehr als
 Tabellenname-, Rowcount- oder HTTP-200-Prüfungen; keine Secrets im Bericht.
 
 Für Produktionsausführung zuerst explizite Freigabe und konkrete Zielidentität.
-P11-Phasen einhalten: Schreibstopp, Backup/Integrity/FK, Zielaufbau, typisierter
+Den P10-Freigabevertrag einhalten: Schreibstopp, Backup/Integrity/FK, Zielaufbau, typisierter
 Import, reale Sequences, semantische Validierung, kontrollierter Start und Pause.
 Kontrollierter Start bleibt mit getestetem Maintenance-/Writer-Gate read-only;
 auch Cache-/Settingswrites würden die Grenze zum veralteten SQLite-Snapshot

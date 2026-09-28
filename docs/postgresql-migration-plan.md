@@ -2,16 +2,19 @@
 
 Stand: 28.09.2026. Ergänzung P11 zum
 [Proxy-Ablöseplan](proxy-retirement-plan.md). **PostgreSQL ist ausdrücklich
-beschlossen.** Dieses Dokument plant Entwicklung und Datenübernahme; es führt
-keine Migration aus und ist keine Deploymentfreigabe.
+beschlossen.** Dieses Dokument bleibt technische Referenz mit Ausgangsbefunden
+und Daten-/Rollbackinvarianten. Einziger ausführbarer Entwicklungs- und
+Freigabevertrag: [Phasen-TODOs](../todo/proxy-retirement.md), P11 und P10.
+Keine Migration ausgeführt, keine Deploymentfreigabe.
 
 ## Entscheidung, Umfang und Reihenfolge
 
 Pingufunk bekommt PostgreSQL als aktiven Datenbankbackend, auch wenn einzelne
 Proxy-Fixes zuvor unabhängig fertig werden. Die Proxy-Ablösung P10 darf nicht
 als abgeschlossen gelten, solange Pingufunk noch auf SQLite läuft.
-P11 folgt als eigenes Pflichtpaket auf P05 und vor neuen optionalen Schema-
-erweiterungen aus P07/P09. Suchfixes P01–P04 bleiben frühe, kleine Nutzenschritte.
+P11 liefert implementierte und isoliert geprobte Bereitschaft nach P05 und
+vor neuen Schemaerweiterungen aus P07/P09. Der echte PG-Cutover mit
+Schreibfreigabe gehört P10, vor und getrennt von der Proxy-Umschaltung. Suchfixes P01–P04 bleiben frühe, kleine Nutzenschritte.
 
 Dies betrifft **Pingufunks eigene Prisma-Datenbank**, nicht erneut die Sonarr-,
 Radarr- oder Prowlarr-Datenbanken. Keine Servarr-main/log-Aufteilung erfinden:
@@ -115,63 +118,13 @@ JSON/Regex bleiben zunächst Strings; keine beiläufige Json-/UUID-Typmigration.
 Prisma-UUID-/CUID-Defaults können clientseitig sein: importierte IDs explizit
 setzen und spätere Inserts über den echten Client testen.
 
-## Reproduzierbarer Migrationsablauf als P11-Liefervertrag
+## Runner- und Operationsreferenz
 
-Der folgende Ablauf beschreibt den **noch zu implementierenden** Runner und
-Runbook-Vertrag, keine heute vorhandenen ausführbaren Projektkommandos.
-Die eigentliche Datenmigration braucht weiterhin ausdrückliche Freigabe.
-
-1. **Preflight, standardmäßig read-only:** Image-/Commit-/Schema-/Toolversionen,
-   tatsächlichen SQLite-Pfad und Mount, Quelltabellen/Spalten/Indizes, Ledger,
-   Datentypen, freien Platz und Rollback-Image feststellen. PostgreSQL-Version,
-   Primary, Ziel-DB/-Schema/-Rolle, HAProxy-Erreichbarkeit und Berechtigungen
-   verifizieren. Unbekanntes Schema oder Fremdbelegung: Abbruch. Vorhandene
-   Serverversion gegen die eingesetzte Prisma-Version und Supportpolitik prüfen;
-   kein stilles Major-Upgrade des Servers.
-2. **Schreibstopp mit Freigabe:** neue Grabs/Queue-Aufnahme anhalten, aktive Jobs
-   kontrolliert beenden, nicht importierte History erfassen. Alle Pingufunk-
-   Writer/Worker stoppen. Proxy/Routing und übrige Servarr-Dienste nicht pauschal
-   stoppen. Während der Übernahme kein Pingufunk-App-Start, der Queue-Jobs startet.
-3. **Konsistentes Backup:** SQLite-Backup-API bzw. CLI-Backup verwenden, WAL/SHM
-   bei der Quellinventur berücksichtigen; nicht nur eine laufende Hauptdatei
-   kopieren. Backup mit Hash und eingeschränkten Rechten außerhalb Git ablegen.
-   Integrität und FK auf dem Snapshot prüfen: integrity_check exakt ok,
-   foreign_key_check ohne Zeilen. Nur Snapshot lesen; keine VACUUM-/Reparatur-
-   oder Checkpoint-Schreiboperation an der Quelle. Unveränderte Quelle behalten.
-4. **PostgreSQL vorbereiten:** freigegebene eigene Rolle/DB/Schema gemäß
-   Infrastrukturkonvention einrichten bzw. kompatiblen Bestand nur prüfen.
-   Schema mit reviewed PostgreSQL-Kette erstellen. Frische Zieltabellen müssen
-   leer sein; alte Quellledgers nie übernehmen. Kein App-Warmup zum Schema-
-   erstellen und kein Servarr-main/log-Verfahren auf Pingufunk anwenden.
-5. **Typisierte Datenübernahme:** ein kleiner, versionierter Importer liest den
-   Snapshot read-only, prüft dessen Fingerprint, importiert Eltern vor Kindern
-   in ein isoliertes Ziel und erhält explizite IDs. Transaktion bzw. getestetes
-   Staging/Checkpointing und Ziel-Lock verhindern teilweisen aktivierten Bestand.
-   Bevorzugt explizite Typabbildung statt blindem pgloader-Schemagenerator.
-   pgloader ist nur vertretbar, wenn Daten-only-Mapping, quoted CamelCase,
-   Zeiten/BigInt, Constraints und das Prisma-Ziel per Test nachgewiesen sind.
-6. **Sequences:** am realen PostgreSQL-Schema über Katalog-/Ownership-Abfragen
-   ermitteln, welche Spalten tatsächlich eine Sequence besitzen. Aktuell ist
-   TvdbEpisode.id der Modell-Autoincrement-Fall, aber keine statische Liste
-   festschreiben. Leerfall/Startwert und importiertes MAX korrekt behandeln;
-   explizite Serien-IDs nicht versehentlich automatisch erzeugen. Erfolgreiche
-   neue Client-Inserts ohne ID-Kollision im isolierten Test nachweisen.
-7. **Semantische Validierung vor App-Start:** Tabellenanzahl, PK-Mengen,
-   zeilenweise normalisierte Werte/Hashes, FK/Unique/NULL, Zeitpräzision,
-   BigInt-Summen und Status-/Kategorieverteilungen vergleichen. Config-Werte
-   nur intern vergleichen, Bericht ohne Geheimnisse. Jeder unerklärte Verlust
-   oder Typfehler führt zum Abbruch, nicht zu „übersprungenen“ Zeilen.
-8. **Kontrollierter Start auf PostgreSQL:** Secret und geprüftes Image einsetzen;
-   SQLite-Mount nur als gesicherter Rollbackbestand, kein Fallback. Readiness
-   mit DB-/Schema-Prüfung; Settings und Queue/History zunächst nur lesen.
-   Maintenance-/Writer-Gate aktiv: Aufnahme, Worker und Cache-/Settingwrites
-   gesperrt. Den Zeitpunkt der ersten tatsächlichen PG-Anwendungsschreiboperation
-   erfassen; nicht erst ein späteres Freigabelabel als Rollbackgrenze verwenden.
-   Isolierten synthetischen Download-/Retry-/Importfall nur bei separat
-   freigegebenem Integrationstest durchführen. Restart/Persistenz abnehmen.
-9. **Validierung und Pause:** Ergebnisse, Sourcehash, Ziel-/Schemaversion und
-   Rollbackpunkte dokumentieren. Erst nach Abnahme normale Aufnahme freigeben.
-   Proxy bleibt aktiv; dessen Abschaltung ist der separate P10-Schritt.
+Lieferergebnisse stehen in P11.3–P11.8 der
+[Phasen-TODOs](../todo/proxy-retirement.md), ihre freigegebene produktive
+Ausführung in P10.2–P10.5. Runner und operatorfertiges Runbook existieren
+noch nicht. Gewählt ist explizit typisierter Snapshotimport, kein blinder
+pgloader-Schemagenerator.
 
 Backupverfahren und die Trennung von Integrity-/FK-Prüfung stützen sich auf
 die [SQLite-Backup-Dokumentation](https://www.sqlite.org/backup.html) und
@@ -198,7 +151,7 @@ Resume-Regeln; keine Behauptung eines vollständig atomaren Gesamtcutovers.
 
 ## Rollback und Haltelinien
 
-- **Vor Schreibfreigabe auf PostgreSQL:** neue App stoppen, Ziel erhalten,
+- **Vor dem ersten tatsächlichen Anwendungsschreibvorgang auf PostgreSQL:** neue App stoppen, Ziel erhalten,
   ursprünglichen SQLite-Image-Digest und ursprüngliche Konfiguration mit
   unveränderter Quelle wiederherstellen. Dieser Punkt gilt nur, solange noch
   keine neuen Anwendungsschreibvorgänge stattfanden. Niemals PG-App-Image an
@@ -218,11 +171,12 @@ Resume-Regeln; keine Behauptung eines vollständig atomaren Gesamtcutovers.
 
 ## Pflichtabnahme und noch offene Betriebswerte
 
-P11 gilt erst als erfüllt, wenn frische Installation und Bestandsmigration,
+Die technische P11-Abnahme umfasst frische Installation und Bestandsmigration,
 Restart, CRUD/Settings, Queue/History, Regeln/Caches, Secret-Ausfälle,
 DB-Ausfall/HAProxy-Reconnect, Datenvergleich, Retry/Resume sowie beide
-Rollback-Zeitpunkte gegen disposable PostgreSQL geprüft sind. Tests mit
+Rollback-Zeitpunkte gegen disposable PostgreSQL. Tests mit
 SQLite allein oder nur Tabellenname-Regex sind kein PostgreSQL-Nachweis.
+Die echte Betriebsabnahme bleibt zusätzlich P10 vorbehalten.
 
 Vor produktiver Ausführung offen: tatsächliche Serverversion, Sourcepfad und
 Schemafingerprint, DB-/Rollenname nach bestehender Konvention, Secretnamen,
@@ -230,9 +184,6 @@ HAProxy-Primary-/TLS-Vertrag, berechtigte Runner-Ausführung, Wartungsfenster,
 Datengröße/Importdauer, Backupablage, Retention und RPO/Rücktransferentscheidung.
 Diese offenen Betriebswerte machen **nicht die PostgreSQL-Entscheidung optional**.
 
-Nächste Artefakte in P11: geprüfte PostgreSQL-Migrationskette, angepasstes Image/
-Entrypoint, secretfähige Konfiguration, Maintenance-/Writer-Gate,
-read-only Preflight plus schreibender Importer und read-only Verifier,
-isolierte PostgreSQL-Testharness und operatorfertiges Runbook mit tatsächlich
-implementierten Kommandos. Bis dahin keine vermeintlich fertigen Deployment-
-befehle oder Freigabe behaupten.
+Artefakte, Entscheidungen und Status werden nur in den Phasen-TODOs geführt.
+Bis zu implementiertem Runner und geprobtem Runbook gibt es hier keine
+vermeintlich fertigen Deploymentbefehle.

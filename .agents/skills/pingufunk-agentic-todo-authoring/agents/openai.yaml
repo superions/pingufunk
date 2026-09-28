@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk Phasen-TODOs"
+  short_description: "Aus Plänen ausführbare Phasen-TODOs erstellen"
+  default_prompt: "Nutze $pingufunk-agentic-todo-authoring, um die freigegebenen Pingufunk-Anforderungen in konkrete Phasen-TODOs zu überführen."

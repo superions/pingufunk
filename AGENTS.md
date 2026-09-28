@@ -5,6 +5,7 @@
 This fork aims to replace an external Sonarr/Radarr compatibility proxy with
 native, tested RundfunkArr fixes and optional integrations. **PostgreSQL is a
 mandatory target, not an optional optimization.** Read
+`todo/proxy-retirement.md` (the sole executable phased contract),
 `docs/proxy-retirement-plan.md`, its review and `docs/postgresql-migration-plan.md`
 before changing the relevant behavior. Re-check upstream before implementing a
 workaround: some historical defects are already fixed.
@@ -118,9 +119,10 @@ request determines scope; a plan or skill never supplies deployment permission.
 - For nontrivial changes review inline contracts, units, ordering, cancellation,
   cache invalidation and persistence invariants. Keep useful English comments;
   remove stale rationale rather than narrating obvious code or inventing history.
-- Put maintained plans and runbooks in `docs/`; update their canonical pages.
-  Report systematic findings in the relevant plan/review rather than creating
-  Myoxus-style TODO/archive hierarchies without a project need.
+- Put maintained references and runbooks in `docs/`. The user-requested phased
+  contract lives in `todo/proxy-retirement.md`; track executable work only there.
+  Report systematic findings in the relevant review and reopen the owner TODO.
+  Do not add duplicate TODO indexes, ledgers or done archives without a need.
 
 ## Repository skills
 
@@ -128,15 +130,16 @@ Read the full applicable SKILL.md before acting and any routed reference needed
 for the task. These skills are portable project files under `.agents/skills`;
 they do not depend on Myoxus scripts, hosts or a global skill installation.
 
-| Task                                                                 | Skill                                                                                    |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Implementation verification, CI gates and evidence reuse             | [pingufunk-test-gates](.agents/skills/pingufunk-test-gates/SKILL.md)                     |
-| Served-runtime diagnosis, hangs and stale bundles                    | [pingufunk-dev-runtime](.agents/skills/pingufunk-dev-runtime/SKILL.md)                   |
-| Desktop UI changes or visual review                                  | [pingufunk-visual-qa](.agents/skills/pingufunk-visual-qa/SKILL.md)                       |
-| Explicit dependency audit, removal or consolidation                  | [pingufunk-dependency-review](.agents/skills/pingufunk-dependency-review/SKILL.md)       |
-| OCI release preparation, publication or verification                 | [pingufunk-container-release](.agents/skills/pingufunk-container-release/SKILL.md)       |
-| Nontrivial inline TypeScript/TSX, shell or SQL contracts             | [pingufunk-inline-doc](.agents/skills/pingufunk-inline-doc/SKILL.md)                     |
-| PostgreSQL implementation, migration rehearsal or authorized cutover | [pingufunk-postgresql-migration](.agents/skills/pingufunk-postgresql-migration/SKILL.md) |
+| Task                                                                 | Skill                                                                                        |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Implementation verification, CI gates and evidence reuse             | [pingufunk-test-gates](.agents/skills/pingufunk-test-gates/SKILL.md)                         |
+| Served-runtime diagnosis, hangs and stale bundles                    | [pingufunk-dev-runtime](.agents/skills/pingufunk-dev-runtime/SKILL.md)                       |
+| Desktop UI changes or visual review                                  | [pingufunk-visual-qa](.agents/skills/pingufunk-visual-qa/SKILL.md)                           |
+| Explicit dependency audit, removal or consolidation                  | [pingufunk-dependency-review](.agents/skills/pingufunk-dependency-review/SKILL.md)           |
+| OCI release preparation, publication or verification                 | [pingufunk-container-release](.agents/skills/pingufunk-container-release/SKILL.md)           |
+| Nontrivial inline TypeScript/TSX, shell or SQL contracts             | [pingufunk-inline-doc](.agents/skills/pingufunk-inline-doc/SKILL.md)                         |
+| PostgreSQL implementation, migration rehearsal or authorized cutover | [pingufunk-postgresql-migration](.agents/skills/pingufunk-postgresql-migration/SKILL.md)     |
+| Approved plans/raw findings into executable phased TODOs             | [pingufunk-agentic-todo-authoring](.agents/skills/pingufunk-agentic-todo-authoring/SKILL.md) |
 
 The adaptation rationale and exclusions are documented in
 [docs/agent-workflow.md](docs/agent-workflow.md). No subagent delegation is implied;
