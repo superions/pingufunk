@@ -672,45 +672,47 @@ export function generateGenericRssItems(
 }
 
 /**
- * Parse season and episode numbers from Mediathek titles.
- * Common patterns:
- *   (S01/E05), (S2026/E02)  — standard ARD/ZDF format
- *   (4/6)                    — episode/total format (no season info)
- *   Folge 5, Folge 5:        — episode-only with optional colon
- *   Staffel 2 Folge 3        — explicit season + episode
+ * Parse source-backed episode coordinates from Mediathek titles. An episode-only
+ * number or fraction does not establish a season, so callers must not turn an
+ * unknown season into S01. Repeated E-numbers stay together for multi-episode titles.
  */
 function parseEpisodeFromTitle(title: string): {
   season: number | null;
-  episode: number | null;
+  episodes: number[];
   episodeName: string;
 } {
   let season: number | null = null;
-  let episode: number | null = null;
+  let episodes: number[] = [];
   let episodeName = title;
 
-  // Pattern 1: (S01/E05) or S01/E05
-  const sPattern = title.match(/\(?S(\d+)\/E(\d+)\)?/i);
+  // Keep the whole E12E13 sequence; truncating it changes the release identity.
+  const sPattern = title.match(/\(?\bS(\d+)\/E(\d+(?:E\d+)*)\)?/i);
   if (sPattern) {
     season = parseInt(sPattern[1], 10);
-    episode = parseInt(sPattern[2], 10);
+    episodes = sPattern[2].split(/E/i).map((value) => parseInt(value, 10));
     episodeName = title.replace(sPattern[0], "").trim();
   }
 
-  // Pattern 2: Staffel N Folge N
-  if (episode === null) {
-    const staffelPattern = title.match(/Staffel\s+(\d+)\s+Folge\s+(\d+)/i);
-    if (staffelPattern) {
-      season = parseInt(staffelPattern[1], 10);
-      episode = parseInt(staffelPattern[2], 10);
-      episodeName = title.replace(staffelPattern[0], "").trim();
+  // A named season plus its episode fraction/number is explicit season evidence.
+  if (episodes.length === 0) {
+    const seasonEpisodePattern = title.match(
+      /\b(?:Staffel|Season|Saison|Temporada|Stagione)\s+(\d+)(?:\s*\((\d+)\s*\/\s*\d+\)|[\s,:-]+(?:Folge|Episode|E)\s*(\d+(?:E\d+)*))/i
+    );
+    if (seasonEpisodePattern) {
+      season = parseInt(seasonEpisodePattern[1], 10);
+      const episodeSequence = seasonEpisodePattern[2] ?? seasonEpisodePattern[3];
+      episodes = episodeSequence.split(/E/i).map((value) => parseInt(value, 10));
+      episodeName = title.replace(seasonEpisodePattern[0], "").trim();
     }
   }
 
-  // Pattern 3: Folge N (with optional episode name after colon)
-  if (episode === null) {
-    const folgePattern = title.match(/Folge\s+(\d+)(?:\s*:\s*(.+?))?(?:\s*\(|$)/i);
+  // Episode labels without a season remain episode-only coordinates.
+  if (episodes.length === 0) {
+    const folgePattern = title.match(
+      /\b(?:Folge|Episode)\s+(\d+(?:E\d+)*)(?:\s*:\s*(.+?))?(?:\s*\(|$)/i
+    );
     if (folgePattern) {
-      episode = parseInt(folgePattern[1], 10);
+      episodes = folgePattern[1].split(/E/i).map((value) => parseInt(value, 10));
       if (folgePattern[2]) {
         episodeName = folgePattern[2].trim();
       } else {
@@ -719,11 +721,11 @@ function parseEpisodeFromTitle(title: string): {
     }
   }
 
-  // Pattern 4: (N/N) — episode/total, only if no season found yet
-  if (episode === null) {
+  // A bare fraction can identify its first episode, but never its season.
+  if (episodes.length === 0) {
     const fracPattern = title.match(/\((\d+)\/(\d+)\)/);
     if (fracPattern) {
-      episode = parseInt(fracPattern[1], 10);
+      episodes = [parseInt(fracPattern[1], 10)];
       episodeName = title.replace(fracPattern[0], "").trim();
     }
   }
@@ -740,7 +742,7 @@ function parseEpisodeFromTitle(title: string): {
   // Remove leading/trailing punctuation artifacts
   episodeName = episodeName.replace(/^[:\-–\s]+|[:\-–\s]+$/g, "").trim();
 
-  return { season, episode, episodeName };
+  return { season, episodes, episodeName };
 }
 
 function createGenericRssItem(
@@ -756,15 +758,17 @@ function createGenericRssItem(
   const parsed = parseEpisodeFromTitle(item.title);
   let rawTitle: string;
 
-  if (parsed.episode !== null) {
-    const seasonNum = parsed.season ?? 1;
-    const paddedSeason = seasonNum.toString().padStart(2, "0");
-    const paddedEpisode = parsed.episode.toString().padStart(2, "0");
-    // Omit the episode-name segment when the pattern consumed the whole title
-    // (e.g. "Staffel 2 Folge 3"), otherwise it duplicates the SxxExx info.
+  if (parsed.episodes.length > 0) {
+    const seasonPart =
+      parsed.season === null ? "" : `S${parsed.season.toString().padStart(2, "0")}`;
+    const episodePart = parsed.episodes
+      .map((episode) => `E${episode.toString().padStart(2, "0")}`)
+      .join("");
+    // Omit the episode-name segment when the pattern consumed the whole title;
+    // otherwise the source coordinate is repeated in the generated release.
     rawTitle = parsed.episodeName
-      ? `${item.topic}.S${paddedSeason}E${paddedEpisode}.${parsed.episodeName}.GERMAN.${quality}.WEB.h264-MEDiATHEK`
-      : `${item.topic}.S${paddedSeason}E${paddedEpisode}.GERMAN.${quality}.WEB.h264-MEDiATHEK`;
+      ? `${item.topic}.${seasonPart}${episodePart}.${parsed.episodeName}.GERMAN.${quality}.WEB.h264-MEDiATHEK`
+      : `${item.topic}.${seasonPart}${episodePart}.GERMAN.${quality}.WEB.h264-MEDiATHEK`;
   } else {
     rawTitle = `${item.topic}.${item.title}.GERMAN.${quality}.WEB.h264-MEDiATHEK`;
   }
@@ -782,15 +786,17 @@ function createGenericRssItem(
   }));
 
   // Add season/episode attributes if parsed
-  if (parsed.episode !== null) {
-    const seasonNum = parsed.season ?? 1;
-    attributes.push({
-      name: "season",
-      value: seasonNum.toString().padStart(2, "0"),
-    });
+  if (parsed.episodes.length > 0) {
+    if (parsed.season !== null) {
+      attributes.push({
+        name: "season",
+        value: parsed.season.toString().padStart(2, "0"),
+      });
+    }
+    // Newznab's episode attribute is numeric; the release title retains every E-number.
     attributes.push({
       name: "episode",
-      value: parsed.episode.toString().padStart(2, "0"),
+      value: parsed.episodes[0].toString().padStart(2, "0"),
     });
   }
 

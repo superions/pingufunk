@@ -7,11 +7,12 @@ import {
   generateFakeNzb,
   getCapabilitiesXml,
   generateGenericRssItems,
+  generateRssItems,
   getValidationRss,
   isMovieCategoryRequest,
   parseNewznabCategoryIds,
 } from "./newznab";
-import type { NewznabItem, ApiResultItem } from "@/types";
+import type { NewznabItem, ApiResultItem, MatchedEpisodeInfo } from "@/types";
 
 describe("generateAttributes", () => {
   it("should generate category attributes", () => {
@@ -264,12 +265,13 @@ describe("generateGenericRssItems", () => {
     expect(items[0].guid.value).toBe("https://example.com/video#1080p");
   });
 
-  it("parses Folge N titles into season/episode attributes", () => {
+  it("parses an episode-only title without inventing a season", () => {
     const items = generateGenericRssItems(baseItem, "best");
     const attrs = items[0].attributes;
 
-    expect(attrs.find((a) => a.name === "season")).toEqual({ name: "season", value: "01" });
+    expect(attrs.find((a) => a.name === "season")).toBeUndefined();
     expect(attrs.find((a) => a.name === "episode")).toEqual({ name: "episode", value: "05" });
+    expect(items[0].title).not.toContain("S01E05");
   });
 
   it("parses explicit S<season>/E<episode> titles", () => {
@@ -312,7 +314,8 @@ describe("generateGenericRssItems - edge cases", () => {
     const attrs = items[0].attributes;
 
     expect(attrs.find((a) => a.name === "episode")).toEqual({ name: "episode", value: "00" });
-    expect(attrs.find((a) => a.name === "season")).toEqual({ name: "season", value: "01" });
+    expect(attrs.find((a) => a.name === "season")).toBeUndefined();
+    expect(items[0].title).not.toContain("S01E00");
   });
 
   it("parses Staffel N Folge N", () => {
@@ -332,29 +335,85 @@ describe("generateGenericRssItems - edge cases", () => {
   });
 });
 
-describe("P00 historical release characterizations", () => {
-  it("characterizes A1: Staffel 2 with only a 2/6 fraction is mislabeled as season 1", () => {
-    const [item] = generateGenericRssItems(
-      {
-        channel: "ARD",
-        topic: "Example Show",
-        title: "Example - Staffel 2 (2/6)",
-        description: "Synthetic characterization input",
-        filmlisteTimestamp: 1_700_000_000,
-        duration: 2700,
-        size: 1_000_000_000,
-        url_website: "https://example.org/show/episode-2",
-        url_video: "https://example.org/episode-2-720.mp4",
-        url_video_low: "",
-        url_video_hd: "",
-      },
-      "720p"
+describe("P01.1 explicit episode coordinates", () => {
+  const base: ApiResultItem = {
+    channel: "ARD",
+    topic: "Example Show",
+    title: "",
+    description: "Synthetic coordinate input",
+    filmlisteTimestamp: 1_700_000_000,
+    duration: 2700,
+    size: 1_000_000_000,
+    url_website: "https://example.org/show/episode-2",
+    url_video: "https://example.org/episode-2-720.mp4",
+    url_video_low: "",
+    url_video_hd: "",
+  };
+
+  it.each(["Staffel", "Season", "Saison", "Temporada", "Stagione"])(
+    "keeps explicit %s 2 (2/6) as season 2 in release, attributes, and encodedTitle",
+    (seasonLabel) => {
+      const [item] = generateGenericRssItems(
+        { ...base, title: `Example - ${seasonLabel} 2 (2/6)` },
+        "720p"
+      );
+      const encodedTitle = new URL(item.enclosure.url, "http://localhost").searchParams.get(
+        "encodedTitle"
+      );
+
+      expect(item.title).toContain("Example.Show.S02E02");
+      expect(item.attributes.find((attribute) => attribute.name === "season")).toEqual({
+        name: "season",
+        value: "02",
+      });
+      expect(item.attributes.find((attribute) => attribute.name === "episode")).toEqual({
+        name: "episode",
+        value: "02",
+      });
+      expect(encodedTitle).toBe(Buffer.from(item.title, "utf-8").toString("base64"));
+      expect(Buffer.from(encodedTitle!, "base64").toString("utf-8")).toBe(item.title);
+    }
+  );
+
+  it.each([
+    ["Reportage (2/6)", "02"],
+    ["Folge 5: Der Anfang", "05"],
+  ])("does not invent season 1 for ambiguous title %s", (title, expectedEpisode) => {
+    const [item] = generateGenericRssItems({ ...base, title }, "720p");
+
+    expect(item.title).not.toMatch(/\.S01E\d+/);
+    expect(item.attributes.find((attribute) => attribute.name === "season")).toBeUndefined();
+    expect(item.attributes.find((attribute) => attribute.name === "episode")).toEqual({
+      name: "episode",
+      value: expectedEpisode,
+    });
+  });
+
+  it("keeps the complete multi-episode coordinate in release and encodedTitle", () => {
+    const [item] = generateGenericRssItems({ ...base, title: "Example S02/E12E13" }, "720p");
+    const encodedTitle = new URL(item.enclosure.url, "http://localhost").searchParams.get(
+      "encodedTitle"
     );
 
-    expect(item.title).toContain("Example.Show.S01E02");
+    expect(item.title).toContain("Example.Show.S02E12E13");
     expect(item.attributes.find((attribute) => attribute.name === "season")).toEqual({
       name: "season",
-      value: "01",
+      value: "02",
+    });
+    expect(item.attributes.find((attribute) => attribute.name === "episode")).toEqual({
+      name: "episode",
+      value: "12",
+    });
+    expect(Buffer.from(encodedTitle!, "base64").toString("utf-8")).toBe(item.title);
+  });
+
+  it("keeps source seasons above 99 in explicit S/E coordinates", () => {
+    const [item] = generateGenericRssItems({ ...base, title: "Example (S2026/E02)" }, "720p");
+
+    expect(item.title).toContain("Example.Show.S2026E02");
+    expect(item.attributes.find((attribute) => attribute.name === "season")).toEqual({
+      name: "season",
+      value: "2026",
     });
     expect(item.attributes.find((attribute) => attribute.name === "episode")).toEqual({
       name: "episode",
@@ -362,6 +421,36 @@ describe("P00 historical release characterizations", () => {
     });
   });
 
+  it("preserves seasons above 99 and the daily release for year-based episodes", () => {
+    const info: MatchedEpisodeInfo = {
+      episode: {
+        name: "Heute",
+        aired: new Date("2026-09-01T00:00:00Z"),
+        runtime: 30,
+        seasonNumber: 2026,
+        episodeNumber: 12,
+      },
+      item: { ...base, title: "Heute" },
+      showName: "Tagesschau",
+      matchedTitle: "Tagesschau",
+      tvdbId: 12345,
+    };
+    const items = generateRssItems(info, "720p");
+
+    expect(items).toHaveLength(2);
+    expect(items[0].title).toContain("Tagesschau.S2026E12");
+    expect(items[1].title).toContain("Tagesschau.2026-09-01");
+    expect(
+      items.every((item) =>
+        item.attributes.some(
+          (attribute) => attribute.name === "season" && attribute.value === "2026"
+        )
+      )
+    ).toBe(true);
+  });
+});
+
+describe("P00 historical release characterizations", () => {
   it("characterizes A2: an ARTE.FR release is labeled GERMAN without language evidence", () => {
     const [item] = generateGenericRssItems(
       {

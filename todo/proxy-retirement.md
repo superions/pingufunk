@@ -94,7 +94,7 @@ Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
 
 Ergebnis: kleine, hochwirksame RSS-Fixes. Abhängigkeit P00; B03/B10, A1/A6.
 
-- [ ] **P01.1 — Staffel/Folge aus nachgewiesenen Quellkoordinaten.**
+- [x] **P01.1 — Staffel/Folge aus nachgewiesenen Quellkoordinaten.**
       `src/services/newznab.ts::parseEpisodeFromTitle` und alle Titel-/Attribut-/
       NZB-Consumer auf explizite `Staffel N (E/Gesamt)` sowie Season/Saison/
       Temporada/Stagione erweitern. Bestehende numerische, Daily-, Jahres->99-
@@ -102,6 +102,12 @@ Ergebnis: kleine, hochwirksame RSS-Fixes. Abhängigkeit P00; B03/B10, A1/A6.
       Mehrdeutiges nicht für automatisches Matching in S01 umdeuten. Abnahme:
       explizite Staffel 2 bleibt S02 in Release, Attributen und encodedTitle,
       E12E13 bleibt vollständig; positive/negative Altformate regressionsfrei.
+      Abgenommen am 28.09.2026: Staffel/Season/Saison/Temporada/Stagione sowie
+      `S2026/E02` und `S02/E12E13` regressionsgeprüft. Folge-only und nackter
+      Bruch erzeugen keine S01-Behauptung; Daily-/Jahresausgabe bleibt erhalten.
+      RSS→Fake-NZB erhält den Base64-Titel; der offene Dateinamen-Parserpfad
+      bleibt wie vorgesehen bei P02.3. Prüfung: 192 Tests, Lint, Typecheck,
+      Formatcheck und Build erfolgreich.
 - [ ] **P01.2 — Nutzbare Qualität nicht durch eine andere URL verlieren.**
       `src/services/mediathek.ts::shouldSkipItem`,
       `src/lib/stream-url.ts` und sämtliche TV/Movie/Generic-RSS-Erzeuger

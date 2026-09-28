@@ -61,11 +61,11 @@ describe("Newznab indexer validation", () => {
     expect(await response.text()).toBe(EMPTY_RSS);
   });
 
-  it("characterizes the Newznab RSS to NZB route and queue-parser boundary", async () => {
+  it("preserves explicit coordinates through RSS/NZB and keeps the queue-parser boundary", async () => {
     const source: ApiResultItem = {
       channel: "ARD",
       topic: "Example Show",
-      title: "Episode with a tricky URL",
+      title: "Staffel 2 (2/6)",
       description: "Synthetic release identity",
       filmlisteTimestamp: 1_700_000_000,
       duration: 2700,
@@ -86,14 +86,17 @@ describe("Newznab indexer validation", () => {
     const parsedRss = await parseStringPromise(searchXml);
     const rssItem = parsedRss.rss.channel[0].item[0];
     const enclosureUrl = rssItem.enclosure[0].$.url as string;
+    const encodedTitle = new URL(enclosureUrl, "http://localhost").searchParams.get("encodedTitle");
     const downloadResponse = await downloadNzb(new NextRequest(`http://localhost${enclosureUrl}`));
     const nzbContent = await downloadResponse.text();
 
     expect(searchResponse.status).toBe(200);
     expect(rssItem.title[0]).toBe(release.title);
+    expect(release.title).toContain("Example.Show.S02E02");
+    expect(encodedTitle).toBe(Buffer.from(release.title).toString("base64"));
     expect(rssItem.link[0]).toBe(source.url_video);
     expect(downloadResponse.status).toBe(200);
-    expect(nzbContent).toContain(Buffer.from(release.title).toString("base64"));
+    expect(nzbContent).toContain(`<!-- ${encodedTitle} -->`);
     expect(nzbContent).toContain(Buffer.from(source.url_video).toString("base64"));
     // P02.3 owns closing this existing gap: the queue parser requires a filename attribute.
     expect(parseNzbContent(nzbContent)).toBeNull();
