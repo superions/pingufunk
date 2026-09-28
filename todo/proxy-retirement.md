@@ -68,7 +68,7 @@ Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
       Ausschluss der Nachbarfolge geprüft; Newznab-Route, RSS und NZB-Parser
       synthetisch verbunden. Der Pfadtest dokumentiert die noch offene
       Producer-/Parserabweichung für P02.3.
-- [x] **P00.2 — Fork-eigene, nicht publizierende Verifikation.**
+- [ ] **P00.2 — Fork-eigene, nicht publizierende Verifikation.**
       `.github/workflows/ci.yml`, `docker-build.yml`, `package.json` und
       `vitest.config.ts` gemeinsam reviewen; nutzbare eigene Runner für Test-CI
       festlegen und geerbte Blacksmith-/Image-Publish-/Schedule-Annahmen sichern.
@@ -82,6 +82,9 @@ Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
       ([Run 36463365408](https://github.com/superions/pingufunk/actions/runs/36463365408)).
       Die Workflows reagieren auf Push/PR, der Docker-Job setzt `push: false`,
       besitzt keine Registry-Publish-Schritte und keinen Schedule-Trigger.
+      Wiedereröffnet am 28.09.2026 beim vollständigen Workflow-Review: die
+      datenbezogene PR-Validierung nutzte noch Blacksmith-Runner; deren beide
+      Jobs werden ebenfalls auf den GitHub-Runner umgestellt und erneut geprüft.
 
 ## Phase P01 — Explizite Koordinaten und unabhängige Renditions
 
