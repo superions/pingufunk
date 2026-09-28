@@ -6,6 +6,12 @@ import { clearTTLCache, mediathekCache } from "@/lib/cache";
 import { isTvdbCredentialSettingKey } from "@/lib/tvdb-auth";
 import { clearTvdbTokenCache } from "@/services/tvdb";
 import { isMaskedSetting, maskSetting } from "@/lib/settings-redaction";
+import {
+  decodeLanguagePolicy,
+  LANGUAGE_POLICY_SETTING_KEY,
+  serializeLanguagePolicy,
+  DEFAULT_LANGUAGE_POLICY,
+} from "@/lib/language-policy";
 
 // Default settings
 const DEFAULT_SETTINGS: Record<string, string> = {
@@ -23,6 +29,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   "matching.strategy": "fuzzy",
   "matching.threshold": "0.7",
   "matching.minDuration": "300",
+  [LANGUAGE_POLICY_SETTING_KEY]: serializeLanguagePolicy(DEFAULT_LANGUAGE_POLICY),
 
   // Cache
   "cache.ttl.search": "3600",
@@ -31,6 +38,14 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   // System
   "system.setupComplete": "false",
 };
+
+function validateSettingValue(key: string, value: unknown): string | null {
+  if (key !== LANGUAGE_POLICY_SETTING_KEY) return String(value);
+  if (typeof value !== "string") return null;
+
+  const policy = decodeLanguagePolicy(value);
+  return policy ? serializeLanguagePolicy(policy) : null;
+}
 
 // GET /api/settings - Fetch all settings or specific key
 export async function GET(request: NextRequest) {
@@ -43,7 +58,10 @@ export async function GET(request: NextRequest) {
       const config = await prisma.config.findUnique({
         where: { key },
       });
-      const value = config?.value ?? DEFAULT_SETTINGS[key] ?? null;
+      let value = config?.value ?? DEFAULT_SETTINGS[key] ?? null;
+      if (key === LANGUAGE_POLICY_SETTING_KEY && value !== null) {
+        value = validateSettingValue(key, value) ?? DEFAULT_SETTINGS[key];
+      }
       return NextResponse.json({
         key,
         value: value === null ? null : maskSetting(key, value),
@@ -57,6 +75,9 @@ export async function GET(request: NextRequest) {
     for (const config of configs) {
       settings[config.key] = maskSetting(config.key, config.value);
     }
+    settings[LANGUAGE_POLICY_SETTING_KEY] =
+      validateSettingValue(LANGUAGE_POLICY_SETTING_KEY, settings[LANGUAGE_POLICY_SETTING_KEY]) ??
+      DEFAULT_SETTINGS[LANGUAGE_POLICY_SETTING_KEY];
 
     return NextResponse.json(settings);
   } catch (error) {
@@ -76,10 +97,14 @@ export async function POST(request: NextRequest) {
       if (isMaskedSetting(key, body.value)) {
         return NextResponse.json({ success: true, key });
       }
+      const value = validateSettingValue(key, body.value);
+      if (value === null) {
+        return NextResponse.json({ error: "Invalid language policy" }, { status: 400 });
+      }
       await prisma.config.upsert({
         where: { key },
-        update: { value: String(body.value) },
-        create: { key, value: String(body.value) },
+        update: { value },
+        create: { key, value },
       });
       clearSettingsCache();
       mediathekCache.clear();
@@ -96,13 +121,21 @@ export async function POST(request: NextRequest) {
 
     // Handle multiple settings
     if (typeof body === "object" && !body.key) {
-      const entries = Object.entries(body).filter(([key, value]) => !isMaskedSetting(key, value));
+      const entries: [string, string][] = [];
+      for (const [key, value] of Object.entries(body)) {
+        if (isMaskedSetting(key, value)) continue;
+        const normalizedValue = validateSettingValue(key, value);
+        if (normalizedValue === null) {
+          return NextResponse.json({ error: "Invalid language policy" }, { status: 400 });
+        }
+        entries.push([key, normalizedValue]);
+      }
       const changedKeys = entries.map(([key]) => key);
       const updates = entries.map(([key, value]) =>
         prisma.config.upsert({
           where: { key },
-          update: { value: String(value) },
-          create: { key, value: String(value) },
+          update: { value },
+          create: { key, value },
         })
       );
       await Promise.all(updates);

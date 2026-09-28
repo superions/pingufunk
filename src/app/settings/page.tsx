@@ -31,7 +31,51 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import {
+  DEFAULT_LANGUAGE_POLICY,
+  LANGUAGE_POLICY_SETTING_KEY,
+  readLanguagePolicy,
+  serializeLanguagePolicy,
+  type LanguagePolicy,
+} from "@/lib/language-policy";
 import packageJson from "../../../package.json";
+
+const LANGUAGE_PREFERENCES: {
+  key: Exclude<keyof LanguagePolicy, "version">;
+  title: string;
+  description: string;
+}[] = [
+  {
+    key: "includeOriginalAudio",
+    title: "Originalton ohne deutsche Tonspur",
+    description: "Als neutrale OV-Fassung anbieten, niemals als GERMAN kennzeichnen.",
+  },
+  {
+    key: "includeGermanSubtitleOnly",
+    title: "Originalton mit deutschen Untertiteln",
+    description: "Als eigene Untertitel-Fassung anbieten, nicht als deutschsprachigen Ton.",
+  },
+  {
+    key: "includeAudioDescription",
+    title: "Audiodeskription",
+    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
+  },
+  {
+    key: "includeSignLanguage",
+    title: "Gebärdenfassung",
+    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
+  },
+  {
+    key: "includeClearSpeech",
+    title: "Klare Sprache",
+    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
+  },
+  {
+    key: "includeUnverifiedLegacy",
+    title: "Altbestand ohne belastbaren Sprachnachweis",
+    description: "Als neutrale, ungeprüfte Fassung anbieten; niemals als GERMAN kennzeichnen.",
+  },
+];
 
 // Helper functions
 function formatBytes(bytes: number): string {
@@ -98,6 +142,17 @@ export default function SettingsPage() {
 
   const setFieldValue = (key: string, value: string) => {
     setFormState((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const getLanguagePolicy = () =>
+    readLanguagePolicy(getFieldValue(LANGUAGE_POLICY_SETTING_KEY) || DEFAULT_LANGUAGE_POLICY);
+
+  const setLanguagePreference = (key: Exclude<keyof LanguagePolicy, "version">, value: boolean) => {
+    const current = getLanguagePolicy();
+    setFieldValue(
+      LANGUAGE_POLICY_SETTING_KEY,
+      serializeLanguagePolicy({ ...current, [key]: value })
+    );
   };
 
   const handleSave = async (keys: string[]) => {
@@ -640,6 +695,44 @@ export default function SettingsPage() {
                       <Save className="w-4 h-4 mr-2" />
                     )}
                     Speichern
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sprache und Fassungen</CardTitle>
+                  <CardDescription>
+                    Bestimmt, welche zusätzlichen Fassungen in deutschen Feeds sichtbar sind.
+                    Deutsch als Tonspur wird ausschließlich bei belastbarem Nachweis angegeben;
+                    diese Schutzregel lässt sich hier nicht abschalten.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {LANGUAGE_PREFERENCES.map(({ key, title, description }) => (
+                    <label key={key} className="flex items-start gap-3 rounded-md border p-3">
+                      <input
+                        type="checkbox"
+                        checked={getLanguagePolicy()[key]}
+                        onChange={(event) => setLanguagePreference(key, event.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-input"
+                      />
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium">{title}</span>
+                        <span className="block text-xs text-muted-foreground">{description}</span>
+                      </span>
+                    </label>
+                  ))}
+                  <Button
+                    onClick={() => handleSave([LANGUAGE_POLICY_SETTING_KEY])}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    Sprachpräferenzen speichern
                   </Button>
                 </CardContent>
               </Card>
