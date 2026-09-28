@@ -68,7 +68,7 @@ Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
       Ausschluss der Nachbarfolge geprüft; Newznab-Route, RSS und NZB-Parser
       synthetisch verbunden. Der Pfadtest dokumentiert die noch offene
       Producer-/Parserabweichung für P02.3.
-- [ ] **P00.2 — Fork-eigene, nicht publizierende Verifikation.**
+- [x] **P00.2 — Fork-eigene, nicht publizierende Verifikation.**
       `.github/workflows/ci.yml`, `docker-build.yml`, `package.json` und
       `vitest.config.ts` gemeinsam reviewen; nutzbare eigene Runner für Test-CI
       festlegen und geerbte Blacksmith-/Image-Publish-/Schedule-Annahmen sichern.
@@ -83,8 +83,12 @@ Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
       Die Workflows reagieren auf Push/PR, der Docker-Job setzt `push: false`,
       besitzt keine Registry-Publish-Schritte und keinen Schedule-Trigger.
       Wiedereröffnet am 28.09.2026 beim vollständigen Workflow-Review: die
-      datenbezogene PR-Validierung nutzte noch Blacksmith-Runner; deren beide
-      Jobs werden ebenfalls auf den GitHub-Runner umgestellt und erneut geprüft.
+      datenbezogene PR-Validierung nutzte noch Blacksmith-Runner. Korrigiert und
+      erneut abgenommen am 28.09.2026 auf `0d07df7`: beide PR-Validierungsjobs
+      nutzen `ubuntu-latest`; Fork-CI erfolgreich ([Run 36464806258](https://github.com/superions/pingufunk/actions/runs/36464806258))
+      und Docker-Validierung ohne Publish erfolgreich ([Run 36464806375](https://github.com/superions/pingufunk/actions/runs/36464806375)).
+      Der separate Schedule-Workflow pflegt ausschließlich `needs-info`-Issues;
+      er baut oder veröffentlicht keine Images.
 
 ## Phase P01 — Explizite Koordinaten und unabhängige Renditions
 
