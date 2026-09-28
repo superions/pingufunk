@@ -68,13 +68,20 @@ Voraussetzung außer dem dokumentierten Ausgangsstand; A1–A7, R8 und B16.
       Ausschluss der Nachbarfolge geprüft; Newznab-Route, RSS und NZB-Parser
       synthetisch verbunden. Der Pfadtest dokumentiert die noch offene
       Producer-/Parserabweichung für P02.3.
-- [ ] **P00.2 — Fork-eigene, nicht publizierende Verifikation.**
+- [x] **P00.2 — Fork-eigene, nicht publizierende Verifikation.**
       `.github/workflows/ci.yml`, `docker-build.yml`, `package.json` und
       `vitest.config.ts` gemeinsam reviewen; nutzbare eigene Runner für Test-CI
       festlegen und geerbte Blacksmith-/Image-Publish-/Schedule-Annahmen sichern.
       Vorhandene Tests/Build erhalten; kein Tag/Release oder Publikationsjob durch
       diese Arbeit aktivieren. Abnahme: Fork-CI führt die passenden npm-Gates aus,
       und Push/PR/Schedule kann ohne gesonderte Freigabe kein Image veröffentlichen.
+      Abgenommen am 28.09.2026 auf `f86d1b9`: Fork-CI mit Test, Lint,
+      Typecheck, Formatcheck und Build erfolgreich
+      ([Run 36463365415](https://github.com/superions/pingufunk/actions/runs/36463365415));
+      Docker-Build-Validierung erfolgreich ohne Publish
+      ([Run 36463365408](https://github.com/superions/pingufunk/actions/runs/36463365408)).
+      Die Workflows reagieren auf Push/PR, der Docker-Job setzt `push: false`,
+      besitzt keine Registry-Publish-Schritte und keinen Schedule-Trigger.
 
 ## Phase P01 — Explizite Koordinaten und unabhängige Renditions
 
