@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk Dependency-Review"
+  short_description: "Abhängigkeiten nach Verhalten und Kosten prüfen"
+  default_prompt: "Nutze $pingufunk-dependency-review, um die beauftragten Abhängigkeiten und ihre Consumer zu prüfen."

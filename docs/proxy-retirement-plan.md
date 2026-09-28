@@ -4,6 +4,9 @@ Stand: 28.09.2026. **Analyse und Planung, keine Funktionsänderung oder
 Bereitstellung.** Dieses Dokument ersetzt den bisherigen groben Projektplan.
 Der anschließende [Reviewbericht](proxy-retirement-review.md) dokumentiert
 Befunde, Korrekturen und verbleibende Unsicherheiten.
+Die ergänzende Nutzerentscheidung ist verbindlich:
+**Pingufunk wird auf PostgreSQL migriert.** Der konkrete Datenvertrag und
+Cutover/Rollback stehen im [PostgreSQL-Migrationsplan](postgresql-migration-plan.md).
 
 ## Ergebnis und Reihenfolge
 
@@ -19,6 +22,8 @@ zwingendes Sicherheitsgate. Sonarr-Metadaten haben sehr hohen Nutzen, sind
 wegen Konfiguration, Secrets und Cache aber kein trivialer Ein-Datei-Fix.
 Filmmatching und allgemeine ARTE-Zuordnung benötigen mehr Arbeit. Die
 vollständige Ablösung umfasst **Indexer und Downloadclient**, nicht nur Suche.
+Sie umfasst außerdem **PostgreSQL als aktiven Datenbankbackend**. Der bisherige
+SQLite/NFS-Workaround ist nur Ausgangs-/Rollbackbestand, kein finales Ziel.
 
 ## Prüfgrundlage und Grenzen
 
@@ -26,7 +31,8 @@ vollständige Ablösung umfasst **Indexer und Downloadclient**, nicht nur Suche.
 - Upstream main frisch abgerufen: a3b02a6e6ad827d6483700480b9bfbcc59a5823c.
   Versionsangabe 1.3.0, Node.js mindestens 24, MIT.
 - Pingufunk-Ausgangspunkt: 97b22298ff21c43b9dbe451f3300fdd66ca5f277;
-  Planung auf codex/proxy-retirement-analysis, main bleibt unverändert.
+  ursprüngliche Analyse auf codex/proxy-retirement-analysis;
+  PostgreSQL-/Agent-Ergänzung auf codex/postgres-agent-workflow, main unverändert.
 - Der ältere lokale Homelab-Checkout war nicht aktuell. Analysiert wurde deshalb
   ein separater, unveränderter Checkout des aktuellen Homelab-Git-Stands
   06205adb50ebbb45926d719fc8b83aaf396a6f33.
@@ -70,7 +76,7 @@ B = Laufzeitfunktion bzw. Vertrag, O = Betriebsrandbedingung.
 | B14 | extractNzbReleaseName, privateDownloadDirectory, scopeDownloadRequest; eigener Ordner pro Job                                   | Kategorieordner für alle Jobs; Tempdatei ebenfalls nur nach Release-Titel                                                   | Native Isolation in Temp und Complete, parsbarer Name + Job-ID; P04                                             |
 | B15 | rewriteDownloadApiResponse; öffentliche cat/category erhalten, storage job-spezifisch lassen                                    | Kategorie wird unverändert zurückgegeben; storage ist dirname(filePath)                                                     | Kategorie und Speicherlayout entkoppeln, Legacy-Einträge erhalten; P04                                          |
 | B16 | HTTP-Weiterleitung, Hop-by-Hop-Header, Response-Länge, /healthz                                                                 | Direkte Next-Routen; /api/newznab/api bereits Alias                                                                         | Transport entfällt, funktionale Health-/Endpoint-/Fehlerverträge prüfen; P05, P10                               |
-| O01 | SQLite/NFS, connection_limit und socket_timeout im Stack, nicht im Proxy-Code                                                   | Prisma weiterhin SQLite                                                                                                     | Betriebsanforderung separat validieren; keine vorschnelle PostgreSQL-Migration; P05, P10                        |
+| O01 | SQLite/NFS, connection_limit und socket_timeout im Stack, nicht im Proxy-Code                                                   | Prisma weiterhin SQLite                                                                                                     | Verbindliche PostgreSQL-Migration mit Datenvertrag, Secrets und Rollback; P05, P11, P10                         |
 | O02 | Indexer-/SAB-URLs, relative NZB-URLs, Remote Path Mapping, Kategorien und Secrets                                               | Direkte Endpunkte vorhanden, Integration noch nicht geprüft                                                                 | Beide Verbraucherpfade und GitOps-Umschaltung abnehmen; P10                                                     |
 
 ### Was bereits vorhanden ist und nicht dupliziert werden soll
@@ -95,23 +101,27 @@ K = lokal begrenzt, M = mehrere Komponenten, G = Integrations-/Architekturpaket.
 Paketgrößen bei der Umsetzung in kleine PRs aufteilen. Hoher Nutzen bedeutet
 nicht automatisch, dass ein Paket ohne seine Sicherheitsabhängigkeiten startet.
 
-| Umsetzung | Paket                                                         | Aufwand | Mehrwert                                                           | Abhängigkeit / Gate                                                            |
-| --------- | ------------------------------------------------------------- | ------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| 0         | P00: dauerhafte Regressionen und Fork-Test-CI                 | K–M     | Sehr hoch: belegbarer Fortschritt                                  | Nur Test-CI, keine Image-Publikation; Runner prüfen                            |
-| 1         | P01: explizite ARTE-Staffel + URL-Rendition-Prüfung           | K       | Hoch: richtige Staffel, progressive Alternativen nicht verlieren   | Bestehende Parser-/RSS-Tests; unklare Staffel nicht erfinden                   |
-| 2         | P02: exakte TV-Antworten und konsistente Release-Identität    | K–M     | Sehr hoch: keine fremden Episoden/unnötigen Feed-Mengen            | P01; Serienidentität vor breit geöffneten Suchpfaden                           |
-| 3         | P03: ehrliche Sprache und sichere GUID-Deduplikation          | M       | Sehr hoch: falsche Sprache verhindern                              | Sprache vor Titelbereinigung und vor Pagination                                |
-| 4         | P04: Job-Isolation und SAB-Kategorievertrag                   | M       | Sehr hoch: Import-/Überschreibungsfehler verhindern                | Pflicht vor Download-/Import-Abnahme; keine DB-Migration zwingend voraussetzen |
-| 5         | P05: Fehler-/Cache-/Betriebsverträge, Secret-Grundlage        | M       | Hoch: robuste Integration, kein Credential-Leak                    | Pflichtgrundlage für neue API-Anbieter                                         |
-| 6         | P06: optionale Sonarr-Metadaten + sichere Titelsuche          | M       | Sehr hoch: Tatort und fehlende lokale Metadaten ohne neue Accounts | P02, P03, P05                                                                  |
-| 7         | P07: allgemeine ARTE-Zuordnung/Varianten statt Allowlist      | M–G     | Hoch: ganze Seriengruppe statt Einzelfix                           | P01–P03, P05; ggf. P06 für Metadaten                                           |
-| 8         | P08: accountfreie Film-Metadaten und sicherer Radarr-Suchpfad | M–G     | Sehr hoch: Filme überhaupt zuverlässig finden/zuordnen             | P03, P05; P04 für vollständigen Import                                         |
-| 9         | P09: vollständige Medienprüfung und HLS-Freigabe              | M–G     | Hoch: keine Samples/stummen Dateien als completed                  | P04, erwartete Identitäts-/Laufzeitinformationen aus P06/P08                   |
-| 10        | P10: isolierte Gesamtparität, kontrollierte Ablösung          | G       | Zielerreichung                                                     | Alle B-/O-Zeilen mit Nachweis schließen; separate Deployment-Freigabe          |
+| Umsetzung | Paket                                                         | Aufwand | Mehrwert                                                           | Abhängigkeit / Gate                                                                  |
+| --------- | ------------------------------------------------------------- | ------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| 0         | P00: dauerhafte Regressionen und Fork-Test-CI                 | K–M     | Sehr hoch: belegbarer Fortschritt                                  | Nur Test-CI, keine Image-Publikation; Runner prüfen                                  |
+| 1         | P01: explizite ARTE-Staffel + URL-Rendition-Prüfung           | K       | Hoch: richtige Staffel, progressive Alternativen nicht verlieren   | Bestehende Parser-/RSS-Tests; unklare Staffel nicht erfinden                         |
+| 2         | P02: exakte TV-Antworten und konsistente Release-Identität    | K–M     | Sehr hoch: keine fremden Episoden/unnötigen Feed-Mengen            | P01; Serienidentität vor breit geöffneten Suchpfaden                                 |
+| 3         | P03: ehrliche Sprache und sichere GUID-Deduplikation          | M       | Sehr hoch: falsche Sprache verhindern                              | Sprache vor Titelbereinigung und vor Pagination                                      |
+| 4         | P04: Job-Isolation und SAB-Kategorievertrag                   | M       | Sehr hoch: Import-/Überschreibungsfehler verhindern                | Pflicht vor Download-/Import-Abnahme; keine DB-Migration zwingend voraussetzen       |
+| 5         | P05: Fehler-/Cache-/Betriebsverträge, Secret-Grundlage        | M       | Hoch: robuste Integration, kein Credential-Leak                    | Pflichtgrundlage für neue API-Anbieter                                               |
+| 6         | P11: verbindliche PostgreSQL-Migration                        | M–G     | Pflichtziel: persistenter Zustand auf PostgreSQL                   | P00, P05; eigenes Datenübernahme-/Rollback-Gate, vor P07/P09-Schemaerweiterungen     |
+| 7         | P06: optionale Sonarr-Metadaten + sichere Titelsuche          | M       | Sehr hoch: Tatort und fehlende lokale Metadaten ohne neue Accounts | P02, P03, P05                                                                        |
+| 8         | P07: allgemeine ARTE-Zuordnung/Varianten statt Allowlist      | M–G     | Hoch: ganze Seriengruppe statt Einzelfix                           | P01–P03, P05, P11 bei Schemaänderung; ggf. P06 für Metadaten                         |
+| 9         | P08: accountfreie Film-Metadaten und sicherer Radarr-Suchpfad | M–G     | Sehr hoch: Filme überhaupt zuverlässig finden/zuordnen             | P03, P05; P04 für vollständigen Import                                               |
+| 10        | P09: vollständige Medienprüfung und HLS-Freigabe              | M–G     | Hoch: keine Samples/stummen Dateien als completed                  | P04, P11 bei Schemaänderung; erwartete Identitäts-/Laufzeitinformationen aus P06/P08 |
+| 11        | P10: isolierte Gesamtparität, kontrollierte Ablösung          | G       | Zielerreichung                                                     | PostgreSQL-Betrieb P11 und alle B-/O-Zeilen abgenommen; separate Deployment-Freigabe |
 
 P01 und der begrenzte P02-Fix liefern am schnellsten Nutzen. P03 bleibt
 Sicherheitspriorität, ist aber keine bloße Regex-Liste. Bei der Umsetzung
 unabhängige Teiländerungen früh reviewen; den Proxy erst nach P10 entfernen.
+P11 behält seine neue Paketnummer, wird aber vor P06–P10 eingeordnet;
+die bestehenden IDs bleiben als stabile Referenzen erhalten. PostgreSQL darf
+nicht wegen fertiger Suchfixes aus dem Abschlussumfang gestrichen werden.
 
 ## Konkrete Umsetzungspakete und Abnahmekriterien
 
@@ -230,13 +240,32 @@ app/api/settings/route.ts und API-/Queue-Tests.
 - Sonarr-Key hat technisch weitere Rechte: unser Adapter nutzt ausschließlich
   GET-Metadaten-Endpunkte; keine angeblich read-only privilegierte Rolle behaupten.
   Base-URL-Unterpfade, Redirects und Auth-Headerverlust/-weitergabe testen.
-- SQLite/NFS-Workaround als bestehende Betriebsbedingung behandeln.
-  Queue-Stress, restart/retry und verlorene Verarbeitung separat prüfen.
-  Ein DB-Poolparameter heilt nicht alle Queue-/Dateisystem-Races.
+- Secret-/Readiness-/Fehlergrundlage für die verbindliche PostgreSQL-Migration
+  P11 schaffen. SQLite/NFS beschreibt nur den bisherigen Ausgangsstand.
+  Queue-Stress, restart/retry und verlorene Verarbeitung separat prüfen:
+  PostgreSQL heilt nicht automatisch Queue-/Dateisystem-Races oder macht mehrere
+  Worker-Replikate sicher.
 
 **Abnahme:** 401/403 ohne sinnlose Retry; 429/5xx mit Budget; Timeout/defektes JSON
 klar diagnostizierbar; keine Credential-Ausgabe. Cache-Ausfalltests und
 Konfigurationsänderungen durchlaufen. Kein unnötiger live DB- oder Secret-Zugriff.
+
+### P11 — Verbindliche PostgreSQL-Migration
+
+Zielorte: prisma/schema.prisma und neue PostgreSQL-Migrationskette, Dockerfile,
+entrypoint.sh, src/lib/db.ts, .env.example, dokumentierter Devbetrieb,
+typisierter Snapshot-Importer und disposable PostgreSQL-Integrationstests.
+Der [kanonische Migrationsplan](postgresql-migration-plan.md) enthält alle
+Tabellen, Typabbildungen, Preflight-, Import-, Validierungs- und Rollbackphasen.
+
+**Abnahme:** PostgreSQL als aktiver Backend für Neuinstallation und Bestand;
+Config, Download/History, Regeln und Metadaten semantisch erhalten. Quelle
+unverändert gesichert; Integrity/FK, BigInt/Zeiten/IDs, reale Sequences, Ledger,
+Restart und Secret-/DB-Ausfälle geprüft. Keine automatische SQLite-Rückfall-
+datei. Eigene Rolle/DB über bestehende externe PostgreSQL-/HAProxy-Infrastruktur,
+kein neuer produktiver PostgreSQL-Swarmstack. Cutover und Rollback vor/nach
+neuen Schreibvorgängen separat abnehmen; Serverversion im Preflight verifizieren.
+Keine tatsächliche Datenübernahme oder Deployment ohne ausdrückliche Freigabe.
 
 ### P06 — Sonarr-Metadaten und Titelabgleich
 
@@ -338,6 +367,7 @@ Keine blind gesetzten deutschen Container-Tags.
 1. Alle B01–B16/O01–O02 mit Test, Ergebnis, verantwortlichem Paket und Reststatus
    belegen. Nicht relevante reine HTTP-Adapterteile ausdrücklich als
    „entfällt bei direkter Verbindung“ schließen; keine Funktion still auslassen.
+   P11 vollständig abnehmen: Produktivziel PostgreSQL, kein Abschluss auf SQLite.
 2. Separat freigegebener isolierter Integrationsbetrieb: eigene Daten/Downloads,
    keine automatische Produktionssuche oder Grabs. Indexer und SAB-Client
    getrennt prüfen, inklusive Prowlarr-Sync zu Sonarr/Radarr.
@@ -361,14 +391,20 @@ Keine blind gesetzten deutschen Container-Tags.
    Downloadclient-Host passen; nicht nur lokale/entfernte Pfadpräfixe prüfen.
    Unbeteiligte Bibliotheks-/Mediapfade bleiben unverändert.
    Architektur, Networks, Volumes, Secrets und Deploymentstruktur erhalten.
-8. Bei Fehlern altes Image/Routing und Proxy wieder aktivieren; neue Jobs
-   kontrolliert anhalten, bevor alte Komponenten übernehmen. Ohne Schemaänderung
-   ist Routing-Rollback einfacher; mit Schemaänderung eigener Backup-/Restore-
-   und Datenverlustplan, niemals alte Binary blind auf neuer DB starten.
+8. Bei Fehlern vorher abgenommenes PostgreSQL-kompatibles Image/Routing und
+   Proxy wieder aktivieren; neue Jobs kontrolliert anhalten, bevor vorherige
+   Komponenten übernehmen. Ein Routing-Rollback ist kein automatischer Rückfall
+   auf SQLite. DB-Rollback ausschließlich gemäß P11, spätere Schemaänderungen
+   mit eigenem Backup-/Restore- und Datenverlustplan; niemals alte Binary blind
+   auf neuer DB starten.
 9. Proxy erst nach dokumentierter erfolgreicher Abnahme und gesonderter
    Entfernungsfreigabe aus dem Stack entfernen.
 
 ## Nachweismatrix und Review der Risiken
+
+Zusätzlich geprüft: Prisma CLI/Client 6.19.2, sechs Modelle, drei SQLite-
+Migrationen und SQLite-Entrypoint. PostgreSQL-Implementierung/Serverversion
+und Datenübernahme sind noch offen; P11 ist verbindlicher Abschlussgate.
 
 | Prüfung                   | Nachweis heute                                                                                                         | Noch erforderliche Abnahme                            |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
@@ -397,3 +433,5 @@ P00: die sieben Audit-Befunde als dauerhafte, synthetische Regressionen in den
 jeweiligen Testmodulen aufbauen. Anschließend **P01 zuerst implementieren**:
 explizite ARTE-Staffeln und unabhängige URL-Qualitätsprüfung, in kleinen
 reviewbaren Commits. Der Proxy bleibt bis zur gesamten Abnahme bestehen.
+P11 anschließend gemäß Pflichtreihenfolge implementieren und separat freigeben;
+die endgültige Ablösung setzt PostgreSQL voraus.

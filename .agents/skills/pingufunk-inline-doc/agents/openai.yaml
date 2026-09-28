@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk Inline-Dokumentation"
+  short_description: "Belegte API- und Persistenzverträge dokumentieren"
+  default_prompt: "Nutze $pingufunk-inline-doc, um die Inline-Verträge der betroffenen Implementierung zu reviewen."

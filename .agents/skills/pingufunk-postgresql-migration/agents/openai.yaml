@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk PostgreSQL-Migration"
+  short_description: "Daten verlustbewusst nach PostgreSQL migrieren"
+  default_prompt: "Nutze $pingufunk-postgresql-migration für den freigegebenen P11-Planungs-, Implementierungs- oder Testumfang."

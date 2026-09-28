@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk Test-Gates"
+  short_description: "Passende Gates und belastbare Testevidenz"
+  default_prompt: "Nutze $pingufunk-test-gates, um die Änderungen passend zu prüfen und die Evidenz zu berichten."

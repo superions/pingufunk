@@ -3,6 +3,7 @@
 Stand: 28.09.2026. Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
 Dies ist ein zweiter, quellen- und testgestützter **Selbstreview**, kein
 unabhängiger Peer-Review und keine Freigabe für produktive Änderungen.
+Ergänzt um den verbindlichen PostgreSQL-Auftrag und den Review dazu (R9).
 
 ## Urteil
 
@@ -10,6 +11,8 @@ Der Plan beschreibt einen tragfähigen Weg zur vollständigen Ablösung, wenn
 alle Abnahmegates geschlossen werden. **Heute ist die Ablösung nicht sicher.**
 Es fehlen sowohl Such-/Identitätsfunktionen als auch ein nachgewiesener
 Download-/Importvertrag. Keine Paketbeschreibung ist bereits implementiert.
+Zusätzlich muss P11 den aktiven Datenbankbackend auf PostgreSQL umstellen;
+die endgültige Proxy-Ablösung auf SQLite wäre keine Zielerreichung.
 
 Die Reihenfolge „klein und hoher Nutzen“ ist sinnvoll: P01 repariert zwei
 lokal begrenzte Fehler, P02 schließt den Episoden-Suchvertrag. P03/P04 sind
@@ -137,7 +140,48 @@ HLS-Video/Audio-Muxing. Stall-Timeout, EXDEV-Fallback und Kategorie-Recovery
 existieren ebenfalls. **Entscheidung:** gezielte Regression und Inhaltsprüfung
 statt paralleler Implementierung; HLS nicht ungeprüft global deaktivieren.
 
+### R9 — PostgreSQL ist Pflicht, nicht nur eine mögliche NFS-Optimierung
+
+Die ausdrückliche Nutzerentscheidung ersetzt die frühere Zurückhaltung zur
+PostgreSQL-Migration. **Korrigiert:** O01, Reihenfolge, Abschluss- und Rollback-
+gate verweisen jetzt auf das verbindliche P11-Paket und den
+[Migrationsplan](postgresql-migration-plan.md). Eine Routing-Rücknahme darf
+nicht unbemerkt die Datenbankentscheidung rückgängig machen.
+
+Zusätzliche Quellprüfung bestätigt Prisma CLI/Client 6.19.2, sechs Modelle,
+drei SQLite-Migrationen, ein unabhängiges SQLite-Bootstrap und ein Entrypoint,
+der die Datenbank fest initialisiert. DEBUG gibt derzeit DATABASE_URL aus.
+Der vorhandene Schema-Test prüft nur Tabellennamen, keine Typen oder echte
+PostgreSQL-Funktion. Die erste Migration und das aktuelle Modell unterscheiden
+sich bei der Autoincrement-Semantik von TvdbSeries.id.
+
+Der neue Vertrag schützt IDs/History/Config, BigInt-Präzision, Zeittypen,
+Quoted-Identifier, Foreign Keys und den neuen Prisma-Ledger. Keine pauschale
+pgloader-Schemaübernahme, kein PostgreSQL-Warmup mit automatischem Queue-Start,
+keine Datenbanklöschung oder automatischer SQLite-Fallback. Reale Sequences statt
+statischer Liste; Rollen/DDL/setval nicht als Gesamttransaktion darstellen.
+
+Rollback vor und nach neuen PG-Schreibvorgängen wird getrennt; nach Schreib-
+vorgängen ist der alte Snapshot nicht aktuell, auch bei Cache-/Settingswrites.
+Ein getesteter Maintenance-/Writer-Gate schützt die Startprüfung; Zeitpunkt der
+ersten tatsächlichen Schreiboperation erfassen. Serverversion, Primary/TLS,
+Importdauer und RPO sind konkrete noch offene Preflight-/Betriebsgates, keine
+Gründe, PostgreSQL als optional zu behandeln. Bestehende externe PostgreSQL-
+und HAProxy-Infrastruktur bleibt das Ziel, keine neue Swarm-DB.
+
+Die zusätzlichen Projektregeln und sieben Myoxus-Adaptionen sind unter
+[agent-workflow.md](agent-workflow.md) nachvollziehbar. Nicht übertragbare
+Host-, Rust-, Yarn-, Mantine- und Forgejo-Annahmen wurden ausgeschlossen.
+
 ## Verifikation und Reproduktionsbefehle
+
+Die nachstehenden Produkt-/Proxy-Testergebnisse stammen aus der vorherigen
+Analyse und werden für den unveränderten Anwendungscode wiederverwendet.
+Für diese reine Plan-/Agent-Ergänzung wurden keine neuen Produkt-, Datenbank-
+oder Runtime-Tests behauptet. Neu geprüft: alle sieben Skills mit dem
+skill-creator-Validator, YAML-Metadaten/Projekt-Routing, 25 relative Links,
+P00–P11-Vollständigkeit, gezielte Privacy-/Portabilityprüfung, Prettier und
+git diff --check. Diese Strukturprüfungen beweisen keine Migration.
 
 | Prüfung                             | Ergebnis                                         |
 | ----------------------------------- | ------------------------------------------------ |
@@ -170,8 +214,10 @@ oder echte API-Antwort wurde als Fixture übernommen.
   Metadaten unsicher; kein permissiver „best effort“ als automatische Zuordnung.
 - API-Zeitbudget, Secret-Rotation, Base-URL-Unterpfad, Redirects und Cache-
   Invalidierung durch Mocktests nachweisen. Keine neuen Schlüssel offen speichern.
-- Echte isolierte Job-/Importtests, bestehende Queue-Zustände und SQLite/NFS-
-  Belastung fehlen. Schemaänderungen brauchen gesonderten Rollback.
+- Echte isolierte Job-/Importtests und bestehende Queue-Zustände fehlen.
+  PostgreSQL-Migration P11 ist verpflichtend; ihre Integrationstests,
+  Serverversionsprüfung und Rollbackabnahme sind noch nicht implementiert.
+  Spätere Schemaänderungen brauchen ebenfalls gesonderten Rollback.
 - API-Endpunkte/Parameter gegen die tatsächlich verwendeten Servarr-Versionen
   vor Integration verifizieren; in dieser Analyse nicht live aktualisiert.
 - Test-CI des Forks ohne fremde Runner-Abhängigkeit bereitstellen, keine
@@ -179,5 +225,7 @@ oder echte API-Antwort wurde als Fixture übernommen.
 - Produktive Funktionsparität erst mit freigegebenem isoliertem Integrations-
   betrieb nachweisen; ein Health-200 ist kein ausreichendes Ablösegate.
 
-**Reviewstatus:** Plan präzisiert und für P00/P01-Entwicklungsarbeit geeignet.
+**Reviewstatus:** Plan präzisiert, P11 als Pflicht aufgenommen und für
+P00/P01-Entwicklungsarbeit geeignet. Neue AGENTS-/Skillverträge sind Anleitung,
+kein Nachweis bereits migrierter Produktdaten.
 Keine Deployment-, Datenmigrations-, Live-Such- oder Proxy-Entfernungsfreigabe.

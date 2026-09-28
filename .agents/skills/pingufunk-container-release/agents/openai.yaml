@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk Container-Release"
+  short_description: "OCI-Releases und Fork-Workflows sicher prüfen"
+  default_prompt: "Nutze $pingufunk-container-release, um den freigegebenen Container-Releaseumfang vorzubereiten oder zu prüfen."

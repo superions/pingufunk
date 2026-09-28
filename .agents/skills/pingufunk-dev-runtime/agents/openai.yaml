@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk Runtime-Diagnose"
+  short_description: "Laufende Instanz und Prozesse sicher prüfen"
+  default_prompt: "Nutze $pingufunk-dev-runtime, um den tatsächlich laufenden Pingufunk-Zustand lesend zu diagnostizieren."

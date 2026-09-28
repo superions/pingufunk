@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pingufunk Desktop-UI-Prüfung"
+  short_description: "Sichtbare Änderungen am echten Bundle prüfen"
+  default_prompt: "Nutze $pingufunk-visual-qa, um die betroffenen Pingufunk-Desktopzustände visuell zu verifizieren."
