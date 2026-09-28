@@ -52,13 +52,13 @@ export function generateAttributes(
   return attributes;
 }
 
-export function getEmptyRssResult(): NewznabRss {
+export function getEmptyRssResult(offset: number = 0): NewznabRss {
   return {
     channel: {
       title: "RundfunkArr",
       description: "RundfunkArr API results",
       response: {
-        offset: 0,
+        offset,
         total: 0,
       },
       items: [],
@@ -113,7 +113,7 @@ export function serializeRss(rss: NewznabRss): string {
 
 export function convertItemsToRss(items: NewznabItem[], limit: number, offset: number): string {
   if (!items || items.length === 0) {
-    return serializeRss(getEmptyRssResult());
+    return serializeRss(getEmptyRssResult(offset));
   }
 
   const paginatedItems = items.slice(offset, offset + limit);

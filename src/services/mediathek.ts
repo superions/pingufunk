@@ -41,6 +41,23 @@ import { findEpisodeByAirDate, findEpisodeBySeasonAndNumber } from "@/types";
 
 const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
+const TV_SEARCH_CANDIDATE_LIMIT = 1500;
+const RSS_SYNC_CANDIDATE_LIMIT = 6000;
+const TV_SEARCH_CACHE_VERSION = "v2";
+const GERMAN_MONTHS: Record<string, number> = {
+  januar: 0,
+  februar: 1,
+  märz: 2,
+  april: 3,
+  mai: 4,
+  juni: 5,
+  juli: 6,
+  august: 7,
+  september: 8,
+  oktober: 9,
+  november: 10,
+  dezember: 11,
+};
 
 function tvSearchContextKey(context: TvSearchContext): string {
   return JSON.stringify([context.query, context.tvdbId, context.season, context.episode]);
@@ -286,48 +303,40 @@ function tryParseDate(dateString: string): Date | null {
   // - "yyyy-MM-dd" (e.g., "2017-12-01")
   // - "yyyyMMdd" (e.g., "20171201")
 
-  const germanMonths: Record<string, number> = {
-    januar: 0,
-    februar: 1,
-    märz: 2,
-    april: 3,
-    mai: 4,
-    juni: 5,
-    juli: 6,
-    august: 7,
-    september: 8,
-    oktober: 9,
-    november: 10,
-    dezember: 11,
+  const makeDate = (year: number, month: number, day: number): Date | null => {
+    const date = new Date(year, month, day);
+    return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day
+      ? date
+      : null;
   };
 
   // Try "d. MMMM yyyy" format
-  const match1 = dateString.match(/^(\d{1,2})\. (\w+) (\d{4})$/);
+  const match1 = dateString.match(/^(\d{1,2})\. (\p{L}+) (\d{4})$/u);
   if (match1) {
     const day = parseInt(match1[1]);
-    const month = germanMonths[match1[2].toLowerCase()];
+    const month = GERMAN_MONTHS[match1[2].toLowerCase()];
     const year = parseInt(match1[3]);
     if (month !== undefined) {
-      return new Date(year, month, day);
+      return makeDate(year, month, day);
     }
   }
 
   // Try "dd.MM.yyyy" format
   const match2 = dateString.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (match2) {
-    return new Date(parseInt(match2[3]), parseInt(match2[2]) - 1, parseInt(match2[1]));
+    return makeDate(parseInt(match2[3]), parseInt(match2[2]) - 1, parseInt(match2[1]));
   }
 
   // Try "yyyy-MM-dd" format
   const match3 = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match3) {
-    return new Date(parseInt(match3[1]), parseInt(match3[2]) - 1, parseInt(match3[3]));
+    return makeDate(parseInt(match3[1]), parseInt(match3[2]) - 1, parseInt(match3[3]));
   }
 
   // Try "yyyyMMdd" format
   const match4 = dateString.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (match4) {
-    return new Date(parseInt(match4[1]), parseInt(match4[2]) - 1, parseInt(match4[3]));
+    return makeDate(parseInt(match4[1]), parseInt(match4[2]) - 1, parseInt(match4[3]));
   }
 
   return null;
@@ -693,6 +702,91 @@ function getDesiredEpisodes(tvdbData: TvdbData, context: TvSearchContext): TvdbE
   return tvdbData.episodes.filter((episode) => matchesTvdbEpisode(episode, context));
 }
 
+function getTvSearchCandidateQueries(
+  context: TvSearchContext
+): Array<{ fields: string[]; query: string }> {
+  // Query alternatives separately: the provider combines clauses with AND.
+  if (context.query) return [{ fields: QUERY_FIELDS, query: context.query }];
+
+  const dailyDate = getDailyDateKey(context);
+  if (dailyDate === null) return [];
+  if (dailyDate !== undefined) {
+    const [year, month, day] = dailyDate.split("-");
+    const monthNumber = Number(month) - 1;
+    const monthName = Object.keys(GERMAN_MONTHS).find(
+      (name) => GERMAN_MONTHS[name] === monthNumber
+    );
+    const localizedDate = monthName
+      ? `${Number(day)}. ${monthName[0].toLocaleUpperCase("de-DE")}${monthName.slice(1)} ${year}`
+      : null;
+    const terms = [`${year}-${month}-${day}`, `${day}.${month}.${year}`, `${year}${month}${day}`];
+    if (localizedDate) terms.push(localizedDate);
+    return terms.map((query) => ({ fields: ["title"], query }));
+  }
+
+  if (context.season) {
+    const season = parseNumericCoordinate(context.season);
+    if (season === null) return [];
+    const isYear = /^\d{4}$/.test(context.season) && season >= 1900 && season <= 2100;
+    const terms = isYear
+      ? [`S${season}`, String(season)]
+      : [
+          `S${String(season).padStart(2, "0")}`,
+          `Staffel ${season}`,
+          `Season ${season}`,
+          `Saison ${season}`,
+          `Temporada ${season}`,
+          `Stagione ${season}`,
+        ];
+    return terms.map((query) => ({ fields: ["title"], query }));
+  }
+
+  if (context.episode) {
+    const episode = parseNumericCoordinate(context.episode);
+    if (episode === null) return [];
+    const padded = String(episode).padStart(2, "0");
+    return [`E${padded}`, `Episode ${episode}`, `Folge ${episode}`].map((query) => ({
+      fields: ["title"],
+      query,
+    }));
+  }
+
+  return [];
+}
+
+async function queryTvSearchCandidates(context: TvSearchContext): Promise<ApiResultItem[] | null> {
+  const candidateQueries = getTvSearchCandidateQueries(context);
+  if (candidateQueries.length === 0) return [];
+
+  // Each provider query has its own source cap. Newznab total below describes
+  // the filtered union, not the source's full catalog.
+  const candidates = await Promise.all(
+    candidateQueries.map((query) => queryContent([query], TV_SEARCH_CANDIDATE_LIMIT))
+  );
+  if (candidates.some((results) => results === null)) return null;
+
+  const uniqueCandidates = new Map<string, ApiResultItem>();
+  for (const item of candidates.flatMap((results) => results ?? [])) {
+    const identity = JSON.stringify(item);
+    if (!uniqueCandidates.has(identity)) uniqueCandidates.set(identity, item);
+  }
+
+  return [...uniqueCandidates.values()].sort(
+    (first, second) => second.filmlisteTimestamp - first.filmlisteTimestamp
+  );
+}
+
+function dedupeNewznabItems(items: NewznabItem[]): NewznabItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    // Keep different URLs/qualities; remove only the same release emitted twice.
+    const identity = JSON.stringify([item.guid.value, item.link, item.title]);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+}
+
 function applyDesiredEpisodeFilter(
   matchedEpisodes: MatchedEpisodeInfo[],
   desiredEpisodes: TvdbEpisode[] | null,
@@ -737,7 +831,7 @@ export async function fetchSearchResultsById(
     query: searchContext.query?.trim() || null,
     tvdbId: searchContext.tvdbId ?? tvdbData.id,
   };
-  if (context.tvdbId !== tvdbData.id) return serializeRss(getEmptyRssResult());
+  if (context.tvdbId !== tvdbData.id) return serializeRss(getEmptyRssResult(offset));
 
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
@@ -749,7 +843,7 @@ export async function fetchSearchResultsById(
   );
 
   const contextKey = tvSearchContextKey(context);
-  const cacheKey = `tvdb_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const cacheKey = `tvdb_${TV_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -763,13 +857,13 @@ export async function fetchSearchResultsById(
     console.log(
       `[Mediathek] No desired episodes found for season=${context.season}, episode=${context.episode}, returning empty`
     );
-    const response = serializeRss(getEmptyRssResult());
+    const response = serializeRss(getEmptyRssResult(offset));
     mediathekCache.set(cacheKey, { response });
     return response;
   }
 
   // Check for cached API response
-  const apiCacheKey = `mediathekapi_tvdb_${contextKey}`;
+  const apiCacheKey = `mediathekapi_tvdb_${TV_SEARCH_CACHE_VERSION}_${contextKey}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -781,7 +875,7 @@ export async function fetchSearchResultsById(
     results = await queryContent([{ fields: QUERY_FIELDS, query: searchQuery }], 10000);
 
     if (results === null || results.length === 0) {
-      return serializeRss(getEmptyRssResult());
+      return serializeRss(getEmptyRssResult(offset));
     }
 
     mediathekCache.set(apiCacheKey, { results });
@@ -815,7 +909,7 @@ export async function fetchSearchResultsById(
   );
   console.log(`[Mediathek] Generated ${newznabItems.length} Newznab items (quality: ${quality})`);
 
-  const response = convertItemsToRss(newznabItems, limit, offset);
+  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
 
   mediathekCache.set(cacheKey, { response });
   return response;
@@ -836,34 +930,23 @@ export async function fetchSearchResultsByString(
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const contextKey = tvSearchContextKey(context);
-  const cacheKey = `q_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const cacheKey = `q_${TV_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
     return (cached as { response: string }).response;
   }
 
-  const apiCacheKey = `mediathekapi_q_${contextKey}`;
+  const apiCacheKey = `mediathekapi_q_${TV_SEARCH_CACHE_VERSION}_${contextKey}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
   if (cachedApi) {
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
-    const queries: Array<{ fields: string[]; query: string }> = [];
-
-    if (trimmedQ) {
-      queries.push({ fields: QUERY_FIELDS, query: trimmedQ });
-    }
-
-    if (context.season) {
-      const zeroPadded = context.season.length >= 2 ? context.season : `0${context.season}`;
-      queries.push({ fields: ["title"], query: `S${zeroPadded}` });
-    }
-
-    results = await queryContent(queries, 1500);
+    results = await queryTvSearchCandidates(context);
     if (results === null) {
-      return serializeRss(getEmptyRssResult());
+      return serializeRss(getEmptyRssResult(offset));
     }
     mediathekCache.set(apiCacheKey, { results });
   }
@@ -879,10 +962,8 @@ export async function fetchSearchResultsByString(
     generateRssItems(info, quality, hlsEnabled)
   );
 
-  // Generic (no-ruleset) results are only meaningful for an actual text search.
-  // A season-only query (e.g. tvsearch&season=01 with no q) would otherwise emit
-  // every title that merely contains "S01" across unrelated shows. Gate on a
-  // non-empty q to keep the previous (matched-only) behavior for those queries.
+  // Coordinate-only candidates may span unrelated shows, so publish only items
+  // tied to a ruleset unless the caller also supplied a text query.
   const hasTextQuery = !!trimmedQ;
   const genericItems: NewznabItem[] = hasTextQuery
     ? unmatchedItems
@@ -890,7 +971,7 @@ export async function fetchSearchResultsByString(
         .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled))
     : [];
 
-  const allItems = [...newznabItems, ...genericItems];
+  const allItems = dedupeNewznabItems([...newznabItems, ...genericItems]);
   const response = convertItemsToRss(allItems, limit, offset);
 
   mediathekCache.set(cacheKey, { response });
@@ -902,7 +983,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
-  const cacheKey = `rss_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const cacheKey = `rss_${TV_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
@@ -916,9 +997,10 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   if (cachedApi) {
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
-    results = await queryContent([], 6000);
+    // total below counts verified matches in this bounded source window only.
+    results = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT);
     if (results === null) {
-      return serializeRss(getEmptyRssResult());
+      return serializeRss(getEmptyRssResult(offset));
     }
     mediathekCache.set(apiCacheKey, { results });
   }
@@ -927,7 +1009,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   const newznabItems: NewznabItem[] = matchedEpisodes.flatMap((info) =>
     generateRssItems(info, quality, hlsEnabled)
   );
-  const response = convertItemsToRss(newznabItems, limit, offset);
+  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
 
   mediathekCache.set(cacheKey, { response });
   return response;
@@ -1001,7 +1083,7 @@ export async function fetchMovieSearchResults(
 
   if (allResults.length === 0) {
     console.log(`[Mediathek] No results found for movie`);
-    const response = serializeRss(getEmptyRssResult());
+    const response = serializeRss(getEmptyRssResult(offset));
     if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
     return response;
   }
@@ -1016,7 +1098,7 @@ export async function fetchMovieSearchResults(
 
   if (filteredResults.length === 0) {
     console.log(`[Mediathek] No results after filtering for movie`);
-    const response = serializeRss(getEmptyRssResult());
+    const response = serializeRss(getEmptyRssResult(offset));
     if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
     return response;
   }
@@ -1026,7 +1108,7 @@ export async function fetchMovieSearchResults(
 
   if (matchResults.length === 0) {
     console.log(`[Mediathek] No matches found for movie`);
-    const response = serializeRss(getEmptyRssResult());
+    const response = serializeRss(getEmptyRssResult(offset));
     if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
     return response;
   }
@@ -1095,7 +1177,7 @@ export async function fetchMovieSearchByQuery(
     console.log(`[Mediathek] Searching MediathekView API for movie query: "${cleanedQuery}"`);
     results = await queryContent([{ fields: QUERY_FIELDS, query: cleanedQuery }], 500);
     if (results === null) {
-      return serializeRss(getEmptyRssResult());
+      return serializeRss(getEmptyRssResult(offset));
     }
     console.log(
       `[Mediathek] API returned ${results.length} results for movie query "${cleanedQuery}"`
@@ -1105,7 +1187,7 @@ export async function fetchMovieSearchByQuery(
 
   if (results.length === 0) {
     console.log(`[Mediathek] No API response for movie query`);
-    const response = serializeRss(getEmptyRssResult());
+    const response = serializeRss(getEmptyRssResult(offset));
     mediathekCache.set(cacheKey, { response });
     return response;
   }
@@ -1124,7 +1206,7 @@ export async function fetchMovieSearchByQuery(
 
   if (filteredResults.length === 0) {
     console.log(`[Mediathek] No movie results after filtering`);
-    const response = serializeRss(getEmptyRssResult());
+    const response = serializeRss(getEmptyRssResult(offset));
     mediathekCache.set(cacheKey, { response });
     return response;
   }

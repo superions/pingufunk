@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
           );
 
           if (!movieData) {
-            return new NextResponse(serializeRss(getEmptyRssResult()), {
+            return new NextResponse(serializeRss(getEmptyRssResult(offset)), {
               status: 200,
               headers: { "Content-Type": "application/xml; charset=utf-8" },
             });
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
         );
 
         if (!movieData) {
-          return new NextResponse(serializeRss(getEmptyRssResult()), {
+          return new NextResponse(serializeRss(getEmptyRssResult(offset)), {
             status: 200,
             headers: { "Content-Type": "application/xml; charset=utf-8" },
           });
@@ -240,7 +240,7 @@ export async function GET(request: NextRequest) {
               headers: { "Content-Type": "application/xml; charset=utf-8" },
             });
           }
-          return new NextResponse(serializeRss(getEmptyRssResult()), {
+          return new NextResponse(serializeRss(getEmptyRssResult(offset)), {
             status: 200,
             headers: { "Content-Type": "application/xml; charset=utf-8" },
           });

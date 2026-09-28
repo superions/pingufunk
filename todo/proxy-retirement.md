@@ -148,8 +148,10 @@ applyDesiredEpisodeFilter,fetchSearchResultsById,fetchSearchResultsByString}`
       bleibt geschlossen. Cachekeys unterscheiden Query, ID, Staffel und Folge.
       Vollständiger Producer-/Consumer-Review ohne offene Findings. Node 24.21.0:
       209 Tests in 20 Dateien, Lint, Typecheck, Formatcheck und Production-Build
-      erfolgreich; Fork-CI wird mit dem Checkpoint verifiziert.
-- [ ] **P02.2 — Gezielte Kandidatensuche, erst dann Ergebnisfenster.**
+      erfolgreich; Fork-CI erfolgreich ([Run 36473448447](https://github.com/superions/pingufunk/actions/runs/36473448447)),
+      Docker-Validierung ohne Publish erfolgreich
+      ([Run 36473448319](https://github.com/superions/pingufunk/actions/runs/36473448319)).
+- [x] **P02.2 — Gezielte Kandidatensuche, erst dann Ergebnisfenster.**
       `mediathek.ts::{fetchSearchResultsByString,fetchSearchResultsForRssSync}`
       von zwingendem literal `Sxx` lösen, ohne ungesicherte Serienzuordnung;
       Identität, Koordinaten, Renditions und Duplikate vor `limit`/`offset` prüfen.
@@ -157,6 +159,18 @@ applyDesiredEpisodeFilter,fetchSearchResultsById,fetchSearchResultsByString}`
       Vollständigkeit bei Sourcecaps. Abnahme: Staffel-Titel werden gefunden,
       fremde Serien nie umetikettiert; Seiten sind stabil, episodenlose
       Staffelfeeds/Daily-Suche funktionieren und leere Suchergebnisse sind korrekt.
+      Abgenommen am 28.09.2026: Textsuche nutzt Kandidaten ohne AND-Zwang aus
+      literal `Sxx`; koordinatenbasierte S/E- und Daily-Suchen fragen passende
+      Quellformate getrennt ab und filtern anschließend über Regeln/Quellkoordinaten.
+      Fremdtitel behalten ihre Regeln-/TVDB-Identität, fehlende Serienregeln
+      erzeugen in koordinatenbasierten Feed-Suchen keine generischen Treffer.
+      Kandidaten und identische RSS-Releases werden vor Pagination dedupliziert;
+      `total` zählt nur den geprüften, sourcebegrenzten Bestand, leere Seiten
+      behalten den angefragten Offset. Regressionen: A4 positiv, Saisonvarianten,
+      Daily-Datum inklusive `März`, unmöglicher Kalendertag, falsche Folgen/Staffel,
+      fremde Titelidentität, Dubletten und Seitenfenster. Vollständiger Owner-Review
+      ohne offene Findings. Node 24.21.0: 215 Tests in 20 Dateien, Lint, Typecheck,
+      Formatcheck und Production-Build erfolgreich.
 - [ ] **P02.3 — Gemeinsame Release-Identität bis zum Download.**
       `newznab.ts::{formatTitle,generateTitle,createRssItem,createGenericRssItem,
 generateFakeNzb}`, `download.ts::parseNzbContent` und vorhandene

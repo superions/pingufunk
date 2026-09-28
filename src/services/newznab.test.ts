@@ -114,10 +114,12 @@ describe("convertItemsToRss", () => {
     expect(xml).toContain('total="2"');
   });
 
-  it("should return empty RSS for empty items array", () => {
-    const xml = convertItemsToRss([], 100, 0);
+  it("preserves the requested offset for an empty result page", () => {
+    const xml = convertItemsToRss([], 100, 5);
 
     expect(xml).toContain('total="0"');
+    expect(xml).toContain('offset="5"');
+    expect(xml).not.toContain("<item>");
   });
 
   it("should respect limit parameter", () => {

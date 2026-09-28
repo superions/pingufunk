@@ -41,6 +41,7 @@ import {
   fetchMovieSearchResults,
   fetchSearchResultsById,
   fetchSearchResultsByString,
+  fetchSearchResultsForRssSync,
 } from "./mediathek";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { mediathekCache } from "@/lib/cache";
@@ -154,7 +155,10 @@ describe("fetchSearchResultsByString – generic result gating", () => {
 });
 
 describe("P00 historical behavior and P01 rendition regressions", () => {
-  it("characterizes A4: literal S02 querying misses a title written as Staffel 2", async () => {
+  it("fixes A4: finds a Staffel 2 title without requiring literal S02", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
     const staffelZwei = makeItem({
       topic: "Example",
       title: "Example - Staffel 2 (2/6)",
@@ -180,13 +184,70 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     );
 
     const requestBody = JSON.parse(String(mockedFetch.mock.calls[0][1]?.body));
-    expect(requestBody.queries).toEqual([
-      { fields: ["topic", "title"], query: "Example" },
-      { fields: ["title"], query: "S02" },
+    expect(requestBody.queries).toEqual([{ fields: ["topic", "title"], query: "Example" }]);
+    expect(xml).toContain('total="1"');
+    expect(xml).toContain("Example.S02E02");
+    expect(xml).not.toContain("S01E02");
+  });
+
+  it("keeps the matched series identity when a foreign title contains the search query", async () => {
+    const foreignShow: TvdbData = {
+      id: 34567,
+      name: "Foreign Series",
+      germanName: null,
+      aliases: [],
+      episodes: [
+        {
+          name: "Episode 3",
+          aired: new Date("2024-01-08T12:00:00Z"),
+          runtime: 45,
+          seasonNumber: 2,
+          episodeNumber: 3,
+        },
+      ],
+    };
+    const ruleset: Ruleset = {
+      id: 7,
+      mediaId: 7,
+      topic: "Foreign Topic",
+      priority: 1,
+      filters: "[]",
+      titleRegexRules: "[]",
+      seasonRegex: "S(\\d+)",
+      episodeRegex: "E(\\d+)",
+      matchingStrategy: MatchingStrategy.SeasonAndEpisodeNumber,
+      media: {
+        media_id: 7,
+        media_name: "Foreign Series",
+        media_type: "tv",
+        media_tvdbId: foreignShow.id,
+        media_tmdbId: null,
+        media_imdbId: null,
+      },
+    };
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockedGetShowInfo.mockResolvedValue(foreignShow);
+    mockedRulesetsForTopic.mockReturnValue([ruleset]);
+    mockApi([
+      makeItem({
+        topic: "Foreign Topic",
+        title: "Requested Show guest slot S02/E03",
+        url_video: "https://example.org/foreign-episode-3.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
     ]);
-    // The source title matches Example but not the additional literal S02 clause.
-    expect(xml).toContain('total="0"');
-    expect(xml).not.toContain("<item>");
+
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Requested Show", season: "2", episode: "3" }),
+      100,
+      0
+    );
+
+    expect(xml).toContain("Foreign.Series.S02E03");
+    expect(xml).not.toContain("Requested.Show.S02E03");
   });
 
   it("characterizes A5: a long unrelated text result is published as a movie", async () => {
@@ -342,6 +403,76 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(xml).toContain("episode-2.mp4");
     expect(xml).not.toContain("S02E01");
     expect(xml).not.toContain("Episode-1");
+  });
+
+  it("searches alternative season coordinates, deduplicates candidates, and paginates after filtering", async () => {
+    const tvdbData: TvdbData = {
+      id: 23456,
+      name: "Example Show",
+      germanName: null,
+      aliases: [],
+      episodes: [
+        {
+          name: "Example Show S02/E02 Staffel 2 (2/6)",
+          aired: new Date("2024-01-08T00:00:00Z"),
+          runtime: 45,
+          seasonNumber: 2,
+          episodeNumber: 2,
+        },
+      ],
+    };
+    const source = makeItem({
+      topic: "Example Show",
+      title: "Example Show S02/E02 Staffel 2 (2/6)",
+      url_video: "https://example.org/episode-2.mp4",
+      url_video_low: "",
+      url_video_hd: "",
+    });
+    const ruleset: Ruleset = {
+      id: 3,
+      mediaId: 3,
+      topic: "Example Show",
+      priority: 1,
+      filters: "[]",
+      titleRegexRules: JSON.stringify([{ type: "regex", field: "title", pattern: "^(.*)$" }]),
+      seasonRegex: null,
+      episodeRegex: null,
+      matchingStrategy: MatchingStrategy.ItemTitleIncludes,
+      media: {
+        media_id: 3,
+        media_name: "Example Show",
+        media_type: "tv",
+        media_tvdbId: tvdbData.id,
+        media_tmdbId: null,
+        media_imdbId: null,
+      },
+    };
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockedGetShowInfo.mockResolvedValue(tvdbData);
+    mockedRulesetsForTopic.mockReturnValue([ruleset]);
+    mockedFetch.mockImplementation(async (_input, init) => {
+      const { queries } = JSON.parse(String(init?.body));
+      const query = queries[0].query as string;
+      const matches = source.title.toLowerCase().includes(query.toLowerCase()) ? [source] : [];
+      return { ok: true, json: async () => ({ result: { results: matches } }) } as Response;
+    });
+
+    const context = makeTvSearchContext({ season: "2", episode: "2" });
+    const firstPage = await fetchSearchResultsByString(context, 1, 0);
+    const secondPage = await fetchSearchResultsByString(context, 1, 1);
+    const candidateQueries = mockedFetch.mock.calls.map(
+      ([, init]) => (JSON.parse(String(init?.body)).queries[0] as { query: string }).query
+    );
+
+    expect(candidateQueries).toContain("S02");
+    expect(candidateQueries).toContain("Staffel 2");
+    expect(firstPage).toContain('offset="0" total="1"');
+    expect(firstPage).toContain("Example.Show.S02E02");
+    expect(firstPage).toContain("episode-2.mp4");
+    expect(secondPage).toContain('offset="1" total="1"');
+    expect(secondPage).not.toContain("<item>");
   });
 
   it("returns the same exact ID and text episode while retaining an explicit multi-episode release", async () => {
@@ -594,6 +725,197 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     }
   });
 
+  it("searches daily date candidates without a text query and filters neighbors before paging", async () => {
+    const tvdbData: TvdbData = {
+      id: 65432,
+      name: "Daily News",
+      germanName: null,
+      aliases: [],
+      episodes: ["2026-03-20", "2026-03-21"].map((date) => ({
+        name: `News on ${date}`,
+        aired: new Date(`${date}T12:00:00Z`),
+        runtime: 10,
+        seasonNumber: 2026,
+        episodeNumber: Number(date.slice(-2)),
+      })),
+    };
+    const ruleset: Ruleset = {
+      id: 4,
+      mediaId: 4,
+      topic: "Daily News",
+      priority: 1,
+      filters: "[]",
+      titleRegexRules: JSON.stringify([
+        { type: "regex", field: "title", pattern: "Daily News (.+)$" },
+      ]),
+      seasonRegex: null,
+      episodeRegex: null,
+      matchingStrategy: MatchingStrategy.ItemTitleEqualsAirdate,
+      media: {
+        media_id: 4,
+        media_name: "Daily News",
+        media_type: "tv",
+        media_tvdbId: tvdbData.id,
+        media_tmdbId: null,
+        media_imdbId: null,
+      },
+    };
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockedGetShowInfo.mockResolvedValue(tvdbData);
+    mockedRulesetsForTopic.mockReturnValue([ruleset]);
+    mockApi(
+      ["2026-03-20", "2026-03-21"].map((date) =>
+        makeItem({
+          topic: "Daily News",
+          title: `Daily News ${date.slice(-2)}. März 2026`,
+          filmlisteTimestamp: Date.parse(`${date}T12:00:00Z`) / 1000,
+          url_video: `https://example.org/${date}.mp4`,
+          url_video_low: "",
+          url_video_hd: "",
+        })
+      )
+    );
+
+    const context = makeTvSearchContext({ season: "2026", episode: "03/21" });
+    const firstPage = await fetchSearchResultsByString(context, 1, 0);
+    const secondPage = await fetchSearchResultsByString(context, 1, 1);
+    const candidateQueries = mockedFetch.mock.calls.map(
+      ([, init]) => (JSON.parse(String(init?.body)).queries[0] as { query: string }).query
+    );
+
+    expect(candidateQueries).toContain("21. März 2026");
+    expect(firstPage).toContain('offset="0" total="2"');
+    expect(firstPage).toContain("2026-03-21.mp4");
+    expect(firstPage).not.toContain("2026-03-20.mp4");
+    expect(secondPage).toContain('offset="1" total="2"');
+    expect(secondPage).not.toContain("2026-03-20.mp4");
+  });
+
+  it("rejects impossible source dates instead of rolling them into an aired episode", async () => {
+    const tvdbData: TvdbData = {
+      id: 65433,
+      name: "Daily News",
+      germanName: null,
+      aliases: [],
+      episodes: [
+        {
+          name: "News on 2026-03-02",
+          aired: new Date("2026-03-02T12:00:00Z"),
+          runtime: 10,
+          seasonNumber: 2026,
+          episodeNumber: 2,
+        },
+      ],
+    };
+    const ruleset: Ruleset = {
+      id: 6,
+      mediaId: 6,
+      topic: "Daily News",
+      priority: 1,
+      filters: "[]",
+      titleRegexRules: JSON.stringify([
+        { type: "regex", field: "title", pattern: "Daily News (.+)$" },
+      ]),
+      seasonRegex: null,
+      episodeRegex: null,
+      matchingStrategy: MatchingStrategy.ItemTitleEqualsAirdate,
+      media: {
+        media_id: 6,
+        media_name: "Daily News",
+        media_type: "tv",
+        media_tvdbId: tvdbData.id,
+        media_tmdbId: null,
+        media_imdbId: null,
+      },
+    };
+    mockedGetShowInfo.mockResolvedValue(tvdbData);
+    mockedRulesetsForTopic.mockReturnValue([ruleset]);
+    mockApi([
+      makeItem({
+        topic: "Daily News",
+        title: "Daily News 30. Februar 2026",
+        url_video: "https://example.org/impossible-date.mp4",
+      }),
+    ]);
+
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Daily News", season: "2026", episode: "03/02" }),
+      100,
+      0
+    );
+
+    expect(xml).toContain('total="0"');
+    expect(xml).not.toContain("impossible-date.mp4");
+  });
+
+  it("deduplicates identical RSS releases before applying page offsets", async () => {
+    const tvdbData: TvdbData = {
+      id: 76543,
+      name: "Example Show",
+      germanName: null,
+      aliases: [],
+      episodes: [
+        {
+          name: "Episode 2",
+          aired: new Date("2024-01-08T12:00:00Z"),
+          runtime: 45,
+          seasonNumber: 2,
+          episodeNumber: 2,
+        },
+      ],
+    };
+    const ruleset: Ruleset = {
+      id: 5,
+      mediaId: 5,
+      topic: "Example Show",
+      priority: 1,
+      filters: "[]",
+      titleRegexRules: "[]",
+      seasonRegex: "S(\\d+)",
+      episodeRegex: "E(\\d+)",
+      matchingStrategy: MatchingStrategy.SeasonAndEpisodeNumber,
+      media: {
+        media_id: 5,
+        media_name: "Example Show",
+        media_type: "tv",
+        media_tvdbId: tvdbData.id,
+        media_tmdbId: null,
+        media_imdbId: null,
+      },
+    };
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "1080p" : null
+    );
+    mockedGetShowInfo.mockResolvedValue(tvdbData);
+    mockedRulesetsForTopic.mockReturnValue([ruleset]);
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E02",
+        url_video: "https://example.org/standard-a.mp4",
+        url_video_hd: "https://example.org/shared-hd.mp4",
+        url_video_low: "",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02/E02",
+        url_video: "https://example.org/standard-b.mp4",
+        url_video_hd: "https://example.org/shared-hd.mp4",
+        url_video_low: "",
+      }),
+    ]);
+
+    const firstPage = await fetchSearchResultsForRssSync(1, 0);
+    const secondPage = await fetchSearchResultsForRssSync(1, 1);
+
+    expect(firstPage).toContain('offset="0" total="1"');
+    expect(firstPage).toContain("shared-hd.mp4");
+    expect(secondPage).toContain('offset="1" total="1"');
+    expect(secondPage).not.toContain("<item>");
+  });
+
   it("paginates the full generic result set and reuses successful provider data", async () => {
     mockedGetSetting.mockImplementation(async (key) =>
       key === "download.quality" ? "720p" : null
@@ -636,7 +958,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_["Example",null,null,null]_1_1_720p_300'),
+      expect.stringContaining('q_v2_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });

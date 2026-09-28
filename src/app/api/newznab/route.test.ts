@@ -109,6 +109,19 @@ describe("Newznab indexer validation", () => {
     expect(mediathekMocks.fetchSearchResultsById).not.toHaveBeenCalled();
   });
 
+  it("preserves the requested offset in an empty ID-only fallback", async () => {
+    showMocks.getShowInfoByTvdbId.mockResolvedValue(null);
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=12345&limit=10&offset=7")
+    );
+    const xml = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(xml).toContain('offset="7" total="0"');
+    expect(mediathekMocks.fetchSearchResultsByString).not.toHaveBeenCalled();
+  });
+
   it("preserves explicit coordinates through RSS/NZB and keeps the queue-parser boundary", async () => {
     const source: ApiResultItem = {
       channel: "ARD",
