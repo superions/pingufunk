@@ -1,4 +1,4 @@
-import { isStreamingUrl } from "@/lib/stream-url";
+import { isRenditionAllowed } from "@/lib/stream-url";
 import type { ApiResultItem, TmdbMovieData } from "@/types";
 import { getSetting } from "@/lib/settings";
 
@@ -95,10 +95,11 @@ export interface MovieMatchResult {
 export async function matchMovieItems(
   items: ApiResultItem[],
   movieData: TmdbMovieData,
-  minDurationSeconds: number
+  minDurationSeconds: number,
+  hlsEnabledOverride?: boolean
 ): Promise<MovieMatchResult[]> {
   const durationTolerance = await getDurationTolerance();
-  const hlsEnabled = await isHlsEnabled();
+  const hlsEnabled = hlsEnabledOverride ?? (await isHlsEnabled());
   const results: MovieMatchResult[] = [];
 
   const normalizedGermanTitle = normalizeTitle(movieData.germanTitle);
@@ -110,11 +111,10 @@ export async function matchMovieItems(
   );
 
   for (const item of items) {
-    // Skip m3u8 streams unless HLS is enabled
+    // Ignore candidates without an eligible rendition; generation gates each URL too.
     if (
-      !hlsEnabled &&
-      ![item.url_video, item.url_video_low, item.url_video_hd].some(
-        (url) => url && !isStreamingUrl(url)
+      ![item.url_video, item.url_video_low, item.url_video_hd].some((url) =>
+        isRenditionAllowed(url, hlsEnabled)
       )
     )
       continue;

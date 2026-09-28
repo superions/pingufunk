@@ -1,4 +1,4 @@
-import { isStreamingUrl } from "@/lib/stream-url";
+import { isRenditionAllowed } from "@/lib/stream-url";
 import { mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { queryContent } from "./content-search";
@@ -66,8 +66,14 @@ function shouldSkipItem(
   minDuration: number,
   hlsEnabled: boolean = false
 ): boolean {
-  // Skip m3u8 streams unless HLS is enabled, items with skip keywords, and items shorter than minDuration
-  if (!hlsEnabled && isStreamingUrl(item.url_video)) return true;
+  // Keep an item when any rendition is usable; generators apply this same gate
+  // to each URL so a blocked HLS variant cannot discard or re-enter the feed.
+  if (
+    ![item.url_video, item.url_video_low, item.url_video_hd].some((url) =>
+      isRenditionAllowed(url, hlsEnabled)
+    )
+  )
+    return true;
   if (SKIP_KEYWORDS.some((kw) => item.title.includes(kw))) return true;
   if (minDuration > 0 && item.duration < minDuration) return true;
   return false;
@@ -472,12 +478,12 @@ async function matchesItemTitleEqualsAirdate(
 
 async function applyRulesetFilters(
   results: ApiResultItem[],
-  tvdbData?: TvdbData
+  tvdbData: TvdbData | undefined,
+  hlsEnabled: boolean
 ): Promise<{ matchedEpisodes: MatchedEpisodeInfo[]; unmatchedItems: ApiResultItem[] }> {
   await ensureRulesetsLoaded();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
-  const hlsEnabled = await isHlsEnabled();
   console.log(
     `[Mediathek] Matching settings: strategy=${matchingSettings.strategy}, threshold=${matchingSettings.threshold}, minDuration=${minDuration}s, hlsEnabled=${hlsEnabled}`
   );
@@ -673,12 +679,13 @@ export async function fetchSearchResultsById(
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
+  const hlsEnabled = await isHlsEnabled();
   const searchQuery = tvdbData.germanName || tvdbData.name;
   console.log(
     `[Mediathek] fetchSearchResultsById: tvdbId=${tvdbData.id}, name="${tvdbData.name}", germanName="${tvdbData.germanName}", season=${season}, episode=${episodeNumber}, quality=${quality}, minDuration=${minDuration}`
   );
 
-  const cacheKey = `tvdb_${tvdbData.id}_${season ?? "null"}_${episodeNumber ?? "null"}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}`;
+  const cacheKey = `tvdb_${tvdbData.id}_${season ?? "null"}_${episodeNumber ?? "null"}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -722,14 +729,14 @@ export async function fetchSearchResultsById(
     );
   }
 
-  const { matchedEpisodes } = await applyRulesetFilters(results, tvdbData);
+  const { matchedEpisodes } = await applyRulesetFilters(results, tvdbData, hlsEnabled);
   console.log(`[Mediathek] Matched episodes after ruleset filtering: ${matchedEpisodes.length}`);
 
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(matchedEpisodes, desiredEpisodes);
   console.log(`[Mediathek] Matched desired episodes: ${matchedDesiredEpisodes.length}`);
 
   const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
-    generateRssItems(info, quality)
+    generateRssItems(info, quality, hlsEnabled)
   );
   console.log(`[Mediathek] Generated ${newznabItems.length} Newznab items (quality: ${quality})`);
 
@@ -751,7 +758,8 @@ export async function fetchSearchResultsByString(
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
-  const cacheKey = `q_${trimmedQ ?? "null"}_${season ?? "null"}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}`;
+  const hlsEnabled = await isHlsEnabled();
+  const cacheKey = `q_${trimmedQ ?? "null"}_${season ?? "null"}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
@@ -783,9 +791,13 @@ export async function fetchSearchResultsByString(
     mediathekCache.set(apiCacheKey, { results });
   }
 
-  const { matchedEpisodes, unmatchedItems } = await applyRulesetFilters(results);
+  const { matchedEpisodes, unmatchedItems } = await applyRulesetFilters(
+    results,
+    undefined,
+    hlsEnabled
+  );
   const newznabItems: NewznabItem[] = matchedEpisodes.flatMap((info) =>
-    generateRssItems(info, quality)
+    generateRssItems(info, quality, hlsEnabled)
   );
 
   // Generic (no-ruleset) results are only meaningful for an actual text search.
@@ -794,7 +806,7 @@ export async function fetchSearchResultsByString(
   // non-empty q to keep the previous (matched-only) behavior for those queries.
   const hasTextQuery = !!trimmedQ;
   const genericItems: NewznabItem[] = hasTextQuery
-    ? unmatchedItems.flatMap((item) => generateGenericRssItems(item, quality))
+    ? unmatchedItems.flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled))
     : [];
 
   const allItems = [...newznabItems, ...genericItems];
@@ -808,7 +820,8 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
-  const cacheKey = `rss_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}`;
+  const hlsEnabled = await isHlsEnabled();
+  const cacheKey = `rss_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
@@ -829,9 +842,9 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
     mediathekCache.set(apiCacheKey, { results });
   }
 
-  const { matchedEpisodes } = await applyRulesetFilters(results);
+  const { matchedEpisodes } = await applyRulesetFilters(results, undefined, hlsEnabled);
   const newznabItems: NewznabItem[] = matchedEpisodes.flatMap((info) =>
-    generateRssItems(info, quality)
+    generateRssItems(info, quality, hlsEnabled)
   );
   const response = convertItemsToRss(newznabItems, limit, offset);
 
@@ -851,11 +864,12 @@ export async function fetchMovieSearchResults(
 ): Promise<string> {
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
+  const hlsEnabled = await isHlsEnabled();
   console.log(
     `[Mediathek] fetchMovieSearchResults: tmdbId=${movieData.tmdbId}, title="${movieData.title}", germanTitle="${movieData.germanTitle}", runtime=${movieData.runtime} min, quality=${quality}, minDuration=${minDuration}s`
   );
 
-  const cacheKey = `movie_${movieData.tmdbId}_${limit}_${offset}_${quality}_${minDuration}`;
+  const cacheKey = `movie_${movieData.tmdbId}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -927,7 +941,7 @@ export async function fetchMovieSearchResults(
   }
 
   // Match results against movie data
-  const matchResults = await matchMovieItems(filteredResults, movieData, minDuration);
+  const matchResults = await matchMovieItems(filteredResults, movieData, minDuration, hlsEnabled);
 
   if (matchResults.length === 0) {
     console.log(`[Mediathek] No matches found for movie`);
@@ -936,8 +950,7 @@ export async function fetchMovieSearchResults(
     return response;
   }
 
-  // Generate RSS items for matches
-  const hlsEnabled = await isHlsEnabled();
+  // Generate RSS items using the same rendition setting used for matching.
   const newznabItems: NewznabItem[] = matchResults.flatMap((match) =>
     generateMovieRssItems(match, movieData, quality, hlsEnabled)
   );
@@ -962,6 +975,7 @@ export async function fetchMovieSearchByQuery(
 ): Promise<string> {
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
+  const hlsEnabled = await isHlsEnabled();
 
   // Strip trailing year from query (Radarr sends "Movie Title 2018")
   const cleanedQuery = query.replace(/\s+\d{4}$/, "").trim();
@@ -980,7 +994,7 @@ export async function fetchMovieSearchByQuery(
     );
   }
 
-  const cacheKey = `movie_query_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}`;
+  const cacheKey = `movie_query_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -1017,7 +1031,6 @@ export async function fetchMovieSearchByQuery(
 
   // Filter trailers and apply the configured minimum duration. Each URL variant
   // is checked for HLS below so direct alternatives remain available.
-  const hlsEnabled = await isHlsEnabled();
   const filteredResults = results.filter((item) => {
     if (SKIP_KEYWORDS.some((kw) => item.title.includes(kw))) return false;
     if (minDuration > 0 && item.duration < minDuration) return false;
@@ -1054,10 +1067,9 @@ export async function fetchMovieSearchByQuery(
       sizeMultiplier: number;
     }> = [];
 
-    const allowed = (url: string) => !!url && (hlsEnabled || !isStreamingUrl(url));
-    const has1080p = allowed(item.url_video_hd);
-    const has720p = allowed(item.url_video);
-    const has480p = allowed(item.url_video_low);
+    const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
+    const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
+    const has480p = isRenditionAllowed(item.url_video_low, hlsEnabled);
 
     if (has1080p && (quality === "all" || quality === "best" || quality === "1080p")) {
       qualities.push({

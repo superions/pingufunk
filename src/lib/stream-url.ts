@@ -22,6 +22,11 @@ export function isStreamingUrl(value: string): boolean {
   return isHlsUrl(value) || srfUrnFromUrl(value) !== null;
 }
 
+/** HLS manifests and stable SRF references are eligible only when enabled. */
+export function isRenditionAllowed(value: string, hlsEnabled: boolean): boolean {
+  return value.length > 0 && (hlsEnabled || !isStreamingUrl(value));
+}
+
 export type StreamHeight = 480 | 720 | 1080;
 
 /** Keep the requested rendition with a stable URL through NZB and queue storage. */

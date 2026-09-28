@@ -6,13 +6,14 @@ import {
   convertItemsToRss,
   generateFakeNzb,
   getCapabilitiesXml,
+  generateMovieRssItems,
   generateGenericRssItems,
   generateRssItems,
   getValidationRss,
   isMovieCategoryRequest,
   parseNewznabCategoryIds,
 } from "./newznab";
-import type { NewznabItem, ApiResultItem, MatchedEpisodeInfo } from "@/types";
+import type { NewznabItem, ApiResultItem, MatchedEpisodeInfo, TmdbMovieData } from "@/types";
 
 describe("generateAttributes", () => {
   it("should generate category attributes", () => {
@@ -495,5 +496,96 @@ describe("P00 historical release characterizations", () => {
 
     expect(firstEdition.link).not.toBe(secondEdition.link);
     expect(firstEdition.guid).toEqual(secondEdition.guid);
+  });
+});
+
+describe("RSS rendition eligibility", () => {
+  const item: ApiResultItem = {
+    channel: "ARD",
+    topic: "Example Show",
+    title: "Example Show (S02/E03)",
+    description: "Synthetic mixed renditions",
+    filmlisteTimestamp: 1_700_000_000,
+    duration: 3600,
+    size: 1_000_000_000,
+    url_website: "https://example.org/show/episode-3",
+    url_video: "https://example.org/720.m3u8",
+    url_video_low: "https://example.org/480.m3u8",
+    url_video_hd: "https://example.org/progressive-hd.mp4",
+  };
+
+  const episodeInfo: MatchedEpisodeInfo = {
+    episode: {
+      name: "Episode 3",
+      aired: new Date("2024-01-08T00:00:00Z"),
+      runtime: 45,
+      seasonNumber: 2,
+      episodeNumber: 3,
+    },
+    item,
+    showName: "Example Show",
+    matchedTitle: "Example Show",
+    tvdbId: 12345,
+  };
+
+  const movieData: TmdbMovieData = {
+    tmdbId: 123,
+    imdbId: null,
+    title: "Example Movie",
+    germanTitle: "Example Movie",
+    runtime: 60,
+    releaseDate: "2024-01-01",
+  };
+
+  it("filters each TV, movie, and generic rendition when HLS is disabled", () => {
+    const tvItems = generateRssItems(episodeInfo, "all", false);
+    const movieItems = generateMovieRssItems(
+      { item, score: 100, titleMatch: "exact", durationDiff: 0 },
+      movieData,
+      "all",
+      false
+    );
+    const genericItems = generateGenericRssItems(item, "all", false);
+
+    expect(tvItems.map((rssItem) => rssItem.link)).toEqual([
+      "https://example.org/progressive-hd.mp4",
+    ]);
+    expect(movieItems.map((rssItem) => rssItem.link)).toEqual([
+      "https://example.org/progressive-hd.mp4",
+    ]);
+    expect(genericItems.map((rssItem) => rssItem.link)).toEqual([
+      "https://example.org/progressive-hd.mp4",
+    ]);
+  });
+
+  it("preserves every available rendition when HLS is enabled", () => {
+    const tvItems = generateRssItems(episodeInfo, "all", true);
+    const movieItems = generateMovieRssItems(
+      { item, score: 100, titleMatch: "exact", durationDiff: 0 },
+      movieData,
+      "all",
+      true
+    );
+    const genericItems = generateGenericRssItems(item, "all", true);
+    const expectedLinks = [
+      "https://example.org/progressive-hd.mp4",
+      "https://example.org/720.m3u8",
+      "https://example.org/480.m3u8",
+    ];
+
+    expect(tvItems.map((rssItem) => rssItem.link)).toEqual(expectedLinks);
+    expect(movieItems.map((rssItem) => rssItem.link)).toEqual(expectedLinks);
+    expect(genericItems.map((rssItem) => rssItem.link)).toEqual(expectedLinks);
+  });
+
+  it("keeps stable SRF references unchanged when HLS is enabled", () => {
+    const srfUrl =
+      "https://www.srf.ch/play/tv/redirect/detail/11111111-1111-4111-8111-111111111111";
+    const srfItem = { ...item, url_video: srfUrl, url_video_low: "", url_video_hd: "" };
+
+    expect(generateGenericRssItems(srfItem, "all", false)).toHaveLength(0);
+    expect(generateGenericRssItems(srfItem, "all", true).map((rssItem) => rssItem.link)).toEqual([
+      srfUrl,
+    ]);
   });
 });

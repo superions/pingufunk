@@ -51,3 +51,15 @@ describe("matchMovieItems – minimum duration", () => {
     expect(matches).toHaveLength(1);
   });
 });
+
+describe("matchMovieItems – HLS eligibility", () => {
+  it("rejects HLS-only items when disabled and accepts them when explicitly enabled", async () => {
+    const hlsOnly = {
+      ...makeItem(2700, "hls-only"),
+      url_video: "https://example.com/hls-only.m3u8",
+    };
+
+    expect(await matchMovieItems([hlsOnly], movie, 0, false)).toHaveLength(0);
+    expect(await matchMovieItems([hlsOnly], movie, 0, true)).toHaveLength(1);
+  });
+});

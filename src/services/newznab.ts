@@ -1,5 +1,5 @@
 import { Builder } from "xml2js";
-import { isStreamingUrl } from "@/lib/stream-url";
+import { isRenditionAllowed } from "@/lib/stream-url";
 import type {
   NewznabRss,
   NewznabItem,
@@ -336,14 +336,15 @@ export type QualityPreference = "all" | "best" | "1080p" | "720p" | "480p";
 
 export function generateRssItems(
   info: MatchedEpisodeInfo,
-  qualityPreference: QualityPreference = "all"
+  qualityPreference: QualityPreference = "all",
+  hlsEnabled: boolean = false
 ): NewznabItem[] {
   const items: NewznabItem[] = [];
   const baseCategories = ["5000", "2000"];
 
-  const has1080p = !!info.item.url_video_hd;
-  const has720p = !!info.item.url_video;
-  const has480p = !!info.item.url_video_low;
+  const has1080p = isRenditionAllowed(info.item.url_video_hd, hlsEnabled);
+  const has720p = isRenditionAllowed(info.item.url_video, hlsEnabled);
+  const has480p = isRenditionAllowed(info.item.url_video_low, hlsEnabled);
 
   // Determine which qualities to include based on preference
   let include1080p = false;
@@ -504,10 +505,9 @@ export function generateMovieRssItems(
   // Movie categories (2000 = Movies)
   const baseCategories = ["2000"];
 
-  const allowed = (url: string) => !!url && (hlsEnabled || !isStreamingUrl(url));
-  const has1080p = allowed(item.url_video_hd);
-  const has720p = allowed(item.url_video);
-  const has480p = allowed(item.url_video_low);
+  const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
+  const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
+  const has480p = isRenditionAllowed(item.url_video_low, hlsEnabled);
 
   let include1080p = false;
   let include720p = false;
@@ -590,14 +590,15 @@ export function generateMovieRssItems(
  */
 export function generateGenericRssItems(
   item: ApiResultItem,
-  qualityPreference: QualityPreference = "all"
+  qualityPreference: QualityPreference = "all",
+  hlsEnabled: boolean = false
 ): NewznabItem[] {
   const items: NewznabItem[] = [];
   const baseCategories = ["5000"];
 
-  const has1080p = !!item.url_video_hd;
-  const has720p = !!item.url_video;
-  const has480p = !!item.url_video_low;
+  const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
+  const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
+  const has480p = isRenditionAllowed(item.url_video_low, hlsEnabled);
 
   let include1080p = false;
   let include720p = false;

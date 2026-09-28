@@ -108,7 +108,7 @@ Ergebnis: kleine, hochwirksame RSS-Fixes. Abhängigkeit P00; B03/B10, A1/A6.
       RSS→Fake-NZB erhält den Base64-Titel; der offene Dateinamen-Parserpfad
       bleibt wie vorgesehen bei P02.3. Prüfung: 192 Tests, Lint, Typecheck,
       Formatcheck und Build erfolgreich.
-- [ ] **P01.2 — Nutzbare Qualität nicht durch eine andere URL verlieren.**
+- [x] **P01.2 — Nutzbare Qualität nicht durch eine andere URL verlieren.**
       `src/services/mediathek.ts::shouldSkipItem`,
       `src/lib/stream-url.ts` und sämtliche TV/Movie/Generic-RSS-Erzeuger
       renditionweise nach URL/Streamtyp/Setting prüfen. Standard-HLS darf
@@ -116,6 +116,16 @@ Ergebnis: kleine, hochwirksame RSS-Fixes. Abhängigkeit P00; B03/B10, A1/A6.
       ins RSS gelangen. SRF-URN-Vertrag und vorhandenes ORF/HLS-Muxing erhalten.
       Abnahme: HLS an/aus, progressive+HLS und SRF liefern genau erlaubte
       Renditions; keine globale HLS-Abschaltung oder Providerregression.
+      Abgenommen am 28.09.2026: gemeinsame Rendition-Schranke für gematchtes TV,
+      generische TV-Feeds, TMDB-Movies und Radarr-Textsuche; HLS-Einstellung wird
+      pro Anfrage konsistent an Filter/Matcher/Erzeuger gereicht und in
+      Antwort-Cachekeys geführt. Regressionen decken progressive HD neben
+      Standard-HLS, gesperrtes HD-HLS neben direktem Standard, HLS-Toggle ohne
+      veraltete RSS-Antwort, HLS-only Movie-Matching sowie SRF-URN und ORF-Opt-in
+      ab. Vollständiger Producer-/Consumer-Review ohne weitere offene Findings;
+      Rohdaten-Cache wird beim Settings-Update geleert. Prüfung nach `npm ci`
+      unter Node 24.21.0: 202 Tests in 20 Dateien, Lint, Typecheck,
+      Formatcheck und Production-Build erfolgreich.
 
 ## Phase P02 — Exakter TV-Suchvertrag vor Pagination
 

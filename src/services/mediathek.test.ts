@@ -135,7 +135,7 @@ describe("fetchSearchResultsByString – generic result gating", () => {
   });
 });
 
-describe("P00 historical search characterizations", () => {
+describe("P00 historical behavior and P01 rendition regressions", () => {
   it("characterizes A4: literal S02 querying misses a title written as Staffel 2", async () => {
     const staffelZwei = makeItem({
       topic: "Example",
@@ -187,7 +187,7 @@ describe("P00 historical search characterizations", () => {
     expect(xml).not.toContain("Example.Film.1998");
   });
 
-  it("characterizes A6: an HLS standard URL discards an available progressive HD URL", async () => {
+  it("preserves progressive HD when the standard rendition is HLS and HLS is disabled", async () => {
     const mixedRenditions = makeItem({
       topic: "Example",
       title: "Example episode",
@@ -199,8 +199,51 @@ describe("P00 historical search characterizations", () => {
 
     const xml = await fetchSearchResultsByString("Example", null, 100, 0);
 
-    expect(xml).toContain('total="0"');
-    expect(xml).not.toContain("progressive-hd.mp4");
+    expect(xml).toContain('total="1"');
+    expect(xml).toContain("progressive-hd.mp4");
+    expect(xml).not.toContain("standard.m3u8");
+  });
+
+  it("does not re-emit a disallowed HLS HD rendition beside a progressive standard rendition", async () => {
+    mockApi([
+      makeItem({
+        topic: "Example",
+        title: "Example episode",
+        url_video: "https://example.org/progressive-standard.mp4",
+        url_video_hd: "https://example.org/disallowed-hd.m3u8",
+        url_video_low: "",
+      }),
+    ]);
+
+    const xml = await fetchSearchResultsByString("Example", null, 100, 0);
+
+    expect(xml).toContain('total="1"');
+    expect(xml).toContain("progressive-standard.mp4");
+    expect(xml).not.toContain("disallowed-hd.m3u8");
+  });
+
+  it("changes rendition output with HLS setting without reusing a stale response cache", async () => {
+    mockApi([
+      makeItem({
+        topic: "Example",
+        title: "Example episode",
+        url_video: "https://example.org/standard.m3u8",
+        url_video_hd: "https://example.org/progressive-hd.mp4",
+        url_video_low: "",
+      }),
+    ]);
+
+    const disabledXml = await fetchSearchResultsByString("Example", null, 100, 0);
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.enableHLS" ? "true" : null
+    );
+    const enabledXml = await fetchSearchResultsByString("Example", null, 100, 0);
+
+    expect(disabledXml).toContain("progressive-hd.mp4");
+    expect(disabledXml).not.toContain("standard.m3u8");
+    expect(enabledXml).toContain("progressive-hd.mp4");
+    expect(enabledXml).toContain("standard.m3u8");
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
   it("characterizes A7: a TVDB-ID search returns the requested episode only", async () => {
@@ -413,6 +456,9 @@ it.each(["standard", "high"])("keeps direct movie variants when %s is HLS", asyn
   expect(xml).toContain("480p");
   expect(xml).toContain(streaming === "standard" ? "1080p" : "720p");
   expect(xml).not.toContain(streaming === "standard" ? "720p" : "1080p");
+  expect(xml).toContain(streaming === "standard" ? "1080.mp4" : "720.mp4");
+  expect(xml).toContain("480.mp4");
+  expect(xml).not.toContain(streaming === "standard" ? "720.m3u8" : "1080.m3u8");
 });
 
 it.each(["standard", "high"])(
@@ -433,8 +479,33 @@ it.each(["standard", "high"])(
     expect(xml).toContain("480p");
     expect(xml).toContain(streaming === "standard" ? "1080p" : "720p");
     expect(xml).not.toContain(streaming === "standard" ? "720p" : "1080p");
+    expect(xml).toContain(streaming === "standard" ? "1080.mp4" : "720.mp4");
+    expect(xml).toContain("480.mp4");
+    expect(xml).not.toContain(streaming === "standard" ? "720.m3u8" : "1080.m3u8");
   }
 );
+
+it("preserves HLS movie text-search renditions when HLS is enabled", async () => {
+  mockedGetSetting.mockImplementation(async (key) =>
+    key === "download.enableHLS" ? "true" : null
+  );
+  mockApi([
+    makeItem({
+      topic: "Mixed Movie",
+      title: "Mixed Movie",
+      url_video: "https://example.org/720.m3u8",
+      url_video_hd: "https://example.org/1080.m3u8",
+      url_video_low: "https://example.org/480.mp4",
+    }),
+  ]);
+
+  const xml = await fetchMovieSearchByQuery("Mixed Movie", 100, 0);
+
+  expect(xml).toContain('total="3"');
+  expect(xml).toContain("720.m3u8");
+  expect(xml).toContain("1080.m3u8");
+  expect(xml).toContain("480.mp4");
+});
 
 it("uses a direct low-quality variant for best when higher qualities are HLS", async () => {
   vi.mocked(getSetting).mockImplementation(async (key) =>
