@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 28.09.2026. **Offener Entwicklungsvertrag, keine Deploymentfreigabe.**
+Stand: 29.09.2026. **Offener Entwicklungsvertrag, keine Deploymentfreigabe.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -31,7 +31,10 @@ erledigte Implementierung.
   blockieren nur ihren benannten Punkt, nicht andere unabhängige Entwicklung.
 - Synthetische, unabhängig implementierte Fixtures; kein privater Proxycode,
   keine Liveantworten/Medien/Secrets im Git. Servarr/Provider/Downloads mocken,
-  Dateisystem und PostgreSQL disposable. Keine mobilen Tests; UI desktop-only.
+  Dateisystem und Datenbank disposable. Bis P11 darf die UI des aktuellen
+  SQLite-Runtimes gegen eine eigene wegwerfbare Testdatenbank geprüft werden;
+  das ist kein PostgreSQL-Nachweis. Ab P11 sind Datenbankgates gegen disposable
+  PostgreSQL zu führen. Keine mobilen Tests; UI desktop-only.
 - Jeder Produktpunkt umfasst den ganzen Owner-/Consumerpfad, Review, Behebung
   und erneutes Review ohne offene Findings, eine sichere repräsentative
   Operation/Readback und kausale Regressionen. P00 darf ausdrücklich zunächst
@@ -211,10 +214,13 @@ B05/B07, A2/A3, R4.
       Tonsprachenbeleg darf `GERMAN` setzen; die Oberfläche lässt Sichtbarkeit
       dauerhaft ändern, nicht diese Invariante.
       Server/API-Persistenz und Regressionen sind geprüft. Noch offen bleibt die
-      vorgeschriebene desktop-only Interaktion samt Screenshot/Konsole auf dem
-      tatsächlich servierten Testbundle; ohne Interaction-Harness und disposable
-      PostgreSQL hier nicht als UI-Abnahme behauptet.
-- [x] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
+      vorgeschriebene desktop-only Interaktion auf dem tatsächlich servierten
+      Testbundle: `/settings` → Matching mit Defaultzustand, Änderung, Speichern,
+      Reload und API-Readback gegen eine eigene wegwerfbare SQLite-Testdatenbank
+      des aktuellen Runtimes; passende Vorher-/Nachher-Screenshots und
+      Browser-Konsole prüfen. Die isolierte P03-UI-Abnahme darf nicht als
+      PostgreSQL-Funktionstest ausgegeben werden; dieser bleibt P11 vorbehalten.
+- [ ] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
       `content-search.ts` vor `Map(url_video)`/frühem Slice und in allen RSS-Pfaden
       Sprach-/Fassungsstatus vor Titelbereinigung ableiten; bekannte deutsche
       Variante derselben Quellidentität reihenfolgeunabhängig bevorzugen, fremde
@@ -230,6 +236,22 @@ B05/B07, A2/A3, R4.
       verwenden beweisgebundene Titel und GUIDs; 720p/1080p bleiben verschieden.
       GUID-Wiederauftauchen/Doppelgrab-Gate dokumentiert; vollständige Producer-
       und Consumer-Review ohne offene Findings.
+      Wiedereröffnet nach Review vom 29.09.2026: Das bloß verdoppelte
+      Quell-Kandidatenfenster kann eine spätere bevorzugte Fassung abschneiden;
+      die GUID enthält derzeit die vollständige Medien-URL, sodass schon ein
+      wechselnder URL-Parameter eine neue Identität erzeugt. Tests setzen
+      `audioLanguage` synthetisch, während dessen Herkunft in den genutzten
+      Providerpfaden noch nicht belegt ist. Vor erneuter Abnahme den tatsächlichen
+      Quellcap/Consumerpfad mit einer deutschen Fassung jenseits des bisherigen
+      Fensters prüfen und entweder begrenzt nachladen oder Unvollständigkeit
+      ausdrücklich kenntlich machen; keine Vollständigkeit behaupten. Für GUIDs
+      quellspezifisch belegen, welche URL-Anteile eine echte Rendition abgrenzen:
+      kurzlebige Parameter dürfen keine neue Release-Identität erzeugen,
+      verschiedene Fassungen/Qualitäten aber nicht kollidieren. Herkunft und
+      Weitergabe real verfügbarer Audio-/Fassungsbelege prüfen; fehlt ein
+      belastbarer Beleg, bleibt der Treffer neutral statt `GERMAN`. Diese Fälle
+      kausal regressionsprüfen, RSS/NZB-Consumer und Cutover-Risiko erneut reviewen;
+      erst dann P03.2 wieder schließen und P04 beginnen.
 - [x] **P03.3 — Sprachvertrag bis in die Medienspuren erhalten.**
       `src/server/ffmpeg.ts::{convertMp4ToMkv,mergeVideoAudio}` und deren
       Downloadconsumer von blindem `language=ger` befreien; nur nachgewiesene
