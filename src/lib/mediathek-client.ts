@@ -15,6 +15,9 @@ import type { ApiResultItem, MediathekApiResponse } from "@/types";
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
 
+// MediathekViewWeb caps every response page at 1,000 results; callers page with offset.
+export const MEDIATHEK_VIEW_MAX_PAGE_SIZE = 1000;
+
 export interface MediathekQueryField {
   fields: string[];
   query: string;
@@ -24,6 +27,7 @@ export interface MediathekQueryOptions {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   future?: boolean;
+  offset?: number;
 }
 
 /**
@@ -36,13 +40,19 @@ export async function queryMediathekView(
   size: number,
   options: MediathekQueryOptions = {}
 ): Promise<ApiResultItem[] | null> {
+  const normalizedSize = Number.isFinite(size)
+    ? Math.max(0, Math.min(Math.trunc(size), MEDIATHEK_VIEW_MAX_PAGE_SIZE))
+    : 0;
+  const normalizedOffset = Number.isFinite(options.offset)
+    ? Math.max(0, Math.trunc(options.offset!))
+    : 0;
   const requestBody = {
     queries,
     sortBy: options.sortBy ?? "filmlisteTimestamp",
     sortOrder: options.sortOrder ?? "desc",
     future: options.future ?? true,
-    offset: 0,
-    size,
+    offset: normalizedOffset,
+    size: normalizedSize,
   };
 
   try {
@@ -91,7 +101,22 @@ export async function queryMediathekView(
       console.error("[MediathekClient] Invalid result item");
       return null;
     }
-    return items;
+    // Keep this boundary aligned with the provider's Filmliste schema. In particular,
+    // arbitrary response properties must not silently become audio-language evidence.
+    return items.map((item) => ({
+      ...(typeof item.id === "string" ? { id: item.id } : {}),
+      channel: item.channel,
+      topic: item.topic,
+      title: item.title,
+      description: item.description,
+      filmlisteTimestamp: item.filmlisteTimestamp,
+      duration: item.duration,
+      size: item.size,
+      url_website: item.url_website,
+      url_video: item.url_video,
+      url_video_low: item.url_video_low,
+      url_video_hd: item.url_video_hd,
+    }));
   } catch (error) {
     console.error("[MediathekClient] Error fetching from API:", error);
     return null;

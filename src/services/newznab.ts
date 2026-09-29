@@ -12,7 +12,11 @@ import type {
   ApiResultItem,
 } from "@/types";
 import type { MovieMatchResult } from "./movie-matcher";
-import { classifyLanguageEdition, getLanguageSourceIdentity } from "./language-editions";
+import {
+  classifyLanguageEdition,
+  getLanguageSourceIdentity,
+  stableUrlIdentity,
+} from "./language-editions";
 import { createFakeNzbDownloadUrl } from "./nzb-release";
 
 export { generateFakeNzb } from "./nzb-release";
@@ -275,11 +279,11 @@ export function buildReleaseGuid(
     getLanguageSourceIdentity(item),
     edition.variantKey,
     quality,
-    renditionUrl,
+    stableUrlIdentity(renditionUrl),
     releaseIdentity,
   ]);
   const fingerprint = createHash("sha256").update(identity).digest("hex").slice(0, 20);
-  const permalink = (item.url_website || item.url_video).split("#", 1)[0];
+  const permalink = stableUrlIdentity(item.url_website || item.url_video);
   return `${permalink}#${quality}-${fingerprint}`;
 }
 

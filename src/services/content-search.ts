@@ -1,4 +1,5 @@
 import {
+  MEDIATHEK_VIEW_MAX_PAGE_SIZE,
   queryMediathekView,
   type MediathekQueryField,
   type MediathekQueryOptions,
@@ -8,6 +9,33 @@ import { LANGUAGE_POLICY_SETTING_KEY, readLanguagePolicy } from "@/lib/language-
 import { srfProvider } from "@/providers/srf";
 import { selectLanguageVariants } from "@/services/language-editions";
 import type { ApiResultItem } from "@/types";
+
+const MAX_MEDIATHEK_CANDIDATES = 5000;
+
+async function queryMediathekCandidateWindow(
+  queries: MediathekQueryField[],
+  requestedSize: number,
+  options: MediathekQueryOptions
+): Promise<ApiResultItem[] | null> {
+  if (requestedSize <= 0) return [];
+
+  const candidates: ApiResultItem[] = [];
+
+  // Scan a bounded source window before edition selection. MediathekViewWeb's
+  // `id` hashes its full source row, so it is not a stable cursor or release key.
+  for (let offset = 0; offset < MAX_MEDIATHEK_CANDIDATES; offset += MEDIATHEK_VIEW_MAX_PAGE_SIZE) {
+    const pageSize = Math.min(MEDIATHEK_VIEW_MAX_PAGE_SIZE, MAX_MEDIATHEK_CANDIDATES - offset);
+    const page = await queryMediathekView(queries, pageSize, { ...options, offset });
+    if (page === null) return null;
+
+    candidates.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  // This is intentionally a bounded candidate set, not a claim that the provider
+  // catalog or all matching releases have been exhausted.
+  return candidates;
+}
 
 export async function getConfiguredLanguagePolicy() {
   return readLanguagePolicy(await getSetting(LANGUAGE_POLICY_SETTING_KEY));
@@ -30,20 +58,17 @@ export async function queryContent(
   const srfEnabled = await srfProvider.isEnabled();
 
   try {
-    // Fetch a bounded candidate window so a preferred language edition is not
-    // lost merely because its duplicate appeared just beyond the requested page.
-    const candidateLimit = size > 0 ? Math.max(size, Math.min(size * 2, 5000)) : 0;
     const [indexed, swiss] = await Promise.all([
       mvEnabled || orfEnabled
-        ? queryMediathekView(
+        ? queryMediathekCandidateWindow(
             !mvEnabled && orfEnabled
               ? [...queries, { fields: ["channel"], query: "ORF" }]
               : queries,
-            candidateLimit,
+            size,
             options
           )
         : Promise.resolve([]),
-      srfEnabled
+      srfEnabled && size > 0
         ? srfProvider.search({
             query: queries.find((q) => q.fields.includes("topic"))?.query || "",
             limit: Math.min(size, 100),

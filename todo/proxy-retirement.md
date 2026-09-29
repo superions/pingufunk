@@ -220,7 +220,7 @@ B05/B07, A2/A3, R4.
       des aktuellen Runtimes; passende Vorher-/Nachher-Screenshots und
       Browser-Konsole prüfen. Die isolierte P03-UI-Abnahme darf nicht als
       PostgreSQL-Funktionstest ausgegeben werden; dieser bleibt P11 vorbehalten.
-- [ ] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
+- [x] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
       `content-search.ts` vor `Map(url_video)`/frühem Slice und in allen RSS-Pfaden
       Sprach-/Fassungsstatus vor Titelbereinigung ableiten; bekannte deutsche
       Variante derselben Quellidentität reihenfolgeunabhängig bevorzugen, fremde
@@ -252,6 +252,30 @@ B05/B07, A2/A3, R4.
       belastbarer Beleg, bleibt der Treffer neutral statt `GERMAN`. Diese Fälle
       kausal regressionsprüfen, RSS/NZB-Consumer und Cutover-Risiko erneut reviewen;
       erst dann P03.2 wieder schließen und P04 beginnen.
+      Erneut abgenommen am 29.09.2026: MediathekViewWeb begrenzt eine Seite auf
+      1.000 Treffer; `content-search` liest bis zu 5.000 Kandidaten über `offset`
+      nach, stoppt bei einer kurzen Seite oder am dokumentierten Fenster und
+      behauptet keine Vollständigkeit des Quellkatalogs. Regression: eine belegte
+      deutsche Variante jenseits des früheren 2×-Fensters und jenseits Seite 1
+      gewinnt reihenfolgeunabhängig; ein Fehler späterer Quellseiten liefert kein
+      scheinbar vollständiges Teilergebnis.
+      Die MediathekView-`id` ist ein Hash der ganzen Rohzeile und deshalb keine
+      stabile Releaseidentität. GUIDs verwenden Quell-/Fassungsidentität, Qualität,
+      Medienpfad und unbekannte stabile Queryselektoren; bekannte kurzlebige
+      Authentifizierungs-/Signaturparameter ändern sie nicht. Unbekannte Queryteile,
+      verschiedene Fassungen und 720p/1080p bleiben unterscheidbar. RSS hält die
+      aktuelle Quell-URL weiter und der echte Fake-NZB-/Parserpfad wurde mit einer
+      erneuerten URL verifiziert. Das [Cutover-Runbook](../docs/proxy-retirement-cutover.md)
+      beschreibt GUID-Wiederauftauchen, Dupegrab-Gate und jetzt die URL-Normalisierung.
+      Herkunftsreview: die aktuellen MediathekView-/ORF-Suchergebnisse enthalten
+      keinen Audiotonsprachenbeleg; SRG-SSR-Suchmetadaten befüllen ebenfalls kein
+      `audioLanguage`. Die API-Grenze verwirft unbekannte Sprachproperties; SRF-
+      Suchergebnis→RSS→NZB bleibt neutral. Ein fehlender Beleg erzeugt kein `GERMAN`.
+      Vollständiger Provider-/Varianten-/TV-/Movie-/Generic-/RSS-/NZB-/Cache-Review
+      erneut durchgeführt, ohne offene Findings. Node 24.21.0 nach `npm ci`:
+      266 Tests in 25 Dateien, Lint, Typecheck, Formatcheck und Production-Build
+      erfolgreich. P03 bleibt wegen der offenen desktop-only Abnahme P03.1 unvollständig;
+      P04 wurde nicht begonnen.
 - [x] **P03.3 — Sprachvertrag bis in die Medienspuren erhalten.**
       `src/server/ffmpeg.ts::{convertMp4ToMkv,mergeVideoAudio}` und deren
       Downloadconsumer von blindem `language=ger` befreien; nur nachgewiesene

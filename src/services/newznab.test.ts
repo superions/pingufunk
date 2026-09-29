@@ -655,6 +655,32 @@ describe("P00 historical release characterizations", () => {
     );
     expect(new Set(items.map((item) => item.guid.value)).size).toBe(items.length);
   });
+
+  it("keeps distinct source editions separate when URL and quality are the same", () => {
+    const source: ApiResultItem = {
+      channel: "ARTE.FR",
+      topic: "Example Show",
+      title: "Example episode (OV, deutsche Untertitel)",
+      description: "Synthetic source variants",
+      filmlisteTimestamp: 1_700_000_000,
+      duration: 2700,
+      size: 1_000_000_000,
+      url_website: "https://www.arte.tv/fr/videos/123456-001-A/example/",
+      url_video: "https://cdn.example.org/example.mp4",
+      url_video_low: "",
+      url_video_hd: "",
+    };
+    const [subtitleEdition] = generateGenericRssItems(source, "720p");
+    const [germanAudioEdition] = generateGenericRssItems(
+      { ...source, audioLanguage: "de" },
+      "720p"
+    );
+
+    expect(subtitleEdition.link).toBe(germanAudioEdition.link);
+    expect(subtitleEdition.guid).not.toEqual(germanAudioEdition.guid);
+    expect(subtitleEdition.title).not.toContain("GERMAN");
+    expect(germanAudioEdition.title).toContain("GERMAN");
+  });
 });
 
 describe("RSS rendition eligibility", () => {

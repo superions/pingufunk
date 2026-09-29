@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { parseStringPromise } from "xml2js";
 import { parseNzbContent } from "@/services/download";
+import { generateGenericRssItems } from "@/services/newznab";
 import { GET } from "./route";
 
 const encodedUrl = Buffer.from("https://example.org/a--b.m3u8").toString("base64");
@@ -33,6 +34,48 @@ it("produces valid XML from URL-encoded Base64 with plus characters", async () =
   expect(parseNzbContent(xml)).toEqual({
     title: Buffer.from(encodedTitle, "base64").toString("utf-8"),
     url: Buffer.from(encodedUrl, "base64").toString("utf-8"),
+  });
+});
+
+it("keeps a release GUID stable across access-token rotation but downloads the current URL", async () => {
+  const source = {
+    channel: "ARD",
+    topic: "Example Show",
+    title: "Example episode",
+    description: "Synthetic rotating CDN credentials",
+    filmlisteTimestamp: 1_700_000_000,
+    duration: 2700,
+    size: 1_000_000_000,
+    url_website:
+      "https://example.org/show/episode-1?program=episode-1&access_token=stale-page-token",
+    url_video:
+      "https://cdn.example.org/videos/episode-1.mp4?asset=main&token=old&expires=100&hdnts=old",
+    url_video_low: "",
+    url_video_hd: "",
+  };
+  const renewedUrl =
+    "https://cdn.example.org/videos/episode-1.mp4?hdnts=new&asset=main&expires=200&token=new";
+  const [firstRelease] = generateGenericRssItems(source, "720p");
+  const [renewedRelease] = generateGenericRssItems(
+    { ...source, url_video: renewedUrl, id: "content-hash-changed-with-raw-row" },
+    "720p"
+  );
+  const [differentSourceRendition] = generateGenericRssItems(
+    { ...source, url_video: `${renewedUrl}&assetVariant=alternate` },
+    "720p"
+  );
+
+  expect(renewedRelease.guid).toEqual(firstRelease.guid);
+  expect(renewedRelease.link).toBe(renewedUrl);
+  expect(differentSourceRendition.guid).not.toEqual(renewedRelease.guid);
+
+  const response = await GET(
+    new NextRequest(new URL(renewedRelease.enclosure.url, "http://localhost"))
+  );
+  expect(response.status).toBe(200);
+  expect(parseNzbContent(await response.text())).toEqual({
+    title: renewedRelease.title,
+    url: renewedUrl,
   });
 });
 

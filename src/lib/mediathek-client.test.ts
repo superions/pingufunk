@@ -45,10 +45,40 @@ const validItem = {
   url_video_low: "",
   url_video_hd: "",
 };
-it("returns complete valid items unchanged", async () => {
+it("returns only the documented provider fields for valid items", async () => {
   vi.mocked(fetchWithRetry).mockResolvedValue(Response.json({ result: { results: [validItem] } }));
   expect(await queryMediathekView([], 10)).toEqual([validItem]);
 });
+
+it("caps each source page and honors its offset", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(Response.json({ result: { results: [] } }));
+
+  await queryMediathekView([], 5000, { offset: 2000 });
+
+  const request = vi.mocked(fetchWithRetry).mock.calls[0]?.[1];
+  expect(request).toBeDefined();
+  expect(JSON.parse(request!.body as string)).toMatchObject({ size: 1000, offset: 2000 });
+});
+
+it("does not promote uncontracted response properties to language evidence", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(
+    Response.json({
+      result: {
+        results: [
+          {
+            ...validItem,
+            audioLanguage: "de",
+            subtitleLanguage: "de",
+            originalVersion: true,
+          },
+        ],
+      },
+    })
+  );
+
+  expect(await queryMediathekView([], 10)).toEqual([validItem]);
+});
+
 it.each([
   null,
   {},

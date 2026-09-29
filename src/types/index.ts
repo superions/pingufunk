@@ -29,6 +29,7 @@ export interface ApiResultItem {
   url_video: string;
   url_video_low: string;
   url_video_hd: string;
+  /** Set only by an adapter with a verified provider audio-language contract. */
   audioLanguage?: string | null;
   subtitleLanguage?: string | null;
   originalVersion?: boolean;

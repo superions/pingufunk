@@ -11,6 +11,10 @@ P03 changes Newznab GUIDs from the old website-plus-quality value to a stable
 identity that includes source, edition, rendition, and search context. Previously
 consumed releases can consequently reappear as new feed entries and cause duplicate
 grabs. Equal titles alone are not proof that two releases are the same edition.
+Known short-lived media access parameters are excluded from that identity; the
+media path, unrecognized query selectors, edition, and explicit quality remain
+identity-bearing. The current RSS/NZB path still forwards the provider's current
+download URL, so GUID stability does not make an old queued URL fresh.
 
 Before the P10.6 routing gate can open:
 

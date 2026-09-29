@@ -31,7 +31,7 @@ export interface ProviderContentItem {
   duration: number;
   /** File size in bytes (0 if unknown) */
   size: number;
-  /** Audio-language evidence supplied by the provider; locale/channel are not substitutes. */
+  /** Only set from provider metadata that explicitly identifies the audio track language. */
   audioLanguage?: string | null;
   /** URL to the website page for this content */
   websiteUrl: string;

@@ -20,6 +20,46 @@ function normalizedLanguageCode(value: unknown): string | null {
   return value.trim().replaceAll("_", "-").toLowerCase();
 }
 
+const SHORT_LIVED_MEDIA_QUERY_KEYS = new Set([
+  "access_token",
+  "auth",
+  "authorization",
+  "expires",
+  "expires_at",
+  "expiry",
+  "hdnea",
+  "hdnts",
+  "key-pair-id",
+  "policy",
+  "sig",
+  "signature",
+  "token",
+]);
+
+/**
+ * MediathekViewWeb exposes separate video URL fields for the source renditions, while
+ * its own result `id` is a hash of the entire Filmliste row. Keep the media path and
+ * unrecognized query selectors as identity, but ignore known expiring access keys.
+ */
+export function stableUrlIdentity(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    url.username = "";
+    url.password = "";
+    url.hash = "";
+
+    for (const key of new Set(url.searchParams.keys())) {
+      if (SHORT_LIVED_MEDIA_QUERY_KEYS.has(key.toLowerCase())) {
+        url.searchParams.delete(key);
+      }
+    }
+    url.searchParams.sort();
+    return url.toString();
+  } catch {
+    return rawUrl.split("#", 1)[0];
+  }
+}
+
 function hasOriginalVersionMarker(title: string): boolean {
   return (
     /\b(?:originalversion|originalfassung|originalton)\b/i.test(title) ||
@@ -132,13 +172,17 @@ function sourceIdentity(item: ApiResultItem): string {
       return `arte:${arteVideo[1].toLowerCase()}`;
     }
     const path = website.pathname.replace(/\/$/, "");
-    if (path) return `website:${website.hostname.toLowerCase()}${path}`;
-    if (sourceId) return `source:${sourceId}`;
-    return `website:${website.hostname.toLowerCase()}/`;
+    const stableWebsite = new URL(stableUrlIdentity(item.url_website));
+    if (path) return `website:${stableWebsite.host.toLowerCase()}${path}${stableWebsite.search}`;
+    if (stableWebsite.search)
+      return `website:${stableWebsite.host.toLowerCase()}/${stableWebsite.search}`;
   } catch {
-    if (sourceId) return `source:${sourceId}`;
-    return `video:${item.url_video}`;
+    // Fall through to the stable media URL. Provider row IDs may include the URL.
   }
+
+  if (item.url_video) return `video:${stableUrlIdentity(item.url_video)}`;
+  if (sourceId) return `source:${sourceId}`;
+  return "source:unknown";
 }
 
 function editionFamily(edition: LanguageEdition): string {
