@@ -199,7 +199,7 @@ generateFakeNzb}`, `download.ts::parseNzbContent` und vorhandene
 Ergebnis: keine falschen GERMAN-Tags oder GUID-Zwillinge. Abhängigkeit P02;
 B05/B07, A2/A3, R4.
 
-- [ ] **P03.1 — Präferenzen ausdrücklich entscheiden.** Vor Änderungen in
+- [x] **P03.1 — Präferenzen ausdrücklich entscheiden.** Vor Änderungen in
       `src/services/newznab.ts`, `src/services/content-search.ts` und
       `src/server/ffmpeg.ts` die Defaultpolitik für OV, deutsche Untertitel,
       Audiodeskription, Gebärde, Klare Sprache und evidenzarmen Altbestand samt
@@ -220,6 +220,15 @@ B05/B07, A2/A3, R4.
       des aktuellen Runtimes; passende Vorher-/Nachher-Screenshots und
       Browser-Konsole prüfen. Die isolierte P03-UI-Abnahme darf nicht als
       PostgreSQL-Funktionstest ausgegeben werden; dieser bleibt P11 vorbehalten.
+      Abgenommen am 30.09.2026 auf dem tatsächlich servierten lokalen
+      Development-Bundle von `8ae2e20` unter `/settings` → Matching mit eigener
+      wegwerfbarer SQLite-Testdatenbank: Defaultzustand visuell geprüft, OV per
+      Maus geändert und gespeichert, nach Reload weiterhin aktiv und über
+      `/api/settings?key=matching.languagePolicy` zurückgelesen. Ein weiterer
+      Schalter ließ sich per Tastatur um- und zurückschalten. Vorher-/Nachher-
+      Screenshots desselben Desktop-Zustands wurden im Codex-Browser aufgenommen
+      und visuell verglichen; Browser-Konsole ohne Warnungen/Fehler. Kein
+      PostgreSQL-Test und keine produktive Instanz betroffen.
 - [x] **P03.2 — Varianten vor Verlust und Pagination auswählen.** In
       `content-search.ts` vor `Map(url_video)`/frühem Slice und in allen RSS-Pfaden
       Sprach-/Fassungsstatus vor Titelbereinigung ableiten; bekannte deutsche
