@@ -1,6 +1,16 @@
 import { prisma } from "@/lib/db";
 import { randomUUID } from "crypto";
-import * as path from "path";
+import path from "node:path";
+import {
+  assertLocalFileSafeForRemoval,
+  getDownloadBasePath,
+  localFilePathForRemoval,
+  publicDownloadCategory,
+  reportedStoragePath,
+  UnsafeDownloadPathError,
+  validateCategory,
+  validateReleaseTitle,
+} from "@/lib/download-paths";
 import { decodeBase64Utf8 } from "./nzb-release";
 import type { NzbRelease } from "./nzb-release";
 
@@ -99,6 +109,8 @@ export async function addToQueue(
   title: string,
   category: string
 ): Promise<{ id: string }> {
+  validateCategory(category);
+  validateReleaseTitle(title);
   const download = await prisma.download.create({
     data: {
       id: randomUUID(),
@@ -162,7 +174,7 @@ export async function getQueue(): Promise<SabnzbdQueue> {
       status: statusText,
       percentage: d.progress.toString(),
       timeleft,
-      cat: d.category,
+      cat: publicDownloadCategory(d.category),
       mb: totalMb,
       mbleft: (remainingBytes / 1024 / 1024).toFixed(1),
       speed: d.status === "downloading" ? `${speedMbps} MB/s` : "",
@@ -173,6 +185,7 @@ export async function getQueue(): Promise<SabnzbdQueue> {
 }
 
 export async function getHistory(): Promise<SabnzbdHistory> {
+  const downloadBasePath = await getDownloadBasePath();
   const downloads = await prisma.download.findMany({
     where: {
       status: { in: ["completed", "failed"] },
@@ -185,7 +198,11 @@ export async function getHistory(): Promise<SabnzbdHistory> {
     // Sonarr scans this folder for video files
     let storagePath = "";
     if (d.filePath) {
-      storagePath = path.dirname(d.filePath);
+      storagePath = reportedStoragePath(
+        d.filePath,
+        downloadBasePath,
+        process.env.DOWNLOAD_FOLDER_PATH_MAPPING
+      );
     }
 
     return {
@@ -193,7 +210,7 @@ export async function getHistory(): Promise<SabnzbdHistory> {
       name: d.title,
       status: d.status === "completed" ? "Completed" : "Failed",
       completed: d.completedAt ? Math.floor(d.completedAt.getTime() / 1000) : 0,
-      category: d.category,
+      category: publicDownloadCategory(d.category),
       storage: storagePath,
       bytes: Number(d.size),
       fail_message: d.error || "",
@@ -208,17 +225,42 @@ export async function deleteHistoryItem(nzoId: string, delFiles: boolean): Promi
     where: { id: nzoId },
   });
 
-  if (!download) {
+  if (!download || !["completed", "failed"].includes(download.status)) {
     return false;
   }
 
-  // Delete the file if requested
+  // Map old remote paths only within the configured root. Unsafe paths leave
+  // both the file and history entry intact instead of deleting a neighbor.
   if (delFiles && download.filePath) {
-    try {
-      const fs = await import("fs/promises");
-      await fs.unlink(download.filePath);
-    } catch {
-      // File might not exist, ignore error
+    const fs = await import("fs/promises");
+    const localBasePath = await getDownloadBasePath();
+    const localPath = localFilePathForRemoval(
+      { ...download, filePath: download.filePath },
+      localBasePath,
+      process.env.DOWNLOAD_FOLDER_PATH_MAPPING
+    );
+    const mappedPath = process.env.DOWNLOAD_FOLDER_PATH_MAPPING
+      ? path.join(
+          process.env.DOWNLOAD_FOLDER_PATH_MAPPING,
+          path.relative(path.resolve(localBasePath), localPath)
+        )
+      : localPath;
+    const otherOwner = await prisma.download.findFirst({
+      where: {
+        id: { not: nzoId },
+        filePath: { in: [...new Set([localPath, mappedPath, download.filePath])] },
+      },
+      select: { id: true },
+    });
+    if (otherOwner) {
+      throw new UnsafeDownloadPathError("Download file is also referenced by another job");
+    }
+    if (await assertLocalFileSafeForRemoval(localPath, localBasePath)) {
+      try {
+        await fs.unlink(localPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
     }
   }
 
@@ -234,17 +276,31 @@ export async function retryDownload(nzoId: string): Promise<{ id: string } | nul
     where: { id: nzoId },
   });
 
-  if (!download) {
+  if (!download || !["completed", "failed"].includes(download.status)) {
     return null;
   }
+  const publicCategory = publicDownloadCategory(download.category);
+  validateCategory(publicCategory);
+  validateReleaseTitle(download.title);
 
-  // Delete the old entry
-  await prisma.download.delete({
-    where: { id: nzoId },
+  // A failed insertion must not discard the old history entry; a new ID owns
+  // the retry so its temp and completed paths cannot collide with the old job.
+  const newId = randomUUID();
+  await prisma.$transaction(async (tx) => {
+    await tx.download.create({
+      data: {
+        id: newId,
+        title: download.title,
+        url: download.url,
+        category: publicCategory,
+        status: "queued",
+        progress: 0,
+      },
+    });
+    await tx.download.delete({ where: { id: nzoId } });
   });
-
-  // Re-add to queue
-  return addToQueue(download.url, download.title, download.category);
+  triggerDownloadProcessing();
+  return { id: newId };
 }
 
 export async function getConfigResponse(): Promise<object> {

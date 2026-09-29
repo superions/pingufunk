@@ -303,7 +303,7 @@ Ergebnis: parallele Jobs können unabhängig heruntergeladen/importiert werden.
 Abhängigkeit P03; B14/B15, R5. Bestehende `Download.id` genügt, keine
 Schemaänderung allein für Verzeichnisnamen.
 
-- [ ] **P04.1 — Temp und Complete gemeinsam pro Job isolieren.**
+- [x] **P04.1 — Temp und Complete gemeinsam pro Job isolieren.**
       `src/server/download-manager.ts::{processDownload,downloadFile,
 moveIntoCategoryDir}`, FFmpeg-/HLS-/Sidecar-Consumer und
       `src/services/download.ts::{addToQueue,getHistory,getQueue}` auf sanitisierten
@@ -312,7 +312,14 @@ moveIntoCategoryDir}`, FFmpeg-/HLS-/Sidecar-Consumer und
       Remote-Path-Mapping-Pfade trennen. Abnahme: zwei gleichnamige Jobs kollidieren
       weder im Temp noch Complete; Import während zweitem Download bleibt sicher,
       EXDEV-copy/unlink und Wiederanlage gelöschter Kategorieordner bleiben erhalten.
-- [ ] **P04.2 — Löschen/Retry sind strikt jobgebunden und legacyfähig.**
+      Abgenommen am 30.09.2026: Temp und Complete verwenden denselben
+      Release+Job-ID-Owner. Zwei gleichnamige synthetische Jobs und ein Import
+      während des zweiten Downloads wurden mit realem Dateisystem geprüft;
+      HLS/FFmpeg, EXDEV-copy/unlink, exklusive Zielanlage und das Wiederanlegen
+      entfernter Kategorieordner sind regressionsgesichert. `history.storage`
+      meldet das genaue Jobverzeichnis im Consumer-Mapping, während `filePath`
+      lokal gespeichert bleibt; öffentliche Kategorien bleiben unverändert.
+- [x] **P04.2 — Löschen/Retry sind strikt jobgebunden und legacyfähig.**
       `download.ts::{deleteHistoryItem,retryDownload}`, SAB-Route und Manager
       gegen Traversal, absolute/unzulässige Namen, Unicode-/Längenrandfälle und
       Symlink-Ausbruch sichern. Legacy-Proxy-Privatekategorien/alte `filePath`-
@@ -320,6 +327,16 @@ moveIntoCategoryDir}`, FFmpeg-/HLS-/Sidecar-Consumer und
       Abnahme: Queue→completed→History→Import→Remove/Retry anhand synthetischer
       FS-Jobs geprüft; ein Job kann nie Nachbar-Dateien löschen, Sonarr-Prefix-
       Mapping bleibt korrekt und alte nicht importierte History bleibt zugänglich.
+      Abgenommen am 30.09.2026: Queue/History/Remove/Retry sind mit synthetischen
+      FS-Jobs, alter flacher und Proxy-Privatekategorie sowie lokalem/remote
+      `filePath` geprüft. Traversal, absolute und unzulässige Namen, Unicode-
+      Bytegrenzen, Symlink-Ausbruch, bestehende Zielpfade und mehrfach referenzierte
+      Legacy-Dateien brechen sicher ab; ein Nachbarjob bleibt erhalten. Retry
+      bekommt eine neue ID und lässt bei fehlgeschlagener Erstellung den alten
+      Eintrag bestehen. Die Übergangs- und Stopbedingungen stehen im
+      [Cutover-Runbook](../docs/proxy-retirement-cutover.md). Auf Node 24.15.0
+      bestanden 293 Tests in 29 Dateien, Lint, Typecheck, Formatcheck und Build.
+      Keine produktiven Jobs oder Datenbanken wurden berührt.
 
 ## Phase P05 — Begrenzte Requests, sichere Secrets und Queue-Fortschritt
 

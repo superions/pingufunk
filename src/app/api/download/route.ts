@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { InvalidDownloadInputError, UnsafeDownloadPathError } from "@/lib/download-paths";
 import {
   getQueue,
   getHistory,
@@ -31,20 +32,37 @@ export async function GET(request: NextRequest) {
     case "history": {
       // Handle history deletion
       if (name === "delete" && value) {
-        const isDeleted = await deleteHistoryItem(value, delFiles);
-        if (isDeleted) {
-          return NextResponse.json({ status: true });
+        try {
+          const isDeleted = await deleteHistoryItem(value, delFiles);
+          if (isDeleted) {
+            return NextResponse.json({ status: true });
+          }
+          return NextResponse.json({ status: false, error: "Item not found" }, { status: 404 });
+        } catch (error) {
+          if (
+            error instanceof UnsafeDownloadPathError ||
+            error instanceof InvalidDownloadInputError
+          ) {
+            return NextResponse.json({ status: false, error: error.message }, { status: 409 });
+          }
+          throw error;
         }
-        return NextResponse.json({ status: false, error: "Item not found" }, { status: 404 });
       }
 
       // Handle retry
       if (name === "retry" && value) {
-        const result = await retryDownload(value);
-        if (result) {
-          return NextResponse.json({ status: true, nzo_id: result.id });
+        try {
+          const result = await retryDownload(value);
+          if (result) {
+            return NextResponse.json({ status: true, nzo_id: result.id });
+          }
+          return NextResponse.json({ status: false, error: "Item not found" }, { status: 404 });
+        } catch (error) {
+          if (error instanceof InvalidDownloadInputError) {
+            return NextResponse.json({ status: false, error: error.message }, { status: 409 });
+          }
+          throw error;
         }
-        return NextResponse.json({ status: false, error: "Item not found" }, { status: 404 });
       }
 
       // Return history list
@@ -86,6 +104,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error adding file:", error);
+    if (error instanceof InvalidDownloadInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

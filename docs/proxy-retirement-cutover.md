@@ -33,3 +33,23 @@ Before the P10.6 routing gate can open:
 
 This note records a risk and a stop condition; it does not authorize reading or
 changing a production feed, queue, history, service, or route.
+
+## P04 — Download-Pfade und Altbestand
+
+Neue Jobs speichern Temp-Dateien und fertige Medien in einem Verzeichnis aus
+sanitisiertem Release-Namen und `Download.id`. Die öffentliche SAB-Kategorie
+bleibt `sonarr`, `movies` usw.; `history.storage` zeigt auf genau das jeweilige
+Jobverzeichnis und berücksichtigt das konfigurierte Pfad-Mapping. In der Datenbank
+bleibt der lokale Pfad, damit ein späteres `del_files=1` die richtige Datei trifft.
+Alte flache `filePath`-Einträge und die bisherigen Proxy-Privatekategorien werden
+beim Lesen nicht umgeschrieben. Ein Retry erzeugt eine neue Job-ID und verwendet
+die öffentliche Kategorie.
+
+Vor einem Cutover synthetisch prüfen, dass Sonarr/Radarr das neue `storage`-Verzeichnis
+importieren und danach entfernen können; parallel darf ein zweiter gleichnamiger
+Job nicht betroffen sein. Alte, noch nicht importierte History muss lesbar bleiben.
+Falls ein alter Dateipfad außerhalb des konfigurierten Download-Roots liegt, über
+einen Symlink ausbricht oder von mehreren History-Einträgen referenziert wird,
+bricht `del_files=1` ab und lässt den History-Eintrag bestehen. Solche Fälle
+müssen einzeln geklärt werden; weder Datenbankzeilen noch Dateien pauschal
+umbenennen oder löschen. Der Pfadwechsel ist keine Freigabe für produktive Jobs.

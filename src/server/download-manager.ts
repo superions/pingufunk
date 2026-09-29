@@ -2,20 +2,21 @@ import { prisma } from "@/lib/db";
 import { isMkvConversionEnabled } from "@/lib/settings";
 import { downloadHlsStream } from "./ytdlp";
 import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
+import {
+  assertNewOutputPath,
+  categoryDirectory,
+  ensureOwnedDirectory,
+  getDownloadBasePath,
+  jobDirectoryName,
+  publicDownloadCategory,
+  safeFileExtension,
+  safeReleaseName,
+} from "@/lib/download-paths";
 import * as fs from "fs/promises";
-import { createWriteStream } from "fs";
+import { constants, createWriteStream } from "fs";
 import * as path from "path";
 
 const MAX_CONCURRENT_DOWNLOADS = 1;
-
-async function getDownloadBasePath(): Promise<string> {
-  const { getSetting } = await import("@/lib/settings");
-  return (
-    (await getSetting("download.path")) ||
-    process.env.DOWNLOAD_FOLDER_PATH ||
-    path.join(process.cwd(), "downloads")
-  );
-}
 
 async function getDownloadTempPath(): Promise<string> {
   const basePath = await getDownloadBasePath();
@@ -90,36 +91,59 @@ async function processQueue(): Promise<void> {
 }
 
 /**
- * Move a finished file into the category folder.
+ * Move a finished file into its private job folder.
  *
  * The folder was created when the download started, but *arr apps remove the
  * imported file from the category folder while later downloads are still
  * running, and delete the folder once it is empty -- so it is re-created
- * right before the move. That still leaves a moment between mkdir and rename;
+ * right before the move. That still leaves a moment between mkdir and link;
  * if an import deletes the folder in exactly that instant, the ENOENT is
  * answered with one more re-create and retry. A missing SOURCE file also
  * surfaces as ENOENT and fails the retry identically, which is correct.
  */
-async function moveIntoCategoryDir(
+async function moveIntoJobDir(
   sourcePath: string,
   targetPath: string,
-  categoryDir: string
+  tempJobDir: string,
+  basePath: string,
+  categoryDir: string,
+  jobDir: string
 ): Promise<void> {
-  await fs.mkdir(categoryDir, { recursive: true });
+  if (path.dirname(path.resolve(sourcePath)) !== path.resolve(tempJobDir)) {
+    throw new Error("Download result is outside its temporary job directory");
+  }
+  const sourceStat = await fs.lstat(sourcePath);
+  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+    throw new Error("Download result is not a regular job file");
+  }
+  const ensureTarget = async () => {
+    await ensureOwnedDirectory(basePath, categoryDir);
+    await ensureOwnedDirectory(categoryDir, jobDir);
+  };
+  await ensureTarget();
   const move = async () => {
     try {
-      await fs.rename(sourcePath, targetPath);
+      // link creates the target without replacing an existing file or symlink.
+      await fs.link(sourcePath, targetPath);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
-      await fs.copyFile(sourcePath, targetPath);
-      await fs.unlink(sourcePath);
+      // Cross-device moves and filesystems without hard-link support still
+      // create a fresh target exclusively before removing the source.
+      if (
+        !["EXDEV", "EPERM", "EOPNOTSUPP", "ENOTSUP"].includes(
+          (error as NodeJS.ErrnoException).code ?? ""
+        )
+      ) {
+        throw error;
+      }
+      await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
     }
+    await fs.unlink(sourcePath);
   };
   try {
     await move();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await fs.mkdir(categoryDir, { recursive: true });
+    await ensureTarget();
     await move();
   }
 }
@@ -128,6 +152,8 @@ async function processDownload(downloadId: string): Promise<void> {
   await downloadSemaphore.acquire();
 
   const startTime = Date.now();
+  let tempJobDir: string | null = null;
+  let completeJobDir: string | null = null;
 
   try {
     // Get download info
@@ -148,12 +174,21 @@ async function processDownload(downloadId: string): Promise<void> {
       data: { status: "downloading" },
     });
 
-    // Create temp and category directories
+    // A job owns both staging and completed output, even if another job has
+    // the same public release title or a consumer removes an imported folder.
     const downloadBasePath = await getDownloadBasePath();
     const downloadTempPath = await getDownloadTempPath();
-    const categoryDir = path.join(downloadBasePath, download.category);
-    await fs.mkdir(downloadTempPath, { recursive: true });
-    await fs.mkdir(categoryDir, { recursive: true });
+    const categoryDir = categoryDirectory(
+      downloadBasePath,
+      publicDownloadCategory(download.category)
+    );
+    const jobDirName = jobDirectoryName(download.title, download.id);
+    tempJobDir = path.join(downloadTempPath, jobDirName);
+    completeJobDir = path.join(categoryDir, jobDirName);
+    const filename = safeReleaseName(download.title);
+    await ensureOwnedDirectory(downloadTempPath, tempJobDir);
+    await ensureOwnedDirectory(downloadBasePath, categoryDir);
+    await ensureOwnedDirectory(categoryDir, completeJobDir);
 
     // Check if this is an HLS stream
     const isHls = isStreamingUrl(download.url);
@@ -172,8 +207,9 @@ async function processDownload(downloadId: string): Promise<void> {
           ? download.url.split("#")[0]
           : download.url;
       const container = (await isMkvConversionEnabled()) ? "mkv" : "mp4";
-      const tempMkvPath = path.join(downloadTempPath, `${download.title}.${container}`);
-      const finalMkvPath = path.join(categoryDir, `${download.title}.${container}`);
+      const tempMkvPath = path.join(tempJobDir, `${filename}.${container}`);
+      const finalMkvPath = path.join(completeJobDir, `${filename}.${container}`);
+      await assertNewOutputPath(tempMkvPath);
 
       const hlsResult = await downloadHlsStream(
         streamUrl,
@@ -201,16 +237,17 @@ async function processDownload(downloadId: string): Promise<void> {
       // Move to final location
       const outputPath = hlsResult.outputPath || tempMkvPath;
       console.log(`[Download] Moving HLS result to final location: ${finalMkvPath}`);
-      await moveIntoCategoryDir(outputPath, finalMkvPath, categoryDir);
+      await moveIntoJobDir(
+        outputPath,
+        finalMkvPath,
+        tempJobDir,
+        downloadBasePath,
+        categoryDir,
+        completeJobDir
+      );
 
       // Get file size
       const stats = await fs.stat(finalMkvPath);
-
-      // Calculate storage path (may be mapped differently)
-      const downloadFolderMapping = process.env.DOWNLOAD_FOLDER_PATH_MAPPING;
-      const storagePath = downloadFolderMapping
-        ? path.join(downloadFolderMapping, download.category, `${download.title}.${container}`)
-        : finalMkvPath;
 
       // Mark as completed
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
@@ -221,7 +258,7 @@ async function processDownload(downloadId: string): Promise<void> {
           status: "completed",
           progress: 100,
           size: stats.size,
-          filePath: storagePath,
+          filePath: finalMkvPath,
           completedAt: new Date(),
         },
       });
@@ -235,9 +272,9 @@ async function processDownload(downloadId: string): Promise<void> {
     // Standard direct download path
     // Determine file extension from URL
     const urlPath = new URL(download.url).pathname;
-    const fileExtension = path.extname(urlPath) || ".mp4";
+    const fileExtension = safeFileExtension(urlPath);
     // Download to temp folder first
-    const tempMp4Path = path.join(downloadTempPath, `${download.title}${fileExtension}`);
+    const tempMp4Path = path.join(tempJobDir, `${filename}${fileExtension}`);
     const mp4Path = tempMp4Path;
 
     // Download the file
@@ -267,8 +304,9 @@ async function processDownload(downloadId: string): Promise<void> {
     // Convert MP4 files to MKV unless the user disabled this step.
     if (fileExtension.toLowerCase() === ".mp4" && (await isMkvConversionEnabled())) {
       // Convert in temp folder first
-      const tempMkvPath = path.join(downloadTempPath, `${download.title}.mkv`);
-      const finalMkvPath = path.join(categoryDir, `${download.title}.mkv`);
+      const tempMkvPath = path.join(tempJobDir, `${filename}.mkv`);
+      const finalMkvPath = path.join(completeJobDir, `${filename}.mkv`);
+      await assertNewOutputPath(tempMkvPath);
 
       console.log(`[Download] Converting to MKV: ${tempMkvPath}`);
 
@@ -287,22 +325,23 @@ async function processDownload(downloadId: string): Promise<void> {
         return;
       }
 
-      // Move completed MKV to final location; see moveIntoCategoryDir for why
+      // Move completed MKV to final location; see moveIntoJobDir for why
       // the category directory is re-created here.
       console.log(`[Download] Moving to final location: ${finalMkvPath}`);
-      await moveIntoCategoryDir(tempMkvPath, finalMkvPath, categoryDir);
+      await moveIntoJobDir(
+        tempMkvPath,
+        finalMkvPath,
+        tempJobDir,
+        downloadBasePath,
+        categoryDir,
+        completeJobDir
+      );
 
       // Clean up temp MP4 file
       await fs.unlink(mp4Path).catch(() => {});
 
       // Get file size
       const stats = await fs.stat(finalMkvPath);
-
-      // Calculate storage path (may be mapped differently)
-      const downloadFolderMapping = process.env.DOWNLOAD_FOLDER_PATH_MAPPING;
-      const storagePath = downloadFolderMapping
-        ? path.join(downloadFolderMapping, download.category, `${download.title}.mkv`)
-        : finalMkvPath;
 
       // Mark as completed
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
@@ -313,7 +352,7 @@ async function processDownload(downloadId: string): Promise<void> {
           status: "completed",
           progress: 100,
           size: stats.size,
-          filePath: storagePath,
+          filePath: finalMkvPath,
           completedAt: new Date(),
         },
       });
@@ -323,15 +362,17 @@ async function processDownload(downloadId: string): Promise<void> {
       );
     } else {
       // Keep non-MP4 files and MP4 files with disabled conversion unchanged.
-      const finalPath = path.join(categoryDir, `${download.title}${fileExtension}`);
-      await moveIntoCategoryDir(mp4Path, finalPath, categoryDir);
+      const finalPath = path.join(completeJobDir, `${filename}${fileExtension}`);
+      await moveIntoJobDir(
+        mp4Path,
+        finalPath,
+        tempJobDir,
+        downloadBasePath,
+        categoryDir,
+        completeJobDir
+      );
 
       const stats = await fs.stat(finalPath);
-
-      const downloadFolderMapping = process.env.DOWNLOAD_FOLDER_PATH_MAPPING;
-      const storagePath = downloadFolderMapping
-        ? path.join(downloadFolderMapping, download.category, `${download.title}${fileExtension}`)
-        : finalPath;
 
       await prisma.download.update({
         where: { id: downloadId },
@@ -339,7 +380,7 @@ async function processDownload(downloadId: string): Promise<void> {
           status: "completed",
           progress: 100,
           size: stats.size,
-          filePath: storagePath,
+          filePath: finalPath,
           completedAt: new Date(),
         },
       });
@@ -352,6 +393,16 @@ async function processDownload(downloadId: string): Promise<void> {
     console.error(`[Download] Error processing download ${downloadId}:`, error);
     await markAsFailed(downloadId, error instanceof Error ? error.message : "Unknown error");
   } finally {
+    // Remove only empty directories owned by this job. A failed tool's
+    // unexpected leftovers remain visible for diagnosis, never swept broadly.
+    for (const directory of [tempJobDir, completeJobDir]) {
+      if (!directory) continue;
+      await fs.rmdir(directory).catch((error: NodeJS.ErrnoException) => {
+        if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code ?? "")) {
+          console.error("[Download] Could not remove empty job directory:", error);
+        }
+      });
+    }
     downloadSemaphore.release();
 
     // Check if there are more items to process
@@ -398,6 +449,7 @@ async function downloadFile(
 ): Promise<boolean> {
   const abortController = new AbortController();
   let fileStream: ReturnType<typeof createWriteStream> | undefined;
+  let fileCreated = false;
   let completed = false;
   let stallTimer: ReturnType<typeof setTimeout> | undefined;
   const resetStallTimer = () => {
@@ -418,7 +470,10 @@ async function downloadFile(
     }
 
     const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
-    fileStream = createWriteStream(destPath);
+    fileStream = createWriteStream(destPath, { flags: "wx" });
+    fileStream.once("open", () => {
+      fileCreated = true;
+    });
     fileStream.on("error", () => abortController.abort());
 
     const reader = response.body.getReader();
@@ -483,7 +538,7 @@ async function downloadFile(
           fileStream!.once("close", resolve);
           fileStream!.destroy();
         });
-        await fs.unlink(destPath).catch(() => {});
+        if (fileCreated) await fs.unlink(destPath).catch(() => {});
       }
     }
   }
