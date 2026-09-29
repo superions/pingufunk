@@ -390,13 +390,25 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Leaks verhindern. Sonarr-Key hat technisch breite Rechte, Adapter nur GET.
       Abnahme: leere/unlesbare/widersprüchliche Secrets fail closed, Rotation
       wirksam; bestehende gespeicherte Settings unverändert migrierbar.
-- [ ] **P05.4 — Queue kann nach Fehlern weiterarbeiten.**
+- [x] **P05.4 — Queue kann nach Fehlern weiterarbeiten.**
       `download-manager.ts::{processQueue,startDownloadProcessing,markAsFailed}`
       und `download.ts::triggerDownloadProcessing` über gesamte Fehler-/Abbruch-
       pfade reviewen, `isProcessing` verlässlich zurücksetzen und Retry/Restart
       ohne verlorene/stuck Jobs schützen. Abnahme: fehlender Prozess, FFmpeg-/
       FS-/Netzfehler und anschließender Job werden korrekt persistiert/verarbeitet;
       kein Replica-/Distributed-Queue-Umbau oder unbeauftragter Betriebsrestart.
+      Abgenommen am 30.09.2026: Der einzelne Worker verarbeitet Jobs erst nach
+      Abschluss und Statuspersistenz des vorherigen; ein erneuter Enqueue-Weckruf
+      während des letzten Polls erzwingt einen weiteren Durchlauf. Fehler setzen
+      den Workerzustand im `finally` zurück. Beim Containerstart werden zuvor
+      aktive `downloading`-/`converting`-Einträge als unterbrochen/fehlgeschlagen
+      markiert und verbleibende Queue-Einträge wieder aufgenommen; Build und
+      bloßer Development-Runtime-Start tun das nicht. Synthetische Folgejobs nach
+      Netzwerk-, FFmpeg-/fehlendem Prozess- und FS-Fehlern, DB-Pollfehler sowie
+      Boot-Recovery sind getestet. Node 24.15.0: 321 Tests in 32 Dateien,
+      Lint, Typecheck, Formatcheck, Build und `sh -n entrypoint.sh` bestanden.
+      Weiterhin ausschließlich Single-Worker; kein Replica-Umbau, kein Restart
+      oder produktiver Download ausgeführt.
 
 ## Phase P11 — PostgreSQL implementieren und isoliert migrationsbereit machen
 

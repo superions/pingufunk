@@ -54,19 +54,41 @@ class Semaphore {
 }
 
 const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
-let isProcessing = false;
 let processingPromise: Promise<void> | null = null;
+let rerunRequested = false;
+
+/** Only the single production worker calls this once at a cold start. */
+export async function recoverInterruptedDownloads(): Promise<number> {
+  const result = await prisma.download.updateMany({
+    where: { status: { in: ["downloading", "converting"] } },
+    data: {
+      status: "failed",
+      error: "Interrupted by server restart; retry this job",
+      completedAt: new Date(),
+    },
+  });
+  return result.count;
+}
 
 export async function startDownloadProcessing(): Promise<void> {
-  if (isProcessing) {
-    return processingPromise || Promise.resolve();
+  if (processingPromise) {
+    // A new queue row can arrive just after the last empty poll. Run one
+    // additional pass after the current drain rather than losing that wakeup.
+    rerunRequested = true;
+    return processingPromise;
   }
 
-  isProcessing = true;
-  processingPromise = processQueue();
-  await processingPromise;
-  isProcessing = false;
-  processingPromise = null;
+  processingPromise = (async () => {
+    try {
+      do {
+        rerunRequested = false;
+        await processQueue();
+      } while (rerunRequested);
+    } finally {
+      processingPromise = null;
+    }
+  })();
+  return processingPromise;
 }
 
 async function processQueue(): Promise<void> {
@@ -82,11 +104,9 @@ async function processQueue(): Promise<void> {
       break;
     }
 
-    // Start download in background (respecting semaphore)
-    processDownload(nextDownload.id).catch(console.error);
-
-    // Small delay to prevent tight loop
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The configured concurrency is one; await status persistence before
+    // polling again so the same queued row cannot be scheduled repeatedly.
+    await processDownload(nextDownload.id);
   }
 }
 
@@ -404,15 +424,6 @@ async function processDownload(downloadId: string): Promise<void> {
       });
     }
     downloadSemaphore.release();
-
-    // Check if there are more items to process
-    const hasMore = await prisma.download.count({
-      where: { status: "queued" },
-    });
-
-    if (hasMore > 0 && !isProcessing) {
-      startDownloadProcessing().catch(console.error);
-    }
   }
 }
 

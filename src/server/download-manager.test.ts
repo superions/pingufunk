@@ -16,16 +16,20 @@ import { jobDirectoryName } from "@/lib/download-paths";
 const {
   configFindUnique,
   downloadCount,
+  downloadFindFirst,
   downloadFindUnique,
   downloadUpdate,
+  downloadUpdateMany,
   ffmpegModuleLoaded,
   convertMp4ToMkv,
   downloadHlsStream,
 } = vi.hoisted(() => ({
   configFindUnique: vi.fn(),
   downloadCount: vi.fn(),
+  downloadFindFirst: vi.fn(),
   downloadFindUnique: vi.fn(),
   downloadUpdate: vi.fn(),
+  downloadUpdateMany: vi.fn(),
   ffmpegModuleLoaded: vi.fn(),
   convertMp4ToMkv: vi.fn(),
   downloadHlsStream: vi.fn(),
@@ -36,8 +40,10 @@ vi.mock("@/lib/db", () => ({
     config: { findUnique: configFindUnique },
     download: {
       count: downloadCount,
+      findFirst: downloadFindFirst,
       findUnique: downloadFindUnique,
       update: downloadUpdate,
+      updateMany: downloadUpdateMany,
     },
   },
 }));
@@ -50,7 +56,11 @@ vi.mock("./ffmpeg", () => {
 vi.mock("./ytdlp", () => ({ downloadHlsStream }));
 
 import { clearSettingsCache } from "@/lib/settings";
-import { processDownload } from "./download-manager";
+import {
+  processDownload,
+  recoverInterruptedDownloads,
+  startDownloadProcessing,
+} from "./download-manager";
 
 let testRoot: string;
 
@@ -112,8 +122,10 @@ beforeEach(async () => {
   clearSettingsCache();
   configFindUnique.mockReset();
   downloadCount.mockReset();
+  downloadFindFirst.mockReset();
   downloadFindUnique.mockReset();
   downloadUpdate.mockReset();
+  downloadUpdateMany.mockReset();
   convertMp4ToMkv.mockReset();
 
   testRoot = await mkdtemp(path.join(tmpdir(), "rundfunkarr-download-manager-"));
@@ -513,6 +525,99 @@ describe("processDownload", () => {
       where: { id: "download-4" },
       data: expect.objectContaining({ status: "completed" }),
     });
+  });
+});
+
+it.each(["network", "ffmpeg", "filesystem"])(
+  "drains a %s failure before processing the next queued job",
+  async (failure) => {
+    const jobs = ["failed-job", "next-job"];
+    downloadFindFirst
+      .mockResolvedValueOnce({ id: jobs[0] })
+      .mockResolvedValueOnce({ id: jobs[1] })
+      .mockResolvedValueOnce(null);
+    downloadFindUnique.mockImplementation(async ({ where }: { where: { id: string } }) => ({
+      id: where.id,
+      title: where.id,
+      category: "sonarr",
+      status: "queued",
+      url: `https://example.org/video.${failure === "ffmpeg" && where.id === jobs[1] ? "webm" : "mp4"}`,
+    }));
+    configFindUnique.mockImplementation(async ({ where }: { where: { key: string } }) =>
+      where.key === "download.path"
+        ? { value: testRoot }
+        : where.key === "download.convertToMkv"
+          ? { value: String(failure === "ffmpeg") }
+          : null
+    );
+    downloadUpdate.mockResolvedValue({});
+    if (failure === "filesystem") {
+      const tempJobDir = path.join(testRoot, "incomplete", jobDirectoryName(jobs[0], jobs[0]));
+      await mkdir(tempJobDir, { recursive: true });
+      await writeFile(path.join(tempJobDir, `${jobs[0]}.mp4`), "preexisting");
+    }
+    if (failure === "ffmpeg") {
+      convertMp4ToMkv.mockResolvedValue({ success: false, error: "ffmpeg unavailable" });
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          failure === "network"
+            ? new Response("unavailable", { status: 503 })
+            : new Response(new Uint8Array([1, 2, 3]))
+        )
+        .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3])))
+    );
+
+    await startDownloadProcessing();
+
+    expect(downloadFindUnique.mock.calls.map(([args]) => args.where.id)).toEqual(jobs);
+    expect(downloadUpdate).toHaveBeenCalledWith({
+      where: { id: jobs[0] },
+      data: expect.objectContaining({ status: "failed" }),
+    });
+    expect(downloadUpdate).toHaveBeenCalledWith({
+      where: { id: jobs[1] },
+      data: expect.objectContaining({ status: "completed" }),
+    });
+  }
+);
+
+it("resets queue state after a database poll failure", async () => {
+  downloadFindFirst
+    .mockRejectedValueOnce(new Error("synthetic database failure"))
+    .mockResolvedValueOnce(null);
+  await expect(startDownloadProcessing()).rejects.toThrow("synthetic database failure");
+  await expect(startDownloadProcessing()).resolves.toBeUndefined();
+  expect(downloadFindFirst).toHaveBeenCalledTimes(2);
+});
+
+it("rechecks the queue when an enqueue wakeup races with an empty poll", async () => {
+  let release!: () => void;
+  downloadFindFirst
+    .mockImplementationOnce(
+      () =>
+        new Promise<null>((resolve) => {
+          release = () => resolve(null);
+        })
+    )
+    .mockResolvedValueOnce(null);
+  const first = startDownloadProcessing();
+  await vi.waitFor(() => expect(release).toBeDefined());
+  const wakeup = startDownloadProcessing();
+  release();
+  await Promise.all([first, wakeup]);
+  expect(downloadFindFirst).toHaveBeenCalledTimes(2);
+});
+
+it("marks only interrupted active rows failed at startup", async () => {
+  downloadUpdateMany.mockResolvedValue({ count: 2 });
+  expect(await recoverInterruptedDownloads()).toBe(2);
+  expect(downloadUpdateMany).toHaveBeenCalledWith({
+    where: { status: { in: ["downloading", "converting"] } },
+    data: expect.objectContaining({ status: "failed", completedAt: expect.any(Date) }),
   });
 });
 

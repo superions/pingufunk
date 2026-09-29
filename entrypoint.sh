@@ -104,4 +104,5 @@ echo "Database directory after migration:"
 ls -la /app/prisma/data/ 2>&1 || echo "Cannot list /app/prisma/data/"
 
 # Run as the user
+export PINGUFUNK_BOOT_QUEUE=1
 exec su-exec "$USER_NAME" "$@"
