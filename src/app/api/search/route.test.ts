@@ -69,3 +69,10 @@ describe("movie search API minimum duration", () => {
     expect(body.results).toHaveLength(1);
   });
 });
+
+it("reports an upstream failure without exposing its token", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("token=private", { status: 401 }));
+  const response = await GET(new NextRequest("http://localhost/api/search?q=Documentary"));
+  expect(response.status).toBe(502);
+  expect(JSON.stringify(await response.json())).not.toContain("private");
+});

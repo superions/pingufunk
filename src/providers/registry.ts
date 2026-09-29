@@ -49,8 +49,8 @@ class ProviderRegistry {
     const initPromises = Array.from(this.providers.values()).map(async (provider) => {
       try {
         await provider.initialize();
-      } catch (error) {
-        console.error(`[ProviderRegistry] Failed to initialize ${provider.id}:`, error);
+      } catch {
+        console.error(`[ProviderRegistry] Failed to initialize ${provider.id}`);
       }
     });
 
@@ -116,10 +116,9 @@ class ProviderRegistry {
         const items = await provider.search(query);
         providerCounts[provider.id] = items.length;
         return items;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[ProviderRegistry] Search failed for ${provider.id}:`, errorMessage);
-        errors.push({ providerId: provider.id, error: errorMessage });
+      } catch {
+        console.error(`[ProviderRegistry] Search failed for ${provider.id}`);
+        errors.push({ providerId: provider.id, error: "Provider search failed" });
         providerCounts[provider.id] = 0;
         return [];
       }
@@ -185,11 +184,11 @@ class ProviderRegistry {
       try {
         const [status, enabled] = await Promise.all([provider.checkStatus(), provider.isEnabled()]);
         statuses[provider.id] = { ...status, enabled };
-      } catch (error) {
+      } catch {
         statuses[provider.id] = {
           available: false,
           lastCheck: Date.now(),
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: "Provider status check failed",
           enabled: false,
         };
       }

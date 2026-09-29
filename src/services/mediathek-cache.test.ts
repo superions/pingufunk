@@ -10,7 +10,10 @@ import {
 } from "./mediathek";
 import type { TmdbMovieData, TvdbData, TvSearchContext } from "@/types";
 
-vi.mock("@/lib/fetch-retry", () => ({ fetchWithRetry: vi.fn() }));
+vi.mock("@/lib/fetch-retry", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/fetch-retry")>()),
+  fetchWithRetry: vi.fn(),
+}));
 vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn(async () => null),
   getMinDurationSeconds: vi.fn(async () => 300),
@@ -65,7 +68,7 @@ describe.each(searches)("$name cache recovery", ({ run, name }) => {
       .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
       .mockImplementation(async () => emptyResult());
 
-    await run(10);
+    await expect(run(10)).rejects.toThrow("Search provider unavailable");
     await run(10);
     expect(fetchWithRetry).toHaveBeenCalledTimes(2);
 
@@ -84,7 +87,9 @@ it("retries only a failed movie title and does not cache the incomplete combined
     .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
     .mockResolvedValueOnce(emptyResult());
 
-  await fetchMovieSearchResults(bilingualMovie, 10, 0);
+  await expect(fetchMovieSearchResults(bilingualMovie, 10, 0)).rejects.toThrow(
+    "Search provider unavailable"
+  );
   expect(fetchWithRetry).toHaveBeenCalledTimes(2);
   await fetchMovieSearchResults(bilingualMovie, 10, 0);
   expect(fetchWithRetry).toHaveBeenCalledTimes(3);

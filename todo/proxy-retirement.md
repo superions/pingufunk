@@ -343,7 +343,7 @@ moveIntoCategoryDir}`, FFmpeg-/HLS-/Sidecar-Consumer und
 Ergebnis: belastbare gemeinsame Consumergrundlagen. Abhängigkeit P04;
 B08/B11/B16/O01, R2 und API-/Cache-Gates.
 
-- [ ] **P05.1 — Endliches Anfragebudget mit ehrlichen Fehlern.**
+- [x] **P05.1 — Endliches Anfragebudget mit ehrlichen Fehlern.**
       `src/lib/fetch-retry.ts::fetchWithRetry`, `src/lib/mediathek-client.ts`
       und ihre Suchconsumer mit Gesamtdeadline, Abort, Antwortgrößen- und Retry-
       Grenzen versehen. 401/403 nicht retryen, 429/5xx begrenzt; ungültiges JSON,
@@ -351,6 +351,17 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Filmterm-Schleifen teilen dasselbe Budget. Abnahme: Fehler-/Abort-/Rate-
       Limit-Mocks beweisen maximale Laufzeit/Versuche, keine Minutenkaskade;
       API-Fehler verraten keine Secrets oder unredigierten Providerantworten.
+      Abgenommen am 30.09.2026: HTTP-Header-Versuche haben ein endliches
+      Gesamtbudget, Abort und begrenzte Backoffs; 401/403 werden nicht erneut
+      versucht, 429/5xx höchstens begrenzt. MediathekView-JSON wird innerhalb
+      derselben Deadline und bis maximal 8 MiB gelesen und schematisch geprüft.
+      Pagination und parallele Filmbegriffe teilen je Anfrage eine Deadline;
+      ein fehlgeschlagener Begriff oder eine Folgeseite liefert keine partiell
+      erfolgreiche Newznab-Antwort. Upstreamfehler ergeben HTTP 503 ohne rohe
+      URL-, Token- oder Provider-Fehlermeldung. Timeout-, Abort-, Status-,
+      Größen-, JSON-/Schema- und Cache-Recovery-Regressionen bestanden. Node
+      24.15.0: 305 Tests in 30 Dateien, Lint, Typecheck, Formatcheck und Build
+      erfolgreich; kein produktiver Request ausgeführt.
 - [ ] **P05.2 — Kontextgebundene bounded Caches.**
       `src/lib/cache.ts`, `src/lib/settings.ts`, die Cache-API und Providerconsumer auf
       begrenzte Positiv-/Negativcaches, Coalescing und passende TTLs bringen.

@@ -879,7 +879,8 @@ export async function fetchSearchResultsById(
     console.log(`[Mediathek] Searching MediathekView API with query: "${searchQuery}"`);
     results = await queryContent([{ fields: QUERY_FIELDS, query: searchQuery }], 10000);
 
-    if (results === null || results.length === 0) {
+    if (results === null) throw new Error("Search provider unavailable");
+    if (results.length === 0) {
       return serializeRss(getEmptyRssResult(offset));
     }
 
@@ -951,7 +952,7 @@ export async function fetchSearchResultsByString(
   } else {
     results = await queryTvSearchCandidates(context);
     if (results === null) {
-      return serializeRss(getEmptyRssResult(offset));
+      throw new Error("Search provider unavailable");
     }
     mediathekCache.set(apiCacheKey, { results });
   }
@@ -1005,7 +1006,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
     // total below counts verified matches in this bounded source window only.
     results = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT);
     if (results === null) {
-      return serializeRss(getEmptyRssResult(offset));
+      throw new Error("Search provider unavailable");
     }
     mediathekCache.set(apiCacheKey, { results });
   }
@@ -1050,6 +1051,7 @@ export async function fetchMovieSearchResults(
   if (movieData.title !== movieData.germanTitle) {
     searchTerms.push(movieData.title);
   }
+  const deadlineAt = Date.now() + 20_000;
 
   // Helper function to fetch results for a single search term
   async function fetchForTerm(searchTerm: string): Promise<ApiResultItem[] | null> {
@@ -1062,7 +1064,9 @@ export async function fetchMovieSearchResults(
     }
 
     console.log(`[Mediathek] Searching MediathekView API for movie: "${searchTerm}"`);
-    const results = await queryContent([{ fields: QUERY_FIELDS, query: searchTerm }], 500);
+    const results = await queryContent([{ fields: QUERY_FIELDS, query: searchTerm }], 500, {
+      deadlineAt,
+    });
     if (results === null) return null;
     console.log(`[Mediathek] API returned ${results.length} results for "${searchTerm}"`);
     mediathekCache.set(apiCacheKey, { results });
@@ -1071,7 +1075,9 @@ export async function fetchMovieSearchResults(
 
   // Fetch all search terms in parallel
   const resultsPerTerm = await Promise.all(searchTerms.map(fetchForTerm));
-  const hasFailedTerm = resultsPerTerm.some((results) => results === null);
+  if (resultsPerTerm.some((results) => results === null)) {
+    throw new Error("Search provider unavailable");
+  }
 
   // Merge search terms before choosing the best edition and deduplicating media URLs.
   const collectedResults: ApiResultItem[] = [];
@@ -1084,7 +1090,7 @@ export async function fetchMovieSearchResults(
   if (allResults.length === 0) {
     console.log(`[Mediathek] No results found for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1099,7 +1105,7 @@ export async function fetchMovieSearchResults(
   if (filteredResults.length === 0) {
     console.log(`[Mediathek] No results after filtering for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1109,7 +1115,7 @@ export async function fetchMovieSearchResults(
   if (matchResults.length === 0) {
     console.log(`[Mediathek] No matches found for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1123,7 +1129,7 @@ export async function fetchMovieSearchResults(
   );
 
   const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
-  if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+  mediathekCache.set(cacheKey, { response });
   return response;
 }
 
@@ -1177,7 +1183,7 @@ export async function fetchMovieSearchByQuery(
     console.log(`[Mediathek] Searching MediathekView API for movie query: "${cleanedQuery}"`);
     results = await queryContent([{ fields: QUERY_FIELDS, query: cleanedQuery }], 500);
     if (results === null) {
-      return serializeRss(getEmptyRssResult(offset));
+      throw new Error("Search provider unavailable");
     }
     console.log(
       `[Mediathek] API returned ${results.length} results for movie query "${cleanedQuery}"`

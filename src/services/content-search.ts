@@ -47,6 +47,7 @@ export async function queryContent(
   size: number,
   options: MediathekQueryOptions = {}
 ): Promise<ApiResultItem[] | null> {
+  const deadlineAt = options.deadlineAt ?? Date.now() + 20_000;
   const [mvSetting, orfSetting, hlsSetting] = await Promise.all([
     getSetting("provider.mediathekview.enabled"),
     getSetting("provider.orf.enabled"),
@@ -65,7 +66,7 @@ export async function queryContent(
               ? [...queries, { fields: ["channel"], query: "ORF" }]
               : queries,
             size,
-            options
+            { ...options, deadlineAt }
           )
         : Promise.resolve([]),
       srfEnabled && size > 0
@@ -104,8 +105,8 @@ export async function queryContent(
         items.push(converted);
     }
     return selectLanguageVariants(items, languagePolicy).slice(0, size);
-  } catch (error) {
-    console.error("[ContentSearch] Provider failed:", error);
+  } catch {
+    console.error("[ContentSearch] Provider failed");
     return null;
   }
 }

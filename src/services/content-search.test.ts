@@ -116,7 +116,9 @@ describe("configured providers in normal search flows", () => {
 
   it("keeps failed SRF searches out of the cache and recovers on the next request", async () => {
     vi.mocked(searchVideos).mockRejectedValueOnce(new Error("unavailable"));
-    expect(await fetchSearchResultsByString(srfSearchContext, 50, 0)).not.toContain("<item>");
+    await expect(fetchSearchResultsByString(srfSearchContext, 50, 0)).rejects.toThrow(
+      "Search provider unavailable"
+    );
     expect(await fetchSearchResultsByString(srfSearchContext, 50, 0)).toContain(
       "11111111-1111-4111-8111-111111111111"
     );
@@ -157,7 +159,7 @@ it("restricts ORF-only upstream searches before applying the requested limit", a
   expect(queryMediathekView).toHaveBeenCalledWith(
     [...queries, { fields: ["channel"], query: "ORF" }],
     1000,
-    { offset: 0 }
+    { offset: 0, deadlineAt: expect.any(Number) }
   );
   expect(queries).toHaveLength(1);
 });
@@ -204,6 +206,10 @@ it("finds and selects a later German edition across the bounded source pages", a
   expect(vi.mocked(queryMediathekView).mock.calls.map(([, , options]) => options?.offset)).toEqual([
     0, 1000,
   ]);
+  expect(
+    new Set(vi.mocked(queryMediathekView).mock.calls.map(([, , options]) => options?.deadlineAt))
+      .size
+  ).toBe(1);
   expect(results).toEqual([german]);
 });
 

@@ -266,8 +266,8 @@ describe("Newznab indexer validation", () => {
       new NextRequest("http://localhost/api/newznab/api?t=search&q=Example")
     );
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "synthetic provider failure" });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ error: "Search temporarily unavailable" });
   });
 
   it("routes t=movie text queries through provider-aware movie search", async () => {

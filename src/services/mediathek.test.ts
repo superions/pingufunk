@@ -28,7 +28,10 @@ vi.mock("@/lib/cache", () => ({
     ),
   },
 }));
-vi.mock("@/lib/fetch-retry", () => ({ fetchWithRetry: vi.fn() }));
+vi.mock("@/lib/fetch-retry", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/fetch-retry")>()),
+  fetchWithRetry: vi.fn(),
+}));
 vi.mock("./shows", () => ({ getShowInfoByTvdbId: mediathekMocks.getShowInfoByTvdbId }));
 // No rulesets by default -> every API result becomes an "unmatched" item.
 vi.mock("./rulesets", () => mediathekMocks.rulesets);
@@ -92,10 +95,7 @@ function makeTvSearchContext(overrides: Partial<TvSearchContext> = {}): TvSearch
 }
 
 function mockApi(results: ApiResultItem[]): void {
-  mockedFetch.mockResolvedValue({
-    ok: true,
-    json: async () => ({ result: { results } }),
-  } as Response);
+  mockedFetch.mockImplementation(async () => Response.json({ result: { results } }));
 }
 
 beforeEach(() => {
@@ -174,7 +174,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
           )
         )
       );
-      return { ok: true, json: async () => ({ result: { results: matched } }) } as Response;
+      return Response.json({ result: { results: matched } });
     });
 
     const xml = await fetchSearchResultsByString(
@@ -457,7 +457,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
       const { queries } = JSON.parse(String(init?.body));
       const query = queries[0].query as string;
       const matches = source.title.toLowerCase().includes(query.toLowerCase()) ? [source] : [];
-      return { ok: true, json: async () => ({ result: { results: matches } }) } as Response;
+      return Response.json({ result: { results: matches } });
     });
 
     const context = makeTvSearchContext({ season: "2", episode: "2" });
@@ -967,17 +967,15 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
   it("does not cache a failed provider response as a successful empty search", async () => {
     mockedFetch
       .mockRejectedValueOnce(new Error("synthetic provider failure"))
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ result: { results: [makeItem()] } }),
-      } as Response);
+      .mockResolvedValueOnce(Response.json({ result: { results: [makeItem()] } }));
 
     const context = makeTvSearchContext({ query: "Example" });
-    const failedResponse = await fetchSearchResultsByString(context, 100, 0);
+    await expect(fetchSearchResultsByString(context, 100, 0)).rejects.toThrow(
+      "Search provider unavailable"
+    );
     expect(mockedCacheSet).not.toHaveBeenCalled();
     const retriedResponse = await fetchSearchResultsByString(context, 100, 0);
 
-    expect(failedResponse).toContain('total="0"');
     expect(retriedResponse).toContain('total="3"');
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(mockedCacheSet).toHaveBeenCalledTimes(2);
@@ -1033,6 +1031,31 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
       expect.any(Object)
     );
   });
+});
+
+it("rejects an incomplete multi-title movie search without caching partial RSS", async () => {
+  const movie: TmdbMovieData = {
+    tmdbId: 29,
+    imdbId: "tt0000029",
+    title: "Original Title",
+    germanTitle: "Deutscher Titel",
+    runtime: 90,
+    releaseDate: "2026-07-12",
+  };
+  mockedFetch
+    .mockRejectedValueOnce(new Error("token=private"))
+    .mockResolvedValueOnce(Response.json({ result: { results: [makeItem()] } }));
+
+  await expect(fetchMovieSearchResults(movie, 100, 0)).rejects.toThrow(
+    "Search provider unavailable"
+  );
+  expect(mockedCacheSet).not.toHaveBeenCalledWith(
+    expect.stringMatching(/^movie_/),
+    expect.anything()
+  );
+  const deadlines = mockedFetch.mock.calls.map(([, , options]) => options?.deadlineAt);
+  expect(deadlines).toHaveLength(2);
+  expect(new Set(deadlines).size).toBe(1);
 });
 
 it.each(["standard", "high"])("keeps direct movie variants when %s is HLS", async (streaming) => {

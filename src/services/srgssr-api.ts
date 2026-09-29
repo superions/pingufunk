@@ -96,8 +96,8 @@ async function getAccessToken(): Promise<string | null> {
 
     console.log(`[SRG-SSR] Obtained access token, expires in ${expiresIn}s`);
     return token;
-  } catch (error) {
-    console.error("[SRG-SSR] Token request error:", error);
+  } catch {
+    console.error("[SRG-SSR] Token request failed");
     return null;
   }
 }
@@ -116,7 +116,7 @@ async function apiRequest<T>(
 
   try {
     const url = `${baseUrl}${endpoint}`;
-    console.log(`[SRG-SSR] API request: ${url}`);
+    console.log("[SRG-SSR] API request started");
 
     const response = await fetch(url, {
       signal: AbortSignal.timeout(15000),
@@ -132,8 +132,8 @@ async function apiRequest<T>(
     }
 
     return (await response.json()) as T;
-  } catch (error) {
-    console.error("[SRG-SSR] API request error:", error);
+  } catch {
+    console.error("[SRG-SSR] API request failed");
     return null;
   }
 }

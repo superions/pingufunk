@@ -126,10 +126,13 @@ async function handleProviderSearch(
     return NextResponse.json({
       results,
       providerCounts,
-      errors: errors.length > 0 ? errors : undefined,
+      errors:
+        errors.length > 0
+          ? errors.map(({ providerId }) => ({ providerId, error: "Provider search failed" }))
+          : undefined,
     });
-  } catch (error) {
-    console.error("Provider search error:", error);
+  } catch {
+    console.error("Provider search failed");
     return NextResponse.json({ results: [], error: "Search failed" }, { status: 500 });
   }
 }
@@ -204,8 +207,8 @@ async function handleDefaultSearch(
     );
 
     return NextResponse.json({ results });
-  } catch (error) {
-    console.error("Search error:", error);
+  } catch {
+    console.error("Search failed");
     return NextResponse.json({ results: [], error: "Search failed" }, { status: 500 });
   }
 }

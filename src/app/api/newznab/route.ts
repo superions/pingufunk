@@ -177,12 +177,9 @@ export async function GET(request: NextRequest) {
         status: 200,
         headers: { "Content-Type": "application/xml; charset=utf-8" },
       });
-    } catch (error) {
-      console.error("Movie search error:", error);
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Unknown error" },
-        { status: 400 }
-      );
+    } catch {
+      console.error("[Newznab] Movie search failed");
+      return NextResponse.json({ error: "Search temporarily unavailable" }, { status: 503 });
     }
   }
 
@@ -202,12 +199,9 @@ export async function GET(request: NextRequest) {
           status: 200,
           headers: { "Content-Type": "application/xml; charset=utf-8" },
         });
-      } catch (error) {
-        console.error("Movie search by query error:", error);
-        return NextResponse.json(
-          { error: error instanceof Error ? error.message : "Unknown error" },
-          { status: 400 }
-        );
+      } catch {
+        console.error("[Newznab] Movie search by query failed");
+        return NextResponse.json({ error: "Search temporarily unavailable" }, { status: 503 });
       }
     }
 
@@ -277,12 +271,9 @@ export async function GET(request: NextRequest) {
         status: 200,
         headers: { "Content-Type": "application/xml; charset=utf-8" },
       });
-    } catch (error) {
-      console.error("Search error:", error);
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Unknown error" },
-        { status: 400 }
-      );
+    } catch {
+      console.error("[Newznab] TV search failed");
+      return NextResponse.json({ error: "Search temporarily unavailable" }, { status: 503 });
     }
   }
 
