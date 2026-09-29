@@ -25,7 +25,11 @@ function boundedInteger(value: number | undefined, fallback: number, upper: numb
 }
 
 export function requestDeadline(options: RetryOptions = {}): number {
-  const timeout = boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
+  const timeout = boundedInteger(
+    options.timeoutMs,
+    options.deadlineAt === undefined ? DEFAULT_TIMEOUT_MS : MAX_TIMEOUT_MS,
+    MAX_TIMEOUT_MS
+  );
   const callerDeadline = Number.isFinite(options.deadlineAt) ? options.deadlineAt! : Infinity;
   return Math.min(callerDeadline, Date.now() + timeout);
 }

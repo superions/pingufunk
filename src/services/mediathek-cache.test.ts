@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { mediathekCache } from "@/lib/cache";
+import { getSetting } from "@/lib/settings";
 import {
   fetchMovieSearchByQuery,
   fetchMovieSearchResults,
@@ -60,6 +61,26 @@ beforeEach(() => {
   mediathekCache.clear();
   vi.clearAllMocks();
   vi.mocked(fetchWithRetry).mockReset();
+  vi.mocked(getSetting).mockReset().mockResolvedValue(null);
+});
+
+it("separates cached search results after a credential-context rotation", async () => {
+  let credential = "synthetic-old-secret";
+  vi.mocked(getSetting).mockImplementation(async (key) =>
+    key === "api.srgssr.consumerKey" ? credential : null
+  );
+  vi.mocked(fetchWithRetry).mockImplementation(async () => emptyResult());
+  const cacheSet = vi.spyOn(mediathekCache, "set");
+
+  await fetchSearchResultsByString(tvSearchContext, 10, 0);
+  await fetchSearchResultsByString(tvSearchContext, 10, 0);
+  expect(fetchWithRetry).toHaveBeenCalledTimes(1);
+
+  credential = "synthetic-new-secret";
+  await fetchSearchResultsByString(tvSearchContext, 10, 0);
+  expect(fetchWithRetry).toHaveBeenCalledTimes(2);
+  expect(cacheSet.mock.calls.map(([key]) => key).join(" ")).not.toContain("synthetic-");
+  cacheSet.mockRestore();
 });
 
 describe.each(searches)("$name cache recovery", ({ run, name }) => {

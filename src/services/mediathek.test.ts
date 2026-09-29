@@ -328,7 +328,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(disabledXml).not.toContain("standard.m3u8");
     expect(enabledXml).toContain("progressive-hd.mp4");
     expect(enabledXml).toContain("standard.m3u8");
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
 
   it("characterizes A7: a TVDB-ID search returns the requested episode only", async () => {

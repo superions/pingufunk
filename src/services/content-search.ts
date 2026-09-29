@@ -4,6 +4,7 @@ import {
   type MediathekQueryField,
   type MediathekQueryOptions,
 } from "@/lib/mediathek-client";
+import { createHash } from "node:crypto";
 import { getSetting } from "@/lib/settings";
 import { LANGUAGE_POLICY_SETTING_KEY, readLanguagePolicy } from "@/lib/language-policy";
 import { srfProvider } from "@/providers/srf";
@@ -11,6 +12,33 @@ import { selectLanguageVariants } from "@/services/language-editions";
 import type { ApiResultItem } from "@/types";
 
 const MAX_MEDIATHEK_CANDIDATES = 5000;
+const MAX_PENDING_SEARCHES = 128;
+const pendingSearches = new Map<string, Promise<ApiResultItem[] | null>>();
+
+/** Fingerprint source identity and mutable matching policy without exposing secrets in keys. */
+export async function searchCacheContext(): Promise<string> {
+  const keys = [
+    "provider.mediathekview.enabled",
+    "provider.orf.enabled",
+    "provider.srf.enabled",
+    "download.enableHLS",
+    "download.quality",
+    "matching.strategy",
+    "matching.threshold",
+    "matching.minDuration",
+    LANGUAGE_POLICY_SETTING_KEY,
+    "api.srgssr.consumerKey",
+    "api.srgssr.consumerSecret",
+    "api.tvdb.key",
+    "api.tvdb.pin",
+    "api.tmdb.key",
+  ];
+  const values = await Promise.all(keys.map(getSetting));
+  return createHash("sha256")
+    .update(JSON.stringify([process.env.DATABASE_URL ?? null, values]))
+    .digest("hex")
+    .slice(0, 24);
+}
 
 async function queryMediathekCandidateWindow(
   queries: MediathekQueryField[],
@@ -42,7 +70,7 @@ export async function getConfiguredLanguagePolicy() {
 }
 
 /** Shared source for UI, Newznab and ruleset discovery, before episode/movie matching. */
-export async function queryContent(
+async function queryContentUncoalesced(
   queries: MediathekQueryField[],
   size: number,
   options: MediathekQueryOptions = {}
@@ -108,5 +136,28 @@ export async function queryContent(
   } catch {
     console.error("[ContentSearch] Provider failed");
     return null;
+  }
+}
+
+/** Share only simultaneous identical searches; never retain failures or expiring media URLs. */
+export async function queryContent(
+  queries: MediathekQueryField[],
+  size: number,
+  options: MediathekQueryOptions = {}
+): Promise<ApiResultItem[] | null> {
+  // An explicit caller deadline is part of its contract and must not inherit
+  // another request's remaining budget through coalescing.
+  if (options.deadlineAt !== undefined) return queryContentUncoalesced(queries, size, options);
+  const context = await searchCacheContext();
+  const key = JSON.stringify([context, queries, size, options]);
+  const pending = pendingSearches.get(key);
+  if (pending) return pending;
+  if (pendingSearches.size >= MAX_PENDING_SEARCHES) return null;
+  const operation = queryContentUncoalesced(queries, size, options);
+  pendingSearches.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    if (pendingSearches.get(key) === operation) pendingSearches.delete(key);
   }
 }

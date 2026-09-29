@@ -7,6 +7,14 @@ type CacheValue = Record<string, any>;
 // Default TTL values (in seconds)
 const DEFAULT_SEARCH_TTL = 3600; // 1 hour
 const DEFAULT_METADATA_TTL = 86400; // 24 hours
+const MAX_SEARCH_TTL = 86400;
+const MAX_METADATA_TTL = 604800;
+
+function boundedTTL(value: string | undefined, fallback: number, maximum: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? Math.min(parsed, maximum) : fallback;
+}
 
 // Cache for TTL settings (short TTL to pick up changes)
 let cachedSearchTTL: number | null = null;
@@ -34,11 +42,8 @@ async function fetchTTLSettings(): Promise<{ searchTTL: number; metadataTTL: num
     const searchTTLStr = configMap.get("cache.ttl.search");
     const metadataTTLStr = configMap.get("cache.ttl.metadata");
 
-    cachedSearchTTL = searchTTLStr ? parseInt(searchTTLStr, 10) : DEFAULT_SEARCH_TTL;
-    cachedMetadataTTL = metadataTTLStr ? parseInt(metadataTTLStr, 10) : DEFAULT_METADATA_TTL;
-
-    if (isNaN(cachedSearchTTL) || cachedSearchTTL < 0) cachedSearchTTL = DEFAULT_SEARCH_TTL;
-    if (isNaN(cachedMetadataTTL) || cachedMetadataTTL < 0) cachedMetadataTTL = DEFAULT_METADATA_TTL;
+    cachedSearchTTL = boundedTTL(searchTTLStr, DEFAULT_SEARCH_TTL, MAX_SEARCH_TTL);
+    cachedMetadataTTL = boundedTTL(metadataTTLStr, DEFAULT_METADATA_TTL, MAX_METADATA_TTL);
 
     lastTTLFetch = now;
   } catch {
@@ -69,6 +74,8 @@ export function clearTTLCache(): void {
   cachedSearchTTL = null;
   cachedMetadataTTL = null;
   lastTTLFetch = 0;
+  mediathekCache.clear();
+  tvdbCache.clear();
 }
 
 // Cache with custom TTL stored per entry
@@ -91,7 +98,7 @@ class DynamicTTLCache {
     if (!entry) return undefined;
 
     // Check if expired
-    if (Date.now() > entry.expiresAt) {
+    if (Date.now() >= entry.expiresAt) {
       this.cache.delete(key);
       return undefined;
     }
@@ -101,6 +108,10 @@ class DynamicTTLCache {
 
   set(key: string, value: CacheValue): void {
     const ttlMs = this.getTTL() * 1000;
+    if (ttlMs <= 0) {
+      this.cache.delete(key);
+      return;
+    }
     this.cache.set(key, {
       value,
       expiresAt: Date.now() + ttlMs,

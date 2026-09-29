@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/search/route";
 import { GET as getFakeNzb } from "@/app/api/newznab/fake_nzb_download/route";
-import type { TvSearchContext } from "@/types";
+import type { ApiResultItem, TvSearchContext } from "@/types";
 import { queryContent } from "./content-search";
 import { generateGenericRssItems } from "./newznab";
 import { parseNzbContent } from "./download";
@@ -237,6 +237,27 @@ it("stops at the documented local candidate ceiling instead of paging without bo
   expect(vi.mocked(queryMediathekView).mock.calls.map(([, , options]) => options?.offset)).toEqual([
     0, 1000, 2000, 3000, 4000,
   ]);
+});
+
+it("coalesces identical in-flight searches but does not retain the result", async () => {
+  settings.set("provider.srf.enabled", "false");
+  let release!: (items: ApiResultItem[]) => void;
+  vi.mocked(queryMediathekView).mockImplementationOnce(
+    () =>
+      new Promise<ApiResultItem[]>((resolve) => {
+        release = resolve;
+      })
+  );
+  const queries = [{ fields: ["topic"], query: "Example" }];
+  const first = queryContent(queries, 10);
+  const second = queryContent(queries, 10);
+  await vi.waitFor(() => expect(queryMediathekView).toHaveBeenCalledTimes(1));
+  release([]);
+  expect(await Promise.all([first, second])).toEqual([[], []]);
+
+  vi.mocked(queryMediathekView).mockResolvedValue([]);
+  await queryContent(queries, 10);
+  expect(queryMediathekView).toHaveBeenCalledTimes(2);
 });
 
 it("does not cache or return partial candidates when a later source page fails", async () => {

@@ -27,7 +27,12 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 vi.mock("@/lib/settings", () => ({ clearSettingsCache: vi.fn() }));
-vi.mock("@/lib/cache", () => ({ clearTTLCache: vi.fn(), mediathekCache: { clear: vi.fn() } }));
+vi.mock("@/lib/cache", () => ({
+  clearTTLCache: vi.fn(),
+  mediathekCache: { clear: vi.fn() },
+  tvdbCache: { clear: vi.fn() },
+  rulesetsCache: { clear: vi.fn() },
+}));
 vi.mock("@/services/tvdb", () => ({ clearTvdbTokenCache: vi.fn() }));
 vi.mock("@/services/srgssr-api", () => ({ clearTokenCache: clearSrfTokenCache }));
 

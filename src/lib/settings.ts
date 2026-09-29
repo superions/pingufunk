@@ -1,82 +1,76 @@
 import { prisma } from "@/lib/db";
 
-// Cache for settings to avoid repeated DB queries
-const settingsCache: Map<string, { value: string; expiry: number }> = new Map();
-const CACHE_TTL = 60 * 1000; // 1 minute
+interface SettingEntry {
+  value: string | null;
+  expiry: number;
+}
+
+const settingsCache = new Map<string, SettingEntry>();
+const inFlight = new Map<string, Promise<string | null>>();
+const MAX_SETTINGS_CACHE = 256;
+const POSITIVE_TTL_MS = 60_000;
+const NEGATIVE_TTL_MS = 5_000;
 const DEFAULT_MIN_DURATION_SECONDS = 300;
+let cacheEpoch = 0;
 
-export async function getSetting(key: string): Promise<string | null> {
-  // Check cache first
-  const cached = settingsCache.get(key);
-  if (cached && Date.now() < cached.expiry) {
-    return cached.value;
+function cachedSetting(key: string): SettingEntry | undefined {
+  const entry = settingsCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() >= entry.expiry) {
+    settingsCache.delete(key);
+    return undefined;
   }
+  settingsCache.delete(key);
+  settingsCache.set(key, entry);
+  return entry;
+}
 
-  // Fetch from database
-  const config = await prisma.config.findUnique({
-    where: { key },
+function putSetting(key: string, value: string | null): void {
+  settingsCache.delete(key);
+  settingsCache.set(key, {
+    value,
+    expiry: Date.now() + (value === null ? NEGATIVE_TTL_MS : POSITIVE_TTL_MS),
   });
-
-  if (config) {
-    settingsCache.set(key, {
-      value: config.value,
-      expiry: Date.now() + CACHE_TTL,
-    });
-    return config.value;
+  if (settingsCache.size > MAX_SETTINGS_CACHE) {
+    settingsCache.delete(settingsCache.keys().next().value!);
   }
+}
 
-  return null;
+/** Coalesce lookups and keep misses short-lived; invalidation beats late reads. */
+export async function getSetting(key: string): Promise<string | null> {
+  const cached = cachedSetting(key);
+  if (cached) return cached.value;
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+  const epoch = cacheEpoch;
+  let lookup!: Promise<string | null>;
+  lookup = (async () => {
+    try {
+      const config = await prisma.config.findUnique({ where: { key } });
+      const value = config?.value ?? null;
+      if (epoch === cacheEpoch) putSetting(key, value);
+      return value;
+    } finally {
+      if (inFlight.get(key) === lookup) inFlight.delete(key);
+    }
+  })();
+  inFlight.set(key, lookup);
+  return lookup;
 }
 
 export async function getSettings(keys: string[]): Promise<Record<string, string | null>> {
-  const result: Record<string, string | null> = {};
-
-  // Check which keys need fetching
-  const keysToFetch: string[] = [];
-  for (const key of keys) {
-    const cached = settingsCache.get(key);
-    if (cached && Date.now() < cached.expiry) {
-      result[key] = cached.value;
-    } else {
-      keysToFetch.push(key);
-    }
-  }
-
-  // Fetch missing keys from database
-  if (keysToFetch.length > 0) {
-    const configs = await prisma.config.findMany({
-      where: { key: { in: keysToFetch } },
-    });
-
-    const configMap = new Map(configs.map((c) => [c.key, c.value]));
-
-    for (const key of keysToFetch) {
-      const value = configMap.get(key);
-      if (value !== undefined) {
-        // Cache all values including empty strings
-        settingsCache.set(key, {
-          value,
-          expiry: Date.now() + CACHE_TTL,
-        });
-        result[key] = value;
-      } else {
-        result[key] = null;
-      }
-    }
-  }
-
-  return result;
+  const entries = await Promise.all(
+    [...new Set(keys)].map(async (key) => [key, await getSetting(key)])
+  );
+  return Object.fromEntries(entries);
 }
 
 export async function getMinDurationSeconds(): Promise<number> {
   const setting = await getSetting("matching.minDuration");
   if (setting) {
     const parsed = parseInt(setting, 10);
-    if (!isNaN(parsed) && parsed >= 0) {
-      return parsed;
-    }
+    if (!isNaN(parsed) && parsed >= 0) return parsed;
   }
-
   return DEFAULT_MIN_DURATION_SECONDS;
 }
 
@@ -85,5 +79,7 @@ export async function isMkvConversionEnabled(): Promise<boolean> {
 }
 
 export function clearSettingsCache(): void {
+  cacheEpoch++;
   settingsCache.clear();
+  inFlight.clear();
 }

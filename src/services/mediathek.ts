@@ -1,7 +1,7 @@
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
-import { getConfiguredLanguagePolicy, queryContent } from "./content-search";
+import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
 import { getShowInfoByTvdbId } from "./shows";
 import {
@@ -848,7 +848,8 @@ export async function fetchSearchResultsById(
   );
 
   const contextKey = tvSearchContextKey(context);
-  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -868,7 +869,7 @@ export async function fetchSearchResultsById(
   }
 
   // Check for cached API response
-  const apiCacheKey = `mediathekapi_tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}`;
+  const apiCacheKey = `mediathekapi_tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -936,14 +937,15 @@ export async function fetchSearchResultsByString(
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const contextKey = tvSearchContextKey(context);
-  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
     return (cached as { response: string }).response;
   }
 
-  const apiCacheKey = `mediathekapi_q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}`;
+  const apiCacheKey = `mediathekapi_q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -989,14 +991,15 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
-  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
     return (cached as { response: string }).response;
   }
 
-  const apiCacheKey = `rss_mediathekview_results_${CONTENT_SEARCH_CACHE_VERSION}`;
+  const apiCacheKey = `rss_mediathekview_results_${CONTENT_SEARCH_CACHE_VERSION}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -1038,7 +1041,8 @@ export async function fetchMovieSearchResults(
     `[Mediathek] fetchMovieSearchResults: tmdbId=${movieData.tmdbId}, title="${movieData.title}", germanTitle="${movieData.germanTitle}", runtime=${movieData.runtime} min, quality=${quality}, minDuration=${minDuration}s`
   );
 
-  const cacheKey = `movie_${CONTENT_SEARCH_CACHE_VERSION}_${movieData.tmdbId}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const cacheKey = `movie_${CONTENT_SEARCH_CACHE_VERSION}_${movieData.tmdbId}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -1055,7 +1059,7 @@ export async function fetchMovieSearchResults(
 
   // Helper function to fetch results for a single search term
   async function fetchForTerm(searchTerm: string): Promise<ApiResultItem[] | null> {
-    const apiCacheKey = `mediathekapi_movie_${CONTENT_SEARCH_CACHE_VERSION}_${searchTerm}`;
+    const apiCacheKey = `mediathekapi_movie_${CONTENT_SEARCH_CACHE_VERSION}_${searchTerm}_${sourceContext}`;
     const cachedApi = mediathekCache.get(apiCacheKey);
 
     if (cachedApi) {
@@ -1163,7 +1167,8 @@ export async function fetchMovieSearchByQuery(
     );
   }
 
-  const cacheKey = `movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const cacheKey = `movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -1172,7 +1177,7 @@ export async function fetchMovieSearchByQuery(
   }
 
   // Search Mediathek by query (without year)
-  const apiCacheKey = `mediathekapi_movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}`;
+  const apiCacheKey = `mediathekapi_movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 

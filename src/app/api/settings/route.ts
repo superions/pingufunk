@@ -2,7 +2,7 @@ import { clearTokenCache as clearSrfTokenCache } from "@/services/srgssr-api";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { clearSettingsCache } from "@/lib/settings";
-import { clearTTLCache, mediathekCache } from "@/lib/cache";
+import { clearTTLCache, mediathekCache, tvdbCache, rulesetsCache } from "@/lib/cache";
 import { isTvdbCredentialSettingKey } from "@/lib/tvdb-auth";
 import { clearTvdbTokenCache } from "@/services/tvdb";
 import { isMaskedSetting, maskSetting } from "@/lib/settings-redaction";
@@ -38,6 +38,15 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   // System
   "system.setupComplete": "false",
 };
+
+function invalidateSettingConsumers(keys: string[]): void {
+  clearSettingsCache();
+  mediathekCache.clear();
+  tvdbCache.clear();
+  rulesetsCache.clear();
+  clearSrfTokenCache();
+  if (keys.some((key) => key.startsWith("cache."))) clearTTLCache();
+}
 
 function validateSettingValue(key: string, value: unknown): string | null {
   if (key !== LANGUAGE_POLICY_SETTING_KEY) return String(value);
@@ -106,15 +115,9 @@ export async function POST(request: NextRequest) {
         update: { value },
         create: { key, value },
       });
-      clearSettingsCache();
-      mediathekCache.clear();
-      clearSrfTokenCache();
+      invalidateSettingConsumers([key]);
       if (isTvdbCredentialSettingKey(key)) {
         await clearTvdbTokenCache();
-      }
-      // Clear TTL cache if cache settings changed
-      if (key.startsWith("cache.")) {
-        clearTTLCache();
       }
       return NextResponse.json({ success: true, key });
     }
@@ -139,15 +142,9 @@ export async function POST(request: NextRequest) {
         })
       );
       await Promise.all(updates);
-      clearSettingsCache();
-      mediathekCache.clear();
-      clearSrfTokenCache();
+      invalidateSettingConsumers(changedKeys);
       if (changedKeys.some(isTvdbCredentialSettingKey)) {
         await clearTvdbTokenCache();
-      }
-      // Clear TTL cache if any cache settings changed
-      if (changedKeys.some((key) => key.startsWith("cache."))) {
-        clearTTLCache();
       }
       return NextResponse.json({ success: true, updated: changedKeys.length });
     }
@@ -172,26 +169,16 @@ export async function DELETE(request: NextRequest) {
     await prisma.config.delete({
       where: { key },
     });
-    clearSettingsCache();
-    mediathekCache.clear();
-    clearSrfTokenCache();
+    invalidateSettingConsumers([key]);
     if (isTvdbCredentialSettingKey(key)) {
       await clearTvdbTokenCache();
-    }
-    if (key.startsWith("cache.")) {
-      clearTTLCache();
     }
     return NextResponse.json({ success: true, key });
   } catch {
     // Key might not exist, which is fine
-    clearSettingsCache();
-    mediathekCache.clear();
-    clearSrfTokenCache();
+    invalidateSettingConsumers([key]);
     if (isTvdbCredentialSettingKey(key)) {
       await clearTvdbTokenCache();
-    }
-    if (key.startsWith("cache.")) {
-      clearTTLCache();
     }
     return NextResponse.json({ success: true, key });
   }

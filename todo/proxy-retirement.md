@@ -370,6 +370,16 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Instanz-/Credentialkontexte, Ausfall erzeugt keinen Empty-Success-Eintrag.
       Abnahme: Contextcollision, gleichzeitige Requests, Expiry, Rotation und
       Settingswechsel synthetisch getestet; Speicher/Requests bleiben begrenzt.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Settings-Lookups
+      haben 256 LRU-Einträge, kurze Negativ-TTL und Single-Flight mit
+      generationensicherer Invalidierung; Cache-TTLs sind begrenzt und `0`
+      deaktiviert Speicherung. Mediathek-RSS/API-Schlüssel enthalten einen
+      nicht umkehrbar ausgegebenen Hash aus Instanz-, Provider-, Credential-
+      und Matching-Kontext; gleichzeitige identische Suchläufe werden nur
+      während der Ausführung zusammengelegt. Tests für Rotation, Expiry und
+      Coalescing bestanden. Noch offen: die anderen Metadaten-Cache-Owner,
+      deren persistierte Quellkollisionen, Negativfälle und Cache-API vollständig
+      prüfen; erst dann P05.2 schließen.
 - [ ] **P05.3 — Eine serverseitige Secret-/Base-URL-Grenze.**
       `src/lib/settings.ts`, `src/lib/settings-redaction.ts`, Settings-API/-UI
       einschließlich der bisherigen SRF-Maskierung,
