@@ -1490,6 +1490,20 @@ Abhängigkeit P08; B10/R7.
       erhält Status-/Erwartungsvertrag. Öffentliche
       Kategorie, Release-ID, Importpfad und Remote-Path-Mapping unverändert.
 
+P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
+versionierte Erwartungsparser und lokale Probeowner sind implementiert und
+isoliert geprüft. Explizite NULL-Sollwerte bleiben unbekannt; kaputte v1-
+Strukturen werden nicht als Legacy akzeptiert. Probe prüft Container, nutzbare
+Audio-/Videospuren ohne Coverbild, endliche Dauer und nur explizite Tags/
+Dimensionen. 30s/1-MiB-Limits einschließlich stderr, tiny-chunk-Cap,
+eigene Prozessgruppe, direkte reguläre Jobdatei und Inode-/Size-/mtime-
+Stabilität sind kausal getestet. Eine echte kurzlebige, netzlose Containerprobe
+mit synthetisch erzeugtem MP4 bestätigt die eingesetzten ffprobe-Optionen.
+Noch nicht in Producer/Parser/Queue/Worker verdrahtet; noch keine P09-Spalten
+oder Schemaübergänge. Diese Basis allein erfüllt weder P09.1 noch P09.2.
+Vollständige Wiring-, SQLite-/PG-/Restart-/Retry-/Medien-/DB-Ausfall- und
+Imageproben bleiben Pflicht, historische completed-Jobs bleiben unangetastet.
+
 ## Phase P10 — Vollständige Parität und getrennt freigegebener Betrieb
 
 Ergebnis: nachgewiesene Gesamtkette auf dem gewählten Backend, danach kein Proxy.

@@ -500,3 +500,28 @@ Docker-Validierung 36790909775. Diese Evidenz wird nicht als Lauf des noch
 unveröffentlichten URL-Checkpoints ausgegeben. Keine DB-/Schemaänderung,
 Main-Integration, Instanzänderung oder produktive Suche/Migration.
 P09 kann beginnen; P10/P11-Endabnahme und Produktionsfreigabe bleiben separat.
+
+## P09-Grundlagenreview (01.10.2026, nicht abgenommen)
+
+Die ersten isolierten Owner sind vorhanden: strenges v1-Erwartungsobjekt mit
+nullable Dauer/Sprache/Dimensionen und Herkunft sowie bounded lokale
+Container-/Stream-/Tagprobe. Abwesenheit bleibt Legacykompatibilität, kein
+Altersnachweis; ungültiger gespeicherter v1-Inhalt kann nicht heruntergestuft
+werden. Review schützt Sekunden/Minuten, fehlende Tags, Coverbilder,
+ausgefallenen Audio-/Videostream, Inodewechsel und eigene Prozessgruppengrenze.
+Kein Netzwerkprotokoll erlaubt, keine Provider-/Datei-/Tooldiagnostik ausgegeben.
+stdout+stderr zusammen höchstens 1 MiB und maximal 30s Prozesslaufzeit.
+Fachschema, lokale Dateieigentumsgrenze und Prozess-/Fehlerpfade separat geprüft.
+
+34 neue isolierte Tests bestehen. Eine synthetische Zwei-Sekunden-MP4-Datei
+wurde im eigenen netzlosen, kurzlebigen Container erzeugt und mit denselben
+ffprobe-Feld-/Format-/Protokolloptionen erfolgreich gelesen. Quelle für die
+Optionssemantik: [ffprobe](https://ffmpeg.org/ffprobe.html) und
+[Protokoll-Whitelist](https://ffmpeg.org/ffmpeg-protocols.html).
+Diese Probe qualifiziert weder vollständiges Decode noch Filmidentität oder
+tatsächlich gesprochene Sprache. JSON-Streamtags sind nur Containerangaben.
+
+Noch keine Produktverdrahtung, neue Schemafelder oder abgeschlossene
+P09-/P11-Abnahme behauptet. Als Nächstes gemeinsam NZB-Transport, Parser,
+beide Persistenzketten/Importer/Legacyübergang, Queue-Retry/Restart und
+alle Abschlusszweige samt Byte-/Mux-/DB-Fehlergrenze implementieren.
