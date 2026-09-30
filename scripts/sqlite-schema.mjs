@@ -68,13 +68,19 @@ export function schemaShape(db) {
     const indexes = db
       .prepare(`PRAGMA index_list("${name}")`)
       .all()
-      .map(({ name: index, unique, origin }) => ({
+      .map(({ name: index, unique, origin, partial }) => ({
         unique: Number(unique),
         origin,
+        partial: Number(partial),
         columns: db
           .prepare(`PRAGMA index_info("${index}")`)
           .all()
           .map((row) => row.name),
+        keyDetails: db
+          .prepare(`PRAGMA index_xinfo("${index}")`)
+          .all()
+          .filter((row) => Number(row.key) === 1)
+          .map((row) => [row.name, Number(row.desc), row.coll]),
       }))
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     const foreignKeys = db

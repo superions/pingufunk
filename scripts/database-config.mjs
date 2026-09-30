@@ -66,6 +66,9 @@ export function resolveDatabaseConfig(env = process.env) {
       throw new Error("Invalid PostgreSQL pool configuration");
   }
   const pgbouncer = parsed.searchParams.getAll("pgbouncer");
+  const schemas = parsed.searchParams.getAll("schema");
+  if (schemas.length > 1 || (schemas.length === 1 && schemas[0] === ""))
+    throw new Error("Invalid PostgreSQL schema configuration");
   if (pgbouncer.length > 1 || (pgbouncer.length === 1 && pgbouncer[0] !== "false"))
     throw new Error("Unsupported PostgreSQL pool mode");
   return { provider, url: parsed.toString(), sqlitePath: null };

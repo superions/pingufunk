@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { lstatSync, accessSync, statfsSync, constants } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import {
   validatePostgresqlLedger,
   validatePostgresqlStructure,
@@ -178,6 +178,18 @@ export function inspectSource(sourcePath) {
     const integrity = db.prepare("PRAGMA quick_check").all();
     if (integrity.length !== 1 || integrity[0].quick_check !== "ok")
       fail("Source quick check failed");
+    if (
+      db.prepare("PRAGMA foreign_key_check").get() ||
+      db
+        .prepare(
+          `
+      SELECT 1 FROM TvdbEpisode e LEFT JOIN TvdbSeries s ON s.id=e.seriesId
+      WHERE s.id IS NULL LIMIT 1
+    `
+        )
+        .get()
+    )
+      fail("Source foreign key check failed");
     const journalMode = db.prepare("PRAGMA journal_mode").get().journal_mode;
     const counts = Object.fromEntries(
       modelNames.map((name) => [
@@ -245,6 +257,38 @@ export function assertTargetMetadata(
   return { version: target.version, primary: true, tls: target.tls, scopedRole: true };
 }
 
+export async function readTargetMetadata(client) {
+  const [target] = await client.$queryRaw`
+    SELECT current_database() AS database, current_user AS role,
+      current_setting('server_version_num')::integer AS version,
+      pg_is_in_recovery() AS standby,
+      (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls,
+      (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS superuser,
+      (SELECT rolcreatedb FROM pg_roles WHERE rolname = current_user) AS createdb,
+      (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS createrole,
+      (SELECT oid::text FROM pg_database WHERE datname = current_database()) AS database_oid,
+      inet_server_addr()::text AS server_address,
+      inet_server_port() AS server_port, current_schema() AS schema_name,
+      (SELECT oid::text FROM pg_namespace WHERE nspname=current_schema()) AS schema_oid
+  `;
+  return target;
+}
+
+/** Bind the actual transaction connection, not a prior pool connection. */
+export async function assertConnectedTarget(client, baseline, database, role, requireTls = true) {
+  const target = await readTargetMetadata(client);
+  assertTargetMetadata(target, database, role, requireTls);
+  for (const [field, key] of [
+    ["database_oid", "databaseOid"],
+    ["server_address", "serverAddress"],
+    ["server_port", "serverPort"],
+    ["schema_name", "schemaName"],
+    ["schema_oid", "schemaOid"],
+  ]) {
+    if (target[field] !== baseline[key]) fail("PostgreSQL transaction target identity changed");
+  }
+}
+
 export async function inspectTarget(
   expectedDatabase,
   expectedRole,
@@ -254,30 +298,26 @@ export async function inspectTarget(
   if (!expectedDatabase || !expectedRole || !expectedHost)
     fail("Expected database, role and endpoint host are required");
   let configuredHost;
+  let configuredSchema;
   try {
-    configuredHost = new URL(process.env.DATABASE_URL).hostname;
+    const url = new URL(process.env.DATABASE_URL);
+    configuredHost = url.hostname;
+    if (url.searchParams.getAll("schema").length > 1 || url.searchParams.get("schema") === "")
+      fail("Ambiguous PostgreSQL schema");
+    configuredSchema = url.searchParams.get("schema") ?? "public";
   } catch {
     fail("PostgreSQL URL unavailable");
   }
   if (configuredHost !== expectedHost) fail("Unexpected PostgreSQL endpoint host");
   const prisma = new PrismaClient({ log: [] });
   try {
-    const [target] = await prisma.$queryRaw`
-      SELECT current_database() AS database, current_user AS role,
-        current_setting('server_version_num')::integer AS version,
-        pg_is_in_recovery() AS standby,
-        (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls,
-        (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS superuser,
-        (SELECT rolcreatedb FROM pg_roles WHERE rolname = current_user) AS createdb,
-        (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS createrole,
-        (SELECT oid::text FROM pg_database WHERE datname = current_database()) AS database_oid,
-        inet_server_addr()::text AS server_address,
-        inet_server_port() AS server_port
-    `;
+    const target = await readTargetMetadata(prisma);
     const metadata = assertTargetMetadata(target, expectedDatabase, expectedRole, requireTls);
+    if (target.schema_name !== configuredSchema || !target.schema_oid)
+      fail("Unexpected or unprovisioned PostgreSQL schema");
     const relations = await prisma.$queryRaw`
       SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname=current_schema() AND c.relkind IN ('r','p','v','m','f')
+      WHERE n.nspname=current_schema() AND c.relkind IN ('r','p','v','m','f','S')
     `;
     let schemaState = "empty";
     if (relations.some((relation) => relation.name === "_prisma_migrations")) {
@@ -290,6 +330,8 @@ export async function inspectTarget(
     return {
       ...metadata,
       schemaState,
+      schemaName: target.schema_name,
+      schemaOid: target.schema_oid,
       databaseOid: target.database_oid,
       serverAddress: target.server_address,
       serverPort: target.server_port,
@@ -305,8 +347,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (process.argv.length !== 6) fail("Expected source, database, role and endpoint host");
     const [source, database, role, endpointHost] = process.argv.slice(2);
     const report = {
-      version: 1,
+      version: 2,
       node: process.version,
+      prismaClient: Prisma.prismaVersion.client,
       source: inspectSource(source),
       target: await inspectTarget(database, role, endpointHost),
     };

@@ -91,10 +91,12 @@ den konkreten, geprüften Container-Networkpfad zum gewählten PostgreSQL-
 Endpunkt ein; eine besondere Proxy- oder Swarm-Topologie wird nicht erfunden.
 
 ```sh
+set -eu
 # Eingaben lokal und geschützt festlegen; hier absichtlich keine Beispielwerte.
 # IMAGE=… SOURCE_DIR=… SQLITE_NAME=… BACKUP_PARENT=… RUN_NAME=…
 # DDL_SECRET_FILE=… PG_SECRET_FILE=… PG_NETWORK=… PG_DATABASE=…
-# PG_ROLE=… PG_ENDPOINT_HOST=…
+# PG_ROLE=… PG_DDL_ROLE=… PG_ENDPOINT_HOST=…
+# SNAPSHOT_SHA256 wird nach Schritt 1 aus dessen privatem Report übernommen.
 
 # 1. Konsistenter SQLite-Snapshot in einem NEUEN privaten Unterverzeichnis.
 #    BACKUP_PARENT muss für UID/GID 1000:1000 privat beschreibbar sein;
@@ -105,10 +107,20 @@ docker run --rm --user 1000:1000 --entrypoint node \
   "${IMAGE}" /app/scripts/postgresql-snapshot.mjs \
   "/source/${SQLITE_NAME}" "/backup/${RUN_NAME}"
 
-# 2. Separat mit DDL-Rolle und gleicher Image-/Schema-Version: migrate deploy.
+# 2. Ausschließlich eigenes, leeres und bereits provisioniertes Ziel-Schema.
+#    DDL-Rolle ohne SUPERUSER/CREATEDB/CREATEROLE; CREATE nur im eigenen Schema.
+#    prepare prüft Snapshot/Hash, Primary/TLS/Server/Rolle/Namespace und echte
+#    Zielkontur VOR migrate deploy. Keine Rollen-/DB-Anlage nebenbei und keine
+#    automatische Migration eines aktiven/teilmigrierten Zielbestands.
+#    Ein identischer bereits vollständig vorbereiteter LEERER Stand bleibt noop.
 docker run --rm --network "${PG_NETWORK}" \
+  --mount "type=bind,src=${BACKUP_PARENT},dst=/backup,readonly" \
   --mount "type=bind,src=${DDL_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
-  -e DATABASE_PROVIDER=postgresql -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}"
+  -e DATABASE_PROVIDER=postgresql -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
+  node /app/scripts/postgresql-migration-cli.mjs prepare \
+  --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
+  --database "${PG_DATABASE}" --role "${PG_DDL_ROLE}" --host "${PG_ENDPOINT_HOST}" \
+  --confirm-writers-stopped
 
 # 3. Ab hier Runtime-/Importrollen-Secret verwenden. Read-only Preflight;
 #    PG muss Primary, versionstauglich und gemäß gewähltem Transport geschützt sein.
@@ -140,7 +152,8 @@ docker run --rm --network "${PG_NETWORK}" \
   --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_ENDPOINT_HOST}"
 
 # 6. Weiterhin ohne Writer: nur die im PG-Katalog tatsächlich zugeordneten
-#    Sequences korrigieren. setval ist NICHT transaktional; bei Fehler bleibt
+#    Sequences korrigieren, inklusive belegter SQLite-AUTOINCREMENT-Höchststände
+#    gelöschter IDs. setval ist NICHT transaktional; bei Fehler bleibt
 #    der Writer gestoppt und derselbe validierte Lauf wird erneut geprüft.
 #    Nach JEDEM App-Write ist dieser Schritt gesperrt, selbst wenn Tabellen
 #    inzwischen wieder leer aussehen.
@@ -164,7 +177,14 @@ innerhalb der Importtransaktion lässt die Anwendungsdaten leer; der identische
 Pending-Lauf kann nach Ursachenbehebung wiederholt werden. Nach Commit, aber
 vor Manifestabschluss wird zuerst jede Zeile lesend geprüft und erst dann
 dieselbe Run-ID als validiert markiert. Veränderte Quelle, Image-/Schemahashes
-oder Zielidentität stoppen. Keine Truncate-/Drop-/Reset-/Upsert-Abkürzung.
+oder Zielidentität einschließlich Namespace-Name/OID stoppen. Ein Wechsel
+zwischen zwei Schemas derselben Datenbank ist kein Resume desselben Laufs.
+Import, Wiederholungsvergleich und Sequence-Schritt prüfen diese Identität
+zusätzlich auf ihrer tatsächlichen Transaktionsverbindung. Ein beobachteter
+Backendwechsel bricht ab; daraus folgt keine Garantie für beliebige
+Pooling-/Failover-Konfigurationen. `setval` bleibt auch in dieser Transaktion
+nicht rückrollbar.
+Keine Truncate-/Drop-/Reset-/Upsert-Abkürzung.
 
 ## Start, Pausen und Rückwege
 

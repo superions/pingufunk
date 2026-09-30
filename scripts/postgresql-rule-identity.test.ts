@@ -84,6 +84,7 @@ it.skipIf(!required)(
       ).rejects.toThrow();
       await validatePostgresqlStructure(pg);
       const driftCases = [
+        ["CREATE SEQUENCE synthetic_orphan_sequence", "DROP SEQUENCE synthetic_orphan_sequence"],
         [
           'ALTER TABLE "Config" ALTER COLUMN "value" TYPE VARCHAR(255)',
           'ALTER TABLE "Config" ALTER COLUMN "value" TYPE TEXT',

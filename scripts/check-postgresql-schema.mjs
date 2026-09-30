@@ -52,6 +52,25 @@ export async function validatePostgresqlStructure(pg) {
     tables.some((table) => table.kind !== "r" || table.rls || table.triggers || table.rules)
   )
     throw new Error("PostgreSQL relation drift");
+  const sequences = await pg.$queryRaw`
+    SELECT tbl.relname AS table_name, att.attname AS column_name,
+      tns.nspname=current_schema() AS local_owner
+    FROM pg_class seq JOIN pg_namespace sns ON sns.oid=seq.relnamespace
+    LEFT JOIN pg_depend dep ON dep.classid='pg_class'::regclass AND dep.objid=seq.oid
+      AND dep.refclassid='pg_class'::regclass AND dep.deptype IN ('a','i') AND dep.refobjsubid>0
+    LEFT JOIN pg_class tbl ON tbl.oid=dep.refobjid
+    LEFT JOIN pg_namespace tns ON tns.oid=tbl.relnamespace
+    LEFT JOIN pg_attribute att ON att.attrelid=tbl.oid AND att.attnum=dep.refobjsubid
+    WHERE sns.nspname=current_schema() AND seq.relkind='S'
+  `;
+  const expectedSequences = models.flatMap((model) =>
+    model.fields
+      .filter((field) => field.default?.name === "autoincrement")
+      .map((field) => ({ table_name: model.name, column_name: field.name, local_owner: true }))
+  );
+  const sequenceKey = (items) => items.map((item) => JSON.stringify(item)).sort();
+  if (JSON.stringify(sequenceKey(sequences)) !== JSON.stringify(sequenceKey(expectedSequences)))
+    throw new Error("PostgreSQL sequence ownership drift");
   const columns = await pg.$queryRaw`
     SELECT c.relname AS table_name, a.attname AS name, format_type(a.atttypid,a.atttypmod) AS type,
       a.attnotnull AS required, pg_get_expr(d.adbin,d.adrelid) AS default_value,

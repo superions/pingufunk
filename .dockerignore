@@ -70,3 +70,4 @@ scripts/*
 !scripts/postgresql-verify.mjs
 !scripts/postgresql-run-manifest.mjs
 !scripts/postgresql-migration-cli.mjs
+!scripts/postgresql-prepare.mjs

@@ -60,6 +60,18 @@ function createClient() {
   }
   return base.$extends({
     query: {
+      // No current domain owner uses raw mutations. Keep future executeRaw
+      // paths behind the same maintenance and durable rollback boundary.
+      async $executeRaw({ args, query }) {
+        assertWritesEnabled();
+        await ensureFirstWriteCheckpoint();
+        return query(args);
+      },
+      async $executeRawUnsafe({ args, query }) {
+        assertWritesEnabled();
+        await ensureFirstWriteCheckpoint();
+        return query(args);
+      },
       $allModels: {
         async $allOperations({ operation, args, query }) {
           if (!MUTATIONS.has(operation)) return query(args);

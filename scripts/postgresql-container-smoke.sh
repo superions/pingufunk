@@ -82,10 +82,34 @@ fi
 docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c 'CREATE ROLE pingufunk_smoke_import LOGIN' \
   -c 'CREATE ROLE pingufunk_smoke_runtime LOGIN' \
-  -c 'CREATE DATABASE pingufunk_smoke' >/dev/null
-DDL_URL="postgresql://postgres@${PG_CONTAINER}/pingufunk_smoke?sslmode=require"
-DATABASE_URL="$DDL_URL" docker run --rm --network "$SMOKE_NETWORK" -e DATABASE_URL \
-  "$MIGRATOR_IMAGE" >/dev/null
+  -c 'CREATE ROLE pingufunk_smoke_ddl LOGIN' \
+  -c 'CREATE DATABASE pingufunk_smoke OWNER pingufunk_smoke_ddl' >/dev/null
+
+# Source integrity and empty-target checks precede every native DDL invocation.
+snapshot_report="$(docker run --rm --user "$(id -u):$(id -g)" --entrypoint node \
+  --mount "type=bind,src=${SMOKE_ROOT}/source,dst=/source,readonly" \
+  --mount "type=bind,src=${SMOKE_ROOT}/backup,dst=/backup" \
+  "$MIGRATOR_IMAGE" /app/scripts/postgresql-snapshot.mjs \
+  /source/source.sqlite /backup/run)"
+snapshot_hash="$(printf '%s' "$snapshot_report" | node -e '
+  let input=""; process.stdin.on("data", chunk => input += chunk);
+  process.stdin.on("end", () => process.stdout.write(JSON.parse(input).sha256));
+')"
+DDL_URL="postgresql://pingufunk_smoke_ddl@${PG_CONTAINER}/pingufunk_smoke?sslmode=require"
+for attempt in 1 2; do
+  prepare_report="$(DATABASE_URL="$DDL_URL" docker run --rm --user "$(id -u):$(id -g)" \
+    --entrypoint node --network "$SMOKE_NETWORK" -e DATABASE_URL \
+    --mount "type=bind,src=${SMOKE_ROOT}/backup,dst=/backup,readonly" \
+    "$MIGRATOR_IMAGE" /app/scripts/postgresql-migration-cli.mjs prepare \
+    --snapshot /backup/run/source.sqlite --sha256 "$snapshot_hash" \
+    --database pingufunk_smoke --role pingufunk_smoke_ddl --host "$PG_CONTAINER" \
+    --confirm-writers-stopped)"
+  printf '%s' "$prepare_report" | SMOKE_PREPARE_ATTEMPT="$attempt" node -e '
+    let s=""; process.stdin.on("data",c=>s+=c); process.stdin.on("end",()=>{
+      const r=JSON.parse(s); if(r.action!=="prepare" || r.prepared!==(process.env.SMOKE_PREPARE_ATTEMPT==="1")) process.exit(1);
+    });
+  '
+done
 docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_smoke \
   -c 'GRANT CONNECT ON DATABASE pingufunk_smoke TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
@@ -96,17 +120,22 @@ docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_smo
   -c 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   >/dev/null
 
-# Use the owning host UID/GID for the private bind mount on both Linux CI and macOS.
-snapshot_report="$(docker run --rm --user "$(id -u):$(id -g)" --entrypoint node \
-  --mount "type=bind,src=${SMOKE_ROOT}/source,dst=/source,readonly" \
-  --mount "type=bind,src=${SMOKE_ROOT}/backup,dst=/backup" \
-  "$MIGRATOR_IMAGE" /app/scripts/postgresql-snapshot.mjs \
-  /source/source.sqlite /backup/run)"
-snapshot_hash="$(printf '%s' "$snapshot_report" | node -e '
-  let input=""; process.stdin.on("data", chunk => input += chunk);
-  process.stdin.on("end", () => process.stdout.write(JSON.parse(input).sha256));
-')"
 IMPORT_URL="postgresql://pingufunk_smoke_import@${PG_CONTAINER}/pingufunk_smoke?sslmode=require"
+preflight_report="$(DATABASE_URL="$IMPORT_URL" docker run --rm --user "$(id -u):$(id -g)" \
+  --entrypoint node --network "$SMOKE_NETWORK" -e DATABASE_URL \
+  --mount "type=bind,src=${SMOKE_ROOT}/backup,dst=/backup,readonly" \
+  "$MIGRATOR_IMAGE" /app/scripts/postgresql-preflight.mjs \
+  /backup/run/source.sqlite pingufunk_smoke pingufunk_smoke_import "$PG_CONTAINER")"
+printf '%s' "$preflight_report" | node -e '
+  let input=""; process.stdin.on("data",chunk=>input+=chunk);
+  process.stdin.on("end",()=>{
+    const report=JSON.parse(input);
+    if(report.version!==2 || report.prismaClient!=="6.19.2" ||
+       Number(report.node.slice(1).split(".")[0])<24 ||
+       report.target.schemaState!=="validated" || report.target.tls!==true ||
+       Object.values(report.source.counts).some(value=>value!=="1")) process.exit(1);
+  });
+'
 for action in import verify sequences; do
   action_args=()
   if [[ "$action" != "verify" ]]; then action_args+=(--confirm-writers-stopped); fi

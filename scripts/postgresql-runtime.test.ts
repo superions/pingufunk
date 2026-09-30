@@ -56,8 +56,21 @@ it.skipIf(!run)(
     const key = `qa-${randomUUID()}`;
     const pg = new PrismaClient({ log: [], datasourceUrl: testUrl });
     try {
+      vi.spyOn(globalThis, "fetch").mockRejectedValue(
+        new Error("External network forbidden in PG gate")
+      );
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
       const countBefore = await prisma.config.count();
+      const domainCounts = () =>
+        Promise.all([
+          prisma.config.count(),
+          prisma.download.count(),
+          prisma.generatedRuleset.count(),
+          prisma.topicCategory.count(),
+          prisma.tvdbSeries.count(),
+          prisma.tvdbEpisode.count(),
+        ]);
+      const beforeAllModels = await domainCounts();
       expect(await pg.migrationCheckpoint.count()).toBe(0);
       const { GET: systemStatus } = await import("@/app/api/system/route");
       const status = await systemStatus();
@@ -69,7 +82,82 @@ it.skipIf(!run)(
       await expect(
         prisma.$transaction(async (tx) => tx.config.create({ data: { key, value: "synthetic" } }))
       ).rejects.toThrow("Application writes are disabled");
+      const mutations = [
+        () => prisma.config.createMany({ data: [{ key, value: "synthetic" }] }),
+        () => prisma.config.createManyAndReturn({ data: [{ key, value: "synthetic" }] }),
+        () => prisma.config.update({ where: { key }, data: { value: "synthetic" } }),
+        () => prisma.config.updateMany({ where: { key }, data: { value: "synthetic" } }),
+        () => prisma.config.updateManyAndReturn({ where: { key }, data: { value: "synthetic" } }),
+        () =>
+          prisma.config.upsert({
+            where: { key },
+            create: { key, value: "synthetic" },
+            update: { value: "synthetic" },
+          }),
+        () => prisma.config.delete({ where: { key } }),
+        () => prisma.config.deleteMany({ where: { key } }),
+        () =>
+          prisma.tvdbSeries.create({
+            data: { id: 7654321, name: "Synthetic", expiresAt: new Date() },
+          }),
+        () =>
+          prisma.tvdbEpisode.create({
+            data: { seriesId: 7654321, seasonNumber: 1, episodeNumber: 1 },
+          }),
+        () =>
+          prisma.download.create({
+            data: {
+              id: key,
+              title: "Synthetic",
+              url: "https://example.invalid/video",
+              category: "tv",
+            },
+          }),
+        () =>
+          prisma.generatedRuleset.create({
+            data: { id: key, topic: key, tvdbId: 7654321, showName: "Synthetic" },
+          }),
+        () => prisma.topicCategory.create({ data: { id: key, topic: key, category: "tv" } }),
+      ];
+      for (const mutate of mutations)
+        await expect(mutate()).rejects.toThrow("Application writes are disabled");
+      const { addToQueue, retryDownload, deleteHistoryItem } = await import("@/services/download");
+      const { startDownloadProcessing, recoverInterruptedDownloads } =
+        await import("@/server/download-manager");
+      for (const action of [
+        () => addToQueue("https://example.invalid/video", "Synthetic", "tv"),
+        () => retryDownload(key),
+        () => deleteHistoryItem(key, true),
+        () => startDownloadProcessing(),
+        () => recoverInterruptedDownloads(),
+      ])
+        await expect(action()).rejects.toThrow("Application writes are disabled");
+      for (const name of ["settings", "rulesets", "download"] as const) {
+        const route =
+          name === "settings"
+            ? await import("@/app/api/settings/route")
+            : name === "rulesets"
+              ? await import("@/app/api/rulesets/route")
+              : await import("@/app/api/download/route");
+        expect(
+          (
+            await route.POST(
+              new NextRequest(`http://localhost/api/${name}`, {
+                method: "POST",
+                body: JSON.stringify({ key, value: "synthetic", id: key }),
+              })
+            )
+          ).status
+        ).toBe(503);
+      }
+      await expect(
+        prisma.$executeRaw`UPDATE "Config" SET value='synthetic' WHERE key=${key}`
+      ).rejects.toThrow("Application writes are disabled");
+      await expect(
+        prisma.$executeRawUnsafe('UPDATE "Config" SET value=$1 WHERE key=$2', "synthetic", key)
+      ).rejects.toThrow("Application writes are disabled");
       expect(await prisma.config.count()).toBe(countBefore);
+      expect(await domainCounts()).toEqual(beforeAllModels);
       expect(await pg.migrationCheckpoint.count()).toBe(0);
 
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");

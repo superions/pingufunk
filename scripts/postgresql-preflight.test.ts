@@ -4,9 +4,64 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { assertTargetMetadata, inspectSource } from "./postgresql-preflight.mjs";
+import {
+  assertTargetMetadata,
+  assertConnectedTarget,
+  inspectSource,
+} from "./postgresql-preflight.mjs";
 
 const dirs: string[] = [];
+it("binds a transaction to the reviewed primary, database and schema without payload diagnostics", async () => {
+  const target = {
+    database: "qa",
+    role: "runtime",
+    version: 170000,
+    standby: false,
+    tls: true,
+    superuser: false,
+    createdb: false,
+    createrole: false,
+    database_oid: "41",
+    server_address: "127.0.0.1",
+    server_port: 5432,
+    schema_name: "public",
+    schema_oid: "2200",
+  };
+  const baseline = {
+    databaseOid: "41",
+    serverAddress: "127.0.0.1",
+    serverPort: 5432,
+    schemaName: "public",
+    schemaOid: "2200",
+  };
+  await expect(
+    assertConnectedTarget({ $queryRaw: async () => [target] }, baseline, "qa", "runtime")
+  ).resolves.toBeUndefined();
+  for (const [field, value] of Object.entries({
+    database_oid: "42",
+    server_address: "127.0.0.2",
+    server_port: 5433,
+    schema_name: "other",
+    schema_oid: "2201",
+  })) {
+    await expect(
+      assertConnectedTarget(
+        { $queryRaw: async () => [{ ...target, [field]: value }] },
+        baseline,
+        "qa",
+        "runtime"
+      )
+    ).rejects.toThrow("transaction target identity changed");
+  }
+  await expect(
+    assertConnectedTarget(
+      { $queryRaw: async () => [{ ...target, standby: true }] },
+      baseline,
+      "qa",
+      "runtime"
+    )
+  ).rejects.toThrow("standby");
+});
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -56,6 +111,24 @@ it("rejects unknown columns and tables", () => {
   expect(() =>
     inspectSource(source([`${legacy}/init-db.sql`], "CREATE TABLE SecretExtra(id INTEGER)"))
   ).toThrow("Unknown source table");
+});
+
+it("rejects partial/collation index drift and bootstrap orphans without PG writes", () => {
+  for (const sql of [
+    'DROP INDEX "GeneratedRuleset_topic_key"; CREATE UNIQUE INDEX "GeneratedRuleset_topic_key" ON "GeneratedRuleset"(topic) WHERE tvdbId>0',
+    'DROP INDEX "GeneratedRuleset_topic_key"; CREATE UNIQUE INDEX "GeneratedRuleset_topic_key" ON "GeneratedRuleset"(topic COLLATE NOCASE)',
+  ])
+    expect(() => inspectSource(source(migrations, sql))).toThrow(
+      "Unrecognized SQLite source schema"
+    );
+  expect(() =>
+    inspectSource(
+      source(
+        [`${legacy}/init-db.sql`],
+        "PRAGMA foreign_keys=OFF; INSERT INTO TvdbEpisode(id,seriesId,seasonNumber,episodeNumber) VALUES (1,9999,1,1)"
+      )
+    )
+  ).toThrow("Source foreign key check failed");
 });
 
 it("rejects an unknown legacy migration ledger entry", () => {

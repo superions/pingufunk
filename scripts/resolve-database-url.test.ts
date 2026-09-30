@@ -56,6 +56,8 @@ it.each([
   () => ({ DATABASE_URL: `${disposableUrl}?pool_timeout=0` }),
   () => ({ DATABASE_URL: `${disposableUrl}?pool_timeout=5&pool_timeout=0` }),
   () => ({ DATABASE_URL: `${disposableUrl}?pgbouncer=true` }),
+  () => ({ DATABASE_URL: `${disposableUrl}?schema=` }),
+  () => ({ DATABASE_URL: `${disposableUrl}?schema=one&schema=two` }),
   () => ({ DATABASE_URL_FILE: "/missing/pingufunk" }),
   () => ({ DATABASE_URL_FILE: secret("\n") }),
   () => ({ DATABASE_URL_FILE: secret(`${disposableUrl}\nsecond-line`) }),

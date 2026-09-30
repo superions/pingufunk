@@ -4,7 +4,12 @@ import { createReadStream, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { inspectLocation, inspectSource, inspectTarget } from "./postgresql-preflight.mjs";
+import {
+  inspectLocation,
+  inspectSource,
+  inspectTarget,
+  assertConnectedTarget,
+} from "./postgresql-preflight.mjs";
 import { convertRow, importOrder } from "./postgresql-row-transform.mjs";
 import { verifyRows } from "./postgresql-verify.mjs";
 import { hasRunManifest, prepareRunManifest } from "./postgresql-run-manifest.mjs";
@@ -13,7 +18,7 @@ import {
   validatePostgresqlStructure,
 } from "./check-postgresql-schema.mjs";
 
-async function hashFile(path) {
+export async function hashSnapshotFile(path) {
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest("hex");
@@ -36,7 +41,8 @@ export async function importSnapshot({
 }) {
   if (!/^[a-f0-9]{64}$/.test(expectedHash ?? "")) throw new Error("Snapshot hash required");
   const source = inspectSource(snapshotPath);
-  if ((await hashFile(snapshotPath)) !== expectedHash) throw new Error("Snapshot hash changed");
+  if ((await hashSnapshotFile(snapshotPath)) !== expectedHash)
+    throw new Error("Snapshot hash changed");
   const target = await inspectTarget(database, role, host, requireTls);
 
   const sqlite = new DatabaseSync(snapshotPath, { readOnly: true, readBigInts: true });
@@ -64,6 +70,7 @@ export async function importSnapshot({
       "postgresql-run-manifest.mjs",
       "postgresql-migration-cli.mjs",
       "check-postgresql-schema.mjs",
+      "postgresql-prepare.mjs",
     ];
     const importerVersion = createHash("sha256")
       .update(scriptNames.map((name) => readFileSync(resolve(scriptRoot, name))).join("\n"))
@@ -97,14 +104,18 @@ export async function importSnapshot({
     if (verifyOnly && manifest.status !== "validated")
       throw new Error("Import run is not validated");
     if (manifest.status === "validated") {
-      await pg.$transaction(async (tx) => verifyRows(sqlite, tx, source.counts), {
-        isolationLevel: "RepeatableRead",
-      });
+      await pg.$transaction(
+        async (tx) => {
+          await assertConnectedTarget(tx, target, database, role, requireTls);
+          await verifyRows(sqlite, tx, source.counts);
+        },
+        { isolationLevel: "RepeatableRead", timeout: 3_600_000 }
+      );
       const location = inspectLocation(snapshotPath);
       if (
         location.walPresent ||
         location.shmPresent ||
-        (await hashFile(snapshotPath)) !== expectedHash
+        (await hashSnapshotFile(snapshotPath)) !== expectedHash
       )
         throw new Error("Snapshot changed during verification");
       return {
@@ -112,10 +123,12 @@ export async function importSnapshot({
         sourceCounts: source.counts,
         imported: false,
         runId: manifest.runId,
+        target,
       };
     }
     const imported = await pg.$transaction(
       async (tx) => {
+        await assertConnectedTarget(tx, target, database, role, requireTls);
         // ACCESS EXCLUSIVE prevents a concurrent application writer from adding
         // rows after the empty-target check. The operator must still keep the
         // application in maintenance for the whole handoff.
@@ -144,7 +157,7 @@ export async function importSnapshot({
         if (
           location.walPresent ||
           location.shmPresent ||
-          (await hashFile(snapshotPath)) !== expectedHash
+          (await hashSnapshotFile(snapshotPath)) !== expectedHash
         )
           throw new Error("Snapshot changed during import");
         return existingRows === 0;
@@ -157,6 +170,7 @@ export async function importSnapshot({
       sourceCounts: source.counts,
       imported,
       runId: manifest.runId,
+      target,
     };
   } finally {
     sqlite.close();

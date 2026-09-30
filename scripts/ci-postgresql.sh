@@ -11,6 +11,9 @@ CI_PG_STARTED=0
 CI_PG_NETWORK_CREATED=0
 cleanup() {
   if [[ "$CI_PG_STARTED" == "1" ]]; then
+    if [[ "$(docker inspect --format '{{.State.Paused}}' "$CI_PG_CONTAINER")" == "true" ]]; then
+      docker unpause "$CI_PG_CONTAINER" >/dev/null
+    fi
     docker stop "$CI_PG_CONTAINER" >/dev/null
   fi
   if [[ "$CI_PG_NETWORK_CREATED" == "1" ]]; then
@@ -61,6 +64,14 @@ for database in pingufunk_qa pingufunk_qa_fresh; do
 done
 
 docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa_fresh \
+  -c 'CREATE SCHEMA p11_other_target' >/dev/null
+DATABASE_URL="postgresql://postgres@127.0.0.1:${port}/pingufunk_qa_fresh?schema=p11_other_target" \
+  npx prisma migrate deploy
+docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa_fresh \
+  -c 'GRANT USAGE ON SCHEMA p11_other_target TO pingufunk_qa_import' \
+  -c 'GRANT SELECT ON ALL TABLES IN SCHEMA p11_other_target TO pingufunk_qa_import' >/dev/null
+
+docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa_fresh \
   -c 'GRANT CONNECT ON DATABASE pingufunk_qa_fresh TO pingufunk_qa_import' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_import' \
   -c 'GRANT ALL ON ALL TABLES IN SCHEMA public TO pingufunk_qa_import' \
@@ -68,6 +79,7 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   >/dev/null
 docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa \
   -c 'CREATE SCHEMA p07_identity AUTHORIZATION pingufunk_qa_runtime' \
+  -c 'CREATE SCHEMA p11_prepare AUTHORIZATION pingufunk_qa_runtime' \
   -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_runtime' \
   -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_qa_runtime' \
@@ -84,7 +96,14 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
   DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  npx vitest run src/lib/db-schema.test.ts scripts/postgresql-runtime.test.ts scripts/postgresql-rule-identity.test.ts
+  npx vitest run src/lib/db-schema.test.ts scripts/postgresql-runtime.test.ts scripts/postgresql-rule-identity.test.ts scripts/postgresql-prepare.test.ts
+
+# Pause only this harness-owned container, after the parallel CRUD suites finish.
+PINGUFUNK_REQUIRE_PG_RECONNECT_TESTS=1 \
+  PINGUFUNK_TEST_RECONNECT_CONTAINER="$CI_PG_CONTAINER" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  npx vitest run scripts/postgresql-reconnect.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DENIED_URL="postgresql://pingufunk_qa_denied@127.0.0.1:${port}/pingufunk_qa" \

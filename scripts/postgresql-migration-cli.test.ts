@@ -12,12 +12,18 @@ const valid = [
   "--role",
   "pingufunk_import",
   "--host",
-  "postgres-haproxy",
+  "postgres.example.invalid",
   "--confirm-writers-stopped",
 ];
 
 it("requires an explicit private snapshot, target and stopped writers", () => {
   expect((parseMigrationArgs(valid) as Record<string, string>).database).toBe("pingufunk");
+  expect(
+    (parseMigrationArgs(["prepare", ...valid.slice(1)]) as Record<string, string>).action
+  ).toBe("prepare");
+  expect(() => parseMigrationArgs(["prepare", ...valid.slice(1, -1)])).toThrow(
+    "writer confirmation"
+  );
   expect(() => parseMigrationArgs(valid.slice(0, -1))).toThrow("writer confirmation");
   expect(
     (parseMigrationArgs(["verify", ...valid.slice(1, -1)]) as Record<string, string>).action

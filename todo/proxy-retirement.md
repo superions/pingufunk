@@ -602,6 +602,28 @@ ausschließlich P10.3–P10.5.
       eingeschränktes Rollenprofil ohne Insert-Recht. Der Marker kann
       konservativ zu früh entstehen; externe Writer und das endgültige
       Rollbackverfahren bleiben Betriebs-Gates.
+      Abschließendes Pfadreview 30.09.2026: Alle aktuellen App-Modellwrites
+      in Settings/Config, Regeln/Kategoriecache, Queue/Retry/History und Worker
+      sind am Prisma-Owner geschützt; App-Raw-SQL dient derzeit ausschließlich
+      lesenden Größenabfragen. Zusätzlich schützen `$executeRaw` und
+      `$executeRawUnsafe` nun Maintenance und durable PG-Checkpoint; beide
+      gesperrten Raw-Writeformen werden gegen SQLite und PG geprobt.
+      Unbekannte zukünftige `$queryRaw`-Schreibfunktionen werden nicht als
+      sicher behauptet; neue Owner müssen weiterhin als Ganzes reviewt werden.
+      Persistierter Reconnectgate im PG-Harness: Nach den parallelen Owner-
+      Suiten nur den eigenen Loopback-Container pausieren, System-API 500
+      ohne Fallback/Dateiänderung prüfen, unpause und API 200 plus gleiche
+      Configmenge/leeren Maintenance-Checkpoint lesen. Socket-/Pool-/Connect-
+      Budgets sind im Test begrenzt. Containername UND publizierter Port müssen
+      zur disposable URL passen; finally und Harness-EXIT lösen eine eigene
+      Pause vor Cleanup. Elf PG-Gates lokal erfolgreich; kein fremder
+      Dockercontainer oder produktiver Endpunkt betroffen.
+      Aktuelle Entwicklungsprüfung: Sämtliche heutigen Modellmutationen,
+      Transaktions- und Raw-Execute-Formen sowie Queue-/History-/Worker-
+      Eingänge im Wartungsmodus geprüft; alle sechs Mengen und der durable
+      Checkpoint bleiben unverändert. Zwölf gesonderte PG-Gates grün,
+      einschließlich begrenztem Netzverlust/Reconnect ohne SQLite-Fallback.
+      Finale Fork-Abnahme dieses Checkpoints steht noch aus.
 - [ ] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
       versionierten Preflight unter `scripts/` mit Referenz auf alle sechs Modelle
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,
@@ -644,6 +666,14 @@ ausschließlich P10.3–P10.5.
       zusätzlicher Relationen/RLS/Trigger. Richtige Ledgernamen allein reichen
       nicht; veränderte Checksums oder offene Fehlversuche brechen ab. Negative
       disposable Katalog-/Ledgerproben ergänzen die bisherigen Eingangsprüfungen.
+      Zusätzlich erkannte SQLite-Drift: Teilindizes und abweichende Collations
+      wurden zuvor nicht in der Kontur verglichen. Der Schemaowner berücksichtigt
+      nun Partialstatus/Schlüsselrichtung/Collation; kausale Negativfälle und
+      explizite verwaiste Episodenprüfung brechen vor jedem PG-Fachwrite ab.
+      Der eigenständige Preflight-Report v2 nennt Node-/Prisma-Clientversion,
+      schemaName/schemaOid und Zielkontur ohne Nutzlast. Ein Wechsel des
+      Schemas derselben DB ist kein identischer Importlauf; ein anderer
+      Transaktionsserver/-namespace wird vor Import/Verify/Sequences abgelehnt.
 - [ ] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
       neuen Runner SQLite-Backup-API/CLI statt Kopie einer laufenden Hauptdatei
       verwenden; Snapshot außerhalb Git mit eingeschränkten Rechten und Hash.
@@ -663,6 +693,14 @@ ausschließlich P10.3–P10.5.
       vollständiger `integrity_check` und `foreign_key_check` sind getestet;
       erneuter Lauf auf dasselbe Ziel und ein FK-defekter Snapshot brechen ab.
       PG-Rolle/Zielidentität, leeres Zielschema und Rollengrenzen sind noch offen.
+      Aktueller Guard: `prepare` prüft den privaten, integren Snapshot und
+      das echte Ziel VOR DDL. Scoped DDL-Rolle, bereits provisioniertes Schema,
+      keine administrativen Rollen-/DB-Anlagen. Fremde Tabellen/Sequences,
+      nicht existierender Namespace, aktive Zeilen oder Checkpoint abort;
+      vollständig vorbereiteter leerer Stand ist noop. Synthetische beschädigte
+      Quelle bleibt unrepariert, WAL-Hauptdatei und WAL-Bytes unverändert.
+      Realer nativer DDL-Lauf plus Wiederholung in eigener disposable Kontur
+      und derselbe CLI-Ablauf zweimal im TLS-Container-Smoke erfolgreich.
 - [ ] **P11.5 — Typisierter Import und sichere Resume-Grenzen.** Den neuen
       Importer explizit auf read-only Snapshot→Prisma-PG-Schema abbilden, Eltern
       vor Kindern, IDs original. Keine blinde pgloader-Schemagenerierung;
@@ -854,6 +892,16 @@ ausschließlich P10.3–P10.5.
       von einem beschriebenen PG-Bestand auf SQLite gesperrt. P11.9 ist kein
       Gate für PG-Betrieb mit getesteter PG-kompatibler App-Rücknahme und kein
       Gate für SQLite-Betrieb oder Proxy-Ausstieg.
+      Aufwandbefund 30.09.2026: Die sechs aktuellen Modelle sind grundsätzlich
+      typisiert rückübertragbar. Ein sicherer Operatorrunner benötigt aber eine
+      eigene konsistente PG-Snapshot-/Read-role-Grenze, atomare NEW-Datei-/Resume-
+      Identität, semantischen Rückvergleich und SQLite-Höchststandprüfung;
+      die geplanten P09-Erwartungsspalten müssen ebenfalls unverändert erhalten
+      bleiben. Dafür genügt weder pg_dump noch Umkehrung einzelner Inserts.
+      Vor Abschluss von P09 bewusst zurückgestellt, um keinen vorzeitig
+      unvollständigen Rückweg zu behaupten. Der geprobte PG-kompatible Image-
+      Rollback bleibt der verlustfreie Pflichtweg nach PG-Writes; keine
+      Rückschaltung auf das veraltete SQLite. Kein offenes Gate wird entfernt.
 
 ## Phase P06 — Sonarr als optionaler accountfreier Metadatenanbieter
 

@@ -105,6 +105,20 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     expect((await importSnapshot(args)).imported).toBe(false);
     expect((await importSnapshot({ ...args, verifyOnly: true })).imported).toBe(false);
     expect(JSON.parse(readFileSync(manifestPath, "utf8")).status).toBe("validated");
+    const otherUrl = new URL(url!);
+    otherUrl.searchParams.set("schema", "p11_other_target");
+    process.env.DATABASE_URL = otherUrl.href;
+    const other = new PrismaClient({ datasourceUrl: otherUrl.href, log: [] });
+    try {
+      await expect(importSnapshot({ ...args, verifyOnly: true })).rejects.toThrow(
+        "Migration manifest does not match this run"
+      );
+      expect(await other.config.count()).toBe(0);
+      expect(await other.tvdbEpisode.count()).toBe(0);
+    } finally {
+      await other.$disconnect();
+      process.env.DATABASE_URL = url;
+    }
     let sideEffectCompleted = false;
     const interruptedSequenceClient = {
       migrationCheckpoint: pg.migrationCheckpoint,

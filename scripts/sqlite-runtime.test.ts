@@ -210,6 +210,19 @@ it.each(["bootstrap", "migrated"])(
     await expect(
       prisma.config.update({ where: { key: "qa.config" }, data: { value: "forbidden" } })
     ).rejects.toThrow("Application writes are disabled");
+    await expect(
+      prisma.$executeRaw`UPDATE "Config" SET value='forbidden' WHERE key='qa.config'`
+    ).rejects.toThrow("Application writes are disabled");
+    await expect(
+      prisma.$executeRawUnsafe(
+        'UPDATE "Config" SET value=$1 WHERE key=$2',
+        "forbidden",
+        "qa.config"
+      )
+    ).rejects.toThrow("Application writes are disabled");
+    expect((await prisma.config.findUnique({ where: { key: "qa.config" } }))?.value).toBe(
+      "client-roundtrip"
+    );
     expect((await GET(new NextRequest("http://localhost/api/settings?key=qa.config"))).status).toBe(
       200
     );
