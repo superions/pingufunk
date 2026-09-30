@@ -1,9 +1,40 @@
 import { indexerDownloadUrl } from "@/lib/indexer-url";
+import {
+  MediaExpectationsError,
+  parseMediaExpectations,
+  serializeMediaExpectations,
+  type MediaExpectations,
+} from "@/lib/media-expectations";
 
 /** Release identity shared by Newznab producers, NZB parsing, and the queue. */
 export interface NzbRelease {
   title: string;
   url: string;
+  /** Absence is reserved for saved legacy NZBs; explicit unknown facts use v1. */
+  mediaExpectations?: MediaExpectations;
+}
+
+const EXPECTATIONS_META_TYPE = "pingufunk-media-expectations";
+
+export function decodeMediaExpectations(value: string): MediaExpectations {
+  if (value.length > 5500) throw new MediaExpectationsError();
+  const decoded = decodeBase64Utf8(value);
+  if (decoded === null) throw new MediaExpectationsError();
+  return parseMediaExpectations(decoded);
+}
+
+/** A declared but malformed/duplicate marker must never downgrade to legacy. */
+export function readNzbMediaExpectations(content: string): MediaExpectations | undefined {
+  const declarations = content.match(/<meta\b[^<>]*pingufunk-media-expectations/gi) ?? [];
+  if (declarations.length === 0) return undefined;
+  if (declarations.length !== 1) throw new MediaExpectationsError();
+  const marker = content.match(
+    /<meta\s+type=(["'])pingufunk-media-expectations\1\s*>([^<]*)<\/meta\s*>/i
+  );
+  if (!marker) {
+    throw new MediaExpectationsError();
+  }
+  return decodeMediaExpectations(marker[2].trim());
 }
 
 export function decodeBase64Utf8(value: string): string | null {
@@ -23,9 +54,13 @@ export function decodeBase64Utf8(value: string): string | null {
 export function createFakeNzbDownloadUrl(release: NzbRelease): string {
   const encodedUrl = Buffer.from(release.url, "utf-8").toString("base64");
   const encodedTitle = Buffer.from(release.title, "utf-8").toString("base64");
+  const expectationsQuery =
+    release.mediaExpectations === undefined
+      ? ""
+      : `&encodedExpectations=${encodeURIComponent(Buffer.from(serializeMediaExpectations(release.mediaExpectations), "utf8").toString("base64"))}`;
 
   return indexerDownloadUrl(
-    `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}`
+    `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}${expectationsQuery}`
   );
 }
 
@@ -55,6 +90,10 @@ export function generateFakeNzb(release: NzbRelease): string {
   const encodedUrl = Buffer.from(release.url, "utf-8").toString("base64");
   const encodedTitle = Buffer.from(release.title, "utf-8").toString("base64");
   const escapedTitle = escapeXml(release.title);
+  const expectationsMeta =
+    release.mediaExpectations === undefined
+      ? ""
+      : `\n    <meta type="${EXPECTATIONS_META_TYPE}">${Buffer.from(serializeMediaExpectations(release.mediaExpectations), "utf8").toString("base64")}</meta>`;
 
   // Base64 comments preserve the release identity without putting arbitrary URLs in XML comments;
   // in particular, a source URL may contain "--", which XML comments cannot represent.
@@ -64,7 +103,7 @@ export function generateFakeNzb(release: NzbRelease): string {
 <!-- ${encodedUrl} -->
 <nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">
   <head>
-    <meta type="title">${escapedTitle}</meta>
+    <meta type="title">${escapedTitle}</meta>${expectationsMeta}
   </head>
   <file poster="RundfunkArr" date="${Math.floor(Date.now() / 1000)}" subject="${escapedTitle}">
     <groups>

@@ -1504,6 +1504,20 @@ oder Schemaübergänge. Diese Basis allein erfüllt weder P09.1 noch P09.2.
 Vollständige Wiring-, SQLite-/PG-/Restart-/Retry-/Medien-/DB-Ausfall- und
 Imageproben bleiben Pflicht, historische completed-Jobs bleiben unangetastet.
 
+P09-Persistenzcheckpoint 01.10.2026, weiterhin keine P09-Abnahme: Der optionale
+v1-Block wird durch Downloadlink/Fake-NZB, Parser und beide Addfile-Routen bis
+zur Queue erhalten. Deklarierter beschädigter/mehrfacher Block wird abgelehnt,
+ohne Titel-/URL-Legacyfallback. Beide additiven Migrationsketten enthalten
+nullable `Download.mediaExpectations` und `mediaValidation`. Der SQLite-
+Snapshotübergang erkennt auch den P07-Zwischenstand mit passender Ledgerpräfix-
+Prüfung; nur die historisch fehlenden neuen Spalten werden als NULL verglichen.
+Vorhandene JSON-Strings bleiben bei Übergang/PG-Import/Retry bytegleich, Retry
+übernimmt keine früheren Prüfergebnisse. Reale SQLite- und disposable PG-
+Queue-/Restart-/Retry-Proben sowie Bootstrap-/aktueller PG-Import sind grün.
+Noch keine Aktivierung in allen RSS-Producern und kein Worker-Abschlussgate;
+P09.1/P09.2 bleiben offen. Die Vollsuite bestand mit 737 regulären Tests;
+die zusätzlichen PG-Proben laufen separat, nicht als SQLite-Ersatz.
+
 ## Phase P10 — Vollständige Parität und getrennt freigegebener Betrieb
 
 Ergebnis: nachgewiesene Gesamtkette auf dem gewählten Backend, danach kein Proxy.

@@ -525,3 +525,28 @@ Noch keine Produktverdrahtung, neue Schemafelder oder abgeschlossene
 P09-/P11-Abnahme behauptet. Als Nächstes gemeinsam NZB-Transport, Parser,
 beide Persistenzketten/Importer/Legacyübergang, Queue-Retry/Restart und
 alle Abschlusszweige samt Byte-/Mux-/DB-Fehlergrenze implementieren.
+
+## P09-Transport-/Persistenzreview (01.10.2026, Teilcheckpoint)
+
+Optionaler strenger v1-NZB-Block läuft über Downloadlink, Fake-NZB-Route,
+Parser, beide Addfile-Routen und echte Queuewrites. Ein kaputter, unvollständiger
+oder doppelter deklarierter Block wird nicht als Legacy angenommen. Alte
+NZBs ohne Block bleiben kompatibel; deren Werte bleiben NULL. Die Producer-
+Aktivierung und der gemeinsame Worker-Abschluss sind noch nicht abgeschlossen.
+
+Append-only SQLite-/PG-Spalten `mediaExpectations` und `mediaValidation` sind
+nullable Text. Die vier akzeptierten SQLite-Konturen (Bootstrap, drei historische
+Migrationen, P07, aktuell) behalten ihre IDs und Daten. Nichtleere Ledger müssen
+genau zum jeweiligen Präfix und Originalchecksums passen. Der Snapshotvergleich
+ergänzt nur die historisch fehlenden neuen nullable Felder; er ignoriert keine
+bestehende Fachspalte. Typisierter PG-Import und Verifier erhalten vorhandene
+Payloads exakt; fehlende historische Spalten ergeben NULL. Retry validiert den
+gespeicherten v1-Block, behält ihn bytegleich und übernimmt keine alten Probefakten.
+
+737 reguläre Tests sowie separat echte disposable PG-Gates erfolgreich.
+Der PG-Harness prüft zusätzlich echten Addfile→Queue→Disconnect/Restart→Retry
+und den Import sowohl aus Bootstrap als auch aus aktueller SQLite-Kontur mit
+nichtleeren neuen Payloads. Lint, Typecheck, Produktformat und Build grün;
+nach der Importtest-Erweiterung Typecheck erneut grün, unveränderte Produktgates
+wiederverwendet. Die generierten Clients wurden mit dem Repository-Generator
+erzeugt. Keine Bestands-/Produktionsdatenbank migriert; P09/P11 bleiben offen.

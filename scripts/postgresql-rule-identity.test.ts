@@ -82,6 +82,15 @@ it.skipIf(!required)(
       await expect(
         pg.topicCategory.create({ data: { topic: original.topic, category: "movie" } })
       ).rejects.toThrow();
+      // The catalog gate checks the current client, including later additive P09 DDL.
+      for (const statement of readFileSync(
+        "prisma/migrations/20261001000000_media_validation/migration.sql",
+        "utf8"
+      )
+        .replace(/^--.*$/gm, "")
+        .split(";")
+        .filter((sql) => sql.trim()))
+        await pg.$executeRawUnsafe(statement);
       await validatePostgresqlStructure(pg);
       const driftCases = [
         ["CREATE SEQUENCE synthetic_orphan_sequence", "DROP SEQUENCE synthetic_orphan_sequence"],

@@ -12,8 +12,13 @@ import {
   validateCategory,
   validateReleaseTitle,
 } from "@/lib/download-paths";
-import { decodeBase64Utf8 } from "./nzb-release";
+import { decodeBase64Utf8, readNzbMediaExpectations } from "./nzb-release";
 import type { NzbRelease } from "./nzb-release";
+import {
+  serializeMediaExpectations,
+  readPersistedMediaExpectations,
+  type MediaExpectations,
+} from "@/lib/media-expectations";
 
 /**
  * Format seconds remaining as SABnzbd's strict "H:MM:SS" timeleft format.
@@ -68,6 +73,13 @@ const FILE_NAME_REGEX = /filename="([^"]+)\.nzb"/;
 const COMMENT_REGEX = /<!--([\s\S]*?)-->/g;
 
 export function parseNzbContent(nzbContent: string): NzbRelease | null {
+  let mediaExpectations: NzbRelease["mediaExpectations"];
+  try {
+    // Validate the versioned declaration before any legacy URL/title recovery.
+    mediaExpectations = readNzbMediaExpectations(nzbContent);
+  } catch {
+    return null;
+  }
   const filenameMatch = nzbContent.match(FILE_NAME_REGEX);
   const metadataTitleMatch = nzbContent.match(
     /<meta\s+type=["']title["'][^>]*>([\s\S]*?)<\/meta\s*>/i
@@ -102,13 +114,15 @@ export function parseNzbContent(nzbContent: string): NzbRelease | null {
   return {
     title,
     url,
+    ...(mediaExpectations === undefined ? {} : { mediaExpectations }),
   };
 }
 
 export async function addToQueue(
   url: string,
   title: string,
-  category: string
+  category: string,
+  mediaExpectations?: MediaExpectations
 ): Promise<{ id: string }> {
   assertWritesEnabled();
   validateCategory(category);
@@ -121,6 +135,8 @@ export async function addToQueue(
       category,
       status: "queued",
       progress: 0,
+      mediaExpectations:
+        mediaExpectations === undefined ? null : serializeMediaExpectations(mediaExpectations),
     },
   });
 
@@ -287,6 +303,9 @@ export async function retryDownload(nzoId: string): Promise<{ id: string } | nul
   validateCategory(publicCategory);
   validateReleaseTitle(download.title);
 
+  // Do not let a retry downgrade corrupt v1 data or inherit a prior probe result.
+  readPersistedMediaExpectations(download.mediaExpectations);
+
   // A failed insertion must not discard the old history entry; a new ID owns
   // the retry so its temp and completed paths cannot collide with the old job.
   const newId = randomUUID();
@@ -299,6 +318,7 @@ export async function retryDownload(nzoId: string): Promise<{ id: string } | nul
         category: publicCategory,
         status: "queued",
         progress: 0,
+        mediaExpectations: download.mediaExpectations ?? null,
       },
     });
     await tx.download.delete({ where: { id: nzoId } });

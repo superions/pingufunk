@@ -38,6 +38,7 @@ vi.mock("@/server/download-manager", () => ({ startDownloadProcessing: start }))
 
 import { clearSettingsCache } from "@/lib/settings";
 import { addToQueue, deleteHistoryItem, retryDownload } from "./download";
+import { unknownMediaExpectations } from "@/lib/media-expectations";
 
 let root: string;
 let outside: string;
@@ -71,6 +72,54 @@ it("rejects unsafe public inputs before creating a queue row", async () => {
   ).rejects.toThrow();
   await expect(addToQueue("https://example.org/video.mp4", title, "../sonarr")).rejects.toThrow();
   expect(downloadCreate).not.toHaveBeenCalled();
+});
+
+it("persists a strict versioned payload and rejects corruption before queue creation", async () => {
+  const mediaExpectations = unknownMediaExpectations();
+  downloadCreate.mockResolvedValue({ id });
+  await addToQueue("https://example.org/video.mp4", title, category, mediaExpectations);
+  expect(downloadCreate).toHaveBeenCalledWith({
+    data: expect.objectContaining({ mediaExpectations: JSON.stringify(mediaExpectations) }),
+  });
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+  downloadCreate.mockClear();
+  await expect(
+    addToQueue("https://example.org/video.mp4", title, category, {} as typeof mediaExpectations)
+  ).rejects.toThrow("Invalid media expectations");
+  expect(downloadCreate).not.toHaveBeenCalled();
+});
+
+it("retains a valid expectation payload byte-for-byte on retry and discards old probe facts", async () => {
+  const payload = '{ "version":1, "duration":null, "audio":null, "resolution":null }';
+  downloadFindUnique.mockResolvedValue({
+    id,
+    title,
+    category,
+    status: "failed",
+    url: "https://example.org/video.mp4",
+    mediaExpectations: payload,
+    mediaValidation: '{"durationSeconds":1}',
+  });
+  downloadCreate.mockResolvedValue({});
+  await retryDownload(id);
+  const data = downloadCreate.mock.calls[0][0].data;
+  expect(data.mediaExpectations).toBe(payload);
+  expect(data).not.toHaveProperty("mediaValidation");
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+});
+
+it("never retries corrupt v1 as legacy or deletes its history row", async () => {
+  downloadFindUnique.mockResolvedValue({
+    id,
+    title,
+    category,
+    status: "failed",
+    url: "https://example.org/video.mp4",
+    mediaExpectations: "{}",
+  });
+  await expect(retryDownload(id)).rejects.toThrow("Invalid media expectations");
+  expect(transaction).not.toHaveBeenCalled();
+  expect(downloadDelete).not.toHaveBeenCalled();
 });
 
 it("removes only its completed job file, not a neighboring release", async () => {

@@ -1,10 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { knownShapes, modelNames, schemaShape } from "./sqlite-schema.mjs";
+import { knownShapes, modelNames, schemaShape, validateSourceLedger } from "./sqlite-schema.mjs";
 import { checkSqliteSchema } from "./check-sqlite-schema.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -27,6 +27,12 @@ export function sqliteDataFingerprint(db) {
     const key = model === "Config" ? "key" : "id";
     digest.update(model);
     for (const row of db.prepare(`SELECT * FROM "${model}" ORDER BY "${key}"`).iterate()) {
+      // Only these append-only nullable columns are absent in accepted historical shapes.
+      // Present payloads are retained byte-for-byte, never normalized or discarded.
+      if (model === "Download") {
+        row.mediaExpectations ??= null;
+        row.mediaValidation ??= null;
+      }
       digest.update(
         JSON.stringify(
           Object.entries(row)
@@ -70,40 +76,16 @@ export function transitionSqliteSnapshot({ snapshotPath, expectedHash, targetPat
   try {
     verifyIntegrity(source);
     const shape = JSON.stringify(schemaShape(source));
-    if (!Object.values(knownShapes()).some((value) => JSON.stringify(value) === shape))
-      throw new Error("Unknown SQLite source schema");
+    const variant = Object.entries(knownShapes()).find(
+      ([, value]) => JSON.stringify(value) === shape
+    )?.[0];
+    if (!variant) throw new Error("Unknown SQLite source schema");
     if (
       source
         .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='_prisma_migrations'")
         .get()
     ) {
-      const rows = source
-        .prepare(
-          "SELECT migration_name,checksum,finished_at,rolled_back_at FROM _prisma_migrations"
-        )
-        .all();
-      const migrations = resolve(root, "prisma/legacy/sqlite/migrations");
-      const known = readdirSync(migrations)
-        .filter((name) => /^\d{14}_/.test(name))
-        .sort();
-      if (rows.length > 0) {
-        const expected =
-          shape === JSON.stringify(knownShapes().current) ? known : known.slice(0, -1);
-        if (
-          shape === JSON.stringify(knownShapes().bootstrap) ||
-          JSON.stringify(rows.map((row) => row.migration_name).sort()) !== JSON.stringify(expected)
-        )
-          throw new Error("Source ledger incompatible");
-        for (const row of rows) {
-          if (
-            !row.finished_at ||
-            row.rolled_back_at ||
-            row.checksum !==
-              hash(readFileSync(resolve(migrations, row.migration_name, "migration.sql")))
-          )
-            throw new Error("Source ledger incomplete or changed");
-        }
-      }
+      validateSourceLedger(source, variant);
     }
     const sourceData = sqliteDataFingerprint(source);
     const manifestPath = `${targetPath}.baseline.json`;

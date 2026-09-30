@@ -35,20 +35,22 @@ model TvdbEpisode {
 }
 
 model Download {
-  id              String    @id @default(uuid())
-  title           String
-  url             String
-  category        String
-  status          String    @default("queued")
-  progress        Int       @default(0)
-  size            BigInt    @default(0)
-  totalSize       BigInt    @default(0)
-  downloadedBytes BigInt    @default(0)
-  speed           BigInt    @default(0)
-  filePath        String?
-  error           String?
-  createdAt       DateTime  @default(now())
-  completedAt     DateTime?
+  id                String    @id @default(uuid())
+  title             String
+  url               String
+  category          String
+  status            String    @default("queued")
+  progress          Int       @default(0)
+  size              BigInt    @default(0)
+  totalSize         BigInt    @default(0)
+  downloadedBytes   BigInt    @default(0)
+  speed             BigInt    @default(0)
+  filePath          String?
+  error             String?
+  mediaExpectations String? // Versioned JSON; NULL denotes legacy unknown expectations.
+  mediaValidation   String? // Facts from the bounded local probe, never identity proof.
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
 
   @@index([status])
 }
@@ -72,8 +74,8 @@ model GeneratedRuleset {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  @@index([tvdbId])
   @@unique([tvdbId, topic])
+  @@index([tvdbId])
 }
 
 model TopicCategory {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { decodeBase64Utf8, generateFakeNzb } from "@/services/nzb-release";
+import { decodeBase64Utf8, decodeMediaExpectations, generateFakeNzb } from "@/services/nzb-release";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -16,7 +16,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid base64 string" }, { status: 400 });
   }
 
-  const nzbContent = generateFakeNzb({ title, url });
+  let mediaExpectations;
+  try {
+    const values = searchParams.getAll("encodedExpectations");
+    if (values.length > 1) throw new Error("Duplicate expectations");
+    mediaExpectations = values.length === 0 ? undefined : decodeMediaExpectations(values[0]);
+  } catch {
+    return NextResponse.json({ error: "Invalid media expectations" }, { status: 400 });
+  }
+  const nzbContent = generateFakeNzb({ title, url, mediaExpectations });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const fileName = `rundfunk-${timestamp}.nzb`;

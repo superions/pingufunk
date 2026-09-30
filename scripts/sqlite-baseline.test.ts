@@ -12,7 +12,7 @@ afterEach(() => {
   for (const dir of owned.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 const hash = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
-function fixture(variant: "bootstrap" | "migrated") {
+function fixture(variant: "bootstrap" | "migrated" | "seriesTopic" | "current") {
   const dir = mkdtempSync(join(tmpdir(), "pingufunk-baseline-"));
   owned.push(dir);
   const snapshotPath = join(dir, "snapshot.sqlite");
@@ -21,7 +21,12 @@ function fixture(variant: "bootstrap" | "migrated") {
     if (variant === "bootstrap") db.exec(readFileSync("prisma/legacy/sqlite/init-db.sql", "utf8"));
     else
       for (const name of readdirSync("prisma/legacy/sqlite/migrations")
-        .filter((name) => /^20260[17]/.test(name))
+        .filter(
+          (name) =>
+            /^\d{14}_/.test(name) &&
+            (variant === "current" ||
+              (variant === "seriesTopic" ? name < "20261001" : /^20260[17]/.test(name)))
+        )
         .sort())
         db.exec(readFileSync(`prisma/legacy/sqlite/migrations/${name}/migration.sql`, "utf8"));
     const instant = 1790769600123;
@@ -49,6 +54,12 @@ function fixture(variant: "bootstrap" | "migrated") {
       BigInt("9007199254741115"),
       instant
     );
+    if (variant === "current") {
+      db.prepare("UPDATE Download SET mediaExpectations=?,mediaValidation=? WHERE id='job'").run(
+        '{"version":1,"duration":null,"audio":null,"resolution":null}',
+        '{"version":1,"durationSeconds":2,"audioLanguages":[]}'
+      );
+    }
     db.prepare(
       "INSERT INTO GeneratedRuleset(id,topic,tvdbId,showName,filters,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?)"
     ).run("rule", "Shared", 7, "Synthetic", '[{"regex":"\\\\d+"}]', instant, instant);
@@ -66,7 +77,7 @@ function fixture(variant: "bootstrap" | "migrated") {
   return { snapshotPath, expectedHash: hash(snapshotPath), targetPath: join(dir, "target.sqlite") };
 }
 
-it.each(["bootstrap", "migrated"] as const)(
+it.each(["bootstrap", "migrated", "seriesTopic", "current"] as const)(
   "transitions %s to a new ledger without modifying source and repeats read-only",
   (variant) => {
     const options = fixture(variant);
@@ -88,7 +99,16 @@ it.each(["bootstrap", "migrated"] as const)(
         db
           .prepare("SELECT count(*) AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL")
           .get()?.n
-      ).toBe(BigInt(4));
+      ).toBe(BigInt(5));
+      const facts = db.prepare("SELECT mediaExpectations,mediaValidation FROM Download").get();
+      expect(facts?.mediaExpectations).toBe(
+        variant === "current"
+          ? '{"version":1,"duration":null,"audio":null,"resolution":null}'
+          : null
+      );
+      expect(facts?.mediaValidation).toBe(
+        variant === "current" ? '{"version":1,"durationSeconds":2,"audioLanguages":[]}' : null
+      );
       expect(
         db
           .prepare("INSERT INTO TvdbEpisode(seriesId,seasonNumber,episodeNumber) VALUES (7,2,4)")

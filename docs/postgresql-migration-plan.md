@@ -133,7 +133,7 @@ kein DDL aus und gibt weder Default- noch Zeilenwerte aus.
 | Tabelle                               | Zwingend zu erhalten / prüfen                                                                                        |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Config                                | Schlüssel und Werte exakt, inklusive vorhandener Settings/Credentials; niemals Klarwerte im Bericht                  |
-| Download                              | IDs, Status, Fortschritt, BigInt-Bytewerte, Kategorie, URL, lokale Pfade, Fehler und Zeitpunkte; keine neue Queue-ID |
+| Download                              | IDs, Status, Fortschritt, BigInt-Bytewerte, Kategorie, URL, lokale Pfade, Fehler und Zeitpunkte sowie nullable P09-Erwartungs-/Prüfstrings; keine neue Queue-ID |
 | GeneratedRuleset                      | IDs, Topic-Unique, Zuordnungen, Regex-/Filterstrings und Zeitpunkte; keine Regeneration als Migrationsersatz         |
 | TopicCategory                         | IDs, Topic-Unique, Kategorie, TMDB-Zuordnung und cachedAt                                                            |
 | TvdbSeries                            | Externe Serien-ID, Namen, Aliase, Cachezeiten und Beziehungen                                                        |

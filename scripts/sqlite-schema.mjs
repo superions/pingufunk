@@ -29,9 +29,10 @@ export function validateSourceLedger(db, variant) {
     .sort();
   if (rows.some((row) => !known.includes(row.migration_name)))
     fail("Unknown SQLite migration ledger entry");
-  const expected = variant === "current" ? known : known.slice(0, -1);
+  const prefixLength = { migrated: 3, seriesTopic: 4, current: 5 }[variant];
+  const expected = known.slice(0, prefixLength);
   const names = rows.map((row) => row.migration_name).sort();
-  if (variant === "bootstrap" || JSON.stringify(names) !== JSON.stringify(expected))
+  if (!prefixLength || JSON.stringify(names) !== JSON.stringify(expected))
     fail("SQLite source ledger incompatible with schema");
   for (const row of rows) {
     const checksum = createHash("sha256")
@@ -95,6 +96,7 @@ export function knownShapes() {
   const bootstrap = new DatabaseSync(":memory:");
   const migrated = new DatabaseSync(":memory:");
   const current = new DatabaseSync(":memory:");
+  const seriesTopic = new DatabaseSync(":memory:");
   try {
     bootstrap.exec(readFileSync(resolve(legacy, "init-db.sql"), "utf8"));
     const migrationNames = [
@@ -106,6 +108,7 @@ export function knownShapes() {
       const sql = readFileSync(resolve(legacy, "migrations", name, "migration.sql"), "utf8");
       migrated.exec(sql);
       current.exec(sql);
+      seriesTopic.exec(sql);
     }
     current.exec(
       readFileSync(
@@ -113,14 +116,28 @@ export function knownShapes() {
         "utf8"
       )
     );
+    seriesTopic.exec(
+      readFileSync(
+        resolve(legacy, "migrations/20260930002000_series_topic_identity/migration.sql"),
+        "utf8"
+      )
+    );
+    current.exec(
+      readFileSync(
+        resolve(legacy, "migrations/20261001000000_media_validation/migration.sql"),
+        "utf8"
+      )
+    );
     return {
       bootstrap: schemaShape(bootstrap),
       migrated: schemaShape(migrated),
+      seriesTopic: schemaShape(seriesTopic),
       current: schemaShape(current),
     };
   } finally {
     bootstrap.close();
     migrated.close();
     current.close();
+    seriesTopic.close();
   }
 }

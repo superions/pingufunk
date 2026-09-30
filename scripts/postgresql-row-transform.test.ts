@@ -47,6 +47,24 @@ it("normalizes a timezone offset to the same millisecond instant", () => {
   expect(result.episodeRegex).toBe(row.episodeRegex);
 });
 
+it("maps absent legacy expectations to NULL and preserves existing payloads exactly", () => {
+  const row = fixture("Download");
+  delete row.mediaExpectations;
+  delete row.mediaValidation;
+  expect(convertRow("Download", row)).toMatchObject({
+    mediaExpectations: null,
+    mediaValidation: null,
+  });
+  row.mediaExpectations = '{ "version": 1, "duration": null, "audio": null, "resolution": null }';
+  row.mediaValidation = "retained malformed historical text";
+  expect(convertRow("Download", row)).toMatchObject({
+    mediaExpectations: row.mediaExpectations,
+    mediaValidation: row.mediaValidation,
+  });
+  delete row.title;
+  expect(() => convertRow("Download", row)).toThrow("Incomplete row");
+});
+
 it("does not synthesize required null, unknown fields or ambiguous dates", () => {
   expect(() => convertRow("Config", { key: "token", value: null })).toThrow("Required null");
   expect(() => convertRow("Config", { key: "token", value: "secret", extra: BigInt(1) })).toThrow(

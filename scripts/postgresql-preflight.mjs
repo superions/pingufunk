@@ -25,7 +25,17 @@ export const sourceFieldContract = {
   Download: {
     int: ["progress"],
     bigint: ["size", "totalSize", "downloadedBytes", "speed"],
-    text: ["id", "title", "url", "category", "status", "filePath", "error"],
+    text: [
+      "id",
+      "title",
+      "url",
+      "category",
+      "status",
+      "filePath",
+      "error",
+      "mediaExpectations",
+      "mediaValidation",
+    ],
     date: ["createdAt", "completedAt"],
     required: [
       "id",
