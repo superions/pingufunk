@@ -1,12 +1,13 @@
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
-import { createReadStream, readdirSync } from "node:fs";
+import { createReadStream, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { inspectLocation, inspectSource, inspectTarget } from "./postgresql-preflight.mjs";
 import { convertRow, importOrder } from "./postgresql-row-transform.mjs";
 import { verifyRows } from "./postgresql-verify.mjs";
+import { hasRunManifest, prepareRunManifest } from "./postgresql-run-manifest.mjs";
 
 async function hashFile(path) {
   const hash = createHash("sha256");
@@ -25,11 +26,12 @@ export async function importSnapshot({
   role,
   host,
   requireTls = true,
+  afterTable = /** @type {undefined | ((table: string) => void | Promise<void>)} */ (undefined),
 }) {
   if (!/^[a-f0-9]{64}$/.test(expectedHash ?? "")) throw new Error("Snapshot hash required");
   const source = inspectSource(snapshotPath);
   if ((await hashFile(snapshotPath)) !== expectedHash) throw new Error("Snapshot hash changed");
-  await inspectTarget(database, role, host, requireTls);
+  const target = await inspectTarget(database, role, host, requireTls);
 
   const sqlite = new DatabaseSync(snapshotPath, { readOnly: true, readBigInts: true });
   const pg = new PrismaClient({ log: [] });
@@ -55,6 +57,52 @@ export async function importSnapshot({
       .sort();
     if (JSON.stringify(applied) !== JSON.stringify(expectedMigrations))
       throw new Error("PostgreSQL migration history mismatch");
+    const scriptRoot = dirname(fileURLToPath(import.meta.url));
+    const scriptNames = [
+      "postgresql-import.mjs",
+      "postgresql-preflight.mjs",
+      "postgresql-row-transform.mjs",
+      "postgresql-verify.mjs",
+      "postgresql-run-manifest.mjs",
+    ];
+    const importerVersion = createHash("sha256")
+      .update(scriptNames.map((name) => readFileSync(resolve(scriptRoot, name))).join("\n"))
+      .digest("hex");
+    const schemaVersion = createHash("sha256")
+      .update(
+        expectedMigrations
+          .map((name) => readFileSync(resolve(migrationRoot, name, "migration.sql")))
+          .join("\n")
+      )
+      .digest("hex");
+    const identity = {
+      sourceHash: expectedHash,
+      importerVersion,
+      schemaVersion,
+      migrations: expectedMigrations,
+      database,
+      role,
+      host,
+      target,
+    };
+    if (!hasRunManifest(snapshotPath)) {
+      for (const [, delegate] of importOrder) {
+        if ((await pg[delegate].count()) !== 0)
+          throw new Error("Unowned PostgreSQL target is not empty");
+      }
+    }
+    const manifest = prepareRunManifest(snapshotPath, identity);
+    if (manifest.status === "validated") {
+      await pg.$transaction(async (tx) => verifyRows(sqlite, tx, source.counts), {
+        isolationLevel: "RepeatableRead",
+      });
+      return {
+        sourceHash: expectedHash,
+        sourceCounts: source.counts,
+        imported: false,
+        runId: manifest.runId,
+      };
+    }
     const imported = await pg.$transaction(
       async (tx) => {
         // ACCESS EXCLUSIVE prevents a concurrent application writer from adding
@@ -77,6 +125,7 @@ export async function importSnapshot({
               }
             }
             if (batch.length) await tx[delegate].createMany({ data: batch });
+            if (afterTable) await afterTable(table);
           }
         }
         await verifyRows(sqlite, tx, source.counts);
@@ -91,7 +140,13 @@ export async function importSnapshot({
       },
       { maxWait: 10_000, timeout: 3_600_000 }
     );
-    return { sourceHash: expectedHash, sourceCounts: source.counts, imported };
+    manifest.markValidated();
+    return {
+      sourceHash: expectedHash,
+      sourceCounts: source.counts,
+      imported,
+      runId: manifest.runId,
+    };
   } finally {
     sqlite.close();
     await pg.$disconnect();

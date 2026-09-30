@@ -43,13 +43,23 @@ it.skipIf(!run)(
       expect(await prisma.config.count()).toBe(countBefore);
 
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      const firstWrite = vi.spyOn(console, "warn").mockImplementation(() => {});
       await prisma.config.create({ data: { key, value: "synthetic" } });
+      expect(firstWrite).toHaveBeenCalledWith(
+        "[Migration] First application PostgreSQL mutation observed; SQLite rollback requires reconciliation"
+      );
       expect((await prisma.config.findUnique({ where: { key } }))?.value).toBe("synthetic");
       await prisma.config.update({ where: { key }, data: { value: "rotated" } });
       expect((await prisma.config.findUnique({ where: { key } }))?.value).toBe("rotated");
       await prisma.config.delete({ where: { key } });
+      expect(
+        firstWrite.mock.calls.filter(([message]) =>
+          String(message).startsWith("[Migration] First application")
+        )
+      ).toHaveLength(1);
       expect(await prisma.config.count()).toBe(countBefore);
     } finally {
+      vi.restoreAllMocks();
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
       await prisma.config.deleteMany({ where: { key } });
       await prisma.$disconnect();

@@ -501,6 +501,11 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Im gebauten App-Image wurde ein gemounteter Sentinel nach einem
       Maintenance-Start gegen disposable PG byte-, mode-, owner- und
       mtimegleich nachgewiesen. Die übrigen offenen Abnahmen bleiben bestehen.
+      Ergänzung 30.09.2026: Der gemeinsame Prisma-Writer loggt die erste
+      erfolgreiche Modellmutation pro Prozess ohne Datennutzlast als
+      konservativen SQLite-Rollback-Grenzmarker. Ein späterer Transaktions-
+      rollback kann ihn zu früh, aber nicht zu spät setzen; für den Betrieb
+      bleibt eine durable, prozessübergreifende Grenzabnahme erforderlich.
 - [ ] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
       versionierten Preflight unter `scripts/` mit Referenz auf alle sechs Modelle
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,
@@ -565,8 +570,16 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       sechs Tabellen in einer Importtransaktion; er fordert ein leeres Ziel.
       Der Import aller sechs Modelle, ein semantisch geprüfter read-only Repeat
       und die Zurückweisung einer zusätzlichen Fremdzeile wurden gegen eine
-      disposable PG-17-DB mit nichtprivilegierter Rolle geprüft. Run-ID,
-      Crash-/Resume-Vertrag und operatorfähiger CLI fehlen ausdrücklich.
+      disposable PG-17-DB mit nichtprivilegierter Rolle geprüft. Der
+      vollständige Crash-/Resume-Vertrag und operatorfähige CLI fehlen.
+      Ergänzung 30.09.2026: Ein privates 0600-Manifest bindet Snapshot-Hash,
+      Importer-/Schemahash sowie Zielversion, DB-OID, Host und Rolle. Ein
+      simulierter Absturz nach Transaktionscommit vor Manifestabschluss wurde
+      durch read-only Zeilenvergleich erkannt und als derselbe Lauf finalisiert;
+      fremde Identität abort. Ein injizierter Abbruch nach bereits importierten
+      Eltern/Config-Zeilen rollte die ganze PG-Transaktion zurück; derselbe
+      Pending-Lauf konnte danach aus dem leeren Ziel neu starten. Noch offen:
+      durable Operatorabläufe/CLI und Sequenz-Resume unter Fehlern.
 - [ ] **P11.6 — Reale Sequences und semantischer Verifier.** Im neuen
       Verifier PG-Katalog/Ownership für tatsächlich sequencegebundene Spalten
       verwenden; MAX, leere Tabelle, Startwert und `is_called` korrekt. Keine

@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -57,6 +57,17 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
       host: "127.0.0.1",
       requireTls: false,
     };
+    await expect(
+      importSnapshot({
+        ...args,
+        afterTable(table: string) {
+          if (table === "Config") throw new Error("Synthetic mid-import fault");
+        },
+      })
+    ).rejects.toThrow("Synthetic mid-import fault");
+    expect(await pg.tvdbSeries.count()).toBe(0);
+    expect(await pg.tvdbEpisode.count()).toBe(0);
+    expect(await pg.config.count()).toBe(0);
     const result = await importSnapshot(args);
     expect(result.sourceCounts.Download).toBe("1");
     expect(await pg.tvdbSeries.count()).toBe(1);
@@ -72,7 +83,12 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     expect((await pg.config.findUnique({ where: { key: "qa-secret" } }))?.value).toBe(
       "synthetic-private"
     );
+    const manifestPath = join(dir, "backup", "import-manifest.json");
+    const crashWindow = JSON.parse(readFileSync(manifestPath, "utf8"));
+    writeFileSync(manifestPath, JSON.stringify({ ...crashWindow, status: "pending" }));
     expect((await importSnapshot(args)).imported).toBe(false);
+    expect(JSON.parse(readFileSync(manifestPath, "utf8")).status).toBe("validated");
+    expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);
     expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);
     const next = await pg.tvdbEpisode.create({
       data: { seriesId: 7123, seasonNumber: 1, episodeNumber: 3 },
@@ -110,6 +126,7 @@ it.skipIf(!enabled)("resets an empty owned sequence to its actual start value", 
   const pg = new PrismaClient({ log: [] });
   try {
     expect(await pg.tvdbEpisode.count()).toBe(0);
+    expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);
     expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);
     await pg.tvdbSeries.create({
       data: { id: 9999, name: "Synthetic", expiresAt: new Date("2026-10-01T00:00:00Z") },

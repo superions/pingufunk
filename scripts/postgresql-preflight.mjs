@@ -324,10 +324,16 @@ export async function inspectTarget(
         (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls,
         (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS superuser,
         (SELECT rolcreatedb FROM pg_roles WHERE rolname = current_user) AS createdb,
-        (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS createrole
+        (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS createrole,
+        (SELECT oid::text FROM pg_database WHERE datname = current_database()) AS database_oid,
+        inet_server_addr()::text AS server_address,
+        inet_server_port() AS server_port
     `;
     return {
       ...assertTargetMetadata(target, expectedDatabase, expectedRole, requireTls),
+      databaseOid: target.database_oid,
+      serverAddress: target.server_address,
+      serverPort: target.server_port,
       endpointMatchesExpected: true,
     };
   } finally {

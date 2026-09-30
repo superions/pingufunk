@@ -12,14 +12,25 @@ const MUTATIONS = new Set([
   "delete",
   "deleteMany",
 ]);
+let firstSuccessfulApplicationMutationLogged = false;
 
 function createClient() {
   return new PrismaClient({ log: [] }).$extends({
     query: {
       $allModels: {
         async $allOperations({ operation, args, query }) {
-          if (MUTATIONS.has(operation)) assertWritesEnabled();
-          return query(args);
+          if (!MUTATIONS.has(operation)) return query(args);
+          assertWritesEnabled();
+          const result = await query(args);
+          if (!firstSuccessfulApplicationMutationLogged) {
+            firstSuccessfulApplicationMutationLogged = true;
+            // Conservative boundary: a statement inside a later-rolled-back
+            // transaction may still log, never the reverse. No row data leaks.
+            console.warn(
+              "[Migration] First application PostgreSQL mutation observed; SQLite rollback requires reconciliation"
+            );
+          }
+          return result;
         },
       },
     },

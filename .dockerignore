@@ -59,3 +59,4 @@ scripts/*
 !scripts/postgresql-row-transform.mjs
 !scripts/postgresql-import.mjs
 !scripts/postgresql-verify.mjs
+!scripts/postgresql-run-manifest.mjs
