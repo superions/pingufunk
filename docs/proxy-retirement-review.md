@@ -329,3 +329,29 @@ Betriebsfreigaben geprüft. Keine Implementierungscheckbox neu geschlossen.
 Offen bleiben die benannten technischen Gates, nicht erneut die beantworteten
 Fachfragen. Dokumentprüfung ist keine aktuelle API-/DB-/Produkt-/Live-Evidenz;
 Produktgates müssen bei Umsetzung der neuen Verträge erneut ausgeführt werden.
+
+## Umsetzungsreview P11.1 und technischer Vertrag P06.1 (30.09.2026)
+
+Selbstreview, kein unabhängiger Peer-Review. Die wieder geöffnete Backendauswahl
+ist in aad3588 behoben: URL-/Secret-Protokoll statt vorexportiertem SQLite-
+Default, identische Entscheidung für App/Migrator, PG ohne Selektor weiterhin
+Maintenance. Fehler bleiben generisch, keine URL-Ausgabe und kein Fallback.
+408 reguläre Tests, acht separate disposable PG-Tests sowie beide neu gebauten
+Container-Smokes bestanden. Fork-CI und Docker-Validierung desselben Commits
+ebenfalls erfolgreich, ohne Veröffentlichung oder Produktionsausführung.
+
+P06.1 gegen offizielle API, Controller und Mapper geprüft; Details/Quellen im
+[Sonarr-Vertrag](sonarr-metadata-contract.md). Synthetische Parserregressionen
+trennen Serien-/Episoden-/Instanz-ID, Monitoring, Episoden-/Serienlaufzeit und
+UTC-Zeitpunkt/Kalendertag. Ungültige Kalenderdaten und 24:00 normalisieren nicht
+still in einen anderen RSS-Tag. Fremde/duplizierte Episode verhindert Teilbestand;
+unbekannte Laufzeit bleibt unbekannt. Keine Bestandsmetadaten überschrieben.
+Parser sind noch nicht an Netzwerk, Lookup oder RSS angeschlossen: P06.2 und
+P06.3 bleiben offen, insbesondere gemeinsamer Versuchszähler/Bodydeadline,
+Epochencache/Merge, Consumerfehler, Medien-Schlussfilter und Desktop-Controls.
+Kein synthetischer Parsernachweis ersetzt tatsächliche Versions-/Feldprüfung
+der später gewählten Sonarr-Instanz oder die RSS→NZB→Queue-Abnahme.
+
+Upstream wurde neu abgerufen: 1b41ebb verbessert TVDB-Suche/Settings, enthält
+keinen Sonarradapter. Die überlappenden Fork-Owner nicht blind durch Merge
+ersetzt. Main, andere Checkouts, Produktivdienste und reale Daten unverändert.

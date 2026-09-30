@@ -23,7 +23,7 @@ erledigte Implementierung.
 - Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R10 bleiben in den Referenzen.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
-- Nächster Entwicklungspunkt ist **P06.1**. Beide Backend-Laufzeitketten und
+- Nächster Entwicklungspunkt ist **P06.2**. Beide Backend-Laufzeitketten und
   die URL-/Secret-basierte Auswahl aus **P11.1** sind geprüft.
   Es folgt der Proxy-Pfad
   P06 → P07 → P08 → P09 → P10 auf den abgenommenen P00–P05.
@@ -827,7 +827,7 @@ ausschließlich P10.3–P10.5.
 Ergebnis: fehlende lokale Episoden sicher auffindbar. Abhängigkeit P05 und P11.1;
 B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
 
-- [ ] **P06.1 — Beschlossenen Provider-/Fallbackvertrag technisch festlegen.**
+- [x] **P06.1 — Beschlossenen Provider-/Fallbackvertrag technisch festlegen.**
       `src/services/shows.ts::{getLocalShow,getShowInfoByTvdbId}` und neue
       `src/services/sonarr-metadata.ts` zusammen planen: optional default-off,
       zunächst eine Instanz, Providerpriorität/Refresh und Ergänzung fehlender
@@ -898,6 +898,22 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       API-Verfügbarkeit/Schema vor realem Betrieb am gewählten Sonarr separat
       verifizieren. Zahlen sind konfigurierbare technische Startwerte, keine
       aus Sonarr oder dem privaten Proxy abgeleiteten Tatsachen.
+      Technischer Vertrag abgenommen 30.09.2026 unter
+      `docs/sonarr-metadata-contract.md`: offizielle v3-OpenAPI und Sonarr-
+      Controller/Mapper auf cab419ade8ac7fcab5bf80394ee492abd35d5f5a geprüft;
+      Sonarr 3/4, Arrayantworten ohne erfundene Pagination, lokale Serien-ID
+      getrennt von externer Serien-/Episoden-TVDB-ID. Episodenlaufzeit statt
+      Serienmittelwert, UTC-Zeitpunkt statt Kalendertag. Eigenständige
+      synthetische Ressourcen prüfen Parser-/Identitäts-/Monitoring-/Units-
+      Grenzen in `src/services/sonarr-metadata.test.ts`. Noch kein Lookup-/RSS-
+      Anschluss und kein Liveversionsnachweis: P06.2/P06.3 bleiben offen.
+      Upstream 1b41ebbe6c1d988cc981675a1dd90a0e038e8400 erneut geprüft;
+      TVDB-/Settingsfix, kein Sonarradapter. Nicht ungeprüft integriert.
+      Verifikation: 29 neue synthetische Parserfälle, insgesamt 437 reguläre
+      Tests, Lint, Typecheck, Format und Produktionsbuild grün. Die acht PG-
+      Gates und isolierten Containerproben aus P11.1 werden für dessen
+      unveränderte DB-/Runtimeinputs wiederverwendet; Parser ist noch kein
+      integrierter Sonarr-Consumer und benötigt keine neue UI-Abnahme.
 - [ ] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
       Neuen Sonarradapter in `shows.ts`/TV-Suchowner anschließen, P05-Secret-/
       Budget-/Cachegrundlagen nutzen, nur GET und Base-URL-Unterpfade. Serien-ID,
