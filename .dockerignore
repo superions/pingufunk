@@ -57,3 +57,5 @@ scripts/*
 !scripts/postgresql-preflight.mjs
 !scripts/postgresql-snapshot.mjs
 !scripts/postgresql-row-transform.mjs
+!scripts/postgresql-import.mjs
+!scripts/postgresql-verify.mjs

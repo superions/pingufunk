@@ -560,9 +560,13 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Die isolierte
       Feldabbildung für alle sechs Modelle ist implementiert und testet
       Original-IDs, BigInt >2^53, NULL, Regex-/JSON-Strings sowie
-      Offset→UTC-Millisekunden. Sie schreibt noch nichts nach PostgreSQL;
-      Importtransaktion, Fremdzielschutz, Run-ID, Resume und Gesamtvergleich
-      fehlen ausdrücklich.
+      Offset→UTC-Millisekunden. Ein noch nicht als CLI freigegebener Kern
+      prüft Snapshot-Hash/Integrität/FK, PG-Identität/Ledger und sperrt alle
+      sechs Tabellen in einer Importtransaktion; er fordert ein leeres Ziel.
+      Der Import aller sechs Modelle, ein semantisch geprüfter read-only Repeat
+      und die Zurückweisung einer zusätzlichen Fremdzeile wurden gegen eine
+      disposable PG-17-DB mit nichtprivilegierter Rolle geprüft. Run-ID,
+      Crash-/Resume-Vertrag und operatorfähiger CLI fehlen ausdrücklich.
 - [ ] **P11.6 — Reale Sequences und semantischer Verifier.** Im neuen
       Verifier PG-Katalog/Ownership für tatsächlich sequencegebundene Spalten
       verwenden; MAX, leere Tabelle, Startwert und `is_called` korrekt. Keine
@@ -573,6 +577,16 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       private Configwerte intern vergleichen. Abnahme: jeder unerklärte Verlust
       abort, Bericht redigiert; echte neue Prisma-Inserts in isoliertem Test
       kollisionsfrei, einschließlich leerem Ziel und Sequence-/Resume-Fehlerfall.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Ein rowweiser
+      Vergleich prüft alle sechs Modelle, sämtliche transformierten Felder und
+      Mengen ohne Payloadausgabe; der Import nutzt ihn noch vor dem Commit.
+      Die Sequence-Korrektur liest Eigentümer/Spalte/Start/Inkrement aus dem
+      PG-Katalog, nicht aus einer statischen Liste. Ein echter neuer Prisma-
+      Episode-Insert nach Import mit expliziter Alt-ID blieb kollisionsfrei;
+      ein leeres Ziel startete danach wieder bei seinem tatsächlichen
+      Sequence-Startwert. Eine gleich große, aber veränderte Config-Zeile
+      wurde ohne Überschreiben zurückgewiesen. Sequence-Fehler-/Resume-
+      Fälle und weitere Abweichungsproben stehen noch aus.
 - [ ] **P11.7 — PostgreSQL-Harness beweist Runtime und beide Rückwege.**
       `src/lib/db-schema.test.ts`, passende Ownerintegration und neue Runner-
       Tests gegen disposable PG aufnehmen; `vitest.config.ts`/npm-Gates so routen,
