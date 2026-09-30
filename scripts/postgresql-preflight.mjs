@@ -150,8 +150,13 @@ function knownShapes() {
 
 export function validSourceDate(value) {
   if (typeof value === "bigint") {
-    // SQLite/Prisma integer timestamps are Unix milliseconds, never seconds.
-    return value >= -62135596800000n && value <= 253402300799999n;
+    // An epoch-sized integer can be seconds in the 2000s or milliseconds
+    // near 1970. Refuse that ambiguous range until provenance is established.
+    return (
+      value >= -62135596800000n &&
+      value <= 253402300799999n &&
+      (value <= -100000000000n || value >= 100000000000n)
+    );
   }
   if (typeof value !== "string") return false;
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(

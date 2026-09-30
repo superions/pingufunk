@@ -57,6 +57,9 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
       host: "127.0.0.1",
       requireTls: false,
     };
+    await expect(importSnapshot({ ...args, verifyOnly: true })).rejects.toThrow(
+      "No validated import manifest"
+    );
     await expect(
       importSnapshot({
         ...args,
@@ -87,6 +90,7 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     const crashWindow = JSON.parse(readFileSync(manifestPath, "utf8"));
     writeFileSync(manifestPath, JSON.stringify({ ...crashWindow, status: "pending" }));
     expect((await importSnapshot(args)).imported).toBe(false);
+    expect((await importSnapshot({ ...args, verifyOnly: true })).imported).toBe(false);
     expect(JSON.parse(readFileSync(manifestPath, "utf8")).status).toBe("validated");
     expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);
     expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);

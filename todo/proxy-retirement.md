@@ -571,7 +571,8 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Der Import aller sechs Modelle, ein semantisch geprüfter read-only Repeat
       und die Zurückweisung einer zusätzlichen Fremdzeile wurden gegen eine
       disposable PG-17-DB mit nichtprivilegierter Rolle geprüft. Der
-      vollständige Crash-/Resume-Vertrag und operatorfähige CLI fehlen.
+      vollständige Crash-/Resume-Vertrag und operatorfähige Sequenz-/Abnahme-
+      CLI fehlen.
       Ergänzung 30.09.2026: Ein privates 0600-Manifest bindet Snapshot-Hash,
       Importer-/Schemahash sowie Zielversion, DB-OID, Host und Rolle. Ein
       simulierter Absturz nach Transaktionscommit vor Manifestabschluss wurde
@@ -579,7 +580,13 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       fremde Identität abort. Ein injizierter Abbruch nach bereits importierten
       Eltern/Config-Zeilen rollte die ganze PG-Transaktion zurück; derselbe
       Pending-Lauf konnte danach aus dem leeren Ziel neu starten. Noch offen:
-      durable Operatorabläufe/CLI und Sequenz-Resume unter Fehlern.
+      vollständige Operatorabläufe und Sequenz-Resume unter Fehlern.
+      Der Runner enthält einen expliziten `import`-CLI-Einstieg, der privaten
+      Snapshot, Hash, DB, Rolle, Endpoint und bestätigte gestoppte Writer
+      verlangt; er ist ohne TLS-Ausnahme und führt keine Sequence-Korrektur
+      oder App-Umschaltung nebenbei aus. `verify` ist nur auf einem validierten
+      Manifest lesend, `sequences` ist ein separater bestätigungspflichtiger
+      Schritt nach demselben Vergleich. Ein vollständiges Runbook fehlt noch.
 - [ ] **P11.6 — Reale Sequences und semantischer Verifier.** Im neuen
       Verifier PG-Katalog/Ownership für tatsächlich sequencegebundene Spalten
       verwenden; MAX, leere Tabelle, Startwert und `is_called` korrekt. Keine
@@ -612,6 +619,15 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       benannten Verlusten. Abnahme: kein SQLite-only/Tabellenname-Regex-Ersatz,
       beide Rollbackfälle geprobt und Grenzen ehrlich dokumentiert, Daten/Backups
       bleiben erhalten; Produktions-RPO noch offen bedeutet Cutover gesperrt.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Die PG-Gates
+      erreichen auch Tests außerhalb `src/`; disposable PG-17-Proben decken
+      native Katalogtypen/Indizes/FK, alle sechs Importmodelle,
+      Maintenance-/Schreibsperre, Runtime-CRUD, Abbruch/Resume, BigInt und
+      Sequence-Inserts ab. Der gebaute Snapshot-Runner hat einen real sichtbaren
+      Bind-Mount benutzt; der App-Maintenance-Start veränderte auf einem ebenso
+      geprüften Mount keine Sentinel-Metadaten. Noch offen: vollständige
+      Queue-/Ruleset-/Cache-Integration, tatsächlicher HAProxy-/TLS-Fall,
+      Rollback nach PG-Writes und ein kompletter Container-End-to-End-Lauf.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,
@@ -621,6 +637,16 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Abnahme: Runbook an frischer und migrierter disposable Installation vollständig
       nachvollziehbar; keine fingierten fertigen Deploykommandos, Retention/
       Cleanup braucht separate Freigabe und Proxyrollback behält PG bei.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Ein ausdrücklich
+      nicht produktiv freigegebener Entwurf unter
+      `docs/postgresql-migration-runbook.md` verwendet die tatsächlich
+      vorhandenen Snapshot-/Preflight-/Import-/Verify-/Sequences-Einstiege,
+      trennt DDL- und Importsecret sowie die drei Rollbackgrenzen. Noch offen:
+      vollständige Docker-End-to-End-Probe, echter HAProxy-/TLS-/Rechtevertrag,
+      Writer-/Rollback-Harness und private P10.2-Betriebswerte.
+      Der Snapshot-Einstieg wurde im gebauten Image mit tatsächlich sichtbarem
+      Bind-Mount unter UID 1000 erprobt; ein erster Test unter einem vom
+      Docker-Host nicht geteilten Temp-Pfad war ungültig und wurde verworfen.
 
 ## Phase P06 — Sonarr als optionaler accountfreier Metadatenanbieter
 

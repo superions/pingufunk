@@ -86,6 +86,17 @@ it("rejects ambiguous timestamps and preserves large integer evidence", () => {
   ).toBe("iso-offset");
 });
 
+it("refuses seconds-sized integer dates instead of silently treating them as milliseconds", () => {
+  const path = source(
+    [`${legacy}/init-db.sql`],
+    `
+    INSERT INTO Download(id,title,url,category,createdAt)
+    VALUES ('a','a','https://example.invalid','tv',1780228800);
+  `
+  );
+  expect(() => inspectSource(path)).toThrow("Ambiguous timestamp in Download.createdAt");
+});
+
 it("does not change the SQLite database or sidecars during a WAL preflight", () => {
   const path = source([`${legacy}/init-db.sql`]);
   const writer = new DatabaseSync(path);

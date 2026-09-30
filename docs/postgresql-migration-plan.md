@@ -140,7 +140,10 @@ Ein mit SQLite `CURRENT_TIMESTAMP` erzeugter Text ohne Offset ist nachträglich
 nicht zweifelsfrei von einem manuell geschriebenen lokalen Zeitwert zu
 unterscheiden. Der Preflight verwirft ihn derzeit bewusst; eine spätere
 Normalisierung benötigt einen ausdrücklich belegten Herkunfts-/Zeitzonenvertrag
-für den echten Quellbestand. Ein WAL-Quellpfad wird nur statisch inventarisiert:
+für den echten Quellbestand. Auch Integer im betragsmäßig kleinen
+Epochbereich (unter 100 Milliarden) sind als Sekunden oder Millisekunden
+mehrdeutig und werden abgelehnt; sehr frühe echte Millisekundenwerte erfordern
+ebenfalls Herkunftsevidenz. Ein WAL-Quellpfad wird nur statisch inventarisiert:
 ein bloßes SQLite-Read-only-Open ändert dort SHM-Lockbytes. Die Inhaltsprüfung
 läuft daher erst auf dem per Backup-API konsistent erzeugten privaten Snapshot.
 

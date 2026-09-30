@@ -27,6 +27,7 @@ export async function importSnapshot({
   host,
   requireTls = true,
   afterTable = /** @type {undefined | ((table: string) => void | Promise<void>)} */ (undefined),
+  verifyOnly = false,
 }) {
   if (!/^[a-f0-9]{64}$/.test(expectedHash ?? "")) throw new Error("Snapshot hash required");
   const source = inspectSource(snapshotPath);
@@ -64,6 +65,7 @@ export async function importSnapshot({
       "postgresql-row-transform.mjs",
       "postgresql-verify.mjs",
       "postgresql-run-manifest.mjs",
+      "postgresql-migration-cli.mjs",
     ];
     const importerVersion = createHash("sha256")
       .update(scriptNames.map((name) => readFileSync(resolve(scriptRoot, name))).join("\n"))
@@ -85,6 +87,8 @@ export async function importSnapshot({
       host,
       target,
     };
+    if (verifyOnly && !hasRunManifest(snapshotPath))
+      throw new Error("No validated import manifest exists");
     if (!hasRunManifest(snapshotPath)) {
       for (const [, delegate] of importOrder) {
         if ((await pg[delegate].count()) !== 0)
@@ -92,10 +96,19 @@ export async function importSnapshot({
       }
     }
     const manifest = prepareRunManifest(snapshotPath, identity);
+    if (verifyOnly && manifest.status !== "validated")
+      throw new Error("Import run is not validated");
     if (manifest.status === "validated") {
       await pg.$transaction(async (tx) => verifyRows(sqlite, tx, source.counts), {
         isolationLevel: "RepeatableRead",
       });
+      const location = inspectLocation(snapshotPath);
+      if (
+        location.walPresent ||
+        location.shmPresent ||
+        (await hashFile(snapshotPath)) !== expectedHash
+      )
+        throw new Error("Snapshot changed during verification");
       return {
         sourceHash: expectedHash,
         sourceCounts: source.counts,
