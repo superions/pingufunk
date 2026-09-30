@@ -25,9 +25,15 @@ SMOKE_ROOT="$(mktemp -d "${SMOKE_PARENT}/pg-smoke.XXXXXXXX")"
 chmod 700 "$SMOKE_ROOT"
 SMOKE_PG_STARTED=0
 SMOKE_APP_STARTED=0
+stop_app() {
+  # Complete removal before this owned name is reused for the next image.
+  docker stop "$APP_CONTAINER" >/dev/null
+  docker rm "$APP_CONTAINER" >/dev/null
+  SMOKE_APP_STARTED=0
+}
 SMOKE_NETWORK_CREATED=0
 cleanup() {
-  if [[ "$SMOKE_APP_STARTED" == "1" ]]; then docker stop "$APP_CONTAINER" >/dev/null; fi
+  if [[ "$SMOKE_APP_STARTED" == "1" ]]; then stop_app; fi
   if [[ "$SMOKE_PG_STARTED" == "1" ]]; then docker stop "$PG_CONTAINER" >/dev/null; fi
   if [[ "$SMOKE_NETWORK_CREATED" == "1" ]]; then docker network rm "$SMOKE_NETWORK" >/dev/null; fi
   if [[ "$SMOKE_ROOT" == "${SMOKE_PARENT}/pg-smoke."* && -d "$SMOKE_ROOT" ]]; then
@@ -156,7 +162,7 @@ SMOKE_SECRET="$SMOKE_ROOT/runtime-secret" SMOKE_URL="$RUNTIME_URL" node --input-
   import {writeFileSync} from "node:fs";
   writeFileSync(process.env.SMOKE_SECRET,process.env.SMOKE_URL,{mode:0o600,flag:"wx"});
 '
-docker run --rm -d --name "$APP_CONTAINER" \
+docker run -d --name "$APP_CONTAINER" \
   --network "$SMOKE_NETWORK" -e DATABASE_URL_FILE=/run/secrets/database_url \
   --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
   "$RUNNER_IMAGE" >/dev/null
@@ -180,10 +186,9 @@ if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   echo "Maintenance unexpectedly marked a PostgreSQL write" >&2
   exit 1
 fi
-docker stop "$APP_CONTAINER" >/dev/null
-SMOKE_APP_STARTED=0
+stop_app
 
-DATABASE_URL="$RUNTIME_URL" docker run --rm -d --name "$APP_CONTAINER" \
+DATABASE_URL="$RUNTIME_URL" docker run -d --name "$APP_CONTAINER" \
   --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
@@ -206,8 +211,7 @@ if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
 fi
 
 if [[ -n "$ROLLBACK_IMAGE" ]]; then
-  docker stop "$APP_CONTAINER" >/dev/null
-  SMOKE_APP_STARTED=0
+  stop_app
   # Exercise the current composite identity in the post-write state as well.
   docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U pingufunk_smoke_runtime \
     -d pingufunk_smoke -c "INSERT INTO \"GeneratedRuleset\" (id,topic,\"tvdbId\",\"showName\",\"updatedAt\") SELECT 'smoke-second-rule',topic,8123,'Synthetic second',CURRENT_TIMESTAMP FROM \"GeneratedRuleset\" WHERE id='smoke-rule'" >/dev/null
@@ -248,7 +252,7 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   [[ "$(domain_fingerprint pingufunk_smoke_restore)" == "$before_rollback" ]] || {
     echo "Restored PostgreSQL backup differs from the post-write state" >&2; exit 1;
   }
-  docker run --rm -d --name "$APP_CONTAINER" --network "$SMOKE_NETWORK" \
+  docker run -d --name "$APP_CONTAINER" --network "$SMOKE_NETWORK" \
     -e DATABASE_URL_FILE=/run/secrets/database_url \
     --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
     "$ROLLBACK_IMAGE" >/dev/null
