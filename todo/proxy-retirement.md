@@ -550,7 +550,7 @@ ausschließlich P10.3–P10.5.
       ohne Selektor. Unerreichbares PG erzeugt keine SQLite-Ersatzdatei.
       Lint, Typecheck, Format, Container-Produktionsbuild, Shellsyntax,
       Compose-Standard und Diffprüfung grün. Keine Produktionsausführung.
-- [ ] **P11.2 — Secretfähiger Single-Worker und vollständiger Writer-Gate.**
+- [x] **P11.2 — Secretfähiger Single-Worker und vollständiger Writer-Gate.**
       Entrypoint/DB-Owner samt `src/instrumentation.ts`, Config-/Cache-, Ruleset-,
       Queue- und Worker-Schreibpfaden auf `DATABASE_URL_FILE` vor Prozessstart und
       getesteten Maintenancebetrieb bringen. URL nur im Prozessspeicher, DEBUG-
@@ -623,8 +623,14 @@ ausschließlich P10.3–P10.5.
       Eingänge im Wartungsmodus geprüft; alle sechs Mengen und der durable
       Checkpoint bleiben unverändert. Zwölf gesonderte PG-Gates grün,
       einschließlich begrenztem Netzverlust/Reconnect ohne SQLite-Fallback.
-      Finale Fork-Abnahme dieses Checkpoints steht noch aus.
-- [ ] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
+      Entwicklungsabnahme: 584 reguläre Tests, zwölf separate PG-Gates,
+      Lint/Typecheck/Format und Build grün. Fork-CI `36779944035` und Docker-
+      Validierung `36779943995` für `811b621` erfolgreich. Der erste Docker-
+      Lauf fand einen --rm-/Namensreuse-Race des Testharness, nicht des Produkts;
+      eigener Stop+Remove wird jetzt vor Wiederverwendung vollständig abgewartet.
+      Der SQLite-Smoke und TLS-PG-Smoke mit immutable Post-write-Rollback wurden
+      lokal erneut erfolgreich ausgeführt. Keine Produktionsfreigabe.
+- [x] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
       versionierten Preflight unter `scripts/` mit Referenz auf alle sechs Modelle
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,
       Bootstrap-Drift, Platz, Tool-/Imageversion und Zielidentität feststellen.
@@ -674,7 +680,11 @@ ausschließlich P10.3–P10.5.
       schemaName/schemaOid und Zielkontur ohne Nutzlast. Ein Wechsel des
       Schemas derselben DB ist kein identischer Importlauf; ein anderer
       Transaktionsserver/-namespace wird vor Import/Verify/Sequences abgelehnt.
-- [ ] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
+      Entwicklungsabnahme mit `19951c5`/`811b621`, denselben grün ausgeführten
+      regulären/PG-/Container- und Fork-Gates wie P11.2. Alle sechs Feldverträge,
+      historische/aktuelle Konturen und negative Identitäts-/Ledger-/Katalog-
+      Fälle geprüft. Echte Produktionswerte bleiben ausdrücklich P10.2.
+- [x] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
       neuen Runner SQLite-Backup-API/CLI statt Kopie einer laufenden Hauptdatei
       verwenden; Snapshot außerhalb Git mit eingeschränkten Rechten und Hash.
       `PRAGMA integrity_check` exakt `ok`, `foreign_key_check` ohne Zeilen;
@@ -701,7 +711,11 @@ ausschließlich P10.3–P10.5.
       Quelle bleibt unrepariert, WAL-Hauptdatei und WAL-Bytes unverändert.
       Realer nativer DDL-Lauf plus Wiederholung in eigener disposable Kontur
       und derselbe CLI-Ablauf zweimal im TLS-Container-Smoke erfolgreich.
-- [ ] **P11.5 — Typisierter Import und sichere Resume-Grenzen.** Den neuen
+      Entwicklungsabnahme mit den P11.2-Gates: gültiger WAL-Snapshot,
+      beschädigte/FK-verletzte Quelle, fremde/eigene nichtleere Ziele,
+      scoped DDL-Rolle und idempotente native Vorbereitung geprüft.
+      Keine SQLite-Quelle repariert und keine fremden Daten/Grants verändert.
+- [x] **P11.5 — Typisierter Import und sichere Resume-Grenzen.** Den neuen
       Importer explizit auf read-only Snapshot→Prisma-PG-Schema abbilden, Eltern
       vor Kindern, IDs original. Keine blinde pgloader-Schemagenerierung;
       typisierter Import ist hier die gewählte Route. Transaktion bzw. isoliertes
@@ -738,7 +752,13 @@ ausschließlich P10.3–P10.5.
       Manifest lesend, `sequences` ist ein separater bestätigungspflichtiger
       Schritt nach demselben Vergleich. Ein Runbookentwurf liegt unter
       `docs/postgresql-migration-runbook.md`; seine End-to-End-Abnahme fehlt.
-- [ ] **P11.6 — Reale Sequences und semantischer Verifier.** Im neuen
+      Entwicklungsabnahme mit den P11.2-Gates und realem CLI-Containerpfad:
+      alle sechs Modelle, Transaktionsabbruch, Post-commit-Manifestabbruch,
+      Pending-Resume und validierter read-only Repeat geprüft. Geänderte Quelle,
+      fremde Zeile sowie gleicher DB-Name mit anderem Schema abort ohne Übernahme.
+      Manifest bindet auch Schema-OID; die Transaktionsverbindung wird separat
+      gebunden. Kein Atomaritätsversprechen für DDL/Rollen/Sequences.
+- [x] **P11.6 — Reale Sequences und semantischer Verifier.** Im neuen
       Verifier PG-Katalog/Ownership für tatsächlich sequencegebundene Spalten
       verwenden; MAX, leere Tabelle, Startwert und `is_called` korrekt. Keine
       statische Liste, keine automatisch erfundenen `TvdbSeries.id`; `setval`
@@ -773,6 +793,11 @@ ausschließlich P10.3–P10.5.
       Der CLI verwendet auch den geprüften Snapshot-Höchststand für tatsächlich
       korrespondierende AUTOINCREMENT-Spalten: eine gelöschte SQLite-ID 1000
       wird im realen PG-Inserttest nicht wiederverwendet, nächste ID ist 1001.
+      Entwicklungsabnahme mit den P11.2-Gates: semantischer Vergleich sämtlicher
+      Fachspalten und Mengen, gleich große veränderte Daten, leere/nonempty
+      Sequences, gelöschte hohe IDs, Ownership-/Overflow-Fehler und Fehler nach
+      setval samt sicherem Repeat. Durable App-Checkpoint sperrt Rücksetzen;
+      echte neue Prisma-Inserts kollisionsfrei. setval bleibt nicht rückrollbar.
 - [ ] **P11.7 — Dual-Backend-Harness beweist Runtime und beide Rückwege.**
       `src/lib/db-schema.test.ts`, passende Ownerintegration und neue Runner-
       Tests gegen disposable SQLite und PG aufnehmen; `vitest.config.ts`/
