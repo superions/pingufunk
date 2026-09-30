@@ -56,3 +56,4 @@ scripts/*
 !scripts/migrate-entrypoint.sh
 !scripts/postgresql-preflight.mjs
 !scripts/postgresql-snapshot.mjs
+!scripts/postgresql-row-transform.mjs

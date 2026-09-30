@@ -13,7 +13,7 @@ RUN npm ci
 # Explicit one-shot migration runner, built from the same schema and pinned CLI.
 # This target is never part of a normal application container startup.
 FROM deps AS migrator
-COPY scripts/resolve-database-url.mjs scripts/migrate-entrypoint.sh scripts/postgresql-preflight.mjs scripts/postgresql-snapshot.mjs ./scripts/
+COPY scripts/resolve-database-url.mjs scripts/migrate-entrypoint.sh scripts/postgresql-preflight.mjs scripts/postgresql-snapshot.mjs scripts/postgresql-row-transform.mjs ./scripts/
 RUN apk add --no-cache su-exec && chmod +x ./scripts/migrate-entrypoint.sh
 ENTRYPOINT ["/app/scripts/migrate-entrypoint.sh"]
 CMD ["/app/node_modules/.bin/prisma", "migrate", "deploy"]

@@ -14,7 +14,7 @@ const modelNames = [
   "TvdbSeries",
 ];
 const legacy = resolve(root, "prisma/legacy/sqlite");
-const fields = {
+export const sourceFieldContract = {
   TvdbSeries: {
     int: ["id"],
     text: ["name", "germanName", "slug", "overview", "aliases"],
@@ -148,7 +148,7 @@ function knownShapes() {
   }
 }
 
-function validDate(value) {
+export function validSourceDate(value) {
   if (typeof value === "bigint") {
     // SQLite/Prisma integer timestamps are Unix milliseconds, never seconds.
     return value >= -62135596800000n && value <= 253402300799999n;
@@ -169,7 +169,7 @@ function validDate(value) {
 
 function inspectValues(db) {
   const dateRepresentations = {};
-  for (const [model, contract] of Object.entries(fields)) {
+  for (const [model, contract] of Object.entries(sourceFieldContract)) {
     const columns = new Set(Object.values(contract).flat());
     for (const row of db.prepare(`SELECT * FROM "${model}"`).iterate()) {
       for (const [field, value] of Object.entries(row)) {
@@ -188,7 +188,7 @@ function inspectValues(db) {
         if (contract.text?.includes(field) && (typeof value !== "string" || value.includes("\0")))
           fail(`Invalid text in ${model}.${field}`);
         if (contract.date?.includes(field)) {
-          if (!validDate(value)) fail(`Ambiguous timestamp in ${model}.${field}`);
+          if (!validSourceDate(value)) fail(`Ambiguous timestamp in ${model}.${field}`);
           const key = `${model}.${field}`;
           const kind = typeof value === "bigint" ? "unix-ms" : "iso-offset";
           const old = dateRepresentations[key];

@@ -557,6 +557,12 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       upsert. Abnahme: alle sechs Tabellen einschließlich Cache/Config/History
       verlustfrei, Crash/Retry/Repeat deterministisch und fremde Daten unangetastet;
       Manifest frei von Secrets, kein pauschaler Atomaritätsanspruch für DDL/Rollen.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Die isolierte
+      Feldabbildung für alle sechs Modelle ist implementiert und testet
+      Original-IDs, BigInt >2^53, NULL, Regex-/JSON-Strings sowie
+      Offset→UTC-Millisekunden. Sie schreibt noch nichts nach PostgreSQL;
+      Importtransaktion, Fremdzielschutz, Run-ID, Resume und Gesamtvergleich
+      fehlen ausdrücklich.
 - [ ] **P11.6 — Reale Sequences und semantischer Verifier.** Im neuen
       Verifier PG-Katalog/Ownership für tatsächlich sequencegebundene Spalten
       verwenden; MAX, leere Tabelle, Startwert und `is_called` korrekt. Keine
