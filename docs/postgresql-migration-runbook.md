@@ -40,6 +40,20 @@ SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
 
 ## Befehlsfolge für eine disposable Probe
 
+Der vollständig synthetische Containerpfad (direktes TLS zu kurzlebigem
+PostgreSQL, **nicht** HAProxy) ist aus diesem Checkout reproduzierbar:
+
+```sh
+docker build --target migrator -t pingufunk-p11-migrator-qa .
+docker build --target runner -t pingufunk-p11-runtime-qa .
+bash scripts/postgresql-container-smoke.sh
+```
+
+Das Skript verwendet ein eigenes Docker-Netz und nur ignorierte temporäre
+Dateien unter `downloads/`; sein Exit-Trap entfernt die selbst erzeugten
+Container, das Netz und die synthetischen Dateien. Es benutzt keine private
+SQLite-Datei und keinen bestehenden PostgreSQL-Endpunkt.
+
 Alle Platzhalter stammen aus dem isolierten Testlauf bzw. müssen für den
 konkreten **privaten** Betrieb separat belegt werden. Die folgenden Variablen
 sind Pfade/Identitäten, keine URLs oder Passwörter. `IMAGE` ist das lokal

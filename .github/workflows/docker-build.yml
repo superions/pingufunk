@@ -20,9 +20,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build image without publishing
+      - name: Setup Node.js for disposable SQLite fixture
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Build application image without publishing
         uses: docker/build-push-action@v7
         with:
           context: .
+          target: runner
           platforms: linux/amd64
           push: false
+          load: true
+          tags: pingufunk-p11-runtime-qa
+
+      - name: Build migration image without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: migrator
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: pingufunk-p11-migrator-qa
+
+      - name: Rehearse disposable TLS container migration
+        run: bash scripts/postgresql-container-smoke.sh

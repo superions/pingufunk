@@ -668,6 +668,12 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       36657639887 war ebenfalls grün. Ein vorheriger CI-Lauf fand einen
       Start-Race im Testharness (Socket statt finalem TCP-Server); die
       korrigierte TCP-Bereitschaftsprüfung wurde erneut erfolgreich ausgeführt.
+      Ein separater Container-Smoke führte lokal Snapshot→native Migration→
+      Import→Verify→Sequences→Wartungs-API-Read→ersten PG-Write mit Checkpoint
+      gegen eine disposable PostgreSQL-17-Instanz mit echtem TLS aus. Er
+      verwendete keine private Quelle und keinen HAProxy; der entsprechende
+      Fork-CI-Lauf steht noch aus. Der Rückweg nach PG-Writes und der echte
+      Betriebsvertrag bleiben offen.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,
