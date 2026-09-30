@@ -112,12 +112,13 @@ export interface Media {
   media_id: number;
   media_name: string;
   media_type: string;
-  media_tvdbId: number;
+  media_tvdbId: number | null;
   media_tmdbId: number | null;
   media_imdbId: string | null;
 }
 
 export enum MatchingStrategy {
+  ByAbsoluteEpisodeNumber = "ByAbsoluteEpisodeNumber",
   SeasonAndEpisodeNumber = "SeasonAndEpisodeNumber",
   ItemTitleIncludes = "ItemTitleIncludes",
   ItemTitleExact = "ItemTitleExact",

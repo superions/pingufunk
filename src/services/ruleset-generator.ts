@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
 import { queryContent } from "./content-search";
 import type { Ruleset, TvdbData, ApiResultItem } from "@/types";
+import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
 
 // Common German show name patterns in MediathekView
 const SEASON_EPISODE_PATTERNS = [
@@ -40,7 +41,7 @@ async function searchMediathekApi(query: string): Promise<ApiResultItem[]> {
 /**
  * Find the best matching topic from MediathekView results
  */
-function findBestMatchingTopic(results: ApiResultItem[], showInfo: TvdbData): string | null {
+export function findBestMatchingTopic(results: ApiResultItem[], showInfo: TvdbData): string | null {
   if (results.length === 0) return null;
 
   // Get unique topics
@@ -64,22 +65,26 @@ function findBestMatchingTopic(results: ApiResultItem[], showInfo: TvdbData): st
     }
   }
 
-  // Contains match
+  // Only a season-decorated verified name is a safe non-exact owned topic.
   for (const topic of topics) {
     const topicLower = topic.toLowerCase();
     for (const name of searchNames) {
-      if (topicLower.includes(name) || name.includes(topicLower)) {
+      if (
+        topicLower.startsWith(`${name} staffel `) &&
+        /^\d+$/.test(topicLower.slice(name.length + 9))
+      ) {
         console.log(`[RulesetGenerator] Partial topic match: "${topic}"`);
         return topic;
       }
     }
   }
 
-  // If only one topic in results, use it
-  if (topics.length === 1) {
-    console.log(`[RulesetGenerator] Using single topic: "${topics[0]}"`);
-    return topics[0];
-  }
+  const sharedTopics = topics.filter(
+    (topic) =>
+      isSharedSeriesTopic(topic) &&
+      results.some((item) => item.topic === topic && hasSharedTopicSeriesEvidence(item, showInfo))
+  );
+  if (sharedTopics.length === 1) return sharedTopics[0];
 
   console.log(`[RulesetGenerator] No matching topic found. Available: ${topics.join(", ")}`);
   return null;
@@ -446,6 +451,7 @@ export async function generateRulesetForShow(
   tvdbId: number,
   showInfo: TvdbData
 ): Promise<Ruleset | null> {
+  if (!Number.isSafeInteger(tvdbId) || tvdbId < 1 || showInfo.id !== tvdbId) return null;
   console.log(
     `[RulesetGenerator] Attempting to generate ruleset for "${showInfo.germanName || showInfo.name}" (TVDB: ${tvdbId})`
   );
@@ -515,7 +521,9 @@ async function generateRulesetFromResults(
   }
 
   // Detect matching strategy
-  const topicResults = results.filter((r) => r.topic === matchingTopic);
+  const topicResults = results.filter(
+    (r) => r.topic === matchingTopic && hasSharedTopicSeriesEvidence(r, showInfo)
+  );
   const strategy = detectMatchingStrategy(topicResults, matchingTopic);
   const patterns = generateRegexPatterns(topicResults, strategy, matchingTopic);
 

@@ -19,6 +19,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 vi.mock("./rulesets", () => ({
+  getRulesetContext: () => "synthetic-rules",
   ensureRulesetsLoaded: async () => {},
   getAllTopics: () => state.rulesets.map((ruleset) => ruleset.topic),
   getRulesetsForTopic: (topic: string) =>

@@ -7,6 +7,7 @@ import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { SonarrUnavailableError } from "./sonarr-provider";
+import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { createHash } from "node:crypto";
 import {
@@ -15,6 +16,7 @@ import {
   getRulesetsForTopicAndTvdbId,
   getAllTopics,
   getOrGenerateRulesetForShow,
+  getRulesetContext,
 } from "./rulesets";
 import {
   generateRssItems,
@@ -52,7 +54,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v3";
+const CONTENT_SEARCH_CACHE_VERSION = "v4";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -351,10 +353,14 @@ function tryParseDate(dateString: string): Date | null {
   return null;
 }
 
-async function getRulesetShow(tvdbId: number, provided?: TvdbData): Promise<TvdbData | null> {
+async function getRulesetShow(
+  tvdbId: number | null,
+  provided?: TvdbData
+): Promise<TvdbData | null> {
+  if (tvdbId === null || !Number.isSafeInteger(tvdbId) || tvdbId < 1) return null;
   const show = provided?.id === tvdbId ? provided : await getBaseShowInfoByTvdbId(tvdbId);
   // Supplementary metadata never enters permissive/fuzzy legacy ruleset matching.
-  return show
+  return show?.id === tvdbId
     ? { ...show, episodes: show.episodes.filter((episode) => episode.metadataSource !== "sonarr") }
     : null;
 }
@@ -384,7 +390,7 @@ async function matchesSeasonAndEpisode(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: `S${season}E${episode}`,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
@@ -426,7 +432,7 @@ async function matchesItemTitleIncludes(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: constructedTitle,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
@@ -486,7 +492,7 @@ async function matchesItemTitleExact(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: constructedTitle,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
@@ -512,7 +518,7 @@ async function matchesItemTitleEqualsAirdate(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: constructedTitle,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
@@ -592,17 +598,20 @@ async function applyRulesetFilters(
     }
 
     for (const ruleset of rulesets) {
+      // Coordinates in a shared catalogue topic do not identify its series.
+      if (isSharedSeriesTopic(item.topic)) {
+        const show = await getRulesetShow(ruleset.media.media_tvdbId, tvdbData);
+        if (!show || !hasSharedTopicSeriesEvidence(item, show)) continue;
+      }
       // Parse filters from JSON string
       let filters: Filter[];
       try {
         filters = JSON.parse(ruleset.filters);
       } catch {
-        filters = [];
+        continue;
       }
 
       if (!filters.every((filter) => filterMatches(item, filter))) {
-        const idx = unmatchedItems.indexOf(item);
-        if (idx > -1) unmatchedItems.splice(idx, 1);
         continue;
       }
 
@@ -634,9 +643,6 @@ async function applyRulesetFilters(
         const idx = unmatchedItems.indexOf(item);
         if (idx > -1) unmatchedItems.splice(idx, 1);
         break;
-      } else {
-        const idx = unmatchedItems.indexOf(item);
-        if (idx > -1) unmatchedItems.splice(idx, 1);
       }
     }
   }
@@ -869,9 +875,11 @@ export async function fetchSearchResultsById(
   );
 
   const contextKey = tvSearchContextKey(context);
+  await ensureRulesetsLoaded();
+  const rulesetContext = getRulesetContext();
   const sourceContext = await searchCacheContext();
   const metadataContext = createHash("sha256").update(JSON.stringify(tvdbData)).digest("hex");
-  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${metadataContext}`;
+  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${metadataContext}_${rulesetContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -978,13 +986,15 @@ export async function fetchSearchResultsByString(
     query: searchContext.query?.trim() || null,
   };
   const trimmedQ = context.query;
+  await ensureRulesetsLoaded();
+  const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const contextKey = tvSearchContextKey(context);
   const sourceContext = await searchCacheContext();
-  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}`;
+  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${rulesetContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
@@ -1033,6 +1043,8 @@ export async function fetchSearchResultsByString(
 }
 
 export async function fetchSearchResultsForRssSync(limit: number, offset: number): Promise<string> {
+  await ensureRulesetsLoaded();
+  const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
@@ -1050,7 +1062,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   const supplementalContext = createHash("sha256")
     .update(JSON.stringify(supplementalMatches))
     .digest("hex");
-  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${supplementalContext}`;
+  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${supplementalContext}_${rulesetContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && !sonarrUnavailable) {

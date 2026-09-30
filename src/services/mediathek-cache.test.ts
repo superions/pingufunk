@@ -20,6 +20,7 @@ vi.mock("@/lib/settings", () => ({
   getMinDurationSeconds: vi.fn(async () => 300),
 }));
 vi.mock("./rulesets", () => ({
+  getRulesetContext: () => "ac16be42",
   ensureRulesetsLoaded: vi.fn(),
   getAllTopics: () => [],
   getRulesetsForTopic: () => [],

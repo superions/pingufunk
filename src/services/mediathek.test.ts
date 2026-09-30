@@ -6,6 +6,7 @@ const mediathekMocks = vi.hoisted(() => ({
   getShowInfoByTvdbId: vi.fn(),
   cacheEntries: new Map<string, { response?: string; results?: ApiResultItem[] }>(),
   rulesets: {
+    getRulesetContext: vi.fn(() => "synthetic-rules"),
     ensureRulesetsLoaded: vi.fn().mockResolvedValue(undefined),
     getRulesetsForTopic: vi.fn().mockReturnValue([]),
     getRulesetsForTopicAndTvdbId: vi.fn().mockReturnValue([]),
@@ -195,6 +196,92 @@ describe("Sonarr supplemental search consumer", () => {
     ).rejects.toThrow("Optional episode metadata unavailable");
     expect(mockedCacheSet).not.toHaveBeenCalled();
   });
+});
+
+describe("shared catalogue rules preserve identity and independent candidates", () => {
+  const show: TvdbData = {
+    id: 299964,
+    name: "Occupied - Die Besatzung",
+    germanName: null,
+    aliases: [{ language: "eng", name: "Occupied" }],
+    episodes: [
+      { name: "Episode one", seasonNumber: 2, episodeNumber: 1, aired: null, runtime: 45 },
+    ],
+  };
+  const rule: Ruleset = {
+    id: 109,
+    mediaId: 68,
+    topic: "Fernsehfilme und Serien - Serien",
+    priority: 0,
+    filters: "[]",
+    titleRegexRules: "[]",
+    episodeRegex: "E(\\d+)",
+    seasonRegex: "S(\\d+)",
+    matchingStrategy: MatchingStrategy.SeasonAndEpisodeNumber,
+    media: {
+      media_id: 68,
+      media_name: show.name,
+      media_type: "show",
+      media_tvdbId: show.id,
+      media_tmdbId: null,
+      media_imdbId: null,
+    },
+  };
+  beforeEach(() => {
+    mockedGetShowInfo.mockResolvedValue(show);
+    mockedRulesetsForTopic.mockReturnValue([rule]);
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+  });
+  it("never assigns foreign series coordinates to Occupied and retains neutral text results", async () => {
+    mockApi([makeItem({ topic: rule.topic, title: "Foreign series S02E01" })]);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Foreign series" }),
+      100,
+      0
+    );
+    expect(xml).toContain('total="1"');
+    expect(xml).not.toContain('name="tvdbid"');
+    expect(xml).not.toContain("Occupied");
+  });
+  it("accepts the verified series alias with the same source coordinates", async () => {
+    mockApi([makeItem({ topic: rule.topic, title: "Occupied S02E01" })]);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Occupied" }),
+      100,
+      0
+    );
+    expect(xml).toContain('name="tvdbid" value="299964"');
+    expect(xml).toContain("S02E01");
+  });
+  it("does not reuse identity output after a rule-context change, while reusing source candidates", async () => {
+    mockApi([makeItem({ topic: rule.topic, title: "Occupied S02E01" })]);
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("rules-before");
+    const context = makeTvSearchContext({ query: "Occupied" });
+    const before = await fetchSearchResultsByString(context, 100, 0);
+    expect(before).toContain('name="tvdbid" value="299964"');
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("rules-after");
+    mockedRulesetsForTopic.mockReturnValue([]);
+    const after = await fetchSearchResultsByString(context, 100, 0);
+    expect(after).not.toContain('name="tvdbid"');
+    expect(after).toContain('total="1"');
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+  it.each(["bad-json", '[{"attribute":"duration","type":"GreaterThan","value":"1000"}]', "[]"])(
+    "keeps independent candidates when a rule fails: %s",
+    async (filters) => {
+      mockedRulesetsForTopic.mockReturnValue([{ ...rule, topic: "Own topic", filters }]);
+      mockApi([makeItem({ topic: "Own topic", title: "Independent result without coordinates" })]);
+      const xml = await fetchSearchResultsByString(
+        makeTvSearchContext({ query: "Independent" }),
+        100,
+        0
+      );
+      expect(xml).toContain('total="1"');
+      expect(xml).not.toContain('name="tvdbid"');
+    }
+  );
 });
 
 describe("fetchSearchResultsByString – generic result gating", () => {
@@ -1044,7 +1131,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_v3_["Example",null,null,null]_1_1_720p_300'),
+      expect.stringContaining('q_v4_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -1080,7 +1167,7 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v3_Documentary__100_0_all_2700"),
+      expect.stringContaining("movie_query_v4_Documentary__100_0_all_2700"),
       expect.any(Object)
     );
   });
@@ -1112,7 +1199,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_v3_28_100_0_all_2700"),
+      expect.stringContaining("movie_v4_28_100_0_all_2700"),
       expect.any(Object)
     );
   });

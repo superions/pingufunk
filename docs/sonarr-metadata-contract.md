@@ -120,7 +120,8 @@ bereits bearbeitete Fork-Owner.
 Selbstreview trennt Serien-/Episoden-/Instanz-ID, Minuten/Sekunden, Punkt/Tag,
 Metadaten/Medienbeweis, Array/Seitenvertrag und Entwicklungs-/Betriebsabnahme.
 P06.1 behauptet weder fertig integrierte Suche noch Liveversionsnachweis.
-P06.2/P06.3 bleiben bis zur finalen Entwicklungsabnahme im TODO offen.
+P06.2/P06.3 sind nach Consumerreview, Desktopprüfung und erfolgreicher Fork-CI
+im TODO abgenommen. Produktive Instanz- und Versionsprüfung bleibt separat.
 Implemented: Default-off, External-Secret, zehnminütiger bounded Metadatencache,
 Coalescing mit jeweils eigener Caller-Deadline, epochengerechte Invalidierung,
 nicht überschreibender Merge und Konfliktmarker. Legacy-Rulesetmatching erhält

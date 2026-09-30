@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateRegexPatterns } from "./ruleset-generator";
+import { generateRegexPatterns, findBestMatchingTopic } from "./ruleset-generator";
 import type { ApiResultItem } from "@/types";
 
 function item(title: string): ApiResultItem {
@@ -82,5 +82,29 @@ describe("generateRegexPatterns - ItemTitleIncludes fallback", () => {
 
     const rules = JSON.parse(titleRegexRules);
     expect(rules[0].pattern).toContain(topic);
+  });
+});
+
+describe("generated rule topic identity", () => {
+  const show = { id: 123, name: "Synthetic series", germanName: null, aliases: [], episodes: [] };
+  it("does not infer identity from a sole unrelated search topic", () => {
+    expect(
+      findBestMatchingTopic([{ ...item("S01E01"), topic: "Foreign series" }], show)
+    ).toBeNull();
+  });
+  it("accepts a season decoration but not a similar sequel topic", () => {
+    expect(
+      findBestMatchingTopic([{ ...item("S01E01"), topic: "Synthetic series Staffel 17" }], show)
+    ).toBe("Synthetic series Staffel 17");
+    expect(
+      findBestMatchingTopic([{ ...item("S01E01"), topic: "Synthetic series sequel" }], show)
+    ).toBeNull();
+  });
+  it("requires a verified name in the video title of a shared catalogue", () => {
+    const topic = "Fernsehfilme und Serien - Serien";
+    expect(findBestMatchingTopic([{ ...item("Foreign series S01E01"), topic }], show)).toBeNull();
+    expect(findBestMatchingTopic([{ ...item("Synthetic series S01E01"), topic }], show)).toBe(
+      topic
+    );
   });
 });

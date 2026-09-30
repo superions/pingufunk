@@ -27,6 +27,7 @@ vi.mock("@/lib/mediathek-client", () => ({
 }));
 vi.mock("./srgssr-api", () => ({ searchVideos: vi.fn(), getLatestVideos: vi.fn() }));
 vi.mock("./rulesets", () => ({
+  getRulesetContext: () => "synthetic-rules",
   ensureRulesetsLoaded: vi.fn(),
   getAllTopics: () => [],
   getRulesetsForTopic: () => [],

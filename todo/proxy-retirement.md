@@ -914,7 +914,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Gates und isolierten Containerproben aus P11.1 werden für dessen
       unveränderte DB-/Runtimeinputs wiederverwendet; Parser ist noch kein
       integrierter Sonarr-Consumer und benötigt keine neue UI-Abnahme.
-- [ ] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
+- [x] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
       Neuen Sonarradapter in `shows.ts`/TV-Suchowner anschließen, P05-Secret-/
       Budget-/Cachegrundlagen nutzen, nur GET und Base-URL-Unterpfade. Serien-ID,
       Instanz und Episode verifizieren; veralteter Bestand ohne gewünschte Folge
@@ -974,7 +974,18 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Konsole ohne Warnungen/Fehler. Kein Netzwerkzugriff auf reale Sonarr-
       Bibliotheken. Finaler Gesamtlauf/Fork-CI und Scope-Review stehen noch aus;
       deshalb keine Checkbox geschlossen und P07 noch nicht begonnen.
-- [ ] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
+      Finale Entwicklungsabnahme: 524 reguläre Tests bestanden; die sechs
+      dort getrennt gerouteten PostgreSQL-Tests nicht als ausgeführt gezählt.
+      Acht Gates in `npm run test:pg` separat erfolgreich. Lint, Formatcheck,
+      Build und nach Korrektur einer Testmock-Typdeklaration Typecheck grün.
+      Gesamter Provider-/Merge-/Cache-/Budget-/RSS-/Settings-Consumer nochmals
+      gegen den Vertrag geprüft. Fork-CI 36751264194 und Docker-Validierung
+      36751265752 für Implementierungscommit 4573b80 erfolgreich, ohne
+      Veröffentlichung oder produktive Zugriffe. Desktop-Evidenz wie oben;
+      API-/RSS-/NZB-/Queue-Regression einschließlich unabhängiger Basistreffer
+      bei Sonarr-Ausfall bestanden. Dies ist Entwicklungsabnahme, kein
+      Nachweis der Version oder Bibliothek einer produktiven Sonarr-Instanz.
+- [x] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
       TV-Suche/`newznab.ts` mit vollständigem Episodentitel oder letztem
       Separatorsegment ≥3 Zeichen nur innerhalb gesicherter Serie, Jahr/
       Serienpräfix, Quellkoordinaten und beschlossener Dauerpolitik matchen.
@@ -989,6 +1000,13 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       benannter kurzer Trailer, falsches Jahr, fremde Serie und widersprechende
       Quellkoordinaten dürfen keine Request-Identität erhalten; Dauer allein
       beweist keine Episode. HLS-Sperre nur für diesen Fallback bis P09.2 erhalten.
+      Abgenommen mit P06.2: gemeinsamer Schlussfilter in
+      `src/services/sonarr-matcher.ts`, 28 fokussierte Matcherfälle und
+      integrierte Exact-/Staffel-/RSS-Consumer. Verifizierte 120s-Episode,
+      inklusive Toleranzgrenzen, p=0, unbekannte Laufzeit, Jahr-/Serien-/Titel-/
+      Koordinatenkonflikte, Trailer und unsichere einzelne Renditions geprüft.
+      Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
+      Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
@@ -1004,6 +1022,18 @@ B04/B05/B06, R3.
       gültige generische Kandidaten nicht endgültig entfernen. Abnahme: lokale
       Änderung tatsächlich verwendbar, Remoteausfall kompatibel, fremde Serien
       nie Occupied und keine dauerhafte All-the-Sins-/Titel-Allowlist.
+      Implementierungscheckpoint: `docs/ruleset-sources.md` definiert gebündelte
+      imagegebundene Regeln als Standard und eine explizite `RULESETS_URL`-
+      Opt-in-Quelle mit geprüftem Katalog, begrenztem HTTP und lokalem Fallback.
+      Der gemeinsame Shared-Topic-Guard verlangt belegten Seriennamen/Alias
+      im Titel; Regel 109/deren ID bleibt erhalten. Fehlerhafte oder erfolglose
+      Regeln verbrauchen neutrale Textkandidaten nicht. Auto-Regeln verwenden
+      weder beliebige Einzel-Topics noch ähnlich benannte Fortsetzungen als
+      Serienbeweis. Regelkontext ist Teil der TV-/RSS-Ergebnis-Cachekeys;
+      ein Quellenrefresh lässt veraltete Antwortkeys nicht wiederverwendbar.
+      542 reguläre Tests und alle normalen Gates grün; eine zusätzliche
+      kausale Cachewechselprobe anschließend fokussiert erfolgreich. Finaler
+      Fork-CI-Lauf/Abnahme noch offen, keine Bestandsmigration ausgeführt.
 - [ ] **P07.2 — Auto-Regeln für gemeinsam genutzte Topics.**
       `ruleset-generator.ts::{getGeneratedRulesetByTopic,getGeneratedRulesetByTvdbId}`,
       `GeneratedRuleset` und alle Read/Writeconsumer auf nachgewiesene kombinierte
