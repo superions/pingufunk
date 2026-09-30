@@ -674,6 +674,11 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       verwendete keine private Quelle und keinen HAProxy; der entsprechende
       Fork-CI-Lauf steht noch aus. Der Rückweg nach PG-Writes und der echte
       Betriebsvertrag bleiben offen.
+      Der erste GitHub-Smoke stoppte an einem Linux-Bind-Mount-Rechteunterschied:
+      privater Snapshot unter Host-UID, Import unter Image-UID. Die disposable
+      Probe verwendet nun dieselbe UID für beide Schritte; eine erneute
+      Fork-Ausführung ist erforderlich. Der produktive Backup-Mount braucht
+      weiterhin einen eigenen Rechte-Preflight für die feste Runner-UID.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,

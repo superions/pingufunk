@@ -52,7 +52,11 @@ bash scripts/postgresql-container-smoke.sh
 Das Skript verwendet ein eigenes Docker-Netz und nur ignorierte temporäre
 Dateien unter `downloads/`; sein Exit-Trap entfernt die selbst erzeugten
 Container, das Netz und die synthetischen Dateien. Es benutzt keine private
-SQLite-Datei und keinen bestehenden PostgreSQL-Endpunkt.
+SQLite-Datei und keinen bestehenden PostgreSQL-Endpunkt. Im Smoke laufen
+Snapshot und Import mit derselben Host-UID, damit das private `0700`-Backup
+unter Linux tatsächlich lesbar ist. Der produktive Runner bleibt bei seiner
+festen Image-UID; sein Backup-Mount muss separat auf genau diese UID geprüft
+werden, bevor reale Daten geöffnet werden.
 
 Alle Platzhalter stammen aus dem isolierten Testlauf bzw. müssen für den
 konkreten **privaten** Betrieb separat belegt werden. Die folgenden Variablen

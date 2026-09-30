@@ -106,9 +106,12 @@ for action in import verify sequences; do
   action_args=()
   if [[ "$action" != "verify" ]]; then action_args+=(--confirm-writers-stopped); fi
   if [[ "$action" == "sequences" ]]; then action_args+=(--confirm-no-app-writes-since-import); fi
-  DATABASE_URL="$IMPORT_URL" docker run --rm --network "$SMOKE_NETWORK" -e DATABASE_URL \
+  # The private 0700 snapshot belongs to the same host UID as the snapshot
+  # step; the disposable runner must keep that UID when reading its bind mount.
+  DATABASE_URL="$IMPORT_URL" docker run --rm --user "$(id -u):$(id -g)" \
+    --entrypoint node --network "$SMOKE_NETWORK" -e DATABASE_URL \
     --mount "type=bind,src=${SMOKE_ROOT}/backup,dst=/backup" \
-    "$MIGRATOR_IMAGE" node /app/scripts/postgresql-migration-cli.mjs "$action" \
+    "$MIGRATOR_IMAGE" /app/scripts/postgresql-migration-cli.mjs "$action" \
     --snapshot /backup/run/source.sqlite --sha256 "$snapshot_hash" \
     --database pingufunk_smoke --role pingufunk_smoke_import --host "$PG_CONTAINER" \
     "${action_args[@]}" >/dev/null
