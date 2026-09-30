@@ -12,7 +12,7 @@
  */
 import { fetchWithRetry, requestDeadline, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
-import type { ApiResultItem, MediathekApiResponse } from "@/types";
+import type { ApiResultItem, MediathekApiResponse, TvdbData } from "@/types";
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -34,6 +34,10 @@ export interface MediathekQueryOptions {
   requestBudget?: HttpRequestBudget;
   /** Sonarr fallback is progressive-only until the P09 HLS validation gate. */
   progressiveOnly?: boolean;
+  /** Verified metadata owner; shared-topic ARTE editions are resolved before language selection. */
+  arteSeries?: TvdbData;
+  /** Internal catalogue owner must resolve verified editions before final selection. */
+  deferLanguageSelection?: boolean;
 }
 
 /**

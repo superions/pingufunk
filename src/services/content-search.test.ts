@@ -108,7 +108,7 @@ describe("configured providers in normal search flows", () => {
     await fetchSearchResultsForRssSync(50, 0);
     expect(getLatestVideos).toHaveBeenCalledWith("SRF", 100, {
       deadlineAt: expect.any(Number),
-      requestBudget: undefined,
+      requestBudget: expect.objectContaining({ remainingAttempts: 10 }),
     });
   });
 

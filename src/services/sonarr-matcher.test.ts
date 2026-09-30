@@ -57,6 +57,32 @@ describe("supplemental duration policy", () => {
 });
 
 describe("identity before duration/identity stamping", () => {
+  it("requires adapter proof and verified series prefix for a shared ARTE topic", () => {
+    const candidate = {
+      ...item,
+      topic: "Fernsehfilme und Serien - Serien",
+      url_website: "https://www.arte.tv/de/videos/123456-001-A/",
+      audioLanguage: "de",
+    };
+    expect(matchSonarrEpisodes(show, [candidate], 300, 10)).toEqual([]);
+    expect(
+      matchSonarrEpisodes(show, [{ ...candidate, arteVerifiedVideoId: "123456-001-A" }], 300, 10)
+    ).toHaveLength(1);
+    expect(
+      matchSonarrEpisodes(
+        show,
+        [
+          {
+            ...candidate,
+            title: "Foreign series: Missing episode",
+            arteVerifiedVideoId: "123456-001-A",
+          },
+        ],
+        300,
+        10
+      )
+    ).toEqual([]);
+  });
   it("accepts an exact title or verified-series prefix with a long-enough last segment", () => {
     expect(matchSonarrEpisodes(show, [item], 300, 10)).toMatchObject([
       { tvdbId: 123, episode: { seasonNumber: 2, episodeNumber: 3 } },

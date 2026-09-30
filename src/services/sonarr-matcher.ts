@@ -3,6 +3,8 @@ import { isStreamingUrl } from "@/lib/stream-url";
 import { classifyLanguageEdition, isLanguageEditionVisible } from "./language-editions";
 import { DEFAULT_LANGUAGE_POLICY, type LanguagePolicy } from "@/lib/language-policy";
 import type { ApiResultItem, MatchedEpisodeInfo, TvdbData } from "@/types";
+import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
+import { arteVideoId } from "./arte-editions";
 
 function normalized(value: string): string {
   return value.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleLowerCase("de-DE");
@@ -75,7 +77,13 @@ export function matchSonarrEpisodes(
   const matches: MatchedEpisodeInfo[] = [];
   for (const candidate of candidates) {
     if (
-      !names.includes(normalized(candidate.topic)) ||
+      !(
+        names.includes(normalized(candidate.topic)) ||
+        (isSharedSeriesTopic(candidate.topic) &&
+          candidate.arteVerifiedVideoId &&
+          candidate.arteVerifiedVideoId === arteVideoId(candidate.url_website) &&
+          hasSharedTopicSeriesEvidence(candidate, show))
+      ) ||
       /\b(?:trailer|teaser|preview|clip|outtakes)\b/i.test(candidate.title) ||
       !isLanguageEditionVisible(classifyLanguageEdition(candidate), languagePolicy)
     )

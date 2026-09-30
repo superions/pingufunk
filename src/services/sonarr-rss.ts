@@ -78,7 +78,7 @@ export async function getSonarrRssMatches(
         const candidates = await queryContent(
           [{ fields: ["topic", "title"], query: show.germanName || show.name }],
           5000,
-          { requestBudget: budget, progressiveOnly: true }
+          { requestBudget: budget, progressiveOnly: true, arteSeries: show }
         );
         if (candidates === null) throw new SonarrUnavailableError();
         matches.push(...matchSonarrEpisodes(show, candidates, minimum, tolerance, languagePolicy));

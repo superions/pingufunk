@@ -1037,7 +1037,7 @@ B04/B05/B06, R3.
       Finale Abnahme für 738a35b: Fork-CI 36753440953 und Docker-Validierung
       36753440947 erfolgreich. Insgesamt 543 Tests einschließlich der kausalen
       Cachewechselprobe im Fork bestanden. Kein Schema-/Betriebswrite in P07.1.
-- [ ] **P07.2 — Auto-Regeln für gemeinsam genutzte Topics.**
+- [x] **P07.2 — Auto-Regeln für gemeinsam genutzte Topics.**
       `ruleset-generator.ts::{getGeneratedRulesetByTopic,getGeneratedRulesetByTvdbId}`,
       `GeneratedRuleset` und alle Read/Writeconsumer auf nachgewiesene kombinierte
       Serien-/Topicidentität bringen statt globalem Topic-Unique. Schlüsselumfang
@@ -1075,7 +1075,9 @@ B04/B05/B06, R3.
       optionale Vorimage-Rollback wurde lokal ausgeführt, nicht als Fork-CI-
       Prüfung behauptet. Manifest bindet zusätzlich tatsächliche Zieldatei-
       Identität; geänderte/fremde Daten und nicht erfüllbare Pflichtwerte
-      abortieren ohne Quelländerung. Finaler Fork-CI-Lauf bleibt offen.
+      abortieren ohne Quelländerung. Final abgenommen mit Commit `96a570e`:
+      Fork-CI `36756864402` und Docker-Buildvalidierung `36756864457` erfolgreich,
+      ohne Imagepublikation oder produktive Migration.
 - [ ] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
       ARTE-Kandidatensuche/Providerconsumer über Titel/Alias plus sichere Serie
       und gleiche Video-ID zur passenden DE-Fassung führen; deren Koordinaten
@@ -1083,6 +1085,23 @@ B04/B05/B06, R3.
       exakte Abschlussfilter und P05-Budget, keine Locale=Audio-Annahme.
       Abnahme: zwei Serien/gleiches Topic, fehlende DE-Fassung, OV/AD, APIausfall
       und paginierte Kandidaten fail closed; korrekte Varianten reihenfolgeunabhängig.
+      Implementierungscheckpoint 30.09.2026, noch keine finale Fork-Abnahme:
+      `arte-editions.ts` prüft offizielle Video-ID, bekannte Serienpräfixe,
+      Player-ID/-Titel/-Koordinaten, Rechte und versionspezifischen Audiocode.
+      Neue progressive URLs benötigen eine eindeutige indexierte Qualitätsfassung
+      derselben Video-ID; keine Locale=Audio- oder beliebige URL=720p-Annahme.
+      Deutsche Titel dienen zur begrenzten Nachsuche, URL-Felder sind beim
+      Provider nicht suchindexiert. Player und Nachsuchseiten teilen zehn
+      Versuche/15 Sekunden. Gemeinsame Topicconsumer nutzen nur lokale oder
+      bereits verifizierte Metadaten, keine neue externe Metadatenkaskade.
+      Sprachselektion erfolgt nach Auflösung; Quellcaches behalten Rohkandidaten,
+      damit Regeländerungen nicht alte ARTE-Zuordnungen übernehmen. TV-ID,
+      regelgebundene Text-/Koordinatensuche, RSS und optionaler Sonarr nutzen
+      den Adapter; der jeweilige Episoden-/Dauerfilter bleibt zuständig.
+      Quellen-/Stopvertrag und Beweisgrenzen unter
+      `docs/arte-edition-contract.md`. Synthetische Zwei-Serien-RSS→NZB→Queue-
+      Probe, Ausfall ohne Teilresponse, OV/AD, widersprüchliche Audiocodes,
+      Qualitäts-/ID-Konflikte und Folgeseitenfehler sind implementiert.
 
 ## Phase P08 — Sichere Filmsuche ohne neue externe Konten
 

@@ -9,6 +9,7 @@ import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { SonarrUnavailableError } from "./sonarr-provider";
 import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { arteVideoId, resolveArteSeriesEditions } from "./arte-editions";
 import { createHash } from "node:crypto";
 import {
   ensureRulesetsLoaded,
@@ -54,7 +55,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v4";
+const CONTENT_SEARCH_CACHE_VERSION = "v5-arte";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -784,14 +785,65 @@ function getTvSearchCandidateQueries(
   return [];
 }
 
-async function queryTvSearchCandidates(context: TvSearchContext): Promise<ApiResultItem[] | null> {
+/** Rules identify possible owners; verified metadata and title decide ownership. */
+async function resolveArteCatalogueCandidates(
+  items: ApiResultItem[],
+  budget: HttpRequestBudget
+): Promise<ApiResultItem[] | null> {
+  const ordinary: ApiResultItem[] = [];
+  const owned = new Map<number, { show: TvdbData; items: ApiResultItem[] }>();
+  const metadata = new Map<number, Promise<TvdbData | null>>();
+  for (const item of items) {
+    if (Date.now() >= budget.deadlineAt) return null;
+    if (!arteVideoId(item.url_website) || !isSharedSeriesTopic(item.topic)) {
+      ordinary.push(item);
+      continue;
+    }
+    const shows = new Map<number, TvdbData>();
+    for (const rule of getRulesetsForTopic(item.topic)) {
+      const id = rule.media.media_tvdbId;
+      if (id === null || !Number.isSafeInteger(id) || id <= 0) continue;
+      // Discovery must not trigger a fresh external metadata cascade. Reuse
+      // verified base cache/bundled identities, not names invented from a rule.
+      if (!metadata.has(id)) metadata.set(id, getBaseShowForSonarrRss(id));
+      const show = await metadata.get(id);
+      if (show?.id !== id) continue;
+      if (show && hasSharedTopicSeriesEvidence(item, show)) shows.set(show.id, show);
+    }
+    if (shows.size === 0) {
+      ordinary.push(item);
+      continue;
+    }
+    if (shows.size !== 1) continue;
+    const show = [...shows.values()][0];
+    const group = owned.get(show.id) ?? { show, items: [] };
+    group.items.push(item);
+    owned.set(show.id, group);
+  }
+  for (const [, { show, items }] of [...owned].sort(([a], [b]) => a - b)) {
+    const resolved = await resolveArteSeriesEditions(items, show, budget);
+    if (resolved === null) return null;
+    ordinary.push(...resolved);
+  }
+  return selectLanguageVariants(ordinary, await getConfiguredLanguagePolicy());
+}
+
+async function queryTvSearchCandidates(
+  context: TvSearchContext,
+  budget: HttpRequestBudget
+): Promise<ApiResultItem[] | null> {
   const candidateQueries = getTvSearchCandidateQueries(context);
   if (candidateQueries.length === 0) return [];
 
   // Each provider query has its own source cap. Newznab total below describes
   // the filtered union, not the source's full catalog.
   const candidates = await Promise.all(
-    candidateQueries.map((query) => queryContent([query], TV_SEARCH_CANDIDATE_LIMIT))
+    candidateQueries.map((query) =>
+      queryContent([query], TV_SEARCH_CANDIDATE_LIMIT, {
+        requestBudget: budget,
+        deferLanguageSelection: true,
+      })
+    )
   );
   if (candidates.some((results) => results === null)) return null;
 
@@ -801,10 +853,8 @@ async function queryTvSearchCandidates(context: TvSearchContext): Promise<ApiRes
     if (!uniqueCandidates.has(identity)) uniqueCandidates.set(identity, item);
   }
 
-  return selectLanguageVariants(
-    [...uniqueCandidates.values()],
-    await getConfiguredLanguagePolicy()
-  );
+  // Cache only source rows: ARTE ownership depends on the current rule catalogue.
+  return [...uniqueCandidates.values()];
 }
 
 function dedupeNewznabItems(items: NewznabItem[]): NewznabItem[] {
@@ -900,7 +950,7 @@ export async function fetchSearchResultsById(
   }
 
   // Check for cached API response
-  const apiCacheKey = `mediathekapi_tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
+  const apiCacheKey = `mediathekapi_tvdb_arte-v1_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}_${metadataContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -912,18 +962,17 @@ export async function fetchSearchResultsById(
     const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
       (episode) => episode.metadataSource === "sonarr"
     );
-    results = await queryContent(
-      [{ fields: QUERY_FIELDS, query: searchQuery }],
-      10000,
-      supplemented
+    results = await queryContent([{ fields: QUERY_FIELDS, query: searchQuery }], 10000, {
+      arteSeries: tvdbData,
+      ...(supplemented
         ? {
             requestBudget: requestBudget ?? new HttpRequestBudget(),
             progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
               (episode) => episode.metadataSource === "sonarr"
             ),
           }
-        : {}
-    );
+        : { requestBudget: requestBudget ?? new HttpRequestBudget() }),
+    });
 
     if (results === null) throw new Error("Search provider unavailable");
     if (results.length === 0) {
@@ -1002,19 +1051,22 @@ export async function fetchSearchResultsByString(
   }
 
   const apiCacheKey = `mediathekapi_q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
+  const budget = new HttpRequestBudget();
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
   if (cachedApi) {
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
-    results = await queryTvSearchCandidates(context);
+    results = await queryTvSearchCandidates(context, budget);
     if (results === null) {
       throw new Error("Search provider unavailable");
     }
     mediathekCache.set(apiCacheKey, { results });
   }
 
+  results = await resolveArteCatalogueCandidates(results, budget);
+  if (results === null) throw new Error("Search provider unavailable");
   const { matchedEpisodes, unmatchedItems } = await applyRulesetFilters(
     results,
     undefined,
@@ -1070,6 +1122,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   }
 
   const apiCacheKey = `rss_mediathekview_results_${CONTENT_SEARCH_CACHE_VERSION}_${sourceContext}`;
+  const budget = new HttpRequestBudget();
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -1077,13 +1130,18 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     // total below counts verified matches in this bounded source window only.
-    results = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT);
+    results = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT, {
+      requestBudget: budget,
+      deferLanguageSelection: true,
+    });
     if (results === null) {
       throw new Error("Search provider unavailable");
     }
     mediathekCache.set(apiCacheKey, { results });
   }
 
+  results = await resolveArteCatalogueCandidates(results, budget);
+  if (results === null) throw new Error("Search provider unavailable");
   const { matchedEpisodes } = await applyRulesetFilters(results, undefined, hlsEnabled);
   if (sonarrUnavailable && matchedEpisodes.length === 0) throw new SonarrUnavailableError();
   const newznabItems: NewznabItem[] = [...matchedEpisodes, ...supplementalMatches].flatMap((info) =>

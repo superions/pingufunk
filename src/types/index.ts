@@ -36,6 +36,8 @@ export interface ApiResultItem {
   audioDescription?: boolean;
   signLanguage?: boolean;
   clearSpeech?: boolean;
+  /** Transient adapter proof, never accepted from raw MediathekView fields. */
+  arteVerifiedVideoId?: string;
 }
 
 // TVDB Types

@@ -11,6 +11,8 @@ import { LANGUAGE_POLICY_SETTING_KEY, readLanguagePolicy } from "@/lib/language-
 import { srfProvider } from "@/providers/srf";
 import { selectLanguageVariants } from "@/services/language-editions";
 import type { ApiResultItem } from "@/types";
+import { resolveArteSeriesEditions } from "./arte-editions";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 const MAX_MEDIATHEK_CANDIDATES = 5000;
 const MAX_PENDING_SEARCHES = 128;
@@ -84,6 +86,8 @@ async function queryContentUncoalesced(
   size: number,
   options: MediathekQueryOptions = {}
 ): Promise<ApiResultItem[] | null> {
+  if (options.arteSeries && !options.requestBudget)
+    options = { ...options, requestBudget: new HttpRequestBudget() };
   const deadlineAt = Math.min(
     options.deadlineAt ?? Date.now() + 20_000,
     options.requestBudget?.deadlineAt ?? Infinity
@@ -148,7 +152,14 @@ async function queryContentUncoalesced(
       )
         items.push(converted);
     }
-    return selectLanguageVariants(items, languagePolicy).slice(0, size);
+    const editions = options.arteSeries
+      ? await resolveArteSeriesEditions(items, options.arteSeries, options.requestBudget!)
+      : items;
+    return editions === null
+      ? null
+      : options.deferLanguageSelection
+        ? editions
+        : selectLanguageVariants(editions, languagePolicy).slice(0, size);
   } catch {
     console.error("[ContentSearch] Provider failed");
     return null;
