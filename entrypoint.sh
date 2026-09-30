@@ -39,31 +39,29 @@ DATABASE_URL=$(node /app/scripts/resolve-database-url.mjs) || fail "PostgreSQL c
 export DATABASE_URL
 unset DATABASE_URL_FILE
 
-# Ensure required download directories exist with correct permissions
-DOWNLOAD_DIR="${DOWNLOAD_FOLDER_PATH:-/app/downloads}"
-TEMP_DIR="${DOWNLOAD_TEMP_PATH:-$DOWNLOAD_DIR/incomplete}"
-echo "Ensuring required directories exist..."
-mkdir -p "$DOWNLOAD_DIR" "$TEMP_DIR"
-echo "Download directories created/verified"
-
-# Fix ownership and permissions of download directories only
-echo "Setting ownership to $PUID:$PGID..."
-chown -R "$PUID:$PGID" "$DOWNLOAD_DIR" "$TEMP_DIR" 2>/dev/null || echo "Note: Could not chown download directories (this is normal for mounted volumes)"
-
-echo "Setting permissions..."
-chmod -R 755 "$DOWNLOAD_DIR" "$TEMP_DIR" 2>/dev/null || echo "Note: Could not chmod download directories (this is normal for mounted volumes)"
-
-# Show actual permissions for debugging
-echo "Download directory permissions:"
-ls -la "$DOWNLOAD_DIR" 2>&1 || echo "Cannot list $DOWNLOAD_DIR"
-
-echo "Checking PostgreSQL schema without applying migrations..."
-su-exec "$USER_NAME" node /app/scripts/check-postgresql-schema.mjs || fail "PostgreSQL schema check failed"
-
-# Run as the user
 case "${PINGUFUNK_WRITES_ENABLED:-0}" in
     0) export PINGUFUNK_WRITES_ENABLED=0; unset PINGUFUNK_BOOT_QUEUE ;;
     1) export PINGUFUNK_WRITES_ENABLED=1; export PINGUFUNK_BOOT_QUEUE=1 ;;
     *) fail "Invalid write gate configuration" ;;
 esac
+
+if [ "$PINGUFUNK_WRITES_ENABLED" = 1 ]; then
+    # A maintenance boot must not create directories or recursively rewrite
+    # ownership/permissions on the persisted download volume.
+    DOWNLOAD_DIR="${DOWNLOAD_FOLDER_PATH:-/app/downloads}"
+    TEMP_DIR="${DOWNLOAD_TEMP_PATH:-$DOWNLOAD_DIR/incomplete}"
+    echo "Ensuring required download directories exist..."
+    mkdir -p "$DOWNLOAD_DIR" "$TEMP_DIR"
+    echo "Download directories created/verified"
+
+    echo "Setting ownership to $PUID:$PGID..."
+    chown -R "$PUID:$PGID" "$DOWNLOAD_DIR" "$TEMP_DIR" 2>/dev/null || echo "Note: Could not chown download directories (this is normal for mounted volumes)"
+
+    echo "Setting permissions..."
+    chmod -R 755 "$DOWNLOAD_DIR" "$TEMP_DIR" 2>/dev/null || echo "Note: Could not chmod download directories (this is normal for mounted volumes)"
+fi
+
+echo "Checking PostgreSQL schema without applying migrations..."
+su-exec "$USER_NAME" node /app/scripts/check-postgresql-schema.mjs || fail "PostgreSQL schema check failed"
+
 exec su-exec "$USER_NAME" "$@"

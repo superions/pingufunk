@@ -496,6 +496,11 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       stille Writes/Dateieffekte reviewen, belastbare erste PG-Schreibgrenze
       und vollständige Secret-/Wartungs-/Reconnect-Regression im finalen
       PG-Harness; echter HAProxy/TLS/Rollenvertrag bleibt P11.3/P10.
+      Ergänzung 30.09.2026: Der Shell-Entrypoint überspringt im Wartungsmodus
+      jetzt auch `mkdir`/rekursives `chown`/`chmod` auf dem Downloadvolume.
+      Im gebauten App-Image wurde ein gemounteter Sentinel nach einem
+      Maintenance-Start gegen disposable PG byte-, mode-, owner- und
+      mtimegleich nachgewiesen. Die übrigen offenen Abnahmen bleiben bestehen.
 - [ ] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
       versionierten Preflight unter `scripts/` mit Referenz auf alle sechs Modelle
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,
