@@ -8,7 +8,7 @@ function modelNames(schema: string): string[] {
 }
 
 describe("PostgreSQL schema lineage", () => {
-  it("keeps all six models in a native baseline and archives SQLite SQL separately", () => {
+  it("keeps six business models and a PostgreSQL-only checkpoint in native migrations", () => {
     const root = process.cwd();
     const schema = readFileSync(path.join(root, "prisma", "schema.prisma"), "utf-8");
     const migration = readFileSync(

@@ -27,7 +27,8 @@ CI_PG_STARTED=1
 
 ready=0
 for ((attempt = 0; attempt < 30; attempt++)); do
-  if docker exec "$CI_PG_CONTAINER" pg_isready -q -U postgres; then
+  # initdb briefly starts a socket-only setup server; wait for final TCP.
+  if docker exec "$CI_PG_CONTAINER" pg_isready -q -h 127.0.0.1 -U postgres; then
     ready=1
     break
   fi
