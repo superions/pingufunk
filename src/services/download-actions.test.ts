@@ -174,6 +174,9 @@ it("removes only a legacy proxy-private file and preserves its public category o
   expect(downloadCreate).toHaveBeenCalledWith({
     data: expect.objectContaining({ category: "sonarr" }),
   });
+  // The worker import is deliberately asynchronous. Drain this test's start
+  // before the next case resets the shared mock and checks a failed retry.
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
 });
 
 it("does not discard the old row when a retry cannot create a new job", async () => {
