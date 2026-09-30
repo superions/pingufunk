@@ -3,7 +3,11 @@
 Stand: 28.09.2026. Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
 Dies ist ein zweiter, quellen- und testgestützter **Selbstreview**, kein
 unabhängiger Peer-Review und keine Freigabe für produktive Änderungen.
-Ergänzt um den verbindlichen PostgreSQL-Auftrag und den Review dazu (R9).
+Der nachfolgende R9-Abschnitt dokumentiert die damalige Pflichtentscheidung
+historisch. Sie wurde am 30.09.2026 ausdrücklich aufgehoben: SQLite bleibt
+unterstützt, PostgreSQL ist optional und kein Proxy-Ablösegate. Aktuell gilt
+ausschließlich der [Phasenvertrag](../todo/proxy-retirement.md); frühere
+Pflicht-, HAProxy- und RPO-Aussagen in diesem Review sind nicht operativ.
 
 ## Urteil
 
@@ -11,8 +15,8 @@ Der Plan beschreibt einen tragfähigen Weg zur vollständigen Ablösung, wenn
 alle Abnahmegates geschlossen werden. **Heute ist die Ablösung nicht sicher.**
 Es fehlen sowohl Such-/Identitätsfunktionen als auch ein nachgewiesener
 Download-/Importvertrag. Keine Paketbeschreibung ist bereits implementiert.
-Zusätzlich muss P11 den aktiven Datenbankbackend auf PostgreSQL umstellen;
-die endgültige Proxy-Ablösung auf SQLite wäre keine Zielerreichung.
+P11 sichert eine optionale PostgreSQL-Wahl mit weiter nutzbarem SQLite; eine
+Proxy-Ablösung auf SQLite ist nach der späteren Nutzerentscheidung zulässig.
 
 Die Reihenfolge „klein und hoher Nutzen“ ist sinnvoll: P01 repariert zwei
 lokal begrenzte Fehler, P02 schließt den Episoden-Suchvertrag. P03/P04 sind
@@ -140,7 +144,10 @@ HLS-Video/Audio-Muxing. Stall-Timeout, EXDEV-Fallback und Kategorie-Recovery
 existieren ebenfalls. **Entscheidung:** gezielte Regression und Inhaltsprüfung
 statt paralleler Implementierung; HLS nicht ungeprüft global deaktivieren.
 
-### R9 — PostgreSQL ist Pflicht, nicht nur eine mögliche NFS-Optimierung
+### R9 — Historische PostgreSQL-Pflicht, am 30.09.2026 aufgehoben
+
+Der folgende Befund bleibt als Entscheidungshistorie lesbar. Die aktuelle
+Vorgabe steht in R10 und im Phasenvertrag.
 
 Die ausdrückliche Nutzerentscheidung ersetzt die frühere Zurückhaltung zur
 PostgreSQL-Migration. **Korrigiert:** O01, Reihenfolge, Abschluss- und Rollback-
@@ -172,6 +179,24 @@ und HAProxy-Infrastruktur bleibt das Ziel, keine neue Swarm-DB.
 Die zusätzlichen Projektregeln und sieben Myoxus-Adaptionen sind unter
 [agent-workflow.md](agent-workflow.md) nachvollziehbar. Nicht übertragbare
 Host-, Rust-, Yarn-, Mantine- und Forgejo-Annahmen wurden ausgeschlossen.
+
+### R10 — Backendwahl und Zugriffsweg sind installationsabhängig
+
+Die neue Nutzerentscheidung hebt R9s Pflichtziel ausdrücklich auf. Der derzeitige
+PG-only-Branch wäre für bestehende SQLite-Installationen eine Regression; P11.1
+ist daher wieder offen. Für Prisma 6 ist der Datasource-Provider Bestandteil
+des Schemas und des generierten Clients, nicht bloß ein austauschbarer URL-Wert.
+SQLite und PostgreSQL brauchen eigene Client-/Migrationsketten und gemeinsame
+Domänentests. Ein PG-Ausfall darf keinen SQLite-Fallback auslösen. Ein
+PostgreSQL-Endpunkt kann je Installation anders erreichbar sein; HAProxy,
+Swarm-Netz und TLS-Details werden weder im öffentlichen Code festgelegt noch
+aus einem anderen Projekt übernommen. URL, Passwörter und private Topologie
+gehören nicht ins Git. Nach PG-Schreibvorgängen ist ein verlustfreier Rückweg
+ein eigener Implementierungs- und Testumfang (P11.9), kein kleines Runbook-
+Detail. Ohne ihn bleibt eine Rückschaltung auf SQLite gesperrt. Ein PG-
+Schreibcutover kann mit vorab getestetem PG-kompatiblem Image und erhaltenem
+PG-Datenstand einen verlustfreien App-Rollback vorsehen. P06–P10 können auf
+SQLite unabhängig fortgesetzt werden.
 
 ## Verifikation und Reproduktionsbefehle
 
@@ -211,23 +236,23 @@ Die offenen Gates sind in [todo/proxy-retirement.md](../todo/proxy-retirement.md
 offene Issue-Liste des Forks (Issues deaktiviert). Kein zweiter Arbeitsvertrag
 in diesem Review. Zuordnung für den Vollständigkeitsreview:
 
-| Quellen / offene Anforderung                                              | Verantwortlicher TODO                             |
-| ------------------------------------------------------------------------- | ------------------------------------------------- |
-| A1/A6, B03/B10: Koordinaten und einzelne Renditions                       | P00.1, P01.1–P01.2, P09.2                         |
-| A4/A7, B01/B02/B04: TV-Kontext, Release, Pagination, breite Kandidaten    | P02.1–P02.3, P07.3                                |
-| A2/A3, B05/B07, R4: Sprache, frühe Deduplikation, GUID, Tracktags         | P03.1–P03.3, P07.3                                |
-| B14/B15, R5: Temp/Complete, Kategorien, Legacy, Isolation/Retry           | P04.1–P04.2, P05.4                                |
-| B08/B09: Sonarr-Anbieter, fehlende Episoden, sichere Titelfallbacks       | P06.1–P06.3                                       |
-| B06, R3: Remote-Regelquelle, generische Topics, Auto-Unique               | P07.1–P07.2                                       |
-| A5, B11/B12/B13, R1/R2: accountfreie Filme, Query/ID/Jahr, Dauer          | P08.1–P08.3                                       |
-| R7: Inhaltsprüfung nicht als Such-Vorabdownload                           | P09.1–P09.2                                       |
-| B16: Transport entfällt, Endpoint-/Fehler-/Readinessvertrag bleibt        | P05.1, P10.1, P10.4                               |
-| API-Budgets, Secret-Rotation/-Leaks, Base-URL, Cache/Settings             | P05.1–P05.3, P11.2, P06.2                         |
-| O01/R9: PostgreSQL Pflicht, alle Daten/Typen, Sequences, Resume, Rollback | P11.1–P11.8, P10.2–P10.5                          |
-| O02/R6: beide Verbindungen, Host/Key, Path-Mapping, GitOps und Rollback   | P10.2, P10.6–P10.7                                |
-| CI/Runner/Publikation; R8: vorhandene Upstream-Fixes schützen             | P00.2, gemeinsame Regeln, P01.2/P04.1/P09.2/P10.1 |
-| Ungeklärte Sprach-/Dauer-/Legacy-/Providerdefaults                        | P03.1, P06.1, P08.1, P09.1                        |
-| Tatsächliche Versionen und private Betriebswerte, RPO/Freigaben           | P11.3/P11.7, P10.1–P10.7                          |
+| Quellen / offene Anforderung                                                         | Verantwortlicher TODO                             |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| A1/A6, B03/B10: Koordinaten und einzelne Renditions                                  | P00.1, P01.1–P01.2, P09.2                         |
+| A4/A7, B01/B02/B04: TV-Kontext, Release, Pagination, breite Kandidaten               | P02.1–P02.3, P07.3                                |
+| A2/A3, B05/B07, R4: Sprache, frühe Deduplikation, GUID, Tracktags                    | P03.1–P03.3, P07.3                                |
+| B14/B15, R5: Temp/Complete, Kategorien, Legacy, Isolation/Retry                      | P04.1–P04.2, P05.4                                |
+| B08/B09: Sonarr-Anbieter, fehlende Episoden, sichere Titelfallbacks                  | P06.1–P06.3                                       |
+| B06, R3: Remote-Regelquelle, generische Topics, Auto-Unique                          | P07.1–P07.2                                       |
+| A5, B11/B12/B13, R1/R2: accountfreie Filme, Query/ID/Jahr, Dauer                     | P08.1–P08.3                                       |
+| R7: Inhaltsprüfung nicht als Such-Vorabdownload                                      | P09.1–P09.2                                       |
+| B16: Transport entfällt, Endpoint-/Fehler-/Readinessvertrag bleibt                   | P05.1, P10.1, P10.6                               |
+| API-Budgets, Secret-Rotation/-Leaks, Base-URL, Cache/Settings                        | P05.1–P05.3, P11.2, P06.2                         |
+| O01/R9/R10: optionale Backendwahl, alle Daten/Typen, Sequences, Resume, Rücktransfer | P11.1–P11.9, bei PG-Wahl P10.2–P10.5              |
+| O02/R6: beide Verbindungen, Host/Key, Path-Mapping, GitOps und Rollback              | P10.2, P10.6–P10.7                                |
+| CI/Runner/Publikation; R8: vorhandene Upstream-Fixes schützen                        | P00.2, gemeinsame Regeln, P01.2/P04.1/P09.2/P10.1 |
+| Ungeklärte Sprach-/Dauer-/Legacy-/Providerdefaults                                   | P03.1, P06.1, P08.1, P09.1                        |
+| Tatsächliche Versionen und private Betriebswerte/Freigaben                           | P11.3/P11.7 bei PG-Wahl, P10.1–P10.7              |
 
 Beim strukturellen Review korrigiert: Content-Search gehört zu
 `src/services/`, nicht `src/providers/`; Cachekonfiguration gehört zu den
@@ -238,9 +263,10 @@ Vitest-Globs brauchen ein wirksames Gate. Ein PG-only-Checkpoint ist Voraussetzu
 für getrennte DB-/Matchingdeployments; kein ungetestetes älteres Image nach
 neuen PG-Schemamigrationen als kompatibel ausgeben.
 
-Reihenfolge und Statusführung sind konsolidiert: P11 ist technische Bereitschaft
-vor P06/P07/P09; der echte PG-Cutover liegt in P10 vor der Proxy-Umschaltung,
-mit separaten Pausen für Importvergleich, Read-only-Start und Schreibfreigabe.
+Reihenfolge und Statusführung nach R10: P11 ist eine optionale Backendspur;
+P06/P07/P09 und der Proxy-Ausstieg können auf SQLite unabhängig fortfahren.
+Bei PG-Wahl liegt der echte Cutover getrennt von der Proxy-Umschaltung, mit
+separaten Pausen für Importvergleich, Read-only-Start und Schreibfreigabe.
 Damit wird keine Produktionsfreigabe für weitere Entwicklungsarbeit vorausgesetzt.
 Die alten Planabschnitte mit zweiten Umsetzungsschritten sind durch Verweise
 ersetzt; Analyse, Dateninvarianten und Herkunftsnachweise bleiben erhalten.

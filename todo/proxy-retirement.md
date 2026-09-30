@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 29.09.2026. **Offener Entwicklungsvertrag, keine Deploymentfreigabe.**
+Stand: 30.09.2026. **Offener Entwicklungsvertrag, keine Deploymentfreigabe.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -10,31 +10,36 @@ erledigte Implementierung.
 
 ## Gemeinsame Regeln und Abnahme
 
-- PostgreSQL ist Pflichtziel für Pingufunks eigene Datenbank, nicht erneut
-  eine Servarr-main/log-Migration. Ein aktiver PostgreSQL-Client; SQLite nur
-  unveränderte Quelle und begrenzter Rollbackbestand, niemals stiller Fallback.
+- PostgreSQL ist für Pingufunks eigene Datenbank optional, nicht erneut eine
+  Servarr-main/log-Migration. SQLite bleibt als aktiver Backend unterstützt.
+  Pro Installation genau einen Provider ausdrücklich wählen; niemals bei
+  DB-Fehler still auf den anderen wechseln.
 - Bestehende Architektur/Owner nutzen, kein neuer interner HTTP/XML-Proxy.
   Shipped IDs, RSS/NZB-Identität, öffentliche Kategorien, Queue/History,
   Konfiguration und Pfade erhalten bzw. explizit kompatibel überführen.
   Ungewisse Serie/Folge/Film/Sprache nie als sicher erkannt ausgeben.
-- Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R9 bleiben in den Referenzen.
+- Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R10 bleiben in den Referenzen.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
-- Reihenfolge: P00 → P01 → P02 → P03 → P04 → P05 → P11 → P06 → P07 → P08
-  → P09 → P10. IDs bleiben trotz der später ergänzten Pflichtphase P11 stabil.
-  P11 liefert implementierte und isoliert geprobte PG-Bereitschaft. Die echte
-  PG-Umstellung liegt in P10 vor und getrennt von der Proxy-Umschaltung; so
-  blockiert eine ausstehende Produktionsfreigabe nicht weitere Entwicklung.
+- Proxy-Pfad: P00 → P01 → P02 → P03 → P04 → P05 → P06 → P07 → P08 → P09 → P10.
+  P11 ist eine unabhängige optionale PostgreSQL-Spur nach P05. IDs bleiben
+  stabil. Schemaänderungen ab P07/P09 müssen für beide unterstützten Backendtypen
+  funktionieren. Eine echte PG-Umstellung ist nur bei ausdrücklicher Wahl und
+  separater Freigabe relevant und nie Voraussetzung für die Proxy-Umschaltung.
+  Die Position von P11 vor P06 in dieser Datei ist historisch; auf dem SQLite-
+  Proxy-Pfad ist P06 der nächste offene Entwicklungspunkt.
+- Bei SQLite-Wahl sind P10.3–P10.5 nicht anwendbare PG-Betriebsschritte;
+  sie werden nicht als ausgeführt markiert und blockieren P10.6–P10.7 nicht.
+  Ein späterer PG-Wunsch aktiviert sie erst nach P11.1–P11.8 und eigener Freigabe.
 - AGENTS.md und vollständige einschlägige Skills lesen. Upstream vor dem
   betroffenen Paket prüfen; bereits gefixte Verträge erhalten statt duplizieren.
   Unautorisierter Scopewechsel bleibt unzulässig. Ungeklärte Entscheidungen
   blockieren nur ihren benannten Punkt, nicht andere unabhängige Entwicklung.
 - Synthetische, unabhängig implementierte Fixtures; kein privater Proxycode,
   keine Liveantworten/Medien/Secrets im Git. Servarr/Provider/Downloads mocken,
-  Dateisystem und Datenbank disposable. Bis P11 darf die UI des aktuellen
-  SQLite-Runtimes gegen eine eigene wegwerfbare Testdatenbank geprüft werden;
-  das ist kein PostgreSQL-Nachweis. Ab P11 sind Datenbankgates gegen disposable
-  PostgreSQL zu führen. Keine mobilen Tests; UI desktop-only.
+  Dateisystem und Datenbank disposable. SQLite-Runtime gegen eigene wegwerfbare
+  SQLite-DB prüfen; PostgreSQL-Runtime separat gegen disposable PG. Kein Backend-
+  Test ersetzt den anderen. Keine mobilen Tests; UI desktop-only.
 - Jeder Produktpunkt umfasst den ganzen Owner-/Consumerpfad, Review, Behebung
   und erneutes Review ohne offene Findings, eine sichere repräsentative
   Operation/Readback und kausale Regressionen. P00 darf ausdrücklich zunächst
@@ -50,7 +55,8 @@ erledigte Implementierung.
   und Pushes nur zum eigenen `codex/`-Branch, kein implizites Release/Upstream-PR.
 - Keine Produktionsmigration, Diensteingriffe, realen Grabs oder Proxyentfernung
   ohne eigene ausdrückliche Freigabe. Vor jedem solchen Gate anhalten. Bestehende
-  externe PG-/HAProxy-/Swarm-/Network-/Volume-/Docker-Secret-Struktur erhalten;
+  gewählte Network-/Volume-/Secret-Struktur erhalten; keinen bestimmten PG-
+  Zugriffsweg voraussetzen oder im öffentlichen Git festlegen;
   Replikazahl unverändert. Backups/DBs nicht löschen, SQLitequelle nicht ändern.
 
 ## Phase P00 — Reproduzierbare Regressionen und sichere Fork-CI
@@ -441,28 +447,35 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Weiterhin ausschließlich Single-Worker; kein Replica-Umbau, kein Restart
       oder produktiver Download ausgeführt.
 
-## Phase P11 — PostgreSQL implementieren und isoliert migrationsbereit machen
+## Phase P11 — Optionales PostgreSQL und beide Backendwege absichern
 
-Ergebnis: einzig aktiver PG-Runtimevertrag, reproduzierbarer Importer und
-bewiesener Rollback. Abhängigkeit P05; O01/R9. Alle hier genannten neuen
-Runner-/Testartefakte sind **anzulegen**, nicht heute vorhandene Befehle.
-Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
+Ergebnis: ausdrücklich wählbares SQLite oder PostgreSQL, reproduzierbarer
+Importer und bewiesener verlustfreier Rückweg. Abhängigkeit P05; O01/R9/R10.
+Offene Runner-/Testartefakte sind zu vervollständigen, nicht als bereits
+einsatzbereite Produktionsbefehle zu behandeln.
+Produktive Anwendung des PG-Runbooks ist optional und gehört bei PG-Wahl
+ausschließlich P10.3–P10.5.
 
-- [x] **P11.1 — Native Schema-/Client-Kette und kompatibler Start.**
+- [ ] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
       `prisma/schema.prisma`, historische SQLite-Migrationen, `init-db.sql`,
       `src/lib/db.ts`, `Dockerfile`, `entrypoint.sh`, `.env.example` und
-      `docker-compose.yml` gemeinsam auf PostgreSQL umstellen. CLI/Client aktuell
-      6.19.2 halten, Baseline in disposable Dev/Shadow-DB erzeugen und SQL prüfen;
-      SQLite-SQL unverändert als Recoverygeschichte archivieren, nicht replayen.
+      `docker-compose.yml` für ausdrückliche Providerwahl überarbeiten.
+      CLI/Client aktuell 6.19.2 halten, Baseline in disposable Dev/Shadow-DB
+      erzeugen und SQL prüfen;
+      SQLite-SQL unverändert als weiterhin ausführbare eigene Kette erhalten,
+      nicht gegen PostgreSQL replayen. Zwei passende generierte Clients und
+      providergetrennte Migrationspfade ohne impliziten Backendwechsel liefern.
       Exakte CLI im schema-/imagegleichen Runner; Client im Build generieren.
       Versionierte DDL kontrolliert mit `migrate deploy`, nicht App-Warmup;
-      normale Starts prüfen Schema/DB ohne Import oder SQLitezugriff. Driftprüfung
+      normale Starts prüfen das gewählte Schema/DB ohne Import. Driftprüfung
       separat, kein reset/produktives migrate dev/db push. Abnahme: Fresh Install
-      und Restart gegen disposable PG funktionieren, kein stiller SQLitefallback;
-      Runnerkommandos im gebauten Image tatsächlich ausführbar, SQLite-Ledger nie
+      und Restart gegen disposable SQLite **und** PG funktionieren, kein stiller
+      Fallback in beide Richtungen; Runnerkommandos im gebauten Image tatsächlich
+      ausführbar, SQLite-Ledger nie
       ins PG-Ziel kopiert und SQL-/Client-/Schema-Versionen konsistent.
-      Abgenommen am 30.09.2026 nur in isolierter Testumgebung: Prisma CLI und
-      Client 6.19.2, PostgreSQL-17-Container, native DDL für sechs Modelle mit
+      Historischer PG-only-Zwischenstand vom 30.09.2026, wegen neuer
+      Dual-Backend-Abnahme wieder geöffnet: Prisma CLI und Client 6.19.2,
+      PostgreSQL-17-Container, native DDL für sechs Modelle mit
       UTC-Zeitspalten (Millisekunden), unveränderte SQLite-SQL-Historie unter
       `prisma/legacy/sqlite/`. Ein frisches Ziel wurde vom tatsächlich gebauten
       `migrator`-Image per `migrate deploy` aufgebaut; der zweite Lauf war
@@ -471,7 +484,8 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       startete nach Containerrestart erneut. Ohne DB-URL brach es ab; keine
       SQLite-Datei wurde angelegt und kein Legacy-Ledger übernommen. Normale
       Starts führen kein DDL/Import aus. Produktions-Primary, PostgreSQL-
-      Version, Rolle, TLS und HAProxy bleiben verpflichtende P11.3-/P10-Gates.
+      Version, Rolle und gewählter Transport/TLS bleiben für einen PG-Cutover
+      P11.3-/P10-Gates; HAProxy ist keine Vorgabe.
 - [ ] **P11.2 — Secretfähiger Single-Worker und vollständiger Writer-Gate.**
       Entrypoint/DB-Owner samt `src/instrumentation.ts`, Config-/Cache-, Ruleset-,
       Queue- und Worker-Schreibpfaden auf `DATABASE_URL_FILE` vor Prozessstart und
@@ -479,7 +493,7 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       URL-Ausgabe entfernen; leere/konfligierende Konfiguration ablehnen.
       Readiness/Settings/History lesen ohne Cache-, Setting- oder Workerwrite;
       tatsächlichen ersten Anwendungsschreibvorgang als Rollbackgrenze erfassen.
-      Pool/TLS/Timeouts an PG/HAProxy statt SQLiteparameter anpassen, kein
+      Pool/TLS/Timeouts für den gewählten Provider/Transport anpassen, kein
       unbegründetes `pgbouncer=true`; Single-Worker bleibt. Abnahme: Secretfehler,
       Netzverlust/Reconnect und alle Writeentrypoints getestet, Wartungslesechecks
       erzeugen null Writes und PG-Ausfall keinen zweiten Datenbestand.
@@ -495,7 +509,7 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       SQLite-Fallback oder neue Zeilen. Noch offen: sämtliche Nebenpfade auf
       stille Writes/Dateieffekte reviewen, belastbare erste PG-Schreibgrenze
       und vollständige Secret-/Wartungs-/Reconnect-Regression im finalen
-      PG-Harness; echter HAProxy/TLS/Rollenvertrag bleibt P11.3/P10.
+      PG-Harness; echter Transport-/TLS-/Rollenvertrag bleibt bei PG-Wahl P11.3/P10.
       Ergänzung 30.09.2026: Der Shell-Entrypoint überspringt im Wartungsmodus
       jetzt auch `mkdir`/rekursives `chown`/`chmod` auf dem Downloadvolume.
       Im gebauten App-Image wurde ein gemounteter Sentinel nach einem
@@ -524,7 +538,7 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,
       Bootstrap-Drift, Platz, Tool-/Imageversion und Zielidentität feststellen.
       Serverversion gegen Prisma-6-Kompatibilität/Support prüfen, Primary/TLS/
-      HAProxy/-Rolle verifizieren; keine Version aus fremdem Projekt schätzen.
+      gewählte Route/Rolle verifizieren; keine Version aus fremdem Projekt schätzen.
       Preserve/Normalize/Reject für jedes Feld festlegen: externe Serien-IDs,
       UUID/CUID/FK/Unique, NULL, UTC-/Millisekunden, BigInt >2^53, JSON-/Regex-
       Strings, Config, alle Job-/Cache-/Regeldaten. Keine erfundenen now/0/Leerwerte
@@ -545,7 +559,7 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       die Inhaltsprüfung läuft erst auf dem privaten Snapshot. Ein Zieltest
       mit scoped Rolle gegen disposable PG 17 bestand ohne TLS-Ausnahme im
       Testharness; die feldweise Fidelitymatrix steht im Migrationsplan.
-      Noch offen: echte HAProxy-/TLS-/Versionsbelege, verfügbare produktive
+      Noch offen bei PG-Wahl: echte Transport-/TLS-/Versionsbelege, produktive
       Runner-/Imageversionen und Abgleich mit der tatsächlichen Quelle.
 - [ ] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
       neuen Runner SQLite-Backup-API/CLI statt Kopie einer laufenden Hauptdatei
@@ -632,18 +646,21 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       `setval`, prüfte das Importmanifest nochmals lesend und wiederholte die
       Synchronisierung erfolgreich. Weitere Sequenzdrift- und Kollisionsfälle
       sowie die durable App-Write-Grenze bleiben offen.
-- [ ] **P11.7 — PostgreSQL-Harness beweist Runtime und beide Rückwege.**
+- [ ] **P11.7 — Dual-Backend-Harness beweist Runtime und beide Rückwege.**
       `src/lib/db-schema.test.ts`, passende Ownerintegration und neue Runner-
-      Tests gegen disposable PG aufnehmen; `vitest.config.ts`/npm-Gates so routen,
+      Tests gegen disposable SQLite und PG aufnehmen; `vitest.config.ts`/
+      npm-Gates so routen,
       dass Tests außerhalb `src/**/*.test.ts` nicht unbemerkt fehlen. Fresh Install,
       Bestandsimport aller Modelle, CRUD/Settings, Queue/History, Regeln/Caches,
       Restart, BigInt/Datum/NULL, Secret-/DB-/Reconnect-Ausfall, Retry/Resume und
       Maintenancewrite-Sperre kausal testen. Vor erstem PG-Write immutable altes
-      SQLiteimage+Quelle zurück; danach gestoppte Writer+PG-Backup und getesteter
-      Rücktransfer **oder vor Produktion ausdrücklich akzeptiertes RPO** mit
-      benannten Verlusten. Abnahme: kein SQLite-only/Tabellenname-Regex-Ersatz,
+      SQLiteimage+Quelle zurück; danach gestoppte Writer+PG-Backup und ein
+      getestetes PG-kompatibles Rollbackimage mit erhaltenem PG-Datenstand.
+      Abnahme: kein SQLite-only/Tabellenname-Regex-Ersatz,
       beide Rollbackfälle geprobt und Grenzen ehrlich dokumentiert, Daten/Backups
-      bleiben erhalten; Produktions-RPO noch offen bedeutet Cutover gesperrt.
+      bleiben erhalten; ungeprüfter PG-kompatibler Rollback sperrt PG-
+      Schreibbetrieb. Eine Rückschaltung auf SQLite nach PG-Writes bleibt
+      ohne P11.9 gesperrt, nicht der Proxy-Ausstieg auf SQLite.
       Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Die PG-Gates
       erreichen auch Tests außerhalb `src/`; disposable PG-17-Proben decken
       native Katalogtypen/Indizes/FK, alle sechs Importmodelle,
@@ -651,7 +668,8 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Sequence-Inserts ab. Der gebaute Snapshot-Runner hat einen real sichtbaren
       Bind-Mount benutzt; der App-Maintenance-Start veränderte auf einem ebenso
       geprüften Mount keine Sentinel-Metadaten. Noch offen: Worker-/Datei-
-      abschluss, tatsächlicher HAProxy-/TLS-Fall, Rollback nach PG-Writes
+      abschluss, gewählter Transport-/TLS-Fall, PG-kompatibler Rollback nach
+      PG-Writes
       und ein kompletter Container-End-to-End-Lauf.
       Ergänzung 30.09.2026: Echte PG-Ownerreads für SAB-Queue/-History,
       Ruleset-GET und TopicCategory-Cache laufen auch bei gesperrten Writes;
@@ -690,21 +708,42 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       private Betriebswerte nur als redigierte Eingaben, keine Beispielcredentials.
       Abnahme: Runbook an frischer und migrierter disposable Installation vollständig
       nachvollziehbar; keine fingierten fertigen Deploykommandos, Retention/
-      Cleanup braucht separate Freigabe und Proxyrollback behält PG bei.
+      Cleanup braucht separate Freigabe und Proxyrollback behält den gewählten
+      Provider bei. Nach P11.9 den geprobten PG→SQLite-Rücktransfer samt Stop-,
+      Prüf- und Freigabegates dokumentieren.
       Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Ein ausdrücklich
       nicht produktiv freigegebener Entwurf unter
       `docs/postgresql-migration-runbook.md` verwendet die tatsächlich
       vorhandenen Snapshot-/Preflight-/Import-/Verify-/Sequences-Einstiege,
       trennt DDL- und Importsecret sowie die drei Rollbackgrenzen. Noch offen:
-      vollständige Docker-End-to-End-Probe, echter HAProxy-/TLS-/Rechtevertrag,
+      vollständige Docker-End-to-End-Probe, echter Transport-/TLS-/Rechtevertrag,
       Writer-/Rollback-Harness und private P10.2-Betriebswerte.
       Der Snapshot-Einstieg wurde im gebauten Image mit tatsächlich sichtbarem
       Bind-Mount unter UID 1000 erprobt; ein erster Test unter einem vom
       Docker-Host nicht geteilten Temp-Pfad war ungültig und wurde verworfen.
+- [ ] **P11.9 — Optionaler verlustfreier PG→SQLite-Rücktransfer nach PG-Writes.** Ein
+      eigener, ausschließlich bei gestoppten Writern ausführbarer Runner liest
+      einen konsistenten PG-Stand mit eingeschränkter Rolle und schreibt in eine
+      **neue** private SQLite-Datei mit zur Imageversion passender SQLite-
+      Migrationskette. Niemals die alte Quell-/Rollbackdatei überschreiben.
+      Alle sechs fachlichen Modelle sowie spätere P07/P09-Spalten, originale
+      IDs/FK/Unique, Config/Secrets, Queue/History, BigInt, Zeitpräzision und
+      NULL semantisch gleich übertragen; PG-only-Betriebsmarker nicht als
+      Fachdaten vortäuschen. SQLite-Sequences/Defaults und echte neue Prisma-
+      Inserts prüfen. Danach beide Seiten zeilenweise ohne Nutzlastausgabe
+      vergleichen, `integrity_check`/`foreign_key_check` ausführen, Dateieffekte
+      und Jobzustände separat abstimmen und die Umschaltung erst nach expliziter
+      Freigabe zulassen. Abbruch/Retry/Fehler nach Teilimport dürfen weder PG
+      noch alte SQLite-Datei verändern; keine Secrets oder Dumps ins Git.
+      Abnahme mit synthetischen Writes nach dem PG-Cutover, Restart und
+      erneutem Vergleich auf disposable Backends. Solange offen: Rückschaltung
+      von einem beschriebenen PG-Bestand auf SQLite gesperrt. P11.9 ist kein
+      Gate für PG-Betrieb mit getesteter PG-kompatibler App-Rücknahme und kein
+      Gate für SQLite-Betrieb oder Proxy-Ausstieg.
 
 ## Phase P06 — Sonarr als optionaler accountfreier Metadatenanbieter
 
-Ergebnis: fehlende lokale Episoden sicher auffindbar. Abhängigkeit P11;
+Ergebnis: fehlende lokale Episoden sicher auffindbar. Abhängigkeit P05;
 B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
 
 - [ ] **P06.1 — Providervertrag und Fallbackumfang entscheiden.**
@@ -754,7 +793,8 @@ B04/B05/B06, R3.
       `GeneratedRuleset` und alle Read/Writeconsumer auf nachgewiesene kombinierte
       Serien-/Topicidentität bringen statt globalem Topic-Unique. Schlüsselumfang
       aus realen Consumers ableiten und vor Schema-Cutover festlegen; nötige
-      append-only PG-Migration und Datentransition/Rollback mitliefern, keine
+      append-only Migrationen für beide Provider samt Datentransition/Rollback
+      mitliefern, keine
       TopicCategory-Unique beiläufig ändern. Abnahme: zwei Serien im selben Topic
       können Regeln laden/generieren ohne Überschreiben/Fehlzuordnung; vorhandene
       IDs/Regex/Filter bleiben erhalten und Migration auf Bestand getestet.
@@ -828,13 +868,15 @@ Abhängigkeit P08; B10/R7.
 
 ## Phase P10 — Vollständige Parität und getrennt freigegebener Betrieb
 
-Ergebnis: nachgewiesene Gesamtkette, produktiv PostgreSQL, danach kein Proxy.
-Abhängigkeit P09 und alle vorherigen Entwicklungsabnahmen; B16/O01/O02, R6/R9.
+Ergebnis: nachgewiesene Gesamtkette auf dem gewählten Backend, danach kein Proxy.
+Abhängigkeit P09 und alle für den gewählten Betriebsweg relevanten
+Entwicklungsabnahmen; B16/O01/O02, R6/R9. P11 ist nur bei PostgreSQL-Wahl Pflicht.
 
 - [ ] **P10.1 — Komplette Paritätsabnahme ohne Produktion.** Beide Newznab-
       Pfade einschließlich Caps/Validation/RSS, ID-/Text-/Staffel-/Episode-/Movie-
       Suche, Counts/Relative-Enclosure, NZB-addfile, Queue/failed/completed,
-      History/Import/Remove/Retry gegen synthetische Sources und disposable PG
+      History/Import/Remove/Retry gegen synthetische Sources und disposable
+      SQLite sowie bei PG-Wahl zusätzlich disposable PG
       zusammen prüfen. Alle B/O-Inventarpunkte Owner zuordnen; B16-Proxytransport
       entfällt ausdrücklich, dessen Endpoint-/Fehler-/Healthvertrag bleibt.
       Sonarr-/Radarr-/Prowlarr-Versionen/Parameter vor einer **separat genehmigten
@@ -851,19 +893,22 @@ Abhängigkeit P09 und alle vorherigen Entwicklungsabnahmen; B16/O01/O02, R6/R9.
       genehmigte externe Integration bleibt explizites Freigabegate.
 - [ ] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
-      Gitstand prüfen: PostgreSQL-Version/Primary/TLS, HAProxy-Networkpfad, eigene
-      Rolle/DB/Schema, Secret-/Mount-/Pfad-/Rechtekonvention, Sourcefingerprint,
+      Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/
+      Pfad-/Rechtekonvention; bei PG-Wahl Serverversion/Primary/Transport/TLS,
+      eigene Rolle/DB/Schema, Sourcefingerprint,
       Größe/Importzeit, Wartungsfenster, Backupablage/Retention und Homelab-
-      Image-/Scanpolicy. PG-Cutoverimage mit unverändertem bisherigen Matching
-      sowie spätere Feature-/Schema-Aktualisierung getrennt bestimmen: fehlt ein
-      kompatibler PG-only-Checkpoint, ist Cutover gesperrt, nicht alles zugleich
-      deployen. Keine privaten Werte im öffentlichen Git. Immutable
-      SQLite-Rollbackimage sowie nach weiteren PG-Schemaänderungen tatsächlich
-      PG-kompatibles Proxy-/Matching-Rollbackimage bestimmen. Rücktransfer oder
-      akzeptiertes RPO mit benannten Verlusten **vor erster PG-Schreibfreigabe
-      entscheiden**; unbekannte Werte stoppen Cutover. Abnahme: ausführbarer
+      Image-/Scanpolicy. Nur bei PG-Wahl: PG-Cutoverimage mit unverändertem
+      Matching sowie spätere Feature-/Schema-Aktualisierung trennen; fehlender
+      kompatibler Dual-Backend-Checkpoint sperrt den PG-Cutover, nicht den
+      SQLite-Proxy-Ausstieg. Keine privaten Werte im öffentlichen Git. Passende
+      Rollbackimage des gewählten Providers festhalten; bei PG-Cutover auch das
+      bisherige SQLite-Image. Vor PG-Schreibfreigabe ein
+      PG-kompatibles Rollbackimage mit erhaltenem PG-Datenstand testen;
+      PG→SQLite-Rückschaltung nur nach separater P11.9-Abnahme. Unbekannte Werte
+      stoppen den PG-Cutover. Abnahme: ausführbarer
       redigierter Operationsentwurf und getestete Rückwege, keine Cleanupfreigabe.
-- [ ] **P10.3 — Freigegebene PG-Übernahme, Proxy unverändert.** **Hier
+- [ ] **P10.3 — Optionale freigegebene PG-Übernahme, Proxy unverändert.**
+      **Nur bei ausdrücklicher PostgreSQL-Wahl; hier
       anhalten bis zur ausdrücklichen Datenmigrations-/Deploymentfreigabe für
       genau diese Installation.** P11-Runbook ausführen: read-only Preflight,
       Aufnahme sperren/aktive Jobs kontrolliert auslaufen/unimportierte History
@@ -873,7 +918,7 @@ Abhängigkeit P09 und alle vorherigen Entwicklungsabnahmen; B16/O01/O02, R6/R9.
       bei Fehler kein Appstart oder automatische Bereinigung. Abnahme: Sourcehash/
       Ziel-/Schema-/Imageversion und redigierter Vollvergleich dokumentiert,
       unveränderte SQLitequelle/Backups erhalten; danach Pause vor Appstart.
-- [ ] **P10.4 — Kontrollierter PG-Start, noch keine Writers.** **Nur nach
+- [ ] **P10.4 — Optionaler kontrollierter PG-Start, noch keine Writers.** **Nur nach
       Validierung von P10.3 und zugehöriger Startfreigabe** neues Image/Secret im
       Maintenancegate starten; DB-/Schema-Readiness, Settings/Queue/History nur
       lesen, null Cache-/Setting-/Workerwrites nachweisen. Nicht allein Probe-200
@@ -881,29 +926,32 @@ Abhängigkeit P09 und alle vorherigen Entwicklungsabnahmen; B16/O01/O02, R6/R9.
       SQLitefallback; Ergebnisse prüfen und erneut anhalten. Fehlerrollback vor
       tatsächlichem erstem PG-Write auf immutable SQLiteimage+Originalquelle,
       PG-Ziel erhalten; keine alten/neuen Images an falschen Provider anschließen.
-- [ ] **P10.5 — PG-Schreibbetrieb separat abnehmen.** **Nur nach expliziter
+- [ ] **P10.5 — Optionalen PG-Schreibbetrieb separat abnehmen.** **Nur nach expliziter
       Abnahme/Schreibfreigabe von P10.4** Aufnahme/Writer öffnen; ersten echten
       PG-Write einschließlich automatischer Caches/Settings erfassen. Restart/
       Persistenz und freigegebenen isolierten synthetischen Job-/Retry-/Importfall
       prüfen, keine realen Bibliotheksgrabs ohne Auftrag. Abnahme: aktiver Betrieb
       auf PG belegt, Proxy bleibt unverändert, stabile Beobachtung statt simultanem
       Matching-/Routing-/Replicacutover. Nach neuen PG-Writes nur Writerstopp+
-      PG-Backup+beschlossener Rücktransfer/RPO, niemals still auf alten Snapshot.
+      PG-Backup+geprüftes PG-kompatibles Rollbackimage; Rückschaltung zu SQLite
+      nur nach P11.9, niemals still auf alten Snapshot.
 - [ ] **P10.6 — Indexer und SAB gleichzeitig auf native Wege umstellen.**
-      **Erst nach stabiler PG-Abnahme und ausdrücklicher Routing-/Deployment-
-      freigabe** geprüfte native Funktionsversion samt separat geprüften append-only
-      PG-Schemaerweiterungen einführen; Indexer- **und**
+      **Erst nach stabiler Abnahme des gewählten Backends und ausdrücklicher
+      Routing-/Deploymentfreigabe** geprüfte native Funktionsversion samt
+      separat geprüften append-only Schemaerweiterungen für beide Provider
+      einführen; Indexer- **und**
       Downloadclient-URLs, Host/Key, relative NZB-URLs und Remote-Path-Mapping
       gemeinsam umstellen. Aktive/nicht importierte Jobs und Legacy-Privatekategorien
       vorher abgleichen, GUID-/Feed-Wiederauftauchen berücksichtigen; eine aktive
       RSS-/Downloadroute, keine Doppelgrabs. Abnahme: freigegebene komplette
       Consumerkette sicher, Mapping/öffentliche Kategorien korrekt. Bei Problemen
-      Routing/PG-kompatibles Image zurück, PostgreSQL bleibt aktiv; DB-Rollback
-      nur nach eigenem P11-Vertrag, neue Findings öffnen ihren Ownerpunkt wieder.
+      Routing/backendkompatibles Image zurück, gewählter Provider bleibt aktiv;
+      DB-Rollback nur nach dem passenden getesteten Vertrag, neue Findings
+      öffnen ihren Ownerpunkt wieder.
 - [ ] **P10.7 — Proxy erst nach letzter eigener Freigabe entfernen.** Nach
-      funktionaler/betrieblicher Abnahme und dokumentiertem PG-/Routing-/Jobzustand
+      funktionaler/betrieblicher Abnahme und dokumentiertem DB-/Routing-/Jobzustand
       **anhalten und explizite Proxy-Entfernungsfreigabe abwarten**. Erst dann
       obsolete Proxyservice-/Routingkonfiguration gezielt aus GitOps nehmen,
       bestehende Networks/Secrets/Volumes anderer Consumer unangetastet lassen.
-      Abnahme: native Indexer-/SAB-Verbindungen und PG-Betrieb bleiben gesund,
+      Abnahme: native Indexer-/SAB-Verbindungen und gewählter DB-Betrieb bleiben gesund,
       Rückweg dokumentiert, kein zweiter Proxy, keine Datenbank-/Backup-Löschung.

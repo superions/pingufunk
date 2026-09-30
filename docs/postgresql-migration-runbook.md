@@ -4,8 +4,9 @@ Stand: 30.09.2026. Dies ist ein **noch nicht produktiv freigegebenes** Runbook
 für P11.3–P11.8. Die Befehle für Snapshot, Import, Verifikation und Sequences
 entsprechen den implementierten CLI-Einstiegen im `migrator`-Image. Sie wurden
 mit synthetischen Daten gegen disposable PostgreSQL 17 erprobt, aber **nicht**
-gegen die private HAProxy-/Swarm-Topologie. P10.2 muss die unten benannten
-Betriebswerte, Image-Digests, Rolle und Rollbacks konkret einsetzen; P10.3–P10.7
+gegen eine konkrete produktive Netz-/DB-Topologie. P10.2 muss bei PG-Wahl die
+unten benannten Betriebswerte, Image-Digests, Rolle und Rollbacks konkret
+einsetzen; P10.3–P10.7
 brauchen jeweils ihre eigene Freigabe. Bis dahin: kein Deployment, keine echte
 SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
 
@@ -22,7 +23,8 @@ SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
    Laufzeit-/Importrolle ohne SUPERUSER, CREATEDB und CREATEROLE; DDL-Runner
    separat auf die eigene DB begrenzen. Nicht Servarr-main/log oder andere
    Anwendungsschemata verwenden. Tatsächliche PostgreSQL-Version, Primary,
-   HAProxy-Endpunkt, TLS, Network und Secret-Mount read-only prüfen. Für die
+   gewählten Endpunkt, Transport/TLS, Network und Secret-Mount read-only prüfen.
+   Weder HAProxy noch ein anderer Zugriffsweg ist vorgegeben. Für die
    eigene leere DB die gepinnte Prisma-6.19.2-Kette mit `migrate deploy`
    anwenden; Appstarts führen das nicht aus.
 4. Secretdateien und Snapshots liegen außerhalb Git mit privaten Rechten.
@@ -41,7 +43,7 @@ SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
 ## Befehlsfolge für eine disposable Probe
 
 Der vollständig synthetische Containerpfad (direktes TLS zu kurzlebigem
-PostgreSQL, **nicht** HAProxy) ist aus diesem Checkout reproduzierbar:
+PostgreSQL ohne vorgeschalteten Proxy) ist aus diesem Checkout reproduzierbar:
 
 ```sh
 docker build --target migrator -t pingufunk-p11-migrator-qa .
@@ -63,15 +65,16 @@ konkreten **privaten** Betrieb separat belegt werden. Die folgenden Variablen
 sind Pfade/Identitäten, keine URLs oder Passwörter. `IMAGE` ist das lokal
 gebaute, per Digest festgehaltene `migrator`-Image aus genau demselben Commit
 wie das spätere App-Image. `PG_SECRET_FILE` enthält die vollständige URL
-mit TLS-Parametern und bleibt außerhalb Git. Der Operator setzt zusätzlich
-den korrekten Container-Networkpfad zum HAProxy ein; kein Swarm-PostgreSQL
-wird erfunden.
+mit den Parametern des geprüften Transports und bleibt außerhalb Git. Der
+Operator setzt zusätzlich
+den konkreten, geprüften Container-Networkpfad zum gewählten PostgreSQL-
+Endpunkt ein; eine besondere Proxy- oder Swarm-Topologie wird nicht erfunden.
 
 ```sh
 # Eingaben lokal und geschützt festlegen; hier absichtlich keine Beispielwerte.
 # IMAGE=… SOURCE_DIR=… SQLITE_NAME=… BACKUP_PARENT=… RUN_NAME=…
 # DDL_SECRET_FILE=… PG_SECRET_FILE=… PG_NETWORK=… PG_DATABASE=…
-# PG_ROLE=… PG_HAPROXY_HOST=…
+# PG_ROLE=… PG_ENDPOINT_HOST=…
 
 # 1. Konsistenter SQLite-Snapshot in einem NEUEN privaten Unterverzeichnis.
 #    BACKUP_PARENT muss für UID/GID 1000:1000 privat beschreibbar sein;
@@ -88,13 +91,13 @@ docker run --rm --network "${PG_NETWORK}" \
   -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}"
 
 # 3. Ab hier Runtime-/Importrollen-Secret verwenden. Read-only Preflight;
-#    PG muss Primary, versionstauglich, TLS-geschützt und richtig adressiert sein.
+#    PG muss Primary, versionstauglich und gemäß gewähltem Transport geschützt sein.
 docker run --rm --network "${PG_NETWORK}" \
   --mount "type=bind,src=${BACKUP_PARENT},dst=/backup,readonly" \
   --mount "type=bind,src=${PG_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
   -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-preflight.mjs \
-  "/backup/${RUN_NAME}/source.sqlite" "${PG_DATABASE}" "${PG_ROLE}" "${PG_HAPROXY_HOST}"
+  "/backup/${RUN_NAME}/source.sqlite" "${PG_DATABASE}" "${PG_ROLE}" "${PG_ENDPOINT_HOST}"
 
 # 4. Ausschließlich nach bewiesener Writer-Pause: Import. SHA256 ist der
 #    Wert aus dem Snapshot-Report, nicht der Hash einer laufenden Hauptdatei.
@@ -104,7 +107,7 @@ docker run --rm --network "${PG_NETWORK}" \
   -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-migration-cli.mjs import \
   --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
-  --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_HAPROXY_HOST}" \
+  --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_ENDPOINT_HOST}" \
   --confirm-writers-stopped
 
 # 5. Erneut lesend vergleichen; ein fremdes/geändertes Ziel stoppt.
@@ -114,7 +117,7 @@ docker run --rm --network "${PG_NETWORK}" \
   -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-migration-cli.mjs verify \
   --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
-  --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_HAPROXY_HOST}"
+  --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_ENDPOINT_HOST}"
 
 # 6. Weiterhin ohne Writer: nur die im PG-Katalog tatsächlich zugeordneten
 #    Sequences korrigieren. setval ist NICHT transaktional; bei Fehler bleibt
@@ -127,7 +130,7 @@ docker run --rm --network "${PG_NETWORK}" \
   -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-migration-cli.mjs sequences \
   --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
-  --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_HAPROXY_HOST}" \
+  --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_ENDPOINT_HOST}" \
   --confirm-writers-stopped --confirm-no-app-writes-since-import
 ```
 
@@ -163,11 +166,14 @@ pro Prozess, ist aber keine Rollback-Entscheidungsgrundlage.
   bleiben. Niemals ein PG-Image mit SQLite oder umgekehrt verbinden.
 - **Nach einem neuen PG-Anwendungswrite:** Altes SQLite ist veraltet.
   Writer stoppen, PG-Backup sichern und Jobs, Settings, Cache, Regeln und
-  Dateieffekte abgleichen. Rücktransfer oder ein ausdrücklich genehmigtes
-  RPO mit benannten Verlusten ist noch offen; daher **keine automatische
-  SQLite-Rückschaltung** und keine produktive Schreibfreigabe.
+  Dateieffekte abgleichen. Ein semantisch verlustfreier PG→SQLite-Rücktransfer
+  in eine neue Datei ist noch nicht implementiert oder abgenommen; daher
+  **keine automatische SQLite-Rückschaltung**. Vor produktiver PG-
+  Schreibfreigabe muss stattdessen ein PG-kompatibles Rollbackimage mit
+  unverändertem PG-Datenstand getestet sein. Der SQLite-Proxy-Ausstieg bleibt
+  davon unabhängig.
 - **Nach späterer Proxy-Umschaltung:** Nur Proxy-/Indexer-/SAB-Routen
-  zurücksetzen und PostgreSQL grundsätzlich beibehalten. GUID-Doppelgrab-
+  zurücksetzen und den gewählten Datenbankprovider beibehalten. GUID-Doppelgrab-
   Risiko und Freigabegrenzen stehen im Proxy-Cutover-Runbook.
 
 SQLite-Dateien, PG-Backups, Manifest und Images bleiben erhalten; eine

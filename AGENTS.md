@@ -3,8 +3,8 @@
 ## Purpose
 
 This fork aims to replace an external Sonarr/Radarr compatibility proxy with
-native, tested RundfunkArr fixes and optional integrations. **PostgreSQL is a
-mandatory target, not an optional optimization.** Read
+native, tested RundfunkArr fixes and optional integrations. **SQLite remains a
+supported backend; PostgreSQL is an optional, explicitly selected backend.** Read
 `todo/proxy-retirement.md` (the sole executable phased contract),
 `docs/proxy-retirement-plan.md`, its review and `docs/postgresql-migration-plan.md`
 before changing the relevant behavior. Re-check upstream before implementing a
@@ -28,13 +28,13 @@ request determines scope; a plan or skill never supplies deployment permission.
   file paths and configuration through an explicit tested transition. Do not
   invent compatibility layers for behavior that never shipped. Do not relabel
   ambiguous content as the requested series, film, episode or language.
-- The future active runtime is PostgreSQL. SQLite is a legacy migration source
-  and a bounded rollback artifact; it must not remain the final production
-  backend or silently become a runtime fallback after a PostgreSQL failure.
-- Use a new PostgreSQL-native migration chain. Preserve historical SQLite SQL
-  as recovery input/history; never replay it against PostgreSQL or copy its
-  `_prisma_migrations` ledger into the target. Applied migrations are append-only.
-  Review schema, generated client, initialization and real source data together.
+- Support a deliberate SQLite or PostgreSQL selection per installation. Never
+  automatically switch providers after a connection failure or create a second
+  database implicitly. A PostgreSQL cutover is optional and separately approved.
+- Maintain provider-specific, append-only migration chains and compatible
+  generated clients. Preserve historical SQLite SQL; never replay it against
+  PostgreSQL or copy its `_prisma_migrations` ledger into the target. Review both
+  providers, initialization and real source data together.
 - Do not combine the database cutover, new matching semantics, worker replica
   increases and proxy removal into one unreviewable deployment. PostgreSQL alone
   does not make the current in-process download queue safe for multiple replicas.
@@ -89,8 +89,9 @@ request determines scope; a plan or skill never supplies deployment permission.
   `migrate dev`, automatic truncation, or `db push` as a production migration.
   Resolve the actual DB, schema, instance and role before any authorized write.
 - Separate development, disposable test and production runtimes. Do not infer
-  hosts, SSH targets, credentials, container names or database versions from
-  another project. Preserve existing Swarm/HAProxy/network/volume/secret topology.
+  hosts, SSH targets, credentials, container names, database versions or a
+  particular PostgreSQL access route from another project. Adapt to the
+  selected installation's network/volume/secret topology without baking it in.
 
 ## Verification and evidence
 
@@ -102,10 +103,10 @@ request determines scope; a plan or skill never supplies deployment permission.
   source-string assertions or an always-successful mock are not sufficient proof
   of matching, data preservation or import safety. Assert the consuming contract
   and negative cases. Do not swallow errors or skip product defects for green CI.
-- Database tests must use disposable PostgreSQL instances once P11 is implemented;
-  SQLite fixtures are appropriate only for migration/legacy characterization.
-  No substitute SQLite-only gate may qualify PostgreSQL support. Tests must clean
-  up their own transactions, files, connections and process trees, not shared data.
+- Exercise both supported backends with disposable databases: SQLite runtime
+  tests for SQLite and PostgreSQL integration tests for PostgreSQL. Neither
+  backend's tests substitute for the other's. Tests must clean up their own
+  transactions, files, connections and process trees, not shared data.
 - Reuse green evidence until a relevant input changes. Documentation edits,
   committing, pushing or elapsed time do not by themselves invalidate product
   tests. Distinguish new execution, reused evidence and unverified gates honestly.

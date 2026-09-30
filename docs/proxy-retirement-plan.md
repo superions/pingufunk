@@ -4,9 +4,9 @@ Stand: 28.09.2026. **Analyse und Planung, keine Funktionsänderung oder
 Bereitstellung.** Dieses Dokument ersetzt den bisherigen groben Projektplan.
 Der anschließende [Reviewbericht](proxy-retirement-review.md) dokumentiert
 Befunde, Korrekturen und verbleibende Unsicherheiten.
-Die ergänzende Nutzerentscheidung ist verbindlich:
-**Pingufunk wird auf PostgreSQL migriert.** Der konkrete Datenvertrag und
-Datenvertrag steht in der [PostgreSQL-Fachreferenz](postgresql-migration-plan.md).
+Entscheidung vom 30.09.2026: **PostgreSQL ist optional; SQLite bleibt ein
+unterstützter Backendtyp und der Proxy-Ausstieg darf darauf erfolgen.** Der
+optionale Datenvertrag steht in der [PostgreSQL-Fachreferenz](postgresql-migration-plan.md).
 Einziger ausführbarer Arbeitsvertrag: [Phasen-TODOs](../todo/proxy-retirement.md).
 Dieses Dokument bleibt Analyse, Inventar und Priorisierungsgrundlage.
 
@@ -24,8 +24,8 @@ zwingendes Sicherheitsgate. Sonarr-Metadaten haben sehr hohen Nutzen, sind
 wegen Konfiguration, Secrets und Cache aber kein trivialer Ein-Datei-Fix.
 Filmmatching und allgemeine ARTE-Zuordnung benötigen mehr Arbeit. Die
 vollständige Ablösung umfasst **Indexer und Downloadclient**, nicht nur Suche.
-Sie umfasst außerdem **PostgreSQL als aktiven Datenbankbackend**. Der bisherige
-SQLite/NFS-Workaround ist nur Ausgangs-/Rollbackbestand, kein finales Ziel.
+Sie setzt **keinen PostgreSQL-Cutover** voraus. Wer PostgreSQL wählt, bekommt
+eine separate, verlustbewusste Migration; SQLite bleibt ein gültiges Ziel.
 
 ## Prüfgrundlage und Grenzen
 
@@ -78,7 +78,7 @@ B = Laufzeitfunktion bzw. Vertrag, O = Betriebsrandbedingung.
 | B14 | extractNzbReleaseName, privateDownloadDirectory, scopeDownloadRequest; eigener Ordner pro Job                                   | Kategorieordner für alle Jobs; Tempdatei ebenfalls nur nach Release-Titel                                                   | Native Isolation in Temp und Complete, parsbarer Name + Job-ID; P04                                             |
 | B15 | rewriteDownloadApiResponse; öffentliche cat/category erhalten, storage job-spezifisch lassen                                    | Kategorie wird unverändert zurückgegeben; storage ist dirname(filePath)                                                     | Kategorie und Speicherlayout entkoppeln, Legacy-Einträge erhalten; P04                                          |
 | B16 | HTTP-Weiterleitung, Hop-by-Hop-Header, Response-Länge, /healthz                                                                 | Direkte Next-Routen; /api/newznab/api bereits Alias                                                                         | Transport entfällt, funktionale Health-/Endpoint-/Fehlerverträge prüfen; P05, P10                               |
-| O01 | SQLite/NFS, connection_limit und socket_timeout im Stack, nicht im Proxy-Code                                                   | Prisma weiterhin SQLite                                                                                                     | Verbindliche PostgreSQL-Migration mit Datenvertrag, Secrets und Rollback; P05, P11, P10                         |
+| O01 | SQLite/NFS, connection_limit und socket_timeout im Stack, nicht im Proxy-Code                                                   | Prisma weiterhin SQLite                                                                                                     | Optionale PostgreSQL-Migration mit Datenvertrag, Secrets und Rücktransfer; P05, P11, bei Wahl P10               |
 | O02 | Indexer-/SAB-URLs, relative NZB-URLs, Remote Path Mapping, Kategorien und Secrets                                               | Direkte Endpunkte vorhanden, Integration noch nicht geprüft                                                                 | Beide Verbraucherpfade und GitOps-Umschaltung abnehmen; P10                                                     |
 
 ### Was bereits vorhanden ist und nicht dupliziert werden soll
@@ -103,27 +103,26 @@ K = lokal begrenzt, M = mehrere Komponenten, G = Integrations-/Architekturpaket.
 Paketgrößen bei der Umsetzung in kleine PRs aufteilen. Hoher Nutzen bedeutet
 nicht automatisch, dass ein Paket ohne seine Sicherheitsabhängigkeiten startet.
 
-| Rang | Paket                                                         | Aufwand | Mehrwert                                                           | Abhängigkeit / Gate                                                                      |
-| ---- | ------------------------------------------------------------- | ------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| 0    | P00: dauerhafte Regressionen und Fork-Test-CI                 | K–M     | Sehr hoch: belegbarer Fortschritt                                  | Nur Test-CI, keine Image-Publikation; Runner prüfen                                      |
-| 1    | P01: explizite ARTE-Staffel + URL-Rendition-Prüfung           | K       | Hoch: richtige Staffel, progressive Alternativen nicht verlieren   | Bestehende Parser-/RSS-Tests; unklare Staffel nicht erfinden                             |
-| 2    | P02: exakte TV-Antworten und konsistente Release-Identität    | K–M     | Sehr hoch: keine fremden Episoden/unnötigen Feed-Mengen            | P01; Serienidentität vor breit geöffneten Suchpfaden                                     |
-| 3    | P03: ehrliche Sprache und sichere GUID-Deduplikation          | M       | Sehr hoch: falsche Sprache verhindern                              | Sprache vor Titelbereinigung und vor Pagination                                          |
-| 4    | P04: Job-Isolation und SAB-Kategorievertrag                   | M       | Sehr hoch: Import-/Überschreibungsfehler verhindern                | Pflicht vor Download-/Import-Abnahme; keine DB-Migration zwingend voraussetzen           |
-| 5    | P05: Fehler-/Cache-/Betriebsverträge, Secret-Grundlage        | M       | Hoch: robuste Integration, kein Credential-Leak                    | Pflichtgrundlage für neue API-Anbieter                                                   |
-| 6    | P11: verbindliche PostgreSQL-Migration                        | M–G     | Pflichtziel: persistenter Zustand auf PostgreSQL                   | Nach P05; technische Bereitschaft vor P07/P09; echter Cutover separat in P10             |
-| 7    | P06: optionale Sonarr-Metadaten + sichere Titelsuche          | M       | Sehr hoch: Tatort und fehlende lokale Metadaten ohne neue Accounts | P02, P03, P05                                                                            |
-| 8    | P07: allgemeine ARTE-Zuordnung/Varianten statt Allowlist      | M–G     | Hoch: ganze Seriengruppe statt Einzelfix                           | P01–P03, P05, P11 bei Schemaänderung; ggf. P06 für Metadaten                             |
-| 9    | P08: accountfreie Film-Metadaten und sicherer Radarr-Suchpfad | M–G     | Sehr hoch: Filme überhaupt zuverlässig finden/zuordnen             | P03, P05; P04 für vollständigen Import                                                   |
-| 10   | P09: vollständige Medienprüfung und HLS-Freigabe              | M–G     | Hoch: keine Samples/stummen Dateien als completed                  | P04, P11 bei Schemaänderung; erwartete Identitäts-/Laufzeitinformationen aus P06/P08     |
-| 11   | P10: isolierte Gesamtparität, kontrollierte Ablösung          | G       | Zielerreichung                                                     | Alle Entwicklungsabnahmen; echter PG-Cutover vor separat freigegebener Proxy-Umschaltung |
+| Rang | Paket                                                           | Aufwand | Mehrwert                                                           | Abhängigkeit / Gate                                                                |
+| ---- | --------------------------------------------------------------- | ------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| 0    | P00: dauerhafte Regressionen und Fork-Test-CI                   | K–M     | Sehr hoch: belegbarer Fortschritt                                  | Nur Test-CI, keine Image-Publikation; Runner prüfen                                |
+| 1    | P01: explizite ARTE-Staffel + URL-Rendition-Prüfung             | K       | Hoch: richtige Staffel, progressive Alternativen nicht verlieren   | Bestehende Parser-/RSS-Tests; unklare Staffel nicht erfinden                       |
+| 2    | P02: exakte TV-Antworten und konsistente Release-Identität      | K–M     | Sehr hoch: keine fremden Episoden/unnötigen Feed-Mengen            | P01; Serienidentität vor breit geöffneten Suchpfaden                               |
+| 3    | P03: ehrliche Sprache und sichere GUID-Deduplikation            | M       | Sehr hoch: falsche Sprache verhindern                              | Sprache vor Titelbereinigung und vor Pagination                                    |
+| 4    | P04: Job-Isolation und SAB-Kategorievertrag                     | M       | Sehr hoch: Import-/Überschreibungsfehler verhindern                | Pflicht vor Download-/Import-Abnahme; keine DB-Migration zwingend voraussetzen     |
+| 5    | P05: Fehler-/Cache-/Betriebsverträge, Secret-Grundlage          | M       | Hoch: robuste Integration, kein Credential-Leak                    | Pflichtgrundlage für neue API-Anbieter                                             |
+| 6    | P11: optionale PostgreSQL-Migration, SQLite weiter unterstützen | G       | Backendwahl ohne Datenverlust                                      | Nach P05; kein Gate für P06–P10 auf SQLite; echter Cutover separat und optional    |
+| 7    | P06: optionale Sonarr-Metadaten + sichere Titelsuche            | M       | Sehr hoch: Tatort und fehlende lokale Metadaten ohne neue Accounts | P02, P03, P05                                                                      |
+| 8    | P07: allgemeine ARTE-Zuordnung/Varianten statt Allowlist        | M–G     | Hoch: ganze Seriengruppe statt Einzelfix                           | P01–P03, P05; Schemaänderung für beide Backendtypen; ggf. P06 für Metadaten        |
+| 9    | P08: accountfreie Film-Metadaten und sicherer Radarr-Suchpfad   | M–G     | Sehr hoch: Filme überhaupt zuverlässig finden/zuordnen             | P03, P05; P04 für vollständigen Import                                             |
+| 10   | P09: vollständige Medienprüfung und HLS-Freigabe                | M–G     | Hoch: keine Samples/stummen Dateien als completed                  | P04, Schemaänderung für beide Backendtypen; erwartete Infos aus P06/P08            |
+| 11   | P10: isolierte Gesamtparität, kontrollierte Ablösung            | G       | Zielerreichung                                                     | Relevante Entwicklungsabnahmen; PG-Cutover nur bei Wahl, Proxy-Umschaltung separat |
 
 P01 und der begrenzte P02-Fix liefern am schnellsten Nutzen. P03 bleibt
 Sicherheitspriorität, ist aber keine bloße Regex-Liste. Bei der Umsetzung
 unabhängige Teiländerungen früh reviewen; den Proxy erst nach P10 entfernen.
-P11 behält seine neue Paketnummer, wird aber vor P06–P10 eingeordnet;
-die bestehenden IDs bleiben als stabile Referenzen erhalten. PostgreSQL darf
-nicht wegen fertiger Suchfixes aus dem Abschlussumfang gestrichen werden.
+P11 behält seine Paketnummer, läuft aber unabhängig vom SQLite-Proxy-Pfad;
+die bestehenden IDs bleiben als stabile Referenzen erhalten.
 
 ## Kanonischer Arbeitsvertrag
 
@@ -131,16 +130,15 @@ Alle Umsetzungspakete und offenen Reviewpunkte sind in den
 [Phasen-TODOs](../todo/proxy-retirement.md) überführt. Abnahmen, Entscheidungen
 und Freigabestopps werden ausschließlich dort geführt.
 
-P11 liefert technische PostgreSQL-Bereitschaft vor neuen Schemaerweiterungen.
-Die echte Produktionsmigration samt Schreibfreigabe liegt in P10, getrennt
-von der späteren Proxy-Umschaltung. PostgreSQL bleibt Pflichtziel, ohne weitere
-Entwicklung auf eine Produktionsfreigabe warten zu lassen.
+P11 liefert technische PostgreSQL-Bereitschaft und erhält SQLite-Lauffähigkeit.
+Die echte Produktionsmigration samt Schreibfreigabe ist bei PG-Wahl separat
+von der Proxy-Umschaltung freizugeben; beides darf unabhängig erfolgen.
 
 ## Nachweismatrix und Review der Risiken
 
 Zusätzlich geprüft: Prisma CLI/Client 6.19.2, sechs Modelle, drei SQLite-
 Migrationen und SQLite-Entrypoint. PostgreSQL-Implementierung/Serverversion
-und Datenübernahme sind noch offen; P11 ist verbindlicher Abschlussgate.
+und Datenübernahme sind noch offen; P11 ist nur für eine PG-Wahl Abschlussgate.
 
 | Prüfung                   | Nachweis heute                                                                                                         | Noch erforderliche Abnahme                            |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |

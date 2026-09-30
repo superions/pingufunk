@@ -1,11 +1,11 @@
 ---
 name: pingufunk-postgresql-migration
-description: Plan, implement or rehearse Pingufunk's mandatory SQLite-to-PostgreSQL migration with semantic data fidelity, secrets and rollback. Use for Pingufunk Prisma and migration work, not for Servarr main/log migration; production cutover remains separately authorized.
+description: Plan, implement or rehearse Pingufunk's optional SQLite-to-PostgreSQL migration and dual-backend compatibility with semantic data fidelity, secrets and rollback. Use for Pingufunk Prisma and migration work, not for Servarr main/log migration; production cutover remains separately authorized.
 ---
 
 # Pingufunk PostgreSQL-Migration
 
-PostgreSQL ist Pflichtziel, nicht eine abwägbare Option. Lies AGENTS.md und
+PostgreSQL ist eine explizit wählbare Option; SQLite bleibt unterstützt. Lies AGENTS.md und
 vollständig die [PostgreSQL-Fachreferenz](../../../docs/postgresql-migration-plan.md)
 und den betroffenen P11-/P10-Vertrag in den
 [Phasen-TODOs](../../../todo/proxy-retirement.md) vor der entsprechenden Arbeit.
@@ -15,8 +15,8 @@ migration oder Dienständerung an einer bestehenden Installation.
 ## Entscheidung und Implementierung
 
 - Tatsächlich gelockte Prisma-Version und Source-/Zielschemas feststellen.
-  PostgreSQL-Prisma-Client und native SQL-Kette erzeugen; alte SQLite-Kette
-  unverändert als Historie/Recovery erhalten. Kein sqlite-Ledger im PG-Ziel.
+  Beide Provider mit passenden Clients und eigenen SQL-Ketten unterstützen;
+  alte SQLite-Kette unverändert erhalten. Kein SQLite-Ledger im PG-Ziel.
 - Datenvertrag für alle sechs Modelle anhand realer Spalten/Defaults prüfen:
   IDs/FK/Unique, NULL, BigInt, Zeiten, Config, Queue/History und Stringpayloads
   bewusst Preserve/Normalize/Reject zuordnen. Verlust ist kein stiller Erfolg.
@@ -25,16 +25,16 @@ migration oder Dienständerung an einer bestehenden Installation.
   Native PostgreSQL-Sequences per Schemaownership ermitteln, keine statische
   Servarr-Liste. Sonderfall leerer Tabelle und setval-Rollbackgrenze testen.
 - Secret-Datei vor Prisma-Start auflösen; Leere/Widersprüche fail closed,
-  URL nie ausgeben. Kein automatischer SQLite-Fallback. Aktuelle SQLite-
-  Entrypoint-/CLI-/Defaultannahmen in Image, Devconfig und Tests gemeinsam lösen.
-- Externe PostgreSQL-Infrastruktur und vorhandenen HAProxy-Weg erhalten.
-  Serverversion/Primary/TLS/Berechtigungen im echten Preflight verifizieren,
-  nicht schätzen oder Myoxus-Host-/Poolannahmen kopieren. Einzelworker beibehalten,
+  URL nie ausgeben. Provider explizit wählen, niemals bei Verbindungsfehler
+  automatisch wechseln. Entrypoint, Image, Devconfig und Tests gemeinsam prüfen.
+- Keinen PostgreSQL-Zugriffsweg fest verdrahten. Serverversion, Primary,
+  Transport/TLS und Berechtigungen für die konkrete Installation verifizieren,
+  nicht schätzen oder fremde Host-/Poolannahmen kopieren. Einzelworker beibehalten,
   bis ein atomarer Queue-Claim für Replikate separat entwickelt ist.
 
 ## Validierung und autorisierter Cutover
 
-Disposable PostgreSQL und synthetische SQLite-Quellen verwenden. Fresh install,
+Disposable PostgreSQL, disposable SQLite und synthetische Quellen verwenden. Fresh install,
 vollständige Übernahme, Datenvergleich, Restart, Secret/DB-Ausfälle, Resume und
 Rollback prüfen. Roundtrip-Vergleich der semantischen Daten schützt mehr als
 Tabellenname-, Rowcount- oder HTTP-200-Prüfungen; keine Secrets im Bericht.
@@ -49,7 +49,9 @@ Kein reset/truncate/fremdes upsert, kein automatischer Appstart bei fehlgeschlag
 Prüfung. Rollen-/DDL-/Sequenceeffekte sind nicht mit dem gesamten Cutover atomar.
 
 Vor neuer PG-Schreibfreigabe kann der unveränderte SQLite-Bestand mit passendem
-altem Image zurückkehren. Danach ist er veraltet: Writer stoppen, PG sichern,
-Delta-/RPO-Vertrag erfüllen; kein stiller Datenverlust. Spätere Proxy-Routing-
-rücknahme soll PostgreSQL beibehalten. Abschluss benennt Sourcehash, Versionen,
+Image zurückkehren. Danach ist er veraltet: Writer stoppen, PG sichern und einen
+getesteten, semantisch verlustfreien Rücktransfer verlangen, falls SQLite wieder
+aktiv werden soll; keine stille Rückschaltung und kein stiller Datenverlust.
+Eine reine Proxy-Routing-Rücknahme soll den gewählten Datenbankprovider nicht
+nebenbei ändern. Abschluss benennt Sourcehash, Versionen,
 Vergleichsergebnis, Restgates und echte vs. nur geplante Commands.
