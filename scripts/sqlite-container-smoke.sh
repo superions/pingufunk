@@ -10,8 +10,15 @@ mkdir -p "$SMOKE_PARENT"
 SMOKE_ROOT="$(mktemp -d "${SMOKE_PARENT}/sqlite-smoke.XXXXXXXX")"
 APP_CONTAINER="pingufunk-sqlite-smoke-${RANDOM}-${RANDOM}"
 APP_STARTED=0
+stop_app() {
+  # --rm removal can outlive docker stop; explicit removal must finish before
+  # reusing this harness-owned name. Bind-mounted fixture data stays intact.
+  docker stop "$APP_CONTAINER" >/dev/null
+  docker rm "$APP_CONTAINER" >/dev/null
+  APP_STARTED=0
+}
 cleanup() {
-  if [[ "$APP_STARTED" == 1 ]]; then docker stop "$APP_CONTAINER" >/dev/null; fi
+  if [[ "$APP_STARTED" == 1 ]]; then stop_app; fi
   if [[ "$SMOKE_ROOT" == "${SMOKE_PARENT}/sqlite-smoke."* && -d "$SMOKE_ROOT" ]]; then
     rm -r -- "$SMOKE_ROOT"
   fi
@@ -61,7 +68,7 @@ for variant in fresh bootstrap; do
     RUNTIME_FILE=current.sqlite
     if [[ -n "$ROLLBACK_RUNNER_IMAGE" ]]; then
       ORIGINAL_HASH=$(SOURCE="$SMOKE_ROOT/$variant/database.sqlite" node -e 'console.log(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.env.SOURCE)).digest("hex"))')
-      docker run --rm -d --name "$APP_CONTAINER" --network none \
+      docker run -d --name "$APP_CONTAINER" --network none \
         -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e PINGUFUNK_WRITES_ENABLED=0 \
         -e DATABASE_URL=file:/qa/database.sqlite \
         --mount "type=bind,src=${SMOKE_ROOT}/${variant},dst=/qa" "$ROLLBACK_RUNNER_IMAGE" >/dev/null
@@ -69,14 +76,13 @@ for variant in fresh bootstrap; do
       ready
       docker exec "$APP_CONTAINER" curl -fsS 'http://localhost:6767/api/settings?key=smoke' \
         | node -e 'let s=""; process.stdin.on("data",c=>s+=c); process.stdin.on("end",()=>{if(JSON.parse(s).value!=="original")process.exit(1)})'
-      docker stop "$APP_CONTAINER" >/dev/null
-      APP_STARTED=0
+      stop_app
       SOURCE="$SMOKE_ROOT/$variant/database.sqlite" EXPECTED_HASH="$ORIGINAL_HASH" node -e 'if(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.env.SOURCE)).digest("hex")!==process.env.EXPECTED_HASH)process.exit(1)'
       echo 'Previous-image rollback on the unchanged source passed before target application writes'
     fi
   fi
   for cycle in initial restart; do
-    docker run --rm -d --name "$APP_CONTAINER" --network none \
+    docker run -d --name "$APP_CONTAINER" --network none \
       -e "PUID=$(id -u)" -e "PGID=$(id -g)" \
       -e "DATABASE_URL=file:/qa/${RUNTIME_FILE}" \
       --mount "type=bind,src=${SMOKE_ROOT}/${variant},dst=/qa" "$RUNNER_IMAGE" >/dev/null
@@ -89,8 +95,7 @@ for variant in fresh bootstrap; do
     docker exec "$APP_CONTAINER" curl -fsS -X POST -H 'Content-Type: application/json' \
       -d '{"key":"smoke","value":"persisted"}' http://localhost:6767/api/settings >/dev/null
     docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/system >/dev/null
-    docker stop "$APP_CONTAINER" >/dev/null
-    APP_STARTED=0
+    stop_app
   done
   SMOKE_SOURCE="$SMOKE_ROOT/$variant/$RUNTIME_FILE" SMOKE_VARIANT="$variant" node --input-type=module -e '
     import {DatabaseSync} from "node:sqlite"; const db=new DatabaseSync(process.env.SMOKE_SOURCE,{readOnly:true});
