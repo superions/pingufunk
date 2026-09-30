@@ -1,5 +1,9 @@
 import { expect, it, vi } from "vitest";
-import { readBoundedProviderJson, ProviderResponseError } from "./bounded-provider-json";
+import {
+  readBoundedProviderJson,
+  readBoundedProviderText,
+  ProviderResponseError,
+} from "./bounded-provider-json";
 
 it("allows the exact byte boundary and rejects one byte over it", async () => {
   await expect(
@@ -38,4 +42,17 @@ it("does not disclose a parse error containing a private URL", async () => {
       100
     )
   ).rejects.toThrow(/^Invalid provider response$/);
+});
+
+it("uses the same byte, UTF-8 and deadline protections for public HTML", async () => {
+  await expect(readBoundedProviderText(new Response("ü"), Date.now() + 1000, 2)).resolves.toBe("ü");
+  await expect(readBoundedProviderText(new Response("ü"), Date.now() + 1000, 1)).rejects.toThrow(
+    "Invalid provider response"
+  );
+  await expect(
+    readBoundedProviderText(new Response(Uint8Array.of(255)), Date.now() + 1000, 2)
+  ).rejects.toThrow("Invalid provider response");
+  await expect(readBoundedProviderText(new Response("html"), Date.now() - 1, 100)).rejects.toThrow(
+    "Invalid provider response"
+  );
 });

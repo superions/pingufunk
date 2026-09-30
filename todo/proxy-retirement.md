@@ -1270,6 +1270,18 @@ P07; B01/B11–B13, A5, R1/R2.
       offen; vorhandenes fuzzy-/ID-Stempel-Verhalten ist ausdrücklich nicht
       abgenommen. Unabhängige P11-Abnahmen laufen weiter, P09 beginnt erst
       nach dem vereinbarten P08-Gate.
+      Ergänzendes Quellenreview: Öffentliche ARTE-Detailseiten enthalten im
+      eigenen `program_content_<id>`-Hauptdatensatz expliziten Filmtyp,
+      `PRODUCTION_YEAR`, Video-ID und Sekundenlaufzeit. Der isolierte Reader
+      liest begrenzte JSON-/UTF-8-Flight-Records ohne JavaScriptausführung,
+      ignoriert Prosa/Empfehlungen/Trailer und akzeptiert zunächst nur deutsche
+      Standalonefilme ohne Magazin-/Serienuntertitel oder Episodenangaben.
+      Primärbeleg, Gegenprobe und React-Framingquelle in der Evidenzmatrix;
+      ein öffentlicher read-only Programmabruf bestätigt die tatsächliche
+      Kontur. 22 synthetische Adapterfälle plus bestehende Body-/GET-Budgetgates
+      erfolgreich. Kein neues Konto/Metadatendienst; andere Provider unknown.
+      Noch kein Suchconsumer angeschlossen, kein Movie-ID-Stempeln dadurch
+      freigegeben. Finale Gesamtläufe/Fork-Gates und P08.2/P08.3 bleiben offen.
 - [ ] **P08.2 — Ein kanonischer Filmkontext über alle Suchrouten.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts` und
       `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}` gemeinsam
