@@ -54,3 +54,5 @@ scripts/*
 !scripts/resolve-database-url.mjs
 !scripts/check-postgresql-schema.mjs
 !scripts/migrate-entrypoint.sh
+!scripts/postgresql-preflight.mjs
+!scripts/postgresql-snapshot.mjs

@@ -508,6 +508,18 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       bei Bootstrapabweichung. Abnahme: bekannte Quellen typisiert erkannt,
       unbekanntes Schema/Zeiteinheit oder fremdes Ziel abort; Read-only erzeugt
       keine Quell-/Zieldatenänderung und Bericht keine geheimen Payloads.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Ein versionierter
+      Preflight erkennt die sechs Modelle in den historischen Bootstrap- und
+      Prisma-SQLite-Schemata, prüft Feldtypen/NULL/Int32/Int64/Zeitdarstellung
+      ohne Klarwertbericht und lehnt unbekannte Tabellen, Spalten, Ledgernamen
+      und mehrdeutige Zeitwerte ab. Ein WAL-Quellpfad wird vor dem SQLite-Open
+      gestoppt: Selbst read-only-Open verändert sonst nachweisbar die SHM-Datei;
+      für die Schema-/Wertprüfung ist ein konsistenter Snapshot nötig. PG-Primary,
+      Rolle, TLS und Version sind als Read-only-Abfragen vorbereitet. Das
+      Quellinventar meldet Pfad, Dateisystem-ID, freien Platz und WAL/SHM;
+      die Inhaltsprüfung läuft erst auf dem privaten Snapshot. Noch offen:
+      Zieltest mit scoped Rolle, HAProxy-/Versionsbeleg, verfügbare
+      Runner-/Imageversionen und vollständige Fidelitymatrix.
 - [ ] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
       neuen Runner SQLite-Backup-API/CLI statt Kopie einer laufenden Hauptdatei
       verwenden; Snapshot außerhalb Git mit eingeschränkten Rechten und Hash.
@@ -519,6 +531,14 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Abnahme: WAL-Quelle konsistent gesichert; beschädigte/FK-verletzte Quelle,
       nichtleeres/fremdes Ziel abbrechen ohne Drop/Truncate; keine Servarr-main/log
       oder fremden Grants. In dieser Phase ausschließlich disposable Umgebungen.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Der separate
+      Snapshot-Runtimepfad nutzt Node-SQLite-Backup statt einer Kopie der
+      laufenden Hauptdatei; ein WAL-Test beweist die zuletzt geschriebene
+      Zeile im Snapshot. Nur die neue private Kopie wird auf einen einzelnen
+      DELETE-Journal-Stand kanonisiert. 0700-Verzeichnis, 0600-Datei, SHA-256,
+      vollständiger `integrity_check` und `foreign_key_check` sind getestet;
+      erneuter Lauf auf dasselbe Ziel und ein FK-defekter Snapshot brechen ab.
+      PG-Rolle/Zielidentität, leeres Zielschema und Rollengrenzen sind noch offen.
 - [ ] **P11.5 — Typisierter Import und sichere Resume-Grenzen.** Den neuen
       Importer explizit auf read-only Snapshot→Prisma-PG-Schema abbilden, Eltern
       vor Kindern, IDs original. Keine blinde pgloader-Schemagenerierung;
