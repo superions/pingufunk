@@ -23,8 +23,10 @@ erledigte Implementierung.
 - Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R10 bleiben in den Referenzen.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
-- Nächster Entwicklungspunkt ist **P06.1**. P11.1 hat SQLite-Lauffähigkeit und
-  ausdrückliche Backendwahl wiederhergestellt. Es folgt der Proxy-Pfad
+- Nächster Entwicklungspunkt ist die eng begrenzte Auswahlkorrektur in
+  **P11.1**, danach **P06.1**. Beide Backend-Laufzeitketten sind geprüft;
+  die Auswahl bei allein konfigurierter PG-URL ist noch nicht umgesetzt.
+  Es folgt der Proxy-Pfad
   P06 → P07 → P08 → P09 → P10 auf den abgenommenen P00–P05.
   P11.2–P11.8 sichern die PostgreSQL-Option und müssen vor deren Betriebsfreigabe
   abgenommen sein; sie blockieren unabhängige Proxy-Arbeit auf SQLite nicht.
@@ -464,7 +466,7 @@ einsatzbereite Produktionsbefehle zu behandeln.
 Produktive Anwendung des PG-Runbooks ist optional und gehört bei PG-Wahl
 ausschließlich P10.3–P10.5.
 
-- [x] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
+- [ ] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
       `prisma/schema.prisma`, historische SQLite-Migrationen,
       `prisma/legacy/sqlite/init-db.sql`,
       `src/lib/db.ts`, `Dockerfile`, `entrypoint.sh`, `.env.example` und
@@ -517,6 +519,26 @@ ausschließlich P10.3–P10.5.
       PG-DB erzeugt keinen Ersatzbestand. SQL-Historien unverändert; Compose-
       Standard und optionaler PG-Override validiert. Bedienung unter
       `docs/database-backends.md`. Keine produktiven Dienste/Daten berührt.
+      Reopen nach Vertragsreview 30.09.2026, ausschließlich für Backendauswahl:
+      `scripts/database-config.mjs::resolveDatabaseConfig` setzt ohne
+      `DATABASE_PROVIDER` derzeit sqlite, selbst bei gültiger PG-URL. Den
+      bestätigten Vertrag zentral umsetzen: ohne Selektor und ohne URL-/Secret-
+      Konfiguration SQLite; ohne Selektor bei gültiger `postgres:`-/
+      `postgresql:`-URL PostgreSQL, bei gültiger `file:`-URL SQLite. Secretdatei
+      erst sicher auflösen, dann deren Protokoll auswerten. Expliziter Selektor
+      bleibt unterstützt, darf aber der URL nicht widersprechen. Leer, unbekannt,
+      unlesbar, doppelt oder unvollständig konfiguriert ist ein Fehler, nicht
+      „PG fehlt“. Ein explizites postgresql ohne URL bricht ab. Gewählter Provider
+      bleibt bei Auth-/Netz-/Schemafehler unverändert. Shell-/lokale Entrypoints
+      dürfen den zentralen Entscheid nicht durch vorzeitiges sqlite-Export
+      überschreiben; App, CLI/Migrator und Compose derselben Auswahl folgen.
+      Abnahme zusätzlich zur weiterhin gültigen Dual-Backend-Evidenz: direkte
+      PG-URL und PG-Secret ohne Selektor wählen PG; file-URL/SQLite-Secret und
+      fehlende Konfiguration wählen SQLite; beide expliziten Provider funktionieren;
+      alle Widerspruchs-/Secret-/PG-Ausfallfälle abort ohne Ersatzdatei. URL nie
+      loggen. Tests für Resolver, beide Startwrapper und gebaute Images erweitern;
+      `docs/database-backends.md`/`.env.example` entsprechend angleichen. Historische
+      Produktgates nicht als Nachweis dieser noch fehlenden Auswahl ausgeben.
 - [ ] **P11.2 — Secretfähiger Single-Worker und vollständiger Writer-Gate.**
       Entrypoint/DB-Owner samt `src/instrumentation.ts`, Config-/Cache-, Ruleset-,
       Queue- und Worker-Schreibpfaden auf `DATABASE_URL_FILE` vor Prozessstart und
@@ -794,7 +816,7 @@ ausschließlich P10.3–P10.5.
 Ergebnis: fehlende lokale Episoden sicher auffindbar. Abhängigkeit P05 und P11.1;
 B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
 
-- [ ] **P06.1 — Providervertrag und Fallbackumfang entscheiden.**
+- [ ] **P06.1 — Beschlossenen Provider-/Fallbackvertrag technisch festlegen.**
       `src/services/shows.ts::{getLocalShow,getShowInfoByTvdbId}` und neue
       `src/services/sonarr-metadata.ts` zusammen planen: optional default-off,
       zunächst eine Instanz, Providerpriorität/Refresh und Ergänzung fehlender
@@ -822,6 +844,49 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       technisch begründen, dokumentieren und mit kurzen/fehlenden Laufzeiten,
       unüberwachten Serien und Grenzfällen regressionsprüfen. Die Fachentscheidungen
       sind geklärt; API-Verifikation und technische Vertragsabnahme bleiben offen.
+      Ausführbare Konkretisierung (Planungswerte, keine ausgeführte Integration):
+      Der bestehende Basislookup bleibt lokale Shows → TVDB → TMDB, nur soweit
+      konfiguriert. Sonarr ergänzt anschließend nach verifizierter TVDB-ID
+      fehlende `(seasonNumber, episodeNumber)`-Einträge; bestehende Einträge,
+      IDs, Titel, Airdates und Laufzeiten werden nicht überschrieben. Ohne
+      Basisbestand ist ein vollständig verifizierter Sonarr-Serienbestand
+      zulässig. Gleiches Koordinatenpaar mit widersprüchlichem Titel/Airdate
+      oder mehreren Sonarr-Serien zur TVDB-ID sperrt dessen automatischen
+      Fallback; keine Titelsimilarität zur Konfliktauflösung. Serienlaufzeit/
+      Durchschnitt nicht als belegte Einzelepisodenlaufzeit ausgeben. Herkunft
+      und Einheiten je Feld im Adaptervertrag dokumentieren.
+      RSS ergänzt nur `series.monitored === true`; fehlender Monitoringbeleg
+      gilt nicht als true. Explizite Einzel-/Staffelsuchen bleiben hiervon
+      unabhängig. Defaultfenster: Airdate UTC in `[jetzt − 14 Tage, jetzt]`,
+      fehlende/ungültige/future Airdate im Sonarr-RSS überspringen. Konfigurierbar
+      auf 1–90 Tage. Pro neuem RSS-Snapshot höchstens fünf Serien, 50 passende
+      Episoden und zehn zusätzliche HTTP-Versuche einschließlich Retries/
+      Folgeseiten; gemeinsamer P05-Deadline maximal 15 Sekunden, kein Budget
+      pro Unterabfrage neu starten. Deterministischer fortschreitender Cursor
+      über überwachte Serien; nicht immer nur die ersten fünf. Cursor erst nach
+      erfolgreichem Snapshot weitersetzen, Offset/Pagination bewegt ihn nicht.
+      Serien-/Episodenmetadaten zehn Minuten, RSS-Ergebnis höchstens 60 Sekunden
+      cachen; Budget-/Fenster-/Konfigurationsänderung invalidiert den Snapshot.
+      `total` beschreibt den gefilterten Snapshot, nicht die ganze Bibliothek.
+      Überwachte Serien aus einer coalesced gecachten API-Inventarabfrage
+      bestimmen, keine komplette Bibliotheks-Content-Suche je RSS-Request.
+      Positiv endliche Quell-Dauer in Sekunden ist Pflicht; unbekannt/0/negativ/
+      NaN/Infinity ist kein gültiger Sonarr-Fallback. `matching.minDuration`
+      (bestehend: 300 Sekunden) für unabhängige Bestandspfade erhalten. Bei
+      belegter positiver Episodenlaufzeit E in Sekunden zusätzlich das Intervall
+      `[E − Δ, E + Δ]` prüfen, Δ = min(25 % E, max(5 Sekunden, p % E));
+      p konfigurierbar 0–25 %, Planungsdefault 10 %. Bei p=0 gilt exakte Dauer,
+      ohne den 5-Sekunden-Sockel. Für belegte Kurzepisoden nur in diesem sicheren
+      Fallback die Mindestgrenze auf min(konfigurierte Mindestdauer, E − Δ)
+      reduzieren; nicht global die Bestandsfilter abschalten. Fehlt E, bleibt
+      allein die konfigurierte Mindestprüfung möglich und die Sollprüfung
+      ausdrücklich unbekannt; keine erfolgreiche Sollprüfung erfinden.
+      Abnahme P06.1: fachlichen Lookup-/RSS-/Dauervertrag mit Units, Herkunft,
+      Grenzen und API-Version schriftlich fixieren; Primärdokumentation und
+      synthetische Adapterfixtures statt ungefragter Live-Bibliotheksantworten.
+      API-Verfügbarkeit/Schema vor realem Betrieb am gewählten Sonarr separat
+      verifizieren. Zahlen sind konfigurierbare technische Startwerte, keine
+      aus Sonarr oder dem privaten Proxy abgeleiteten Tatsachen.
 - [ ] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
       Neuen Sonarradapter in `shows.ts`/TV-Suchowner anschließen, P05-Secret-/
       Budget-/Cachegrundlagen nutzen, nur GET und Base-URL-Unterpfade. Serien-ID,
@@ -830,6 +895,28 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Abnahme: Missing-Episode, falsche Instanz/ID, Rotation, Timeout/401/429,
       Cacheexpiry/-coalescing und default-off mit synthetischer API getestet;
       keine APIkeys/echten Bibliotheksantworten im Browser oder Git.
+      Producer-/Consumerowner gemeinsam bewegen: `shows.ts` darf eine lokale
+      Trefferliste nicht vor Ergänzungsprüfung vorzeitig zurückgeben;
+      Newznab-TV-Route, `mediathek.ts` mit `fetchSearchResultsById` und
+      `fetchSearchResultsForRssSync` sowie Cachekeys verwenden denselben verifizierten
+      Ergänzungsbestand. Keine Metadaten/RSS-Ausfallantwort als erfolgreich leeren
+      Cacheeintrag speichern. Unabhängig belegte Bestandstreffer bleiben nutzbar;
+      ein nur durch ausgefallenen Sonarr belegbarer Request meldet 503, nicht
+      fingierte Identität oder Empty-Erfolg. Noch nicht fertig aufgebaute Sonarr-
+      RSS-Snapshots nicht teilweise publizieren. Secretrotation/Instanzwechsel
+      trennt Cache und inFlight; alte Antworten dürfen neue Epochen nicht füllen.
+      Konfigurationsowner `src/lib/settings.ts`, Settings-API und `/settings` →
+      Matching/Integrationen für Fenster, Mindestdauer und Toleranz zusammenführen;
+      validierte Zahlen mit sichtbaren Units, persistenter Reload/Readback,
+      serverseitige APIkeys/Secretdateien, default-off ohne Sonarr-Netzverkehr.
+      Desktop-only QA samt Screenshot/Konsole für neu sichtbare Controls.
+      Abnahme zusätzlich: Merge ohne Überschreiben, widersprüchliche Koordinaten,
+      gecachte lokale Serie mit fehlender neuer Folge, unüberwachte/Monitoring-
+      unbekannte Serie nicht in Sonarr-RSS, zukünftige/fehlende Airdate,
+      Fenstergrenzen, Rotation über mehr als fünf Serien, stabiles RSS-Offset/
+      total, Budget einschließlich Retry/Folgeseite, Abbruch ohne Teilsnapshot
+      und invalidierte spät eintreffende Antworten kausal testen. Bestehende
+      RSS-/Validierungsfeeds und die gesamte RSS→NZB→Queue-Kette regressionsprüfen.
 - [ ] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
       TV-Suche/`newznab.ts` mit vollständigem Episodentitel oder letztem
       Separatorsegment ≥3 Zeichen nur innerhalb gesicherter Serie, Jahr/
@@ -838,6 +925,13 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       ablehnen. Sonarr-Fallback vor P09 nur direkte progressive HTTP(S)-Renditions.
       Abnahme: synthetische Tatort-Missing-Episodes und Jahres-/Titelkonflikte
       nachgewiesen; Unbekanntes erhält nie angefragte S/E/TVDB-Identität.
+      Dauerprüfung an derselben Schlussfilterstelle vor Dedupe/Limit/total für
+      Einzel-, Staffel- und Sonarr-RSS-Fallback anwenden. Grenztests mit belegter
+      120-Sekunden-Folge trotz bestehender 300-Sekunden-Mindestdauer, genau auf/
+      knapp außerhalb der Toleranz, p=0 und fehlender Soll-/Quell-Dauer. Gleich
+      benannter kurzer Trailer, falsches Jahr, fremde Serie und widersprechende
+      Quellkoordinaten dürfen keine Request-Identität erhalten; Dauer allein
+      beweist keine Episode. HLS-Sperre nur für diesen Fallback bis P09.2 erhalten.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
@@ -863,6 +957,12 @@ B04/B05/B06, R3.
       TopicCategory-Unique beiläufig ändern. Abnahme: zwei Serien im selben Topic
       können Regeln laden/generieren ohne Überschreiben/Fehlzuordnung; vorhandene
       IDs/Regex/Filter bleiben erhalten und Migration auf Bestand getestet.
+      Vor der ersten neuen SQLite-Schemaänderung beide Bestandsformen prüfen:
+      vollständige angewandte Prisma-Kette und historisches Bootstrap mit leerem
+      Ledger. Einen geprüften, idempotenten Baselineübergang für letzteren
+      mit Backup/Schema-/Datenvergleich liefern; kein blindes Ledger-Adoptieren,
+      kein SQL-Replay über vorhandene Tabellen. Source-/Zielversion und
+      Gegenprobe auf beiden disposable Backends gehören zur P07.2-Abnahme.
 - [ ] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
       ARTE-Kandidatensuche/Providerconsumer über Titel/Alias plus sichere Serie
       und gleiche Video-ID zur passenden DE-Fassung führen; deren Koordinaten
@@ -876,26 +976,48 @@ B04/B05/B06, R3.
 Ergebnis: kanonische Filmidentität statt Topic/Ausstrahlungsjahr. Abhängigkeit
 P07; B01/B11–B13, A5, R1/R2.
 
-- [ ] **P08.1 — Accountfreien Metadatenvertrag verifizieren und entscheiden.**
+- [ ] **P08.1 — Accountfreien Mediathek-Metadatenvertrag verifizieren.**
       Filmowner in `src/services/mediathek.ts` und neuer Movie-Metadatenadapter:
-      öffentlichen Radarr-Metadatendienst einschließlich `/v1/movie/<id>` anhand
-      aktueller Primärquellen/Schema/Terms/Datenschutz/Verfügbarkeit prüfen.
-      Optional/default-off, nur öffentliche Film-IDs nach außen, keine Bibliothek/
-      Keys; lokale Radarr-API ist Alternative, kein zwangsweise zweiter Anbieter.
-      **Unverifizierter Dienstvertrag stoppt seine Integration**. Providerwahl,
-      Film-/Kurzfilm-Dauerpolitik und AD/Sprachdefaults explizit festhalten/
-      Entscheidung einholen; Proxy-60-Minutenheuristik kein globaler Default.
+      zuerst die tatsächlich verfügbaren Filmmetadaten der bestehenden
+      Mediathekprovider anhand aktueller Primärquellen und synthetischer Fixtures
+      verifizieren. Providerfelder/ggf. strukturierte Quellseiten zu kanonischem
+      Titel, Filmklassifikation, ausdrücklich belegtem Produktionsjahr, IDs,
+      Laufzeit und deren Units mappen. Topic und Ausstrahlungsjahr sind kein
+      Ersatz. Fehlende Felder unbekannt lassen; Request-ID/Jahr nicht als
+      Quellnachweis übernehmen. Kein neuer Kontozwang, keine verpflichtende
+      lokale Radarr-Metadatenanbindung. Öffentlicher externer Metadatendienst
+      bedeutet Titel-/ID-/Jahr-/Laufzeitlieferant, **nicht Mediathek oder Videoquelle**;
+      weder ihn noch lokale Radarr-Metadaten still als neuen Ausweichweg einführen.
+      Bestehende ausdrücklich konfigurierte Metadatenprovider kompatibel erhalten.
+      Falls die vorhandenen Quellen keine sichere Identität erlauben, konkrete
+      fehlende Evidenz dokumentieren und nur den betroffenen Filmfallback anhalten,
+      statt fuzzy zu raten oder eigenmächtig einen neuen Dienst zu aktivieren.
+      Für einen später ausdrücklich gewählten externen Anbieter zuerst API-/
+      Schema-/Terms-/Datenschutz-/Verfügbarkeitsvertrag prüfen; unbestätigter
+      Dienstvertrag stoppt dessen Integration, nicht unabhängige sichere Quellen.
+      Die bestätigte Kurzfilm-/Dauerpolitik und P03-Sprachpolitik anwenden;
+      Proxy-60-Minutenheuristik kein globaler Default.
       Abnahme: accountfreie begrenzte Strategie mit sicheren Ausfallsemantiken,
       kein garantierter fremder APIvertrag und kein neuer Kontozwang behauptet.
-      Nutzerentscheidung 30.09.2026: Vorhandene lokale Radarr-Instanz als
-      accountfreien Metadatenanbieter bevorzugen. Öffentlicher Dienst nur optional
-      nach belastbarer Schnittstellen-/Terms-/Datenschutzprüfung, kein zwingender
-      zweiter Anbieter und kein neuer Kontozwang. Kurzfilme nicht pauschal durch
+      Korrigierte Nutzerentscheidung 30.09.2026: Die zuvor notierte Bevorzugung
+      lokaler Radarr-Metadaten ist aufgehoben; zuerst Mediathek-Metadaten prüfen.
+      Radarr als vorhandener Newznab-/SAB-/Importconsumer bleibt unverändert.
+      Kein zusätzlicher Metadatendienst wird vorausgesetzt. Kurzfilme nicht pauschal durch
       eine 60-Minuten-Grenze ausschließen; belegte Laufzeit und konfigurierbare
       Dauerprüfung nutzen, fehlende Laufzeit nicht als automatisch bestanden
       behandeln. P03-Sprach-/Variantenentscheidungen gelten auch hier, nicht
-      über Kanal/Domain eine Sprache oder AD-Fassung erfinden. Radarr-API-Vertrag
+      über Kanal/Domain eine Sprache oder AD-Fassung erfinden. Quellenvertrag
       und sichere Consumer-Abnahme bleiben technische Gates.
+      Abnahme konkret: Evidenzmatrix pro genutztem Mediathekprovider mit Feld,
+      Herkunft und Preserve/Unknown/Reject; kein behaupteter APIvertrag für
+      tatsächlich nicht gelieferte IDs/Jahre. P05-Budget/Bodylimits/GET-/Cacheowner
+      wiederverwenden, Metadatenausfall nicht erfolgreich leer cachen. Units
+      einmal zentral nach Sekunden normalisieren; P06-Dauerregel einschließlich
+      belegter Kurzfilm-Ausnahme nutzen, unbekannte Soll-Laufzeit nicht erfinden.
+      Tests ohne externe Konten/lokales Radarr: belegter Film, belegter Kurzfilm,
+      bloßes Magazin-Topic, Ausstrahlungsjahr ohne Produktionsjahr, Remake-
+      Konflikt, fehlende ID/Dauer und Quellenfehler. Fehlender Identitätsbeleg
+      verhindert ID-Stempeln; bekannt sichere Bestandspfade bleiben erhalten.
 - [ ] **P08.2 — Ein kanonischer Filmkontext über alle Suchrouten.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts` und
       `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}` gemeinsam
@@ -942,15 +1064,69 @@ Abhängigkeit P08; B10/R7.
       und Worker gemeinsam festlegen und positiv/negativ testen. P09.2 muss bei
       evidenzarmen Altjobs echte Defekte ablehnen, nicht unbekannte Sollwerte als
       bewiesene Samples oder umgekehrt jeden Legacy-Job pauschal als failed werten.
+      Vertrag konkret: Version 1 der neuen NZB-Medienerwartungen gemeinsam in
+      `newznab.ts`/Fake-NZB-Route, `download.ts::{parseNzbContent,addToQueue}`,
+      `src/types`, `Download` und Worker definieren. Vertragsversion, optionale
+      positive Solldauer in Sekunden, belegte Audio-/Auflösungserwartungen und
+      deren Herkunft speichern; NULL bedeutet unbekannt, niemals 0/false=erfüllt.
+      Fremde/negative/nichtendliche/falsch typisierte Werte und unbekannte
+      Vertragsversion ablehnen; deklarierte neue Version ohne erforderliche
+      Struktur nie automatisch als Legacy weiterverarbeiten. Bestehende
+      unversionierte NZBs und bestehende DB-Zeilen bleiben Legacy-kompatibel;
+      keine massenhafte Umschreibung oder Sollwert-Neuberechnung aus Titeln.
+      Fehlender Versionsmarker beweist nicht das Erzeugungsdatum: die Einstufung
+      bezeichnet Protokollkompatibilität, keine vertrauenswürdige Altersprüfung.
+      Eigene neue Producer müssen den Marker immer liefern; Header-/Title-
+      Fallbacks dürfen einen kaputten v1-Payload nicht auf Legacy herunterstufen.
+      Für alle neuen Jobs gelten die grundlegenden Medienchecks; zusätzliche
+      Sollchecks nur mit belegten Erwartungen, nicht durch erfundene Pflichtwerte.
+      Append-only Migrationen für beide Provider erhalten bestehende IDs,
+      Queue/History, Pfade und NULL; den historischen SQLite-Bootstrap-/Ledger-
+      Übergang aus P11.1 ausdrücklich lösen, nicht mit migrate deploy blind
+      adoptieren. Retry und Restart behalten Vertragsversion/Erwartungen unverändert.
+      Abnahme: neue Producer→Parser→DB→Restart→Retry→Worker mit identischen
+      Erwartungen, unversioniertes altes NZB mit unbekannten Sollwerten,
+      neue deklarierte Version mit fehlender/kaputter Struktur abgelehnt und
+      gleiche Daten-/NULL-Semantik auf beiden disposable Backends. Keine
+      reine Spaltenexistenz-/HTTP-200-Abnahme.
 - [ ] **P09.2 — Fertigmeldung nur nach verifiziertem Medienabschluss.**
       Manager-/FFmpeg-/yt-dlp-Owner nach Download/Mux per lokaler Probe tatsächliche
       Dauer, Audio/Video, Sprache soweit beweisbar, Auflösung und Abschluss prüfen.
-      HTTP-200-HTML, Samples, Abbruch, fehlende Audiospur und kaputte Artefakte
+      HTTP-200-HTML, nachweisbare Samples, Abbruch, fehlende Audiospur und kaputte Artefakte
       erhalten failed statt completed; P03-Sprachvertrag und P04-Isolation gelten.
       Abnahme: synthetische Medien/Processmocks mit positivem Readback, negativen
       Abbruchfällen und anschließender Queuearbeit; vorhandenes ORF-/SRF-Muxing
       erhalten. Sonarr-Fallback-HLS erst nach dieser Abnahme über vorhandenes
       Setting freischaltbar; keine globale HLS-Sperre oder ungeprüfte Aktivierung.
+      Grundprüfung für Legacy und v1 an einem gemeinsamen Abschlussowner:
+      nur jobeigene reguläre lokale Datei, erfolgreicher Download-/Mux-Exit,
+      bei vorhandener zuverlässiger Längenangabe vollständig empfangene Bytes,
+      lesbarer unterstützter Mediencontainer, mindestens eine nutzbare Video-
+      und Audiospur, positive endliche tatsächliche Dauer. Coverbilder nicht
+      als Videospur zählen. Probeprozess ohne Netzwerkzugriff, maximal
+      30 Sekunden Wallclock und 1 MiB Ergebnisoutput betreiben; Timeout/
+      Outputoverflow bricht den eigenen Prozessbaum ab und ergibt failed,
+      ebenso Fehler/fehlende Spur. Keine fremden FFmpeg-Prozesse beenden.
+      Probe vor persistiertem completed und importbereiter History ausführen,
+      in allen progressiven/HLS-/Konvertierungszweigen; DB-/Probe-Fehler dürfen
+      keine zuvor verfrühte Fertigmeldung hinterlassen. Bereits abgeschlossene
+      historische Jobs nicht ungefragt erneut probieren oder umschreiben.
+      Belegte Solldauer mit derselben P06-Toleranz vergleichen. Fehlende
+      Legacy-Sollwerte als unknown führen, nicht als erfolgreich geprüft;
+      dennoch completed bei bestandener Grundprüfung zulassen. Sprache nur
+      soweit belegbar melden, keine deutschen Tags erfinden. Nachweislich
+      verkürzte Dateien/Samples mit verlässlicher Solldauer ablehnen; ohne
+      solche Evidenz keine vollständige Film-/Episodenidentität allein aus
+      ffprobe behaupten. Prüfgrenzen dokumentieren, kein Voll-Decode behaupten,
+      wenn nur Container-/Stream-/Abschlusschecks durchgeführt wurden.
+      Kausale Gates: gültige Legacy-Datei ohne Erwartungen completed; gleiche
+      Datei ohne Audio/mit HTML/nachweisbarer Truncation/Probe-Timeout failed; v1-Sample mit
+      Soll-Dauer failed; positive progressive und ORF-/SRF-HLS-/Mux-Fälle,
+      Grenzdauer und Unknown-Sprache; Medienfehler lassen bei verfügbarer DB
+      den nächsten Queuejob weiterlaufen. DB-Ausfall pausiert fail closed ohne
+      completed oder Spinloop, Reconnect nimmt sicher wieder auf. Retry/Restart
+      erhält Status-/Erwartungsvertrag. Öffentliche
+      Kategorie, Release-ID, Importpfad und Remote-Path-Mapping unverändert.
 
 ## Phase P10 — Vollständige Parität und getrennt freigegebener Betrieb
 

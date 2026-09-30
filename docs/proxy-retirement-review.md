@@ -286,3 +286,46 @@ Abnahme und Abhängigkeiten. Projektlokaler Skill heißt ausschließlich
 oder Runtimeabhängigkeit. Struktur-/Format-/Linkprüfungen sind Dokumentevidenz,
 keine neue Produkt-, PostgreSQL- oder Liveintegrationsevidenz.
 Keine Deployment-, Datenmigrations-, Live-Such- oder Proxy-Entfernungsfreigabe.
+
+## Vertragsreview der Nutzerentscheidungen vom 30.09.2026
+
+Erneuter **Selbstreview** des ausführbaren TODO-Vertrags, kein unabhängiger
+Peer-Review und keine Produktabnahme. Gegen aktuelle Owner geprüft:
+`scripts/database-config.mjs`, `shows.ts`, Settings-/Arr-Client,
+`mediathek.ts`-TV-/RSS-/Filmconsumer, NZB-Parser, Downloadmodell und
+Workerabschluss. Keine echten Bibliotheksantworten, Medien oder DB geöffnet.
+
+Gefundene und im kanonischen TODO korrigierte Lücken:
+
+- **Backendauswahl:** Der Resolver erzwingt ohne Selektor bisher SQLite auch
+  bei PG-URL. P11.1 gezielt wieder geöffnet: URL-/Secret-basierte Auswahl und
+  dieselbe Entscheidung in Shell-/lokalen Entrypoints; fehlerhafte Konfiguration
+  oder PG-Ausfall niemals als Aufforderung zum Backendwechsel. Die frühere
+  Dual-Backend-Testevidenz bleibt historisch, beweist diese Auswahl noch nicht.
+- **Sonarr-Ergänzung:** P06 benennt jetzt Merge-Schlüssel, Nichtüberschreiben,
+  Konfliktbehandlung, Dauerunits/-grenzen sowie ausschließlich überwachte
+  Serien im RSS. Begrenzter Snapshot braucht Cursorrotation, gemeinsames
+  HTTP-/Zeitbudget, stabile Pagination und epochengerechte Cacheinvalidierung.
+  Alle Defaultzahlen sind dokumentierte konfigurierbare Planungswerte bzw.
+  explizite technische Caps, keine behaupteten fremden API-Zusagen.
+- **Filmquellen:** Die zwischenzeitliche Radarr-Bevorzugung ist auf erneuten
+  Nutzerwunsch zurückgenommen. P08 prüft zuerst Mediathek-Metadaten. Externer
+  Metadatendienst und Mediathek/Videoquelle sind ausdrücklich getrennt;
+  kein neuer Dienst oder lokales Radarr wird vorausgesetzt. Fehlende Film-ID/
+  Produktionsjahr-Evidenz ist keine Erlaubnis zu Query-ID-Stempeln oder Fuzzy-
+  Zuordnung. Tatsächlich verfügbare Quellevidenz bleibt Implementierungsgate.
+- **Legacy-Abschluss:** P09 trennt fehlende optionale Erwartungen von kaputten
+  v1-Payloads, trägt Erwartungen über DB/Restart/Retry und prüft vor completed.
+  Protokoll-Legacy ist kein bewiesenes Alter. Medienprobe ohne Sollwerte kann
+  nicht jedes plausible Sample erkennen oder fehlende Sprache belegen; diese
+  Grenze ist benannt statt als vollständiger Inhaltsnachweis ausgegeben.
+- **Erster SQLite-Schemacutover:** Bereits P07.2 muss das historisch leere
+  Bootstrap-Ledger explizit behandeln; erst P09 wäre zu spät. Beide Backends
+  und erhaltene IDs/Daten bleiben Pflichtgates für die betreffenden Migrationen.
+
+Nach Korrektur erneut auf Nutzerumfang, stabile Paket-IDs, Abhängigkeiten,
+Units/Grenzfälle, Owner-/Consumer-Cutover, Desktop-only UI-Abnahme und getrennte
+Betriebsfreigaben geprüft. Keine Implementierungscheckbox neu geschlossen.
+Offen bleiben die benannten technischen Gates, nicht erneut die beantworteten
+Fachfragen. Dokumentprüfung ist keine aktuelle API-/DB-/Produkt-/Live-Evidenz;
+Produktgates müssen bei Umsetzung der neuen Verträge erneut ausgeführt werden.
