@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ApiResultItem, TvdbData } from "@/types";
 import type { MediathekQueryOptions } from "@/lib/mediathek-client";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 const state = vi.hoisted(() => ({
   epoch: 0,
@@ -125,6 +126,18 @@ it("bounds cold snapshots to the shared ten attempts and rotates monitored serie
   const second = await getSonarrRssMatches(base);
   expect(second.map((match) => match.tvdbId)).toEqual([105, 106, 101, 102, 103]);
   expect(second.some((match) => match.tvdbId === 107)).toBe(false);
+});
+
+it("uses the foreground RSS budget and reserves five attempts for its source window", async () => {
+  const budget = new HttpRequestBudget();
+  const matches = await getSonarrRssMatches(base, budget);
+  expect(matches.map((match) => match.tvdbId)).toEqual([101]);
+  expect(state.query).toHaveBeenCalledTimes(1);
+  expect(state.query.mock.calls[0][2].requestBudget).toBe(budget);
+  expect(budget.remainingAttempts).toBe(6);
+  // The same caller can still perform its primary five-page Recent retrieval.
+  for (let page = 0; page < 5; page++) budget.takeAttempt();
+  expect(budget.remainingAttempts).toBe(1);
 });
 
 it("uses inclusive UTC boundaries and excludes future/missing/invalid dates", async () => {

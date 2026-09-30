@@ -6,10 +6,13 @@ import {
   tvdbCache,
 } from "@/lib/cache";
 import { fetchWithRetry } from "@/lib/fetch-retry";
+import type { HttpRequestBudget } from "@/lib/fetch-retry";
+import { ProviderResponseError, readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import { getSettings } from "@/lib/settings";
 import { buildTvdbLoginPayload } from "@/lib/tvdb-auth";
 import type { TvdbData, TvdbEpisode, TvdbAlias } from "@/types";
 import { createHash } from "node:crypto";
+import { z } from "zod";
 
 const TVDB_API_URL = "https://api4.thetvdb.com/v4";
 
@@ -28,7 +31,7 @@ export async function clearTvdbTokenCache(): Promise<void> {
   clearTvdbTokenMemoryCache();
 }
 
-async function getToken(): Promise<string | null> {
+async function getToken(budget?: HttpRequestBudget): Promise<string | null> {
   const settings = await getSettings(["api.tvdb.key", "api.tvdb.pin"]);
   const apiKey = settings["api.tvdb.key"];
   const pin = settings["api.tvdb.pin"];
@@ -43,22 +46,41 @@ async function getToken(): Promise<string | null> {
   if (credentialHash !== tokenCredentialHash) clearTvdbTokenMemoryCache();
   if (cachedToken && tokenExpiry && new Date() < tokenExpiry) return cachedToken;
 
-  return refreshToken(payload, credentialHash);
+  return refreshToken(payload, credentialHash, budget);
 }
 
 async function refreshToken(
   payload: ReturnType<typeof buildTvdbLoginPayload>,
-  credentialHash: string
+  credentialHash: string,
+  budget?: HttpRequestBudget
 ): Promise<string | null> {
   if (!payload) return null;
   try {
-    const response = await fetchWithRetry(`${TVDB_API_URL}/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
+    const response = await fetchWithRetry(
+      `${TVDB_API_URL}/login`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      { requestBudget: budget }
+    );
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
+      throw new ProviderResponseError();
+    }
+    const data = z
+      .object({
+        status: z.string(),
+        data: z.object({ token: z.string().min(1).max(8192) }).optional(),
+      })
+      .parse(
+        await readBoundedProviderJson(
+          response,
+          budget?.deadlineAt ?? Date.now() + 15_000,
+          64 * 1024
+        )
+      );
 
     if (data.status === "success" && data.data?.token) {
       const token = data.data.token;
@@ -72,15 +94,18 @@ async function refreshToken(
       return token;
     }
 
-    console.error("Failed to get TVDB token");
-    return null;
+    throw new ProviderResponseError();
   } catch {
     console.error("Error refreshing TVDB token");
+    if (budget) throw new ProviderResponseError();
     return null;
   }
 }
 
-export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | null> {
+export async function getShowInfoByTvdbId(
+  tvdbId: number,
+  budget?: HttpRequestBudget
+): Promise<TvdbData | null> {
   // Guard against undefined/null tvdbId
   if (tvdbId === undefined || tvdbId === null) {
     return null;
@@ -99,13 +124,44 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
 
   if (hasMetadataMiss(cacheKey)) return null;
 
+  // Explicit callers retain their own deadline rather than joining another request.
+  if (budget) return fetchAndCacheSeriesData(tvdbId, cacheKey, budget);
   return coalesceMetadata(cacheKey, () => fetchAndCacheSeriesData(tvdbId, cacheKey)).catch(
     () => null
   );
 }
 
-async function fetchAndCacheSeriesData(tvdbId: number, cacheKey: string): Promise<TvdbData | null> {
-  const token = await getToken();
+const seriesResponseSchema = z.object({
+  status: z.literal("success"),
+  data: z.object({
+    id: z.number().int().positive(),
+    name: z.string().min(1).max(500),
+    nameTranslations: z.union([z.record(z.string(), z.string()), z.array(z.string())]).nullish(),
+    aliases: z
+      .array(z.object({ language: z.string(), name: z.string().max(500) }))
+      .max(1000)
+      .nullish(),
+    episodes: z
+      .array(
+        z.object({
+          name: z.string().nullable().optional(),
+          aired: z.string().nullable().optional(),
+          runtime: z.number().finite().nonnegative().nullable().optional(),
+          seasonNumber: z.number().int().nonnegative(),
+          number: z.number().int().nonnegative(),
+        })
+      )
+      .max(100_000)
+      .nullish(),
+  }),
+});
+
+async function fetchAndCacheSeriesData(
+  tvdbId: number,
+  cacheKey: string,
+  budget?: HttpRequestBudget
+): Promise<TvdbData | null> {
+  const token = await getToken(budget);
   if (!token) {
     return null;
   }
@@ -118,26 +174,34 @@ async function fetchAndCacheSeriesData(tvdbId: number, cacheKey: string): Promis
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
-      }
+      },
+      { requestBudget: budget }
     );
 
     if (response.status === 404) {
+      void response.body?.cancel().catch(() => {});
       cacheMetadataMiss(cacheKey);
       return null;
     }
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    if (!data || data.status !== "success") {
-      console.error("Failed to fetch data from TVDB");
-      return null;
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
+      throw new ProviderResponseError();
     }
+    const data = seriesResponseSchema.parse(
+      await readBoundedProviderJson(
+        response,
+        budget?.deadlineAt ?? Date.now() + 15_000,
+        8 * 1024 * 1024
+      )
+    );
 
     const series = data.data;
+    if (series.id !== tvdbId) throw new ProviderResponseError();
 
     // Extract German name from translations
-    const germanName = series.nameTranslations?.deu || series.name;
+    const germanName = !Array.isArray(series.nameTranslations)
+      ? series.nameTranslations?.deu || series.name
+      : series.name;
 
     // Extract German aliases
     const rawAliases = series.aliases || [];
@@ -149,21 +213,13 @@ async function fetchAndCacheSeriesData(tvdbId: number, cacheKey: string): Promis
       }));
 
     // Map episodes
-    const episodes: TvdbEpisode[] = (series.episodes || []).map(
-      (ep: {
-        name?: string;
-        aired?: string;
-        runtime?: number;
-        seasonNumber: number;
-        number: number;
-      }) => ({
-        name: ep.name || "",
-        aired: ep.aired ? new Date(ep.aired) : null,
-        runtime: ep.runtime || null,
-        seasonNumber: ep.seasonNumber,
-        episodeNumber: ep.number,
-      })
-    );
+    const episodes: TvdbEpisode[] = (series.episodes || []).map((ep) => ({
+      name: ep.name || "",
+      aired: ep.aired ? new Date(ep.aired) : null,
+      runtime: ep.runtime || null,
+      seasonNumber: ep.seasonNumber,
+      episodeNumber: ep.number,
+    }));
 
     const tvdbData: TvdbData = {
       id: tvdbId,
@@ -178,6 +234,7 @@ async function fetchAndCacheSeriesData(tvdbId: number, cacheKey: string): Promis
     return tvdbData;
   } catch {
     console.error("Error fetching TVDB data");
+    if (budget) throw new ProviderResponseError();
     return null;
   }
 }

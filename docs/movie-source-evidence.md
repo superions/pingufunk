@@ -96,7 +96,8 @@ mögliche Textsuche kann trotzdem ehrliche Quellkandidaten ausgeben.
 
 Alle Lookups, Suchbegriffe, Folgeseiten und Retries teilen das vorhandene
 P05-Budget: höchstens zehn HTTP-Versuche und 15 Sekunden insgesamt.
-Arr-JSON ist auf 5 MiB begrenzt; bestehendes TMDB auf 1 MiB pro Body.
+Arr-JSON ist auf 5 MiB begrenzt; TMDB-Film/Find auf 1 MiB,
+Serien-/Staffeldetails auf 5 MiB, TVDB-Serie und Showkatalog auf 8 MiB.
 Positive Radarr-Metadaten bleiben höchstens zehn Minuten im begrenzten
 Prozesscache (256 Einträge). URL, Credential, DB-/Settingkontext und
 Rotation invalidieren den Bezug; Ausfälle werden nicht als Empty-Success gecacht.
@@ -141,11 +142,25 @@ Nachbarfolgen nicht irrtümlich als koordinatenlos durchgehen.
 
 ## Offene Abnahmegrenzen
 
-P08.1–P08.4 bleiben im ausführbaren TODO offen, bis alle dort genannten
-Abnahmen erfüllt sind. Film-Text/ID-Kontext und RSS→NZB→Queue sind synthetisch
+P08.1 ist abgenommen; P08.2–P08.4 bleiben bis zur vollständigen
+Vertragsabnahme offen. Film-Text/ID-Kontext und RSS→NZB→Queue sind synthetisch
 prüfbar, aber nicht dasselbe wie eine laufende Arr-/Prowlarr-Verbraucherprobe.
 Film-Recent/RSS und neutrale TV-Kandidaten sind implementiert und synthetisch
-prüfbar. Verbleibende Callerbudget-Pfade der älteren TVDB-/TMDB-Serienanbieter
-und Regel-Metadatenauflösung benötigen weiterhin Review.
+prüfbar. Serienanbieter, Show-/Regelkataloge, Regel-Metadaten und
+automatische Regelgenerierung erhalten jetzt dasselbe Callerbudget.
+TVDB-Login/Serie und TMDB-Find/Details/sämtliche Staffeln nutzen begrenzte
+Bodyreader. Fehlgeschlagene und falsche Identitäten werden nicht als leere
+Metadaten gecacht. TVDB-Ausfall kann innerhalb des verbleibenden Budgets
+durch explizit konfiguriertes TMDB oder Sonarr aufgefangen werden.
+Vordergrund-RSS reserviert fünf Versuche für sein Haupt-Sourcefenster,
+statt einen unabhängigen Sonarr-Budgetscope zu starten.
+TV-Suche verwendet maximal drei vollständige Suchnamen/Aliase, bei genau
+einer gewünschten Episode auch deren belegten Titel; gemeinsame Umlaut-/
+Wortvarianten sind reine Retrievalbegriffe. Pro TV-Suchbegriff höchstens
+1.500 Sourcezeilen; Union, Zuordnung, Sprache/Fassung und Pagination danach.
+Keine anderen Serien werden durch einen passenden Episodentitel umbenannt.
+Offizieller TVDB-v4-Feldvertrag: [Swagger](https://github.com/thetvdb/v4-api/blob/main/docs/swagger.yml).
+Die nameTranslations-Sprachcodeliste wird nicht als übersetzter Titel
+interpretiert; bereits unterstützte benannte Übersetzungsobjekte bleiben lesbar.
 Diese Grenzen nicht durch Änderung der Kriterien als erledigt ausgeben.
 P09 und die separate produktive P10-Freigabe bleiben nachgelagert.

@@ -442,3 +442,33 @@ P08.2/P08.3/P08.4 bleiben bis zur restlichen Consumer-/Gesamtbudgetabnahme
 offen. Insbesondere alte Serienanbieter/Showrefresh/Regelauflösung noch nicht
 unter demselben Callerbudget nachgewiesen. Keine Main-Integration oder
 Produktionsoperation; P09 weiterhin abhängig von vollständiger P08-Abnahme.
+
+## P08-Gesamtbudget-Reviewcheckpoint (01.10.2026)
+
+Die verbleibenden Budgetowner sind bis zu TVDB-Login, TMDB-Staffeln,
+Katalogrefresh, Regelmetadaten, Regelgenerierung und Sonarr-RSS weitergereicht.
+Vordergrundsuchen starten keinen separaten Katalogrefresh; überfällige Regeln
+werden im selben Scope erneuert. Explizite Caller erben keine fremden
+Coalescing-Deadlines. Körper sind begrenzt; API-Fehler, fremde IDs und
+unvollständige Staffeln erzeugen keinen erfolgreichen Leer-/Teilcache.
+Providerfehler dürfen eine unabhängig konfigurierte Metadatenquelle innerhalb
+des Restbudgets nutzen, aber keine neue Deadline/Versuchszahl erhalten.
+
+Review-Findings korrigiert: Ablaufgrenze ist nicht identisch mit verbleibender
+Versuchszahl null nach dem letzten erfolgreichen Abruf; ein solcher vollständiger
+Abruf darf publiziert werden. TVDB-nameTranslations kann eine Sprachcodeliste
+statt benannter Texte sein. Optionale/null Episodenfelder und Folge null werden
+nicht zu deutscher Sprache oder Laufzeitbelegen umgedeutet. Nicht gelesene
+Fehlerbodies werden abgebrochen. Fehlgeschlagene Basisprovider dürfen nicht
+nach erfolglosem Sonarr-Lookup als bestätigtes leeres Resultat erscheinen.
+
+Die gemeinsame Retrievaltermfunktion schützt weiterhin den Filmvertrag und
+erweitert TV um begrenzte Aliase/Umlaut-/Wortvarianten sowie einen belegten
+Episodentitel bei exakter Suche. Sie vergibt keine Identität. Source-Unions
+werden erst nach allen erfolgreichen Fenstern gecacht; neue Cacheversion.
+Kausale Tests decken echte HTTP-Attemptzählung, Retrykaskade, Bodycaps,
+Fremd-ID, mehrdeutige TMDB-Findresultate und Staffel-Teilversagen ab.
+662 reguläre Tests bestanden, zehn bedingte PG-Tests nicht ausgeführt;
+Lint, Typecheck, Formatcheck, Build und Diffcheck grün.
+Der neue Gesamtbudgetcheckpoint bleibt unabhängig von der abschließenden
+P08-Consumerabnahme, P09 sowie finalem DB-/Medien-End-to-End.

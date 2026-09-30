@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
 import { queryContent } from "./content-search";
+import type { HttpRequestBudget } from "@/lib/fetch-retry";
 import type { Ruleset, TvdbData, ApiResultItem } from "@/types";
 import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
 
@@ -29,13 +30,17 @@ const ABSOLUTE_EPISODE_PATTERNS = [
  * Search MediathekView API directly (shared client - see its own doc
  * comment for why this used to be a separate, buggy reimplementation).
  */
-async function searchMediathekApi(query: string): Promise<ApiResultItem[]> {
-  return (
-    (await queryContent([{ fields: ["topic"], query }], 50, {
-      sortBy: "timestamp",
-      future: false,
-    })) ?? []
-  );
+async function searchMediathekApi(
+  query: string,
+  budget?: HttpRequestBudget
+): Promise<ApiResultItem[]> {
+  const results = await queryContent([{ fields: ["topic"], query }], 50, {
+    sortBy: "timestamp",
+    future: false,
+    requestBudget: budget,
+  });
+  if (results === null) throw new Error("Search provider unavailable");
+  return results;
 }
 
 /**
@@ -449,7 +454,8 @@ function convertToRuleset(dbRuleset: {
  */
 export async function generateRulesetForShow(
   tvdbId: number,
-  showInfo: TvdbData
+  showInfo: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<Ruleset | null> {
   if (!Number.isSafeInteger(tvdbId) || tvdbId < 1 || showInfo.id !== tvdbId) return null;
   console.log(
@@ -475,14 +481,14 @@ export async function generateRulesetForShow(
   const searchQuery = showInfo.germanName || showInfo.name;
   console.log(`[RulesetGenerator] Searching MediathekView for: "${searchQuery}"`);
 
-  const results = await searchMediathekApi(searchQuery);
+  const results = await searchMediathekApi(searchQuery, budget);
   console.log(`[RulesetGenerator] MediathekView returned ${results.length} results`);
 
   if (results.length === 0) {
     // Try English name if German search failed
     if (showInfo.germanName && showInfo.name !== showInfo.germanName) {
       console.log(`[RulesetGenerator] Trying English name: "${showInfo.name}"`);
-      const englishResults = await searchMediathekApi(showInfo.name);
+      const englishResults = await searchMediathekApi(showInfo.name, budget);
       if (englishResults.length > 0) {
         return generateRulesetFromResults(tvdbId, showInfo, englishResults);
       }

@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ApiResultItem, TvdbData } from "@/types";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 const state = vi.hoisted(() => ({
   rows: new Map<string, Record<string, unknown>>(),
@@ -93,4 +94,25 @@ it("does not publish a requested ID when its metadata belongs to another series"
   expect(await generateRulesetForShow(7, show(8))).toBeNull();
   expect(state.queryContent).not.toHaveBeenCalled();
   expect(state.create).not.toHaveBeenCalled();
+});
+
+it("shares the caller budget across localized and fallback rule-generation searches", async () => {
+  state.queryContent.mockImplementation(async (_queries, _limit, options) => {
+    options.requestBudget.takeAttempt();
+    return [];
+  });
+  const metadata = { ...show(7), germanName: "Lokalisierte Serie" };
+  const budget = new HttpRequestBudget(1);
+  await expect(generateRulesetForShow(7, metadata, budget)).rejects.toThrow();
+  expect(budget.remainingAttempts).toBe(0);
+  expect(state.create).not.toHaveBeenCalled();
+});
+
+it("does not treat a failed rule-generation query as a successful empty search", async () => {
+  state.queryContent.mockResolvedValue(null);
+  await expect(generateRulesetForShow(7, show(7), new HttpRequestBudget())).rejects.toThrow(
+    "Search provider unavailable"
+  );
+  expect(state.create).not.toHaveBeenCalled();
+  expect(state.queryContent).toHaveBeenCalledTimes(1);
 });

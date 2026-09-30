@@ -1356,6 +1356,25 @@ Regel-Metadatenauflösung offen: dort ist der vollständige Gesamtbudget-
 Nachweis noch nicht erbracht. P08.2/P08.4 nicht allein aus diesem Teilstand
 schließen; P09 weiterhin nach vollständiger P08-Abnahme.
 
+Weiterer Budgetcheckpoint 01.10.2026: Basislookup, TVDB-Login/Serie,
+TMDB-Find/Details/alle Staffeln, initialer/überfälliger Show-/Regelkatalog,
+Regel-Metadaten und automatische Regelgenerierung teilen nun den Callerbudget.
+Keine ungezählte Hintergrundaktualisierung aus Vordergrundsuchen;
+explizite Caller erben kein fremdes Coalescing-Budget. TVDB-Fehler kann ein
+konfiguriertes TMDB innerhalb der verbleibenden Versuche auffangen;
+erschöpfter Scope wird nicht zurückgesetzt. Sonarr-RSS reserviert fünf
+Versuche für das Hauptfenster, ohne eigenes zusätzliches Requestbudget.
+Gemeinsame begrenzte Titel-/Umlaut-/Wortterme auch für TV; exakte Episode
+nutzt ihren belegten Titel, höchstens drei Begriffe/1.500 Sourcezeilen je
+TV-Begriff. Union und Quellidentität bleiben vor Sprache/Pagination.
+Kausale Regressionen prüfen mit dem echten Retry-Client Fehlidentität,
+Bodylimit, teilweises TMDB-Staffelversagen, Budgeterschöpfung,
+TVDB→TMDB-Retrykaskade, Regelgenerierungsfehler und RSS-Reserve.
+662 reguläre Tests, Lint, Typecheck, Formatcheck, Build und Diffcheck grün;
+zehn bedingte PG-Tests nicht in diesem Lauf ausgeführt. Keine Schemaänderung.
+Checkboxen P08.2–P08.4 nicht allein mit diesem Checkpoint schließen;
+vollständige Consumer-/Scopeabnahme vor P09 bleibt erforderlich.
+
 ## Phase P09 — Tatsächlicher Medieninhalt vor completed
 
 Ergebnis: falsche/kaputte Downloads werden nicht importierbereit gemeldet.

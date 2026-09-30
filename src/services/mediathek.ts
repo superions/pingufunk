@@ -30,6 +30,7 @@ import {
 } from "./newznab";
 import { matchMovieItems } from "./movie-matcher";
 import { movieSearchTerms } from "./movie-search-terms";
+import { titleSearchTerms } from "@/lib/title-search-terms";
 import { getRadarrMonitoredMovies } from "./radarr-provider";
 import type {
   ApiResultItem,
@@ -52,7 +53,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v7-recent-candidates";
+const CONTENT_SEARCH_CACHE_VERSION = "v8-shared-search-budget";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -383,10 +384,11 @@ function tryParseDate(dateString: string): Date | null {
 
 async function getRulesetShow(
   tvdbId: number | null,
-  provided?: TvdbData
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<TvdbData | null> {
   if (tvdbId === null || !Number.isSafeInteger(tvdbId) || tvdbId < 1) return null;
-  const show = provided?.id === tvdbId ? provided : await getBaseShowInfoByTvdbId(tvdbId);
+  const show = provided?.id === tvdbId ? provided : await getBaseShowInfoByTvdbId(tvdbId, budget);
   // Supplementary metadata never enters permissive/fuzzy legacy ruleset matching.
   return show?.id === tvdbId
     ? { ...show, episodes: show.episodes.filter((episode) => episode.metadataSource !== "sonarr") }
@@ -396,9 +398,10 @@ async function getRulesetShow(
 async function matchesSeasonAndEpisode(
   item: ApiResultItem,
   ruleset: Ruleset,
-  provided?: TvdbData
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const season = extractValueUsingRegex(item, ruleset.seasonRegex);
@@ -426,9 +429,10 @@ async function matchesItemTitleIncludes(
   item: ApiResultItem,
   ruleset: Ruleset,
   threshold: number = 0.7,
-  provided?: TvdbData
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const constructedTitle = buildTitleFromRegexRules(item, ruleset.titleRegexRules);
@@ -468,9 +472,10 @@ async function matchesItemTitleExact(
   item: ApiResultItem,
   ruleset: Ruleset,
   threshold: number = 0.95,
-  provided?: TvdbData
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const constructedTitle = buildTitleFromRegexRules(item, ruleset.titleRegexRules);
@@ -527,9 +532,10 @@ async function matchesItemTitleExact(
 async function matchesItemTitleEqualsAirdate(
   item: ApiResultItem,
   ruleset: Ruleset,
-  provided?: TvdbData
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const constructedTitle = buildTitleFromRegexRules(item, ruleset.titleRegexRules);
@@ -554,9 +560,10 @@ async function applyRulesetFilters(
   results: ApiResultItem[],
   tvdbData: TvdbData | undefined,
   hlsEnabled: boolean,
-  tvdbId: number | null = tvdbData?.id ?? null
+  tvdbId: number | null = tvdbData?.id ?? null,
+  budget?: HttpRequestBudget
 ): Promise<{ matchedEpisodes: MatchedEpisodeInfo[]; unmatchedItems: ApiResultItem[] }> {
-  await ensureRulesetsLoaded();
+  await ensureRulesetsLoaded(budget);
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   console.log(
@@ -591,7 +598,7 @@ async function applyRulesetFilters(
       );
 
       // Try to auto-generate a ruleset
-      const generatedRuleset = await getOrGenerateRulesetForShow(tvdbData.id, tvdbData);
+      const generatedRuleset = await getOrGenerateRulesetForShow(tvdbData.id, tvdbData, budget);
       if (generatedRuleset) {
         console.log(
           `[Mediathek] Auto-generated ruleset for topic "${generatedRuleset.topic}" -> TVDB ${tvdbData.id}`
@@ -628,7 +635,7 @@ async function applyRulesetFilters(
     for (const ruleset of rulesets) {
       // Coordinates in a shared catalogue topic do not identify its series.
       if (isSharedSeriesTopic(item.topic)) {
-        const show = await getRulesetShow(ruleset.media.media_tvdbId, tvdbData);
+        const show = await getRulesetShow(ruleset.media.media_tvdbId, tvdbData, budget);
         if (!show || !hasSharedTopicSeriesEvidence(item, show)) continue;
       }
       // Parse filters from JSON string
@@ -650,19 +657,19 @@ async function applyRulesetFilters(
 
       switch (ruleset.matchingStrategy) {
         case "SeasonAndEpisodeNumber" as MatchingStrategy:
-          matchInfo = await matchesSeasonAndEpisode(item, ruleset, tvdbData);
+          matchInfo = await matchesSeasonAndEpisode(item, ruleset, tvdbData, budget);
           break;
         case "ItemTitleIncludes" as MatchingStrategy:
-          matchInfo = await matchesItemTitleIncludes(item, ruleset, threshold, tvdbData);
+          matchInfo = await matchesItemTitleIncludes(item, ruleset, threshold, tvdbData, budget);
           break;
         case "ItemTitleExact" as MatchingStrategy:
           // For strict strategy, require higher threshold
           const exactThreshold =
             matchingSettings.strategy === "strict" ? Math.max(threshold, 0.95) : threshold;
-          matchInfo = await matchesItemTitleExact(item, ruleset, exactThreshold, tvdbData);
+          matchInfo = await matchesItemTitleExact(item, ruleset, exactThreshold, tvdbData, budget);
           break;
         case "ItemTitleEqualsAirdate" as MatchingStrategy:
-          matchInfo = await matchesItemTitleEqualsAirdate(item, ruleset, tvdbData);
+          matchInfo = await matchesItemTitleEqualsAirdate(item, ruleset, tvdbData, budget);
           break;
       }
 
@@ -764,7 +771,8 @@ function getTvSearchCandidateQueries(
   context: TvSearchContext
 ): Array<{ fields: string[]; query: string }> {
   // Query alternatives separately: the provider combines clauses with AND.
-  if (context.query) return [{ fields: QUERY_FIELDS, query: context.query }];
+  if (context.query)
+    return titleSearchTerms([context.query]).map((query) => ({ fields: QUERY_FIELDS, query }));
 
   const dailyDate = getDailyDateKey(context);
   if (dailyDate === null) return [];
@@ -933,7 +941,7 @@ export async function fetchSearchResultsById(
   searchContext: TvSearchContext,
   limit: number,
   offset: number,
-  requestBudget?: HttpRequestBudget
+  requestBudget = new HttpRequestBudget()
 ): Promise<string> {
   const context: TvSearchContext = {
     ...searchContext,
@@ -952,7 +960,7 @@ export async function fetchSearchResultsById(
   );
 
   const contextKey = tvSearchContextKey(context);
-  await ensureRulesetsLoaded();
+  await ensureRulesetsLoaded(requestBudget);
   const rulesetContext = getRulesetContext();
   const sourceContext = await searchCacheContext();
   const metadataContext = createHash("sha256").update(JSON.stringify(tvdbData)).digest("hex");
@@ -989,18 +997,36 @@ export async function fetchSearchResultsById(
     const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
       (episode) => episode.metadataSource === "sonarr"
     );
-    results = await queryContent([{ fields: QUERY_FIELDS, query: searchQuery }], 10000, {
-      arteSeries: tvdbData,
-      deferLanguageSelection: true,
-      ...(supplemented
-        ? {
-            requestBudget: requestBudget ?? new HttpRequestBudget(),
-            progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
-              (episode) => episode.metadataSource === "sonarr"
-            ),
-          }
-        : { requestBudget: requestBudget ?? new HttpRequestBudget() }),
-    });
+    const searchTerms = titleSearchTerms([
+      searchQuery,
+      ...(desiredEpisodes?.length === 1 ? [desiredEpisodes[0].name] : []),
+      tvdbData.germanName || tvdbData.name,
+      tvdbData.name,
+      ...tvdbData.aliases.map((alias) => alias.name),
+    ]);
+    const windows = await Promise.all(
+      searchTerms.map((query) =>
+        queryContent([{ fields: QUERY_FIELDS, query }], TV_SEARCH_CANDIDATE_LIMIT, {
+          arteSeries: tvdbData,
+          deferLanguageSelection: true,
+          ...(supplemented
+            ? {
+                requestBudget,
+                progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
+                  (episode) => episode.metadataSource === "sonarr"
+                ),
+              }
+            : { requestBudget }),
+        })
+      )
+    );
+    results = windows.some((window) => window === null)
+      ? null
+      : [
+          ...new Map(
+            windows.flatMap((window) => window ?? []).map((item) => [JSON.stringify(item), item])
+          ).values(),
+        ];
 
     if (results === null) throw new Error("Search provider unavailable");
     if (results.length === 0) {
@@ -1022,7 +1048,8 @@ export async function fetchSearchResultsById(
     results,
     tvdbData,
     hlsEnabled,
-    context.tvdbId
+    context.tvdbId,
+    requestBudget
   );
   console.log(`[Mediathek] Matched episodes after ruleset filtering: ${matchedEpisodes.length}`);
 
@@ -1083,7 +1110,7 @@ export async function fetchSearchResultsByString(
     query: searchContext.query?.trim() || null,
   };
   const trimmedQ = context.query;
-  await ensureRulesetsLoaded();
+  await ensureRulesetsLoaded(budget);
   const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
@@ -1118,7 +1145,8 @@ export async function fetchSearchResultsByString(
     results,
     undefined,
     hlsEnabled,
-    context.tvdbId
+    context.tvdbId,
+    budget
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(matchedEpisodes, null, context);
   const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
@@ -1148,7 +1176,8 @@ export async function fetchSearchResultsByString(
 }
 
 export async function fetchSearchResultsForRssSync(limit: number, offset: number): Promise<string> {
-  await ensureRulesetsLoaded();
+  const budget = new HttpRequestBudget();
+  await ensureRulesetsLoaded(budget);
   const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
@@ -1160,7 +1189,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   let supplementalMatches: MatchedEpisodeInfo[] = [];
   let sonarrUnavailable = false;
   try {
-    supplementalMatches = await getSonarrRssMatches(getBaseShowForSonarrRss);
+    supplementalMatches = await getSonarrRssMatches(getBaseShowForSonarrRss, budget);
   } catch {
     sonarrUnavailable = true;
   }
@@ -1175,7 +1204,6 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   }
 
   const apiCacheKey = `rss_mediathekview_results_${CONTENT_SEARCH_CACHE_VERSION}_${sourceContext}`;
-  const budget = new HttpRequestBudget();
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -1195,7 +1223,13 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
 
   results = await resolveArteCatalogueCandidates(results, budget);
   if (results === null) throw new Error("Search provider unavailable");
-  const { matchedEpisodes } = await applyRulesetFilters(results, undefined, hlsEnabled);
+  const { matchedEpisodes } = await applyRulesetFilters(
+    results,
+    undefined,
+    hlsEnabled,
+    null,
+    budget
+  );
   if (sonarrUnavailable && matchedEpisodes.length === 0) throw new SonarrUnavailableError();
   const newznabItems: NewznabItem[] = [...matchedEpisodes, ...supplementalMatches].flatMap((info) =>
     generateRssItems(info, quality, info.episode.metadataSource === "sonarr" ? false : hlsEnabled)

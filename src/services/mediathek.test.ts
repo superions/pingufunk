@@ -53,6 +53,7 @@ import {
   fetchSearchResultsForRssSync,
 } from "./mediathek";
 import { fetchWithRetry } from "@/lib/fetch-retry";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getShowInfoByTvdbId } from "./shows";
@@ -135,6 +136,46 @@ describe("Sonarr supplemental search consumer", () => {
       },
     ],
   };
+
+  it("finds an exact supplemental episode via its real title on the same caller budget", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockedFetch.mockImplementation(async (_input, init, options) => {
+      options?.requestBudget?.takeAttempt();
+      const query = JSON.parse(String(init?.body)).queries[0].query;
+      return Response.json({
+        result: {
+          results:
+            query === "Missing episode"
+              ? [
+                  makeItem({
+                    topic: "Synthetic series",
+                    title: "Missing episode",
+                    duration: 120,
+                    url_video_low: "",
+                    url_video_hd: "",
+                  }),
+                ]
+              : [],
+        },
+      });
+    });
+    const budget = new HttpRequestBudget(2);
+    const xml = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2", episode: "3" }),
+      100,
+      0,
+      budget
+    );
+    expect(xml).toContain("S02E03");
+    expect(xml).toContain('total="1"');
+    expect(budget.remainingAttempts).toBe(0);
+    expect(
+      mockedFetch.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).queries[0].query)
+    ).toEqual(["Synthetic series", "Missing episode"]);
+  });
 
   it("uses the same final short-episode filter for exact and season searches before pagination", async () => {
     mockApi([
@@ -1206,7 +1247,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_v7-recent-candidates_["Example",null,null,null]_1_1_720p_300'),
+      expect.stringContaining('q_v8-shared-search-budget_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -1242,7 +1283,7 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v7-recent-candidates_Documentary__100_0_all_2700"),
+      expect.stringContaining("movie_query_v8-shared-search-budget_Documentary__100_0_all_2700"),
       expect.any(Object)
     );
   });
@@ -1274,7 +1315,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v7-recent-candidates_[a-f0-9]{64}_100_0_all_2700/),
+      expect.stringMatching(/^movie_v8-shared-search-budget_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });

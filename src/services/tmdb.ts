@@ -29,49 +29,10 @@ function getApiUrl(endpoint: string): string {
   return `${TMDB_API_URL}${endpoint}`;
 }
 
-interface TmdbFindResult {
-  tv_results: Array<{
-    id: number;
-    name: string;
-    original_name: string;
-    first_air_date: string;
-    origin_country: string[];
-  }>;
-}
-
-interface TmdbTvDetails {
-  id: number;
-  name: string;
-  original_name: string;
-  number_of_seasons: number;
-  seasons: Array<{
-    season_number: number;
-    episode_count: number;
-  }>;
-  translations?: {
-    translations: Array<{
-      iso_639_1: string;
-      data: {
-        name: string;
-      };
-    }>;
-  };
-}
-
-interface TmdbEpisode {
-  id: number;
-  name: string;
-  episode_number: number;
-  season_number: number;
-  air_date: string | null;
-  runtime: number | null;
-}
-
-interface TmdbSeasonDetails {
-  episodes: TmdbEpisode[];
-}
-
-export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | null> {
+export async function getShowInfoByTvdbId(
+  tvdbId: number,
+  budget?: HttpRequestBudget
+): Promise<TvdbData | null> {
   if (tvdbId === undefined || tvdbId === null) {
     return null;
   }
@@ -88,6 +49,7 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
   }
 
   if (hasMetadataMiss(cacheKey)) return null;
+  if (budget) return fetchAndCacheSeriesData(tvdbId, apiKey, cacheKey, budget);
   return coalesceMetadata(cacheKey, () => fetchAndCacheSeriesData(tvdbId, apiKey, cacheKey)).catch(
     () => null
   );
@@ -96,33 +58,49 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
 async function fetchAndCacheSeriesData(
   tvdbId: number,
   apiKey: string,
-  cacheKey: string
+  cacheKey: string,
+  budget?: HttpRequestBudget
 ): Promise<TvdbData | null> {
   try {
     console.log(`[TMDB] Looking up TVDB ID ${tvdbId}`);
     const headers = getAuthHeaders(apiKey);
     const findUrl = getApiUrl(`/find/${tvdbId}?external_source=tvdb_id`);
 
-    const findResponse = await fetchWithRetry(findUrl, { headers });
+    const findResponse = await fetchWithRetry(findUrl, { headers }, { requestBudget: budget });
 
     if (!findResponse.ok) {
+      void findResponse.body?.cancel().catch(() => {});
       console.error(`[TMDB] Find request failed: ${findResponse.status}`);
-      return null;
+      throw new ProviderResponseError();
     }
 
-    const findData: TmdbFindResult = await findResponse.json();
-    return processShowData(tvdbId, findData, apiKey, cacheKey);
+    const findData = z
+      .object({
+        tv_results: z
+          .array(z.object({ id: z.number().int().positive(), name: z.string().optional() }))
+          .max(1000),
+      })
+      .parse(
+        await readBoundedProviderJson(
+          findResponse,
+          budget?.deadlineAt ?? Date.now() + 15_000,
+          1024 * 1024
+        )
+      );
+    return await processShowData(tvdbId, findData, apiKey, cacheKey, budget);
   } catch {
     console.error("[TMDB] Error fetching data");
+    if (budget) throw new ProviderResponseError();
     return null;
   }
 }
 
 async function processShowData(
   tvdbId: number,
-  findData: TmdbFindResult,
+  findData: { tv_results: Array<{ id: number; name?: string }> },
   apiKey: string,
-  cacheKey: string
+  cacheKey: string,
+  budget?: HttpRequestBudget
 ): Promise<TvdbData | null> {
   if (!Array.isArray(findData.tv_results)) return null;
   if (findData.tv_results.length === 0) {
@@ -130,6 +108,7 @@ async function processShowData(
     cacheMetadataMiss(cacheKey);
     return null;
   }
+  if (findData.tv_results.length !== 1) throw new ProviderResponseError();
 
   const tmdbShow = findData.tv_results[0];
   const tmdbId = tmdbShow.id;
@@ -137,15 +116,41 @@ async function processShowData(
 
   const headers = getAuthHeaders(apiKey);
   const detailsUrl = getApiUrl(`/tv/${tmdbId}?append_to_response=translations`);
-  const detailsResponse = await fetchWithRetry(detailsUrl, { headers });
+  const detailsResponse = await fetchWithRetry(detailsUrl, { headers }, { requestBudget: budget });
 
   if (!detailsResponse.ok) {
+    void detailsResponse.body?.cancel().catch(() => {});
     console.error(`[TMDB] Details request failed: ${detailsResponse.status}`);
-    return null;
+    throw new ProviderResponseError();
   }
 
-  const details: TmdbTvDetails = await detailsResponse.json();
-  if (!Array.isArray(details.seasons)) return null;
+  const details = z
+    .object({
+      id: z.number().int().positive(),
+      name: z.string().min(1).max(500),
+      original_name: z.string().max(500).optional(),
+      seasons: z.array(z.object({ season_number: z.number().int().nonnegative() })).max(1000),
+      translations: z
+        .object({
+          translations: z
+            .array(
+              z.object({
+                iso_639_1: z.string(),
+                data: z.object({ name: z.string().max(500).optional() }),
+              })
+            )
+            .max(1000),
+        })
+        .optional(),
+    })
+    .parse(
+      await readBoundedProviderJson(
+        detailsResponse,
+        budget?.deadlineAt ?? Date.now() + 15_000,
+        5 * 1024 * 1024
+      )
+    );
+  if (details.id !== tmdbId) throw new ProviderResponseError();
 
   // Prefer a real TMDB "de" translation; but when none is populated (common -
   // translations aren't always filled in), fall back to original_name rather
@@ -170,13 +175,40 @@ async function processShowData(
 
     try {
       const seasonUrl = getApiUrl(`/tv/${tmdbId}/season/${season.season_number}?language=de-DE`);
-      const seasonResponse = await fetchWithRetry(seasonUrl, { headers });
+      const seasonResponse = await fetchWithRetry(
+        seasonUrl,
+        { headers },
+        { requestBudget: budget }
+      );
 
-      if (!seasonResponse.ok) return null;
-      const seasonData: TmdbSeasonDetails = await seasonResponse.json();
-      if (!Array.isArray(seasonData.episodes)) return null;
+      if (!seasonResponse.ok) {
+        void seasonResponse.body?.cancel().catch(() => {});
+        throw new ProviderResponseError();
+      }
+      const seasonData = z
+        .object({
+          episodes: z
+            .array(
+              z.object({
+                name: z.string().nullable().optional(),
+                season_number: z.number().int().nonnegative(),
+                episode_number: z.number().int().nonnegative(),
+                air_date: z.string().nullable().optional(),
+                runtime: z.number().finite().nonnegative().nullable().optional(),
+              })
+            )
+            .max(100_000),
+        })
+        .parse(
+          await readBoundedProviderJson(
+            seasonResponse,
+            budget?.deadlineAt ?? Date.now() + 15_000,
+            5 * 1024 * 1024
+          )
+        );
 
       for (const ep of seasonData.episodes) {
+        if (ep.season_number !== season.season_number) throw new ProviderResponseError();
         episodes.push({
           name: ep.name || "",
           aired: ep.air_date ? new Date(ep.air_date) : null,
@@ -187,6 +219,7 @@ async function processShowData(
       }
     } catch {
       console.error(`[TMDB] Error fetching season ${season.season_number}`);
+      if (budget) throw new ProviderResponseError();
       return null;
     }
   }
