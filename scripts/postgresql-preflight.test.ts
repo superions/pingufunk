@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { inspectSource } from "./postgresql-preflight.mjs";
+import { assertTargetMetadata, inspectSource } from "./postgresql-preflight.mjs";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -100,4 +100,33 @@ it("does not change the SQLite database or sidecars during a WAL preflight", () 
   } finally {
     writer.close();
   }
+});
+
+it("rejects wrong target identity, standby, insecure transport and powerful roles", () => {
+  const safe = {
+    database: "pingufunk_qa",
+    role: "pingufunk_runtime",
+    version: 170000,
+    standby: false,
+    tls: true,
+    superuser: false,
+    createdb: false,
+    createrole: false,
+  };
+  expect(assertTargetMetadata(safe, safe.database, safe.role).primary).toBe(true);
+  expect(() =>
+    assertTargetMetadata({ ...safe, database: "foreign" }, safe.database, safe.role)
+  ).toThrow("target identity");
+  expect(() => assertTargetMetadata({ ...safe, standby: true }, safe.database, safe.role)).toThrow(
+    "standby"
+  );
+  expect(() => assertTargetMetadata({ ...safe, tls: false }, safe.database, safe.role)).toThrow(
+    "not using TLS"
+  );
+  expect(() =>
+    assertTargetMetadata({ ...safe, superuser: true }, safe.database, safe.role)
+  ).toThrow("overprivileged");
+  expect(() =>
+    assertTargetMetadata({ ...safe, version: 190000 }, safe.database, safe.role)
+  ).toThrow("Unsupported");
 });

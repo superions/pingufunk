@@ -515,10 +515,12 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       und mehrdeutige Zeitwerte ab. Ein WAL-Quellpfad wird vor dem SQLite-Open
       gestoppt: Selbst read-only-Open verändert sonst nachweisbar die SHM-Datei;
       für die Schema-/Wertprüfung ist ein konsistenter Snapshot nötig. PG-Primary,
-      Rolle, TLS und Version sind als Read-only-Abfragen vorbereitet. Das
+      Rolle, TLS und Version sind als Read-only-Abfragen vorbereitet; die
+      konfigurierte Endpoint-Adresse muss explizit der erwarteten entsprechen.
+      Der disposable PostgreSQL-17-Superuser wurde korrekt zurückgewiesen. Das
       Quellinventar meldet Pfad, Dateisystem-ID, freien Platz und WAL/SHM;
       die Inhaltsprüfung läuft erst auf dem privaten Snapshot. Noch offen:
-      Zieltest mit scoped Rolle, HAProxy-/Versionsbeleg, verfügbare
+      Zieltest mit scoped Rolle, echte HAProxy-/Versionsbelege, verfügbare
       Runner-/Imageversionen und vollständige Fidelitymatrix.
 - [ ] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
       neuen Runner SQLite-Backup-API/CLI statt Kopie einer laufenden Hauptdatei

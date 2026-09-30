@@ -118,6 +118,32 @@ JSON/Regex bleiben zunächst Strings; keine beiläufige Json-/UUID-Typmigration.
 Prisma-UUID-/CUID-Defaults können clientseitig sein: importierte IDs explizit
 setzen und spätere Inserts über den echten Client testen.
 
+### P11.3-Feldvertrag des vorbereiteten Preflight
+
+Der aktuelle Preflight (`scripts/postgresql-preflight.mjs`) inspiziert alle sechs
+Modelle, akzeptiert nur die beiden aus der unveränderten Legacy-SQL-Historie
+rekonstruierten Schemakonturen und berichtet niemals Zeileninhalte. Die
+folgenden Regeln sind bereits als Eingangsprüfung implementiert; die
+Import-/Vergleichsabnahme in P11.5–P11.6 steht noch aus.
+
+| Quelle/Felder                                                                                                                                         | Abbildung bzw. Abbruch                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TvdbSeries.id`, `TvdbEpisode.id/seriesId/seasonNumber/episodeNumber/runtime`, `Download.progress`, `GeneratedRuleset.tvdbId`, `TopicCategory.tmdbId` | SQLite-Integer als BigInt lesen; nur innerhalb PostgreSQL-`integer`-Grenzen übernehmen. Externe TVDB-IDs bleiben unverändert, fehlende Pflichtwerte brechen ab.                                                                                                                                         |
+| `Download.size/totalSize/downloadedBytes/speed`                                                                                                       | SQLite-Integer als BigInt bis zum vollständigen signierten Int64-Bereich erhalten, auch oberhalb 2^53; kein JS-Number-Zwischenschritt und kein Ersatzwert.                                                                                                                                              |
+| Alle Textspalten inkl. `Config.key/value`, URL, Download-Pfad/Fehler, UUID-/CUID-IDs, Topic, Titel, Alias-/JSON- und Regex-Strings                    | Als Text exakt erhalten; kein JSON-Reparse, keine ID-Neugenerierung und keine Regex-Interpretation. SQLite-BLOB/Zahl oder NUL im Text werden abgelehnt, weil PostgreSQL-Text NUL nicht aufnehmen kann. Geheimwerte dürfen weder im Bericht noch im Log erscheinen.                                      |
+| `firstAired`, `cachedAt`, `expiresAt`, `aired`, `createdAt`, `completedAt`, `updatedAt`                                                               | Nur explizite Unix-Millisekunden-Integer oder vollständiges ISO-8601 mit Offset und höchstens drei Dezimalstellen. In PostgreSQL `timestamptz(3)` als derselbe Zeitpunkt; gemischte Repräsentation pro Feld sowie naive/unklare Zeittexte brechen ab. Nicht belegte Zeiteinheiten werden nicht geraten. |
+| Alle nullable Felder                                                                                                                                  | `NULL` bleibt `NULL`; erforderliche Werte werden gegen den PostgreSQL-Modellvertrag geprüft, auch wenn ein historisches SQLite-Bootstrap eine Spalte nullable angelegt hat. Kein `now`, `0` oder leerer Ersatzstring.                                                                                   |
+| PK, `topic`-Unique und `TvdbEpisode.seriesId`-FK                                                                                                      | Quellspalten/-indizes/-FK gegen die historische Schemakontur prüfen, im Snapshot `foreign_key_check`; Original-IDs erhalten. Mengen- und Wertgleichheit bleibt P11.6-Gate.                                                                                                                              |
+| `_prisma_migrations`, `sqlite_sequence`                                                                                                               | Ledgereinträge nur gegen bekannte Legacy-Namen prüfen; nie als Anwendungstabellen importieren. PostgreSQL hat eigene Migrationshistorie und real zugehörige Sequences.                                                                                                                                  |
+
+Ein mit SQLite `CURRENT_TIMESTAMP` erzeugter Text ohne Offset ist nachträglich
+nicht zweifelsfrei von einem manuell geschriebenen lokalen Zeitwert zu
+unterscheiden. Der Preflight verwirft ihn derzeit bewusst; eine spätere
+Normalisierung benötigt einen ausdrücklich belegten Herkunfts-/Zeitzonenvertrag
+für den echten Quellbestand. Ein WAL-Quellpfad wird nur statisch inventarisiert:
+ein bloßes SQLite-Read-only-Open ändert dort SHM-Lockbytes. Die Inhaltsprüfung
+läuft daher erst auf dem per Backup-API konsistent erzeugten privaten Snapshot.
+
 ## Runner- und Operationsreferenz
 
 Lieferergebnisse stehen in P11.3–P11.8 der

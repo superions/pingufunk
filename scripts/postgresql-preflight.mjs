@@ -287,8 +287,34 @@ function exists(path) {
   }
 }
 
-export async function inspectTarget(expectedDatabase, expectedRole, requireTls = true) {
-  if (!expectedDatabase || !expectedRole) fail("Expected database and role are required");
+export function assertTargetMetadata(target, expectedDatabase, expectedRole, requireTls = true) {
+  if (target.database !== expectedDatabase || target.role !== expectedRole)
+    fail("Unexpected PostgreSQL target identity");
+  // Prisma 6's supported server range is checked before any target write.
+  if (target.version < 90600 || target.version >= 190000)
+    fail("Unsupported PostgreSQL server version");
+  if (target.standby) fail("PostgreSQL target is a standby");
+  if (requireTls && !target.tls) fail("PostgreSQL connection is not using TLS");
+  if (target.superuser || target.createdb || target.createrole)
+    fail("PostgreSQL runtime role is overprivileged");
+  return { version: target.version, primary: true, tls: target.tls, scopedRole: true };
+}
+
+export async function inspectTarget(
+  expectedDatabase,
+  expectedRole,
+  expectedHost,
+  requireTls = true
+) {
+  if (!expectedDatabase || !expectedRole || !expectedHost)
+    fail("Expected database, role and endpoint host are required");
+  let configuredHost;
+  try {
+    configuredHost = new URL(process.env.DATABASE_URL).hostname;
+  } catch {
+    fail("PostgreSQL URL unavailable");
+  }
+  if (configuredHost !== expectedHost) fail("Unexpected PostgreSQL endpoint host");
   const prisma = new PrismaClient({ log: [] });
   try {
     const [target] = await prisma.$queryRaw`
@@ -300,16 +326,10 @@ export async function inspectTarget(expectedDatabase, expectedRole, requireTls =
         (SELECT rolcreatedb FROM pg_roles WHERE rolname = current_user) AS createdb,
         (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS createrole
     `;
-    if (target.database !== expectedDatabase || target.role !== expectedRole)
-      fail("Unexpected PostgreSQL target identity");
-    // Prisma 6's supported server range is checked before any target write.
-    if (target.version < 90600 || target.version >= 190000)
-      fail("Unsupported PostgreSQL server version");
-    if (target.standby) fail("PostgreSQL target is a standby");
-    if (requireTls && !target.tls) fail("PostgreSQL connection is not using TLS");
-    if (target.superuser || target.createdb || target.createrole)
-      fail("PostgreSQL runtime role is overprivileged");
-    return { version: target.version, primary: true, tls: target.tls, scopedRole: true };
+    return {
+      ...assertTargetMetadata(target, expectedDatabase, expectedRole, requireTls),
+      endpointMatchesExpected: true,
+    };
   } finally {
     await prisma.$disconnect();
   }
@@ -317,12 +337,13 @@ export async function inspectTarget(expectedDatabase, expectedRole, requireTls =
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const [source, database, role] = process.argv.slice(2);
+    if (process.argv.length !== 6) fail("Expected source, database, role and endpoint host");
+    const [source, database, role, endpointHost] = process.argv.slice(2);
     const report = {
       version: 1,
       node: process.version,
       source: inspectSource(source),
-      target: await inspectTarget(database, role),
+      target: await inspectTarget(database, role, endpointHost),
     };
     console.log(JSON.stringify(report));
   } catch {
