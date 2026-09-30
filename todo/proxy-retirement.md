@@ -679,6 +679,9 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Probe verwendet nun dieselbe UID für beide Schritte; eine erneute
       Fork-Ausführung ist erforderlich. Der produktive Backup-Mount braucht
       weiterhin einen eigenen Rechte-Preflight für die feste Runner-UID.
+      Erneute Fork-Abnahme: CI 36658718136 und Docker-/TLS-Container-Smoke
+      36658718093 sind grün. Der UID-Fehler war auf den synthetischen
+      Harness begrenzt; die privaten Betriebsrechte bleiben ungeprüft.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,
