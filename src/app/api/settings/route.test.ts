@@ -132,14 +132,18 @@ it.each([
   expect(upsert).not.toHaveBeenCalled();
 });
 
-it("masks Sonarr keys and refuses browser credential writes", async () => {
-  values.set("api.sonarr.key", "private-sonarr-key");
-  const response = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
-  expect(response["api.sonarr.key"]).toBe("••••••••");
-  expect(JSON.stringify(response)).not.toContain("private-sonarr-key");
-  expect((await post({ "api.sonarr.key": "new-key" })).status).toBe(400);
-  expect(upsert).not.toHaveBeenCalled();
-});
+it.each(["sonarr", "radarr"])(
+  "masks %s keys and refuses browser credential writes",
+  async (app) => {
+    const key = "api." + app + ".key";
+    values.set(key, "private-arr-key");
+    const response = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+    expect(response[key]).toBe("••••••••");
+    expect(JSON.stringify(response)).not.toContain("private-arr-key");
+    expect((await post({ [key]: "new-key" })).status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+  }
+);
 
 it("preserves stored credentials when a client saves masked settings again", async () => {
   const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();

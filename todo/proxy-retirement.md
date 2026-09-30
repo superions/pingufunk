@@ -1212,95 +1212,123 @@ B04/B05/B06, R3.
       Formatcheck und Build grün; Fork-CI `36761536896` und Docker-/TLS-/
       SQLite-Buildvalidierung `36761536831` erfolgreich, ohne Publikation.
 
-## Phase P08 — Sichere Filmsuche ohne neue externe Konten
+## Phase P08 — Ein gemeinsamer Indexer mit ehrlichen Kandidaten und Arr-Metadaten
 
-Ergebnis: kanonische Filmidentität statt Topic/Ausstrahlungsjahr. Abhängigkeit
-P07; B01/B11–B13, A5, R1/R2.
+Ergebnis: Sonarr/Radarr nutzen Pingufunk direkt oder über Prowlarr als
+Newznab-Indexer; MediathekView und vorhandene Provider bleiben Videoquellen.
+Abhängigkeit P07; B01/B11–B13, A5, R1/R2.
 
-- [ ] **P08.1 — Accountfreien Mediathek-Metadatenvertrag verifizieren.**
-      Filmowner in `src/services/mediathek.ts` und neuer Movie-Metadatenadapter:
-      zuerst die tatsächlich verfügbaren Filmmetadaten der bestehenden
-      Mediathekprovider anhand aktueller Primärquellen und synthetischer Fixtures
-      verifizieren. Providerfelder/ggf. strukturierte Quellseiten zu kanonischem
-      Titel, Filmklassifikation, ausdrücklich belegtem Produktionsjahr, IDs,
-      Laufzeit und deren Units mappen. Topic und Ausstrahlungsjahr sind kein
-      Ersatz. Fehlende Felder unbekannt lassen; Request-ID/Jahr nicht als
-      Quellnachweis übernehmen. Kein neuer Kontozwang, keine verpflichtende
-      lokale Radarr-Metadatenanbindung. Öffentlicher externer Metadatendienst
-      bedeutet Titel-/ID-/Jahr-/Laufzeitlieferant, **nicht Mediathek oder Videoquelle**;
-      weder ihn noch lokale Radarr-Metadaten still als neuen Ausweichweg einführen.
-      Bestehende ausdrücklich konfigurierte Metadatenprovider kompatibel erhalten.
-      Falls die vorhandenen Quellen keine sichere Identität erlauben, konkrete
-      fehlende Evidenz dokumentieren und nur den betroffenen Filmfallback anhalten,
-      statt fuzzy zu raten oder eigenmächtig einen neuen Dienst zu aktivieren.
-      Für einen später ausdrücklich gewählten externen Anbieter zuerst API-/
-      Schema-/Terms-/Datenschutz-/Verfügbarkeitsvertrag prüfen; unbestätigter
-      Dienstvertrag stoppt dessen Integration, nicht unabhängige sichere Quellen.
-      Die bestätigte Kurzfilm-/Dauerpolitik und P03-Sprachpolitik anwenden;
-      Proxy-60-Minutenheuristik kein globaler Default.
-      Abnahme: accountfreie begrenzte Strategie mit sicheren Ausfallsemantiken,
-      kein garantierter fremder APIvertrag und kein neuer Kontozwang behauptet.
-      Korrigierte Nutzerentscheidung 30.09.2026: Die zuvor notierte Bevorzugung
-      lokaler Radarr-Metadaten ist aufgehoben; zuerst Mediathek-Metadaten prüfen.
-      Radarr als vorhandener Newznab-/SAB-/Importconsumer bleibt unverändert.
-      Kein zusätzlicher Metadatendienst wird vorausgesetzt. Kurzfilme nicht pauschal durch
-      eine 60-Minuten-Grenze ausschließen; belegte Laufzeit und konfigurierbare
-      Dauerprüfung nutzen, fehlende Laufzeit nicht als automatisch bestanden
-      behandeln. P03-Sprach-/Variantenentscheidungen gelten auch hier, nicht
-      über Kanal/Domain eine Sprache oder AD-Fassung erfinden. Quellenvertrag
-      und sichere Consumer-Abnahme bleiben technische Gates.
-      Abnahme konkret: Evidenzmatrix pro genutztem Mediathekprovider mit Feld,
-      Herkunft und Preserve/Unknown/Reject; kein behaupteter APIvertrag für
-      tatsächlich nicht gelieferte IDs/Jahre. P05-Budget/Bodylimits/GET-/Cacheowner
-      wiederverwenden, Metadatenausfall nicht erfolgreich leer cachen. Units
-      einmal zentral nach Sekunden normalisieren; P06-Dauerregel einschließlich
-      belegter Kurzfilm-Ausnahme nutzen, unbekannte Soll-Laufzeit nicht erfinden.
-      Tests ohne externe Konten/lokales Radarr: belegter Film, belegter Kurzfilm,
-      bloßes Magazin-Topic, Ausstrahlungsjahr ohne Produktionsjahr, Remake-
-      Konflikt, fehlende ID/Dauer und Quellenfehler. Fehlender Identitätsbeleg
-      verhindert ID-Stempeln; bekannt sichere Bestandspfade bleiben erhalten.
-      Quellenreview 30.09.2026: Feldmatrix und gepinnte Primärquellen unter
-      `docs/movie-source-evidence.md`. MediathekView/ARTE-Player und bestehende
-      SRF-/ORF-Pfade belegen derzeit nicht zuverlässig Filmklassifikation und
-      Produktionsjahr/externe Filmidentität; ARD-Dokumentation ist nicht als
-      accountfreier Vertrag zugänglich, betrachteter ZDF-Detailparser liefert
-      Ausstrahlungs-/Editorialdatum. Kein erfundenes Produktionsjahr, kein
-      Radarr-/neuer Metadatenservice-Fallback. Konkrete positive Mediathekfälle
-      zur gezielten Quellenprüfung beim Nutzer angefragt. P08.1–P08.3 bleiben
-      offen; vorhandenes fuzzy-/ID-Stempel-Verhalten ist ausdrücklich nicht
-      abgenommen. Unabhängige P11-Abnahmen laufen weiter, P09 beginnt erst
-      nach dem vereinbarten P08-Gate.
-      Ergänzendes Quellenreview: Öffentliche ARTE-Detailseiten enthalten im
-      eigenen `program_content_<id>`-Hauptdatensatz expliziten Filmtyp,
-      `PRODUCTION_YEAR`, Video-ID und Sekundenlaufzeit. Der isolierte Reader
-      liest begrenzte JSON-/UTF-8-Flight-Records ohne JavaScriptausführung,
-      ignoriert Prosa/Empfehlungen/Trailer und akzeptiert zunächst nur deutsche
-      Standalonefilme ohne Magazin-/Serienuntertitel oder Episodenangaben.
-      Primärbeleg, Gegenprobe und React-Framingquelle in der Evidenzmatrix;
-      ein öffentlicher read-only Programmabruf bestätigt die tatsächliche
-      Kontur. 22 synthetische Adapterfälle plus bestehende Body-/GET-Budgetgates
-      erfolgreich. Kein neues Konto/Metadatendienst; andere Provider unknown.
-      Noch kein Suchconsumer angeschlossen, kein Movie-ID-Stempeln dadurch
-      freigegeben. Finale Gesamtläufe/Fork-Gates und P08.2/P08.3 bleiben offen.
-- [ ] **P08.2 — Ein kanonischer Filmkontext über alle Suchrouten.**
-      Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts` und
-      `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}` gemeinsam
-      für `t=movie`/`t=search`+Filmkat,
-      q/IMDb/TMDB/Jahr und ID-only/q+ID vereinheitlichen. Metadaten-/Querykonflikte
-      ablehnen, nicht Queryjahr über kanonisches Jahr setzen. Aliase/Original-/
-      deutscher Titel und Produktionsjahr begründen die Releaseidentität;
-      Ausstrahlungstag ist kein Filmjahr. Abnahme: alle Routeformen gleichwertig,
-      falsch/fehlend identifizierte Kandidaten ohne blindes ID-Stempeln verworfen,
-      bekannte sichere Fälle und generische Nichtfilmverträge regressionsfrei.
-- [ ] **P08.3 — Begrenzte Kandidatenerweiterung mit strenger Schlussprüfung.**
-      Film-Suchconsumer um markante Titelwörter und begrenzte Umlautvarianten
-      erweitern, alle Versuche teilen P05-Gesamtbudget. Exakter Titel/Alias,
-      ID/Jahr, Filmkontext, Dauer, Sprache und Qualität vor Dedupe/Pagination/
-      `total` prüfen, gemeinsame P02-Release-/NZB-Identität nutzen. Keine fuzzy/
-      partial-Ausgabe beliebiger Magazine, Clips, Remakes, Sequels oder AD.
-      Abnahme: positive/negative synthetische Fälle inklusive fehlender Dauer,
-      DE-Kanal+FR-Website und Jahreskonflikt; Providerfehler nicht als valider
-      Empty-Erfolg verschleiert, Seiten/Counts konsistent und Budget eingehalten.
+Verbindliche Nutzerentscheidung 01.10.2026: **Ein gemeinsamer Endpunkt und
+derselbe Suchvertrag für direkte und über Prowlarr vermittelte Anfragen.**
+Keine zusätzlichen Manual-Endpunkte, getrennten Indexerinstanzen oder
+vorausgesetzten Sync-Profile. Gezielte Suche und RSS anhand ihrer tatsächlichen
+Parameter unterscheiden, nicht mit interaktiv/automatisch gleichsetzen.
+RSS ist ein eigener Aktualitätslauf, nicht zwingender Bestandteil jeder
+gezielten Suche. Plausible, nicht abschließend identifizierte Kandidaten dürfen
+ausgegeben und in der Arr-GUI manuell zugeordnet werden. Ihre Ausgabe ist
+keine garantierte Auto-Grab-Sperre: Arr kann einen Kandidaten selbst akzeptieren.
+Keine fremde Rejection-/Confidence-Unterstützung oder Sicherheit durch ein
+freies XML-Attribut behaupten. Unsicherheit niemals durch erfundene
+Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
+
+- [ ] **P08.1 — Optionale strukturierte Metadaten statt Senderseiten-Parser.**
+      `src/services/sonarr-provider.ts`, neuer Radarr-Metadatenowner,
+      `src/lib/read-only-arr-client.ts`, Settings-/Secret-/Cacheowner und
+      `docs/movie-source-evidence.md`: vorhandene Sonarr-Anbindung erhalten,
+      optional eine explizit konfigurierte Radarr-Instanz unterstützen.
+      Standardmäßig deaktiviert; kein zusätzlicher TVDB-/TMDB-Nutzeraccount,
+      keine verpflichtende Arr-Instanz. Lokale Arr-API-Keys ausschließlich
+      serverseitig aus Umgebung/Secretdatei, GET-only, Base-URL-Unterpfade,
+      Versions-/Schemaschutz, Rotation, gemeinsame P05-Budgets und Bodylimits.
+      Titel/Originaltitel/Aliase, IDs, Jahr, Episodenkoordinaten und belegte
+      Laufzeit verwenden; Units einmal nach Sekunden normalisieren.
+      Bestehende ausdrücklich konfigurierte Metadatenprovider erhalten.
+      Keine neuen ARTE-HTML-/Flight- oder ARD-Seiten-/Gateway-Filmparser:
+      die isolierten Versuche sind verworfen und samt ihren ausschließlich
+      zugehörigen Fixtures aus dem aktiven Code zu entfernen. Allgemeine
+      Bodyreader und unabhängig abgenommene P07-Playerintegration erhalten.
+      Zentrale Sonarr-/Radarr-Metadatendienste nicht still als zugesicherte
+      Drittanbieter-API aktivieren; ein solcher Anbieter braucht einen separat
+      geklärten Nutzungs-/Schema-/Verfügbarkeitsvertrag, keine kopierten Keys.
+      Abnahme: synthetische positive/negative API- und Consumerfälle,
+      deaktiviert ohne Secret-I/O/HTTP, keine Writes, keine Secrets im Browser,
+      Fehlern, URLs, argv oder Git; Ausfälle nicht erfolgreich leer cachen.
+      Fehlende Metadaten stoppen nur die davon abhängige ID-Auflösung,
+      nicht eine unabhängig mögliche ehrliche Text-Kandidatensuche.
+- [ ] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
+      Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts`,
+      neuer Radarr-Owner und
+      `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}`
+      für `t=movie`/`t=search` mit Filmkategorie,
+      q/IMDb/TMDB/Jahr, ID-only und q+ID gemeinsam überarbeiten.
+      Ganzzahlige IDs vollständig prüfen; widersprüchliche IDs/Titel/Jahre
+      ablehnen statt Queryjahr über Metadatenjahr zu setzen. Suchziel-Metadaten
+      sind kein Nachweis für jeden gefundenen Mediathekbeitrag.
+      Sicher zugeordnete Ergebnisse dürfen begründet kanonisch formatiert werden;
+      unsichere Kandidaten behalten Quelltitel, Quelle und vorhandene Angaben,
+      ohne Suchziel-ID/Jahr/Koordinaten oder falsches Film-/Sprachlabel.
+      Ausstrahlungsdatum niemals als Produktionsjahr verwenden.
+      Keine automatische/kollektive Umbenennung beliebiger Magazine, Clips,
+      Remakes oder Sequels in den gesuchten Film. Original- und Alternativtitel
+      nur aus belegten Metadaten; IDs nur nach tatsächlicher Zuordnung.
+      Abnahme: sichere Treffer plus unaufgelöste plausible Kandidaten,
+      Metadatenkonflikte, fehlendes Jahr/ID/Dauer, gleiche Titel verschiedener
+      Werke und alle Routeformen; generische Nichtfilmverträge erhalten.
+- [ ] **P08.3 — Begrenzte Kandidatensuche ohne vorgespielte Gewissheit.**
+      Film-/TV-Consumer, Content-Search und gemeinsame Release-/NZB-Owner:
+      vollständige Titel/Aliase/Episodentitel sowie begrenzte markante Wörter
+      und Umlautvarianten als Suchbegriffe nutzen. Begriffe, Pagination,
+      Metadata-Lookups und Retries teilen P05-Gesamtbudget.
+      Vor Dedupe/Pagination/total Quellrenditions, Sprache/Fassungen und
+      tatsächliche Zuordnung auswerten; sicher erkannte Konflikte nicht durch
+      fuzzy-Ranking überschreiben. Ranking kann plausible Kandidaten ordnen,
+      beweist aber keine Identität. Keine global neue 60-Minutenheuristik;
+      belegte Kurzfilme erhalten, unbekannte Soll-Laufzeit bleibt unbekannt.
+      Dauerprüfung mit dokumentierten Units/konfigurierbarer P06-Regel,
+      fehlende Laufzeit nicht als bestanden deklarieren. Kein Vorab-Mediengrab.
+      Abnahme: korrekte Reihenfolge/Counts/IDs/Titel/aktuelle Medien-URLs,
+      Varianten vor Pagination, Quellenfehler ohne partiellen Erfolg oder
+      Empty-Success-Cache, bounded Requests und RSS→NZB→Queue-Konsistenz.
+- [ ] **P08.4 — Direkter und Prowlarr-vermittelter Arr-Verbrauchervertrag.**
+      `src/app/api/newznab/route.ts`, vorhandener API-Alias, RSS-/NZB-Owner,
+      Sonarr-/Radarr-Consumerregressionen und Cutover-Runbook:
+      gleiche Caps/Kategorien/Anfrageparameter, stabile Quell-/Fassungs-GUIDs,
+      Pagination und Downloadlinks für beide Zugriffswege sichern.
+      Keine zuverlässige Calleridentität oder interaktiv/automatisch aus
+      IP, User-Agent, RSS, `t=search` oder Prowlarr-Weiterleitung ableiten.
+      Die optionale Metadatenanbindung ist separat an Arr konfiguriert;
+      Prowlarr ist kein allgemeiner Proxy ihrer lokalen Metadaten-APIs und
+      übermittelt nicht automatisch deren Bibliothek oder API-Keys.
+      Gegen versionierte Arr-Parser/Decision-/Override-Consumer reviewen,
+      welche unveränderten Quelltitel sichtbar/manuell zuordenbar sind und
+      welche Ergebnisse schon vor der GUI verloren gehen. Keine garantierte
+      Anzeige jedes beliebigen Kandidaten behaupten. Synthetische Proben
+      für ID-/Text-/RSS-Anfragen und direkte/vermittelte Links ausführen.
+      Dokumentieren, dass Arr die automatische Auswahl verantwortet und
+      ehrliche unbekannte Felder keine garantierte Ablehnung bewirken.
+      Abnahme: reproduzierbare Consumer-Evidenz, kein zweiter Modus/Endpunkt,
+      keine produktiven Suchläufe, Grabs oder Instanzänderungen ohne Freigabe.
+
+Implementierungscheckpoint 01.10.2026, keine vollständige P08-Abnahme:
+der gemeinsame Filmkontext prüft q/IMDb/TMDB/Jahr inklusive Konflikten;
+Radarr ist optional, standardmäßig aus, GET-only und derzeit auf API v3/6.x
+begrenzt. Derselbe Handler verarbeitet direkte und vermittelte Anfragen.
+Die verworfenen Senderseiten-Filmadapter sind entfernt; Quellkandidaten
+übernehmen keine Anfrage-IDs/Jahre oder unbelegte Sprache. Begrenzte
+Titel-/Alias-/Umlaut-/Wortsuche teilt den Callerbudget-Owner; Metadatenfehler
+verhindern nicht automatisch eine unabhängig mögliche Textsuche.
+Synthetisch gesichert: Quellen-/Suchzieltrennung, Kurzfilmeinheiten,
+Konflikte, Secretmaskierung, Rotation/Budget, direkte/forwarded Film-Route
+sowie identischer RSS→NZB→Queue-Pfad. Lokal 635 Tests erfolgreich, zehn
+unverändert bedingte PG-Gates nicht in diesem regulären Lauf ausgeführt;
+Lint, Typecheck, Formatcheck, Build und diff-check erfolgreich. Lockfile,
+Schema und DB-Runtimewriter unverändert; keine neue PG-Abnahme behauptet.
+Offen bleiben insbesondere Film-Recent/RSS statt Validierungsfeed,
+TV-Kandidaten ohne sichere Koordinaten, vollständige verbleibende
+Callerbudget-Kette und tatsächliche Arr-/Prowlarr-Consumerabnahme.
+Alle vier Checkboxen bleiben bis zum vollständigen Kriteriennachweis offen.
+Details und versionierte Primärquellen in
+docs/movie-source-evidence.md; GUID-Übergang im Cutover-Runbook.
 
 ## Phase P09 — Tatsächlicher Medieninhalt vor completed
 

@@ -21,10 +21,7 @@ import {
 } from "./rulesets";
 import {
   generateRssItems,
-  generateMovieRssItems,
   generateGenericRssItems,
-  applyLanguageEdition,
-  buildReleaseGuid,
   convertItemsToRss,
   serializeRss,
   getEmptyRssResult,
@@ -32,8 +29,7 @@ import {
   parseEpisodeFromTitle,
 } from "./newznab";
 import { matchMovieItems } from "./movie-matcher";
-import { createFakeNzbDownloadUrl } from "./nzb-release";
-import { searchMovieByTitle } from "./tmdb";
+import { movieSearchTerms } from "./movie-search-terms";
 import type {
   ApiResultItem,
   TvdbData,
@@ -55,7 +51,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v5-arte";
+const CONTENT_SEARCH_CACHE_VERSION = "v6-source-candidates";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -1161,7 +1157,8 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
 export async function fetchMovieSearchResults(
   movieData: TmdbMovieData,
   limit: number,
-  offset: number
+  offset: number,
+  requestBudget = new HttpRequestBudget()
 ): Promise<string> {
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
@@ -1171,7 +1168,8 @@ export async function fetchMovieSearchResults(
   );
 
   const sourceContext = await searchCacheContext();
-  const cacheKey = `movie_${CONTENT_SEARCH_CACHE_VERSION}_${movieData.tmdbId}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
+  const movieIdentity = createHash("sha256").update(JSON.stringify(movieData)).digest("hex");
+  const cacheKey = `movie_${CONTENT_SEARCH_CACHE_VERSION}_${movieIdentity}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -1180,11 +1178,11 @@ export async function fetchMovieSearchResults(
   }
 
   // Search by German title and original title in parallel
-  const searchTerms = [movieData.germanTitle];
-  if (movieData.title !== movieData.germanTitle) {
-    searchTerms.push(movieData.title);
-  }
-  const deadlineAt = Date.now() + 20_000;
+  const searchTerms = movieSearchTerms([
+    movieData.germanTitle,
+    movieData.title,
+    ...(movieData.aliases ?? []),
+  ]);
 
   // Helper function to fetch results for a single search term
   async function fetchForTerm(searchTerm: string): Promise<ApiResultItem[] | null> {
@@ -1198,7 +1196,8 @@ export async function fetchMovieSearchResults(
 
     console.log(`[Mediathek] Searching MediathekView API for movie: "${searchTerm}"`);
     const results = await queryContent([{ fields: QUERY_FIELDS, query: searchTerm }], 500, {
-      deadlineAt,
+      requestBudget,
+      deferLanguageSelection: true,
     });
     if (results === null) return null;
     console.log(`[Mediathek] API returned ${results.length} results for "${searchTerm}"`);
@@ -1218,7 +1217,7 @@ export async function fetchMovieSearchResults(
     if (results === null) continue;
     collectedResults.push(...results);
   }
-  const allResults = selectLanguageVariants(collectedResults, await getConfiguredLanguagePolicy());
+  const allResults = collectedResults;
 
   if (allResults.length === 0) {
     console.log(`[Mediathek] No results found for movie`);
@@ -1253,8 +1252,12 @@ export async function fetchMovieSearchResults(
   }
 
   // Generate RSS items using the same rendition setting used for matching.
-  const newznabItems: NewznabItem[] = matchResults.flatMap((match) =>
-    generateMovieRssItems(match, movieData, quality, hlsEnabled)
+  const selected = selectLanguageVariants(
+    matchResults.map((match) => match.item),
+    await getConfiguredLanguagePolicy()
+  );
+  const newznabItems: NewznabItem[] = selected.flatMap((item) =>
+    generateGenericRssItems(item, quality, hlsEnabled, "movie")
   );
 
   console.log(
@@ -1268,12 +1271,13 @@ export async function fetchMovieSearchResults(
 
 /**
  * Search for movies in the Mediathek by query string (for Radarr text search)
- * Filters by minimum duration to identify feature films
+ * A duration policy limits candidates; it does not prove their genre or identity.
  */
 export async function fetchMovieSearchByQuery(
   query: string,
   limit: number,
-  offset: number
+  offset: number,
+  requestBudget = new HttpRequestBudget()
 ): Promise<string> {
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
@@ -1287,14 +1291,6 @@ export async function fetchMovieSearchByQuery(
   console.log(
     `[Mediathek] fetchMovieSearchByQuery: query="${query}", cleanedQuery="${cleanedQuery}", year=${searchYear}, quality=${quality}, minDuration=${minDuration}s`
   );
-
-  // Try to find the movie on TMDB to get IDs for Radarr matching
-  const tmdbMovie = await searchMovieByTitle(cleanedQuery, searchYear);
-  if (tmdbMovie) {
-    console.log(
-      `[Mediathek] Found TMDB match: "${tmdbMovie.germanTitle}" (TMDB: ${tmdbMovie.tmdbId}, IMDB: ${tmdbMovie.imdbId})`
-    );
-  }
 
   const sourceContext = await searchCacheContext();
   const cacheKey = `movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
@@ -1315,10 +1311,18 @@ export async function fetchMovieSearchByQuery(
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     console.log(`[Mediathek] Searching MediathekView API for movie query: "${cleanedQuery}"`);
-    results = await queryContent([{ fields: QUERY_FIELDS, query: cleanedQuery }], 500);
-    if (results === null) {
+    const pages = await Promise.all(
+      movieSearchTerms([cleanedQuery]).map((term) =>
+        queryContent([{ fields: QUERY_FIELDS, query: term }], 500, {
+          requestBudget,
+          deferLanguageSelection: true,
+        })
+      )
+    );
+    if (pages.some((page) => page === null)) {
       throw new Error("Search provider unavailable");
     }
+    results = pages.flatMap((page) => page ?? []);
     console.log(
       `[Mediathek] API returned ${results.length} results for movie query "${cleanedQuery}"`
     );
@@ -1351,96 +1355,12 @@ export async function fetchMovieSearchByQuery(
     return response;
   }
 
-  // Generate RSS items directly for the filtered results (as movies)
-  const newznabItems: NewznabItem[] = [];
-
-  for (const item of filteredResults) {
-    // Format the release title
-    const baseTitle = formatTitle(item.topic || item.title);
-    const year = new Date(item.filmlisteTimestamp * 1000).getFullYear();
-
-    // Calculate size
-    const size = item.size > 0 ? item.size : item.duration * 500000;
-
-    // Create item for each available quality
-    const qualities: Array<{
-      url: string;
-      qualityName: string;
-      category: string;
-      sizeMultiplier: number;
-    }> = [];
-
-    const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
-    const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
-    const has480p = isRenditionAllowed(item.url_video_low, hlsEnabled);
-
-    if (has1080p && (quality === "all" || quality === "best" || quality === "1080p")) {
-      qualities.push({
-        url: item.url_video_hd,
-        qualityName: "1080p",
-        category: "2040",
-        sizeMultiplier: 1.6,
-      });
-    }
-    if (has720p && (quality === "all" || quality === "720p" || (quality === "best" && !has1080p))) {
-      qualities.push({
-        url: item.url_video,
-        qualityName: "720p",
-        category: "2040",
-        sizeMultiplier: 1.0,
-      });
-    }
-    if (
-      has480p &&
-      (quality === "all" || quality === "480p" || (quality === "best" && !has1080p && !has720p))
-    ) {
-      qualities.push({
-        url: item.url_video_low,
-        qualityName: "480p",
-        category: "2030",
-        sizeMultiplier: 0.5,
-      });
-    }
-
-    for (const q of qualities) {
-      const releaseTitle = applyLanguageEdition(
-        `${baseTitle}.${year}.${q.qualityName}.WEB.h264-MEDiATHEK`,
-        item
-      );
-      const adjustedSize = Math.floor(size * q.sizeMultiplier);
-
-      const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: releaseTitle, url: q.url });
-
-      newznabItems.push({
-        title: releaseTitle,
-        guid: {
-          isPermaLink: true,
-          value: buildReleaseGuid(
-            item,
-            q.qualityName,
-            q.url,
-            `movie-text:${tmdbMovie?.tmdbId ?? "unmatched"}:${cleanedQuery}:${year}`
-          ),
-        },
-        link: q.url,
-        comments: item.url_website || "",
-        pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
-        category: q.category === "2030" ? "Movies > SD" : "Movies > HD",
-        description: item.description || "",
-        enclosure: {
-          url: fakeDownloadUrl,
-          length: adjustedSize,
-          type: "application/x-nzb",
-        },
-        attributes: [
-          { name: "category", value: "2000" },
-          { name: "category", value: q.category },
-          ...(tmdbMovie?.tmdbId ? [{ name: "tmdbid", value: tmdbMovie.tmdbId.toString() }] : []),
-          ...(tmdbMovie?.imdbId ? [{ name: "imdbid", value: tmdbMovie.imdbId }] : []),
-        ],
-      });
-    }
-  }
+  // The query year and optional metadata describe the search goal, not these
+  // source videos. Do not stamp IDs or turn the broadcast timestamp into a year.
+  const selected = selectLanguageVariants(filteredResults, await getConfiguredLanguagePolicy());
+  const newznabItems = selected.flatMap((item) =>
+    generateGenericRssItems(item, quality, hlsEnabled, "movie")
+  );
 
   console.log(
     `[Mediathek] Generated ${newznabItems.length} Newznab items for movie query (quality: ${quality})`

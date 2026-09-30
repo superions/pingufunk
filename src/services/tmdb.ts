@@ -6,6 +6,9 @@ import {
   tvdbCache,
 } from "@/lib/cache";
 import { fetchWithRetry } from "@/lib/fetch-retry";
+import type { HttpRequestBudget } from "@/lib/fetch-retry";
+import { ProviderResponseError, readBoundedProviderJson } from "@/lib/bounded-provider-json";
+import { z } from "zod";
 import { getSetting } from "@/lib/settings";
 import type { TvdbData, TvdbEpisode, TmdbMovieData } from "@/types";
 
@@ -214,20 +217,14 @@ interface TmdbMovieDetails {
   release_date: string | null;
 }
 
-interface TmdbFindMovieResult {
-  movie_results: Array<{
-    id: number;
-    title: string;
-    original_title: string;
-    release_date: string;
-  }>;
-}
-
 /**
  * Get movie info by TMDB ID
  * Uses German locale to get German title
  */
-export async function getMovieInfoByTmdbId(tmdbId: number): Promise<TmdbMovieData | null> {
+export async function getMovieInfoByTmdbId(
+  tmdbId: number,
+  budget?: HttpRequestBudget
+): Promise<TmdbMovieData | null> {
   if (!tmdbId) {
     return null;
   }
@@ -248,6 +245,8 @@ export async function getMovieInfoByTmdbId(tmdbId: number): Promise<TmdbMovieDat
 
   if (hasMetadataMiss(cacheKey)) return null;
 
+  // A caller-owned search must not inherit another operation's remaining budget.
+  if (budget) return fetchAndCacheMovie(tmdbId, apiKey, cacheKey, budget);
   return coalesceMetadata(cacheKey, () => fetchAndCacheMovie(tmdbId, apiKey, cacheKey)).catch(
     () => null
   );
@@ -256,7 +255,8 @@ export async function getMovieInfoByTmdbId(tmdbId: number): Promise<TmdbMovieDat
 async function fetchAndCacheMovie(
   tmdbId: number,
   apiKey: string,
-  cacheKey: string
+  cacheKey: string,
+  budget?: HttpRequestBudget
 ): Promise<TmdbMovieData | null> {
   try {
     console.log(`[TMDB] Looking up movie by TMDB ID ${tmdbId}`);
@@ -264,22 +264,52 @@ async function fetchAndCacheMovie(
 
     // First get the original movie details (for runtime and imdb_id)
     const detailsUrl = getApiUrl(`/movie/${tmdbId}`);
-    const detailsResponse = await fetchWithRetry(detailsUrl, { headers });
+    const detailsResponse = await fetchWithRetry(
+      detailsUrl,
+      { headers },
+      { requestBudget: budget }
+    );
 
     if (!detailsResponse.ok) {
       console.error(`[TMDB] Movie details request failed: ${detailsResponse.status}`);
-      if (detailsResponse.status === 404) cacheMetadataMiss(cacheKey);
-      return null;
+      void detailsResponse.body?.cancel().catch(() => {});
+      if (detailsResponse.status === 404) {
+        cacheMetadataMiss(cacheKey);
+        return null;
+      }
+      throw new ProviderResponseError();
     }
 
-    const details: TmdbMovieDetails = await detailsResponse.json();
+    const details = parseTmdbMovieDetails(
+      await readBoundedProviderJson(
+        detailsResponse,
+        budget?.deadlineAt ?? Date.now() + 15_000,
+        1024 * 1024
+      )
+    );
+    if (details.id !== tmdbId) throw new ProviderResponseError();
 
     // Now get the German title
     const germanUrl = getApiUrl(`/movie/${tmdbId}?language=de-DE`);
-    const germanResponse = await fetchWithRetry(germanUrl, { headers });
+    const germanResponse = await fetchWithRetry(germanUrl, { headers }, { requestBudget: budget });
 
-    if (!germanResponse.ok) return null;
-    const germanDetails: TmdbMovieDetails = await germanResponse.json();
+    if (!germanResponse.ok) {
+      void germanResponse.body?.cancel().catch(() => {});
+      throw new ProviderResponseError();
+    }
+    const germanDetails = parseTmdbMovieDetails(
+      await readBoundedProviderJson(
+        germanResponse,
+        budget?.deadlineAt ?? Date.now() + 15_000,
+        1024 * 1024
+      )
+    );
+    if (
+      germanDetails.id !== tmdbId ||
+      germanDetails.release_date !== details.release_date ||
+      germanDetails.imdb_id !== details.imdb_id
+    )
+      throw new ProviderResponseError();
     const germanTitle = germanDetails.title || details.title;
 
     const movieData: TmdbMovieData = {
@@ -301,8 +331,30 @@ async function fetchAndCacheMovie(
     return movieData;
   } catch {
     console.error("[TMDB] Error fetching movie data");
+    if (budget) throw new ProviderResponseError();
     return null;
   }
+}
+
+function parseTmdbMovieDetails(payload: unknown): TmdbMovieDetails {
+  const parsed = z
+    .object({
+      id: z.number().int().positive().max(2_147_483_647),
+      imdb_id: z
+        .string()
+        .regex(/^tt\d{7,10}$/)
+        .nullable(),
+      title: z.string().trim().min(1).max(500),
+      original_title: z.string().trim().min(1).max(500),
+      runtime: z.number().int().nonnegative().max(100_000).nullable(),
+      release_date: z
+        .string()
+        .regex(/^(?:\d{4}-\d{2}-\d{2})?$/)
+        .nullable(),
+    })
+    .safeParse(payload);
+  if (!parsed.success) throw new ProviderResponseError();
+  return parsed.data;
 }
 
 interface TmdbSearchMovieResult {
@@ -401,7 +453,10 @@ async function fetchAndCacheMovieSearch(
  * Get movie info by IMDB ID
  * Uses TMDB /find endpoint to resolve IMDB ID to TMDB ID
  */
-export async function getMovieInfoByImdbId(imdbId: string): Promise<TmdbMovieData | null> {
+export async function getMovieInfoByImdbId(
+  imdbId: string,
+  budget?: HttpRequestBudget
+): Promise<TmdbMovieData | null> {
   if (!imdbId) {
     return null;
   }
@@ -422,6 +477,7 @@ export async function getMovieInfoByImdbId(imdbId: string): Promise<TmdbMovieDat
 
   if (hasMetadataMiss(cacheKey)) return null;
 
+  if (budget) return fetchAndCacheMovieByImdbId(imdbId, apiKey, cacheKey, budget);
   return coalesceMetadata(cacheKey, () =>
     fetchAndCacheMovieByImdbId(imdbId, apiKey, cacheKey)
   ).catch(() => null);
@@ -430,7 +486,8 @@ export async function getMovieInfoByImdbId(imdbId: string): Promise<TmdbMovieDat
 async function fetchAndCacheMovieByImdbId(
   imdbId: string,
   apiKey: string,
-  cacheKey: string
+  cacheKey: string,
+  budget?: HttpRequestBudget
 ): Promise<TmdbMovieData | null> {
   try {
     console.log(`[TMDB] Looking up movie by IMDB ID ${imdbId}`);
@@ -438,14 +495,29 @@ async function fetchAndCacheMovieByImdbId(
 
     // Use /find endpoint to resolve IMDB ID
     const findUrl = getApiUrl(`/find/${imdbId}?external_source=imdb_id`);
-    const findResponse = await fetchWithRetry(findUrl, { headers });
+    const findResponse = await fetchWithRetry(findUrl, { headers }, { requestBudget: budget });
 
     if (!findResponse.ok) {
       console.error(`[TMDB] Find request failed: ${findResponse.status}`);
-      return null;
+      void findResponse.body?.cancel().catch(() => {});
+      throw new ProviderResponseError();
     }
 
-    const findData: TmdbFindMovieResult = await findResponse.json();
+    const parsed = z
+      .object({
+        movie_results: z
+          .array(z.object({ id: z.number().int().positive().max(2_147_483_647) }))
+          .max(100),
+      })
+      .safeParse(
+        await readBoundedProviderJson(
+          findResponse,
+          budget?.deadlineAt ?? Date.now() + 15_000,
+          1024 * 1024
+        )
+      );
+    if (!parsed.success) throw new ProviderResponseError();
+    const findData = parsed.data;
 
     if (!Array.isArray(findData.movie_results)) return null;
     if (findData.movie_results.length === 0) {
@@ -454,11 +526,13 @@ async function fetchAndCacheMovieByImdbId(
       return null;
     }
 
+    if (findData.movie_results.length !== 1) throw new ProviderResponseError();
     const tmdbId = findData.movie_results[0].id;
     console.log(`[TMDB] Resolved IMDB ID ${imdbId} to TMDB ID ${tmdbId}`);
 
     // Now get the full movie info using the TMDB ID
-    const movieData = await getMovieInfoByTmdbId(tmdbId);
+    const movieData = await getMovieInfoByTmdbId(tmdbId, budget);
+    if (movieData && movieData.imdbId !== imdbId) throw new ProviderResponseError();
 
     if (movieData) {
       // Also cache under the IMDB ID
@@ -468,6 +542,7 @@ async function fetchAndCacheMovieByImdbId(
     return movieData;
   } catch {
     console.error("[TMDB] Error resolving IMDB ID");
+    if (budget) throw new ProviderResponseError();
     return null;
   }
 }

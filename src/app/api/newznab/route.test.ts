@@ -21,11 +21,13 @@ const tmdbMocks = vi.hoisted(() => ({
   getMovieInfoByTmdbId: vi.fn(),
   getMovieInfoByImdbId: vi.fn(),
 }));
+const radarrMocks = vi.hoisted(() => ({ getRadarrMovie: vi.fn() }));
 const downloadMocks = vi.hoisted(() => ({ addToQueue: vi.fn() }));
 
 vi.mock("@/services/mediathek", () => mediathekMocks);
 vi.mock("@/services/shows", () => showMocks);
 vi.mock("@/services/tmdb", () => tmdbMocks);
+vi.mock("@/services/radarr-provider", () => radarrMocks);
 vi.mock("@/services/download", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/download")>();
   return { ...actual, addToQueue: downloadMocks.addToQueue };
@@ -41,8 +43,137 @@ const EMPTY_RSS = `<?xml version="1.0" encoding="UTF-8"?>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  radarrMocks.getRadarrMovie.mockResolvedValue(null);
+  tmdbMocks.getMovieInfoByTmdbId.mockResolvedValue(null);
+  tmdbMocks.getMovieInfoByImdbId.mockResolvedValue(null);
   mediathekMocks.fetchSearchResultsForRssSync.mockResolvedValue(EMPTY_RSS);
   downloadMocks.addToQueue.mockResolvedValue({ id: "synthetic-queue-item" });
+});
+
+describe("one movie contract for direct and forwarded indexer requests", () => {
+  const movie = {
+    tmdbId: 42,
+    imdbId: "tt0000042",
+    title: "Original Film",
+    germanTitle: "Beispielfilm",
+    productionYear: 1998,
+    releaseDate: null,
+    runtime: 90,
+  };
+
+  it.each(["movie", "search&cat=2000"])(
+    "resolves the search goal on the same budget: %s",
+    async (type) => {
+      radarrMocks.getRadarrMovie.mockResolvedValue(movie);
+      mediathekMocks.fetchMovieSearchResults.mockResolvedValue(EMPTY_RSS);
+      const response = await GETApiAlias(
+        new NextRequest(
+          "http://localhost/api/newznab/api?t=" +
+            type +
+            "&tmdbid=42&imdbid=0000042&q=Beispielfilm+1998"
+        )
+      );
+      expect(response.status).toBe(200);
+      const budget = radarrMocks.getRadarrMovie.mock.calls[0][2];
+      expect(mediathekMocks.fetchMovieSearchResults).toHaveBeenCalledWith(movie, 100, 0, budget);
+      expect(tmdbMocks.getMovieInfoByTmdbId).not.toHaveBeenCalled();
+      expect(await response.text()).toBe(EMPTY_RSS);
+    }
+  );
+
+  it("does not search after a metadata/query identity conflict", async () => {
+    radarrMocks.getRadarrMovie.mockResolvedValue(movie);
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=movie&tmdbid=42&q=Foreign+Film")
+    );
+    expect(response.status).toBe(400);
+    expect(mediathekMocks.fetchMovieSearchResults).not.toHaveBeenCalled();
+    expect(mediathekMocks.fetchMovieSearchByQuery).not.toHaveBeenCalled();
+  });
+
+  it("does not camouflage an enabled integration outage as successful empty RSS", async () => {
+    radarrMocks.getRadarrMovie.mockRejectedValue(new Error("synthetic private detail"));
+    const response = await GET(new NextRequest("http://localhost/api/newznab?t=movie&tmdbid=42"));
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("private detail");
+    expect(tmdbMocks.getMovieInfoByTmdbId).not.toHaveBeenCalled();
+    expect(mediathekMocks.fetchMovieSearchByQuery).not.toHaveBeenCalled();
+  });
+
+  it("preserves offset when an ID cannot be resolved without any configured metadata", async () => {
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=movie&tmdbid=42&offset=7")
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('offset="7" total="0"');
+    expect(mediathekMocks.fetchMovieSearchByQuery).not.toHaveBeenCalled();
+  });
+
+  it("continues an independent text search after an optional lookup fails without resetting budget", async () => {
+    radarrMocks.getRadarrMovie.mockRejectedValue(new Error("synthetic failure"));
+    mediathekMocks.fetchMovieSearchByQuery.mockResolvedValue(EMPTY_RSS);
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=movie&tmdbid=42&q=Beispielfilm+1998")
+    );
+    const budget = radarrMocks.getRadarrMovie.mock.calls[0][2];
+    expect(response.status).toBe(200);
+    expect(mediathekMocks.fetchMovieSearchByQuery).toHaveBeenCalledWith(
+      "Beispielfilm 1998",
+      100,
+      0,
+      budget
+    );
+    expect(tmdbMocks.getMovieInfoByTmdbId).not.toHaveBeenCalled();
+  });
+
+  it("round-trips the same honest candidate through both paths, RSS, NZB and the queue parser", async () => {
+    const source: ApiResultItem = {
+      channel: "Synthetic Channel",
+      topic: "Filmreihe",
+      title: "Original Film",
+      description: "No verified production year or language",
+      filmlisteTimestamp: 1_700_000_000,
+      duration: 5400,
+      size: 1_000_000_000,
+      url_website: "https://example.org/film",
+      url_video: "https://example.org/film.mp4?quality=720p",
+      url_video_low: "",
+      url_video_hd: "",
+    };
+    const [release] = generateGenericRssItems(source, "720p", false, "movie");
+    const rss = convertItemsToRss([release], 100, 0);
+    mediathekMocks.fetchMovieSearchByQuery.mockResolvedValue(rss);
+    const direct = await GET(
+      new NextRequest("http://localhost/api/newznab?t=movie&q=Original+Film+1998")
+    );
+    const forwarded = await GETApiAlias(
+      new NextRequest("http://localhost/api/newznab/api?t=search&cat=2000&q=Original+Film+1998")
+    );
+    expect(await direct.text()).toBe(await forwarded.text());
+    expect(release.title).toContain("Original.Film");
+    expect(release.title).not.toMatch(/1998|2023|GERMAN/);
+    expect(release.attributes.map((attribute) => attribute.name)).not.toContain("tmdbid");
+    expect(release.attributes.map((attribute) => attribute.name)).not.toContain("imdbid");
+    const parsed = await parseStringPromise(rss);
+    const enclosureUrl = parsed.rss.channel[0].item[0].enclosure[0].$.url;
+    const nzbResponse = await downloadNzb(
+      new NextRequest(new URL(enclosureUrl, "http://localhost"))
+    );
+    const content = await nzbResponse.text();
+    expect(parseNzbContent(content)).toEqual({ title: release.title, url: source.url_video });
+    const queued = await addToQueue(
+      new NextRequest("http://localhost/api?mode=addfile&cat=radarr", {
+        method: "POST",
+        body: content,
+      })
+    );
+    expect(queued.status).toBe(200);
+    expect(downloadMocks.addToQueue).toHaveBeenCalledWith(
+      source.url_video,
+      release.title,
+      "radarr"
+    );
+  });
 });
 
 describe("Newznab indexer validation", () => {
@@ -278,7 +409,12 @@ describe("Newznab indexer validation", () => {
     const response = await GET(
       new NextRequest("http://localhost/api/newznab/api?t=movie&q=Rundschau&limit=20&offset=5")
     );
-    expect(mediathekMocks.fetchMovieSearchByQuery).toHaveBeenCalledWith("Rundschau", 20, 5);
+    expect(mediathekMocks.fetchMovieSearchByQuery).toHaveBeenCalledWith(
+      "Rundschau",
+      20,
+      5,
+      expect.anything()
+    );
     expect(await response.text()).toBe(EMPTY_RSS);
   });
   it("returns a movie-category result for the Radarr sync request", async () => {

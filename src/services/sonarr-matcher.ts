@@ -5,6 +5,7 @@ import { DEFAULT_LANGUAGE_POLICY, type LanguagePolicy } from "@/lib/language-pol
 import type { ApiResultItem, MatchedEpisodeInfo, TvdbData } from "@/types";
 import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
 import { arteVideoId } from "./arte-editions";
+import { verifiedDurationCheck as sonarrDurationCheck } from "@/lib/verified-duration";
 
 function normalized(value: string): string {
   return value.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleLowerCase("de-DE");
@@ -25,37 +26,7 @@ function progressiveUrl(value: string): string {
   }
 }
 
-/** Inclusive seconds-based check; unknown expected duration is not a successful expected check. */
-export function sonarrDurationCheck(
-  sourceSeconds: number,
-  expectedSeconds: number | null,
-  minimumSeconds: number,
-  tolerancePercent: number
-): { accepted: boolean; expectedVerified: boolean } {
-  if (
-    !Number.isFinite(sourceSeconds) ||
-    sourceSeconds <= 0 ||
-    !Number.isFinite(minimumSeconds) ||
-    minimumSeconds < 0 ||
-    !Number.isFinite(tolerancePercent) ||
-    tolerancePercent < 0 ||
-    tolerancePercent > 25
-  )
-    return { accepted: false, expectedVerified: false };
-  if (expectedSeconds === null)
-    return { accepted: sourceSeconds >= minimumSeconds, expectedVerified: false };
-  if (!Number.isFinite(expectedSeconds) || expectedSeconds <= 0)
-    return { accepted: false, expectedVerified: false };
-  const delta =
-    tolerancePercent === 0
-      ? 0
-      : Math.min(expectedSeconds * 0.25, Math.max(5, (expectedSeconds * tolerancePercent) / 100));
-  const accepted =
-    sourceSeconds >= Math.min(minimumSeconds, expectedSeconds - delta) &&
-    sourceSeconds >= expectedSeconds - delta &&
-    sourceSeconds <= expectedSeconds + delta;
-  return { accepted, expectedVerified: accepted };
-}
+export { verifiedDurationCheck as sonarrDurationCheck } from "@/lib/verified-duration";
 
 /** The same final owner is used for exact, season and RSS supplemental candidates. */
 export function matchSonarrEpisodes(

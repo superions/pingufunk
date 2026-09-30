@@ -501,7 +501,8 @@ function generateMovieAttributes(
 }
 
 function generateMovieTitle(movieData: TmdbMovieData, quality: string): string {
-  const year = movieData.releaseDate ? movieData.releaseDate.split("-")[0] : "";
+  const year =
+    movieData.productionYear ?? (movieData.releaseDate ? movieData.releaseDate.split("-")[0] : "");
   const title = movieData.germanTitle || movieData.title;
   const yearPart = year ? `.${year}` : "";
 
@@ -644,10 +645,12 @@ export function generateMovieRssItems(
 export function generateGenericRssItems(
   item: ApiResultItem,
   qualityPreference: QualityPreference = "all",
-  hlsEnabled: boolean = false
+  hlsEnabled: boolean = false,
+  candidateKind?: "movie" | "tv"
 ): NewznabItem[] {
   const items: NewznabItem[] = [];
-  const baseCategories = ["5000"];
+  const movie = candidateKind === "movie";
+  const baseCategories = [movie ? "2000" : "5000"];
 
   const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
   const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
@@ -689,9 +692,10 @@ export function generateGenericRssItems(
         item,
         "1080p",
         1.6,
-        "TV > HD",
-        [...baseCategories, "5040"],
-        item.url_video_hd
+        movie ? "Movies > HD" : "TV > HD",
+        [...baseCategories, movie ? "2040" : "5040"],
+        item.url_video_hd,
+        candidateKind
       )
     );
   }
@@ -702,9 +706,10 @@ export function generateGenericRssItems(
         item,
         "720p",
         1.0,
-        "TV > HD",
-        [...baseCategories, "5040"],
-        item.url_video
+        movie ? "Movies > HD" : "TV > HD",
+        [...baseCategories, movie ? "2040" : "5040"],
+        item.url_video,
+        candidateKind
       )
     );
   }
@@ -715,9 +720,10 @@ export function generateGenericRssItems(
         item,
         "480p",
         0.4,
-        "TV > SD",
-        [...baseCategories, "5030"],
-        item.url_video_low
+        movie ? "Movies > SD" : "TV > SD",
+        [...baseCategories, movie ? "2030" : "5030"],
+        item.url_video_low,
+        candidateKind
       )
     );
   }
@@ -805,14 +811,22 @@ function createGenericRssItem(
   sizeMultiplier: number,
   category: string,
   categoryValues: string[],
-  url: string
+  url: string,
+  candidateKind?: "movie" | "tv"
 ): NewznabItem {
   const adjustedSize = Math.floor(item.size * sizeMultiplier);
 
   const parsed = parseEpisodeFromTitle(item.title);
   let rawTitle: string;
 
-  if (parsed.episodes.length > 0) {
+  if (candidateKind) {
+    // Search goals are not evidence. Keep source title/topic even when Arr
+    // can only assign this candidate through its existing override dialog.
+    rawTitle =
+      item.topic === item.title
+        ? `${item.title}.${quality}.WEB.h264-MEDiATHEK`
+        : `${item.topic}.${item.title}.${quality}.WEB.h264-MEDiATHEK`;
+  } else if (parsed.episodes.length > 0) {
     const seasonPart =
       parsed.season === null ? "" : `S${parsed.season.toString().padStart(2, "0")}`;
     const episodePart = parsed.episodes
@@ -837,7 +851,7 @@ function createGenericRssItem(
   }));
 
   // Add season/episode attributes if parsed
-  if (parsed.episodes.length > 0) {
+  if (!candidateKind && parsed.episodes.length > 0) {
     if (parsed.season !== null) {
       attributes.push({
         name: "season",
@@ -859,7 +873,9 @@ function createGenericRssItem(
         item,
         quality,
         url,
-        `generic:${parsed.season ?? ""}:${parsed.episodes.join("-")}`
+        candidateKind
+          ? `candidate:${candidateKind}`
+          : `generic:${parsed.season ?? ""}:${parsed.episodes.join("-")}`
       ),
     },
     link: url,
@@ -904,7 +920,7 @@ export function getCapabilitiesXml(): string {
       searching: {
         search: { $: { available: "yes", supportedParams: "q" } },
         "tv-search": { $: { available: "yes", supportedParams: "q,tvdbid,season,ep" } },
-        "movie-search": { $: { available: "yes", supportedParams: "q,tmdbid,imdbid" } },
+        "movie-search": { $: { available: "yes", supportedParams: "q,tmdbid,imdbid,year" } },
       },
       categories: {
         category: [

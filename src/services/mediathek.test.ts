@@ -422,7 +422,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(xml).not.toContain("Requested.Show.S02E03");
   });
 
-  it("characterizes A5: a long unrelated text result is still published neutrally as a movie", async () => {
+  it("fixes A5: preserves candidate title without inventing film year, language or identity", async () => {
     mockedGetMinDuration.mockResolvedValue(300);
     mockedGetSetting.mockImplementation(async (key) =>
       key === "download.quality" ? "720p" : null
@@ -438,8 +438,10 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     const xml = await fetchMovieSearchByQuery("Example Film 1998", 100, 0);
 
     expect(xml).toContain('total="1"');
-    expect(xml).toContain("Magazine.Feature.2024.720p");
-    expect(xml).not.toMatch(/Magazine\.Feature\.2024\.GERMAN(?:\.|<)/);
+    expect(xml).toContain("Magazine.Feature.A.report.unrelated.to.the.requested.film.720p");
+    expect(xml).not.toContain(".2024.");
+    expect(xml).not.toContain(".GERMAN.");
+    expect(xml).not.toMatch(/name="(?:tmdbid|imdbid)"/);
     expect(xml).not.toContain("Example.Film.1998");
   });
 
@@ -1131,7 +1133,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_v5-arte_["Example",null,null,null]_1_1_720p_300'),
+      expect.stringContaining('q_v6-source-candidates_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -1167,7 +1169,7 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v5-arte_Documentary__100_0_all_2700"),
+      expect.stringContaining("movie_query_v6-source-candidates_Documentary__100_0_all_2700"),
       expect.any(Object)
     );
   });
@@ -1199,7 +1201,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_v5-arte_28_100_0_all_2700"),
+      expect.stringMatching(/^movie_v6-source-candidates_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });

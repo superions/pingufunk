@@ -34,6 +34,26 @@ Before the P10.6 routing gate can open:
 This note records a risk and a stop condition; it does not authorize reading or
 changing a production feed, queue, history, service, or route.
 
+## P08 — Gemeinsamer Indexer und Filmkandidaten
+
+Direkter Arr-Zugriff und Prowlarr-Weiterleitung nutzen denselben Vertrag.
+Keine getrennte manuelle Route oder Pflicht-Syncprofile beim Cutover einrichten.
+Indexerzugriff und optionale lokale Arr-Metadatenanbindung getrennt konfigurieren;
+Prowlarr übermittelt dafür nicht automatisch die lokalen Arr-API-Keys.
+
+Der neue Filmkandidaten-Generator bindet GUIDs an Quellidentität/Fassung/Rendition,
+nicht an Anfrage-ID, Suchtext oder ein aus dem Ausstrahlungsdatum erfundenes
+Produktionsjahr. Gegenüber bisherigen movie-text-/kanonisch gestempelten GUIDs
+ist das ein erneuter Übergang: alte Einträge können neu erscheinen. Die
+obigen Queue-/History-/Doppelgrab-Gates gelten auch hierfür.
+
+Unbekannte Identität ist keine Auto-Grab-Sperre. Arr darf selbst zuordnen;
+manuelle GUI-Korrektur ist nur möglich, wenn der Consumer den Treffer behält.
+Vor Routingfreigabe die tatsächlich vorgesehenen Arr-/Prowlarr-Versionen
+synthetisch prüfen. Keine Behauptung produktiver Kompatibilität allein aus
+RSS-/Queue-Unit-Tests. Offene Film-RSS-/TV-Kandidatenabnahmen in P08 blockieren
+weiterhin P09/P10, ohne den abgenommenen bisherigen TV-Pfad zurückzunehmen.
+
 ## P04 — Download-Pfade und Altbestand
 
 Neue Jobs speichern Temp-Dateien und fertige Medien in einem Verzeichnis aus

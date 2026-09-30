@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { writesEnabled } from "@/lib/write-gate";
 import { SONARR_DEFAULT_SETTINGS, validateSonarrSetting } from "@/lib/sonarr-settings";
+import { RADARR_DEFAULT_SETTINGS, validateRadarrSetting } from "@/lib/radarr-settings";
 import { clearSettingsCache, getSetting } from "@/lib/settings";
 import { clearTTLCache, clearMetadataCaches, mediathekCache, rulesetsCache } from "@/lib/cache";
 import { isTvdbCredentialSettingKey } from "@/lib/tvdb-auth";
@@ -23,6 +24,7 @@ import {
 // Default settings
 const DEFAULT_SETTINGS: Record<string, string> = {
   ...SONARR_DEFAULT_SETTINGS,
+  ...RADARR_DEFAULT_SETTINGS,
   // General
   "download.path": "/downloads",
   "download.quality": "all",
@@ -68,6 +70,8 @@ function invalidateSettingConsumers(keys: string[]): void {
 }
 
 function validateSettingValue(key: string, value: unknown): string | null {
+  const radarrValue = validateRadarrSetting(key, value);
+  if (radarrValue !== undefined) return radarrValue;
   const sonarrValue = validateSonarrSetting(key, value);
   if (sonarrValue !== undefined) return sonarrValue;
   if (key !== LANGUAGE_POLICY_SETTING_KEY) return String(value);

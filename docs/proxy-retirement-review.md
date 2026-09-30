@@ -381,3 +381,35 @@ unverändert; die letzte PG-/Container-Evidenz ist dafür wiederverwendbar.
 Noch keine Sonarraktivierung, keine fertige Merge-/RSS-/UI-Integration. Das neue
 Budgetobjekt ist Infrastruktur, kein Beweis, dass jeder künftige Suchcall es schon
 verwendet. Keine Checkbox geschlossen, keine Produktivdienste oder Daten berührt.
+
+## P08 — Nutzerkorrektur und gemeinsamer Vertrag (01.10.2026)
+
+Die frühere Senderseiten-Filmstrategie und eine Trennung in manuelle/automatische
+Indexer sind ausdrücklich verworfen. Der ausführbare TODO wurde autorisiert
+neu gefasst, nicht im Implementierungsreview still abgeschwächt. Ein gemeinsamer
+Handler für direkte Arr-Anbindung und Prowlarr; keine Callerheuristik oder
+vorausgesetzten Syncprofile. MediathekView bleibt Suchquelle; optionale lokale
+Arr-Metadaten liefern den Suchkontext, keine sichere Identität aller Videos.
+Filmseitenadapter und ihre ausschließlich zugehörigen Fixtures entfernt;
+allgemeine Bodyreader und P07-Playervertrag erhalten.
+
+Selbstreview über Settings/Secrets/URL/Cache, optionalen Radarr-GET-Transport,
+ID-/Titel-/Jahreskonflikte, Filmretrieval, Variantenfolge, RSS/NZB und Queue.
+Findings behoben: ungültige Quelldauer durfte bei Minimum null nicht durchgehen;
+Metadata-Ausfall darf unabhängige Textsuche nicht ohne Not sperren; dabei darf
+kein neuer Gesamtbudgetscope entstehen. Variante vor Matcher/Minimum hätte
+gültige Fassungen verdrängt; Auswahl liegt nun nach Eignungsprüfung.
+TMDB-Filmauflösung liest bounded Bodies, bestätigt beide lokalisierten IDs
+und übernimmt nicht das erste von mehreren IMDb-Findergebnissen.
+Radarr-/Sonarr-Credentials maskiert, Browser-Credentialwrites abgelehnt.
+
+Versionierte Requestgenerator-/Decision-/Override-Owner und Grenzen stehen in
+docs/movie-source-evidence.md. Gezielt versus RSS ist nicht identisch mit
+interaktiv versus automatisch. Arr entscheidet selbst; fehlende Identität ist
+keine garantierte Ablehnung oder universelle GUI-Sichtbarkeit.
+
+635 reguläre Tests, Lint, Typecheck, Format und Build erfolgreich;
+zehn bedingte PG-Tests im regulären Lauf nicht ausgeführt, keine neue PG-Evidenz.
+Abhängigkeiten, Schema und Persistenzwriter unverändert. Film-Recent/RSS,
+TV-Kandidaten und vollständige Consumerabnahme noch offen: P08 nicht geschlossen,
+P09 nicht begonnen. Keine Produktionsabfrage, Aktivierung oder Datenmigration.

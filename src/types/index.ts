@@ -57,9 +57,12 @@ export interface TmdbMovieData {
   tmdbId: number;
   imdbId: string | null;
   title: string; // Original title
-  germanTitle: string; // German title
+  germanTitle: string; // Localized display title; never audio-language evidence
   runtime: number | null; // Runtime in minutes
   releaseDate: string | null;
+  /** Explicit source year; do not manufacture a release date from it. */
+  productionYear?: number;
+  aliases?: string[];
 }
 
 export interface TvdbAlias {

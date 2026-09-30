@@ -40,10 +40,19 @@ export async function searchCacheContext(): Promise<string> {
     "integration.sonarr.windowDays",
     "matching.sonarr.tolerancePercent",
     "api.sonarr.key",
+    "integration.radarr.enabled",
+    "integration.radarr.url",
+    "matching.movie.tolerancePercent",
+    "api.radarr.key",
   ];
   const sonarrEnabled = (await getSetting("integration.sonarr.enabled")) === "true";
+  const radarrEnabled = (await getSetting("integration.radarr.enabled")) === "true";
   const values = await Promise.all(
-    keys.map((key) => (key === "api.sonarr.key" && !sonarrEnabled ? null : getSetting(key)))
+    keys.map((key) =>
+      (key === "api.sonarr.key" && !sonarrEnabled) || (key === "api.radarr.key" && !radarrEnabled)
+        ? null
+        : getSetting(key)
+    )
   );
   return createHash("sha256")
     .update(JSON.stringify([cacheContextEpoch(), process.env.DATABASE_URL ?? null, values]))
