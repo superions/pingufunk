@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
-import { createReadStream, readFileSync, readdirSync } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
@@ -8,6 +8,10 @@ import { inspectLocation, inspectSource, inspectTarget } from "./postgresql-pref
 import { convertRow, importOrder } from "./postgresql-row-transform.mjs";
 import { verifyRows } from "./postgresql-verify.mjs";
 import { hasRunManifest, prepareRunManifest } from "./postgresql-run-manifest.mjs";
+import {
+  validatePostgresqlLedger,
+  validatePostgresqlStructure,
+} from "./check-postgresql-schema.mjs";
 
 async function hashFile(path) {
   const hash = createHash("sha256");
@@ -46,19 +50,8 @@ export async function importSnapshot({
     if (sqlite.prepare("PRAGMA foreign_key_check").get())
       throw new Error("Snapshot foreign key check failed");
     const migrationRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../prisma/migrations");
-    const expectedMigrations = readdirSync(migrationRoot)
-      .filter((name) => /^\d{14}_/.test(name))
-      .sort();
-    if (expectedMigrations.length === 0) throw new Error("PostgreSQL migration history missing");
-    const ledger = await pg.$queryRaw`
-      SELECT migration_name, finished_at, rolled_back_at FROM "_prisma_migrations"
-    `;
-    const applied = ledger
-      .filter((row) => row.finished_at && !row.rolled_back_at)
-      .map((row) => row.migration_name)
-      .sort();
-    if (JSON.stringify(applied) !== JSON.stringify(expectedMigrations))
-      throw new Error("PostgreSQL migration history mismatch");
+    const expectedMigrations = await validatePostgresqlLedger(pg);
+    await validatePostgresqlStructure(pg);
     if ((await pg.migrationCheckpoint.count()) !== 0)
       throw new Error("Application PostgreSQL write checkpoint already exists");
     const scriptRoot = dirname(fileURLToPath(import.meta.url));
@@ -70,6 +63,7 @@ export async function importSnapshot({
       "postgresql-verify.mjs",
       "postgresql-run-manifest.mjs",
       "postgresql-migration-cli.mjs",
+      "check-postgresql-schema.mjs",
     ];
     const importerVersion = createHash("sha256")
       .update(scriptNames.map((name) => readFileSync(resolve(scriptRoot, name))).join("\n"))

@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import { createSnapshot } from "./postgresql-snapshot.mjs";
 import { importSnapshot } from "./postgresql-import.mjs";
 import { synchronizeOwnedSequences } from "./postgresql-verify.mjs";
+import { createHash } from "node:crypto";
 
 const enabled = process.env.PINGUFUNK_REQUIRE_PG_IMPORT_TESTS === "1";
 const url = process.env.PINGUFUNK_TEST_IMPORT_URL;
@@ -61,6 +62,14 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     await expect(importSnapshot({ ...args, verifyOnly: true })).rejects.toThrow(
       "No validated import manifest"
     );
+    const migration = "20260930000000_postgresql_baseline";
+    const checksum = createHash("sha256")
+      .update(readFileSync(`prisma/migrations/${migration}/migration.sql`))
+      .digest("hex");
+    await pg.$executeRaw`UPDATE "_prisma_migrations" SET checksum='tampered' WHERE migration_name=${migration}`;
+    await expect(importSnapshot(args)).rejects.toThrow("checksum changed");
+    expect(await pg.config.count()).toBe(0);
+    await pg.$executeRaw`UPDATE "_prisma_migrations" SET checksum=${checksum} WHERE migration_name=${migration}`;
     await expect(
       importSnapshot({
         ...args,
@@ -175,5 +184,30 @@ it.skipIf(!enabled)("resets an empty owned sequence to its actual start value", 
     await pg.tvdbEpisode.deleteMany({ where: { seriesId: 9999 } });
     await pg.tvdbSeries.deleteMany({ where: { id: 9999 } });
     await pg.$disconnect();
+  }
+});
+
+it.skipIf(!enabled)("does not reuse deleted SQLite IDs after a PostgreSQL cutover", async () => {
+  process.env.DATABASE_URL = url;
+  const sqlite = new DatabaseSync(":memory:", { readBigInts: true });
+  const pg = new PrismaClient({ log: [] });
+  try {
+    sqlite.exec(
+      'CREATE TABLE "TvdbEpisode" (id INTEGER PRIMARY KEY AUTOINCREMENT); INSERT INTO "TvdbEpisode" VALUES (1000); DELETE FROM "TvdbEpisode"'
+    );
+    expect(await pg.tvdbEpisode.count()).toBe(0);
+    await synchronizeOwnedSequences(pg, sqlite);
+    await pg.tvdbSeries.create({
+      data: { id: 9998, name: "Synthetic", expiresAt: new Date("2026-10-01T00:00:00Z") },
+    });
+    const episode = await pg.tvdbEpisode.create({
+      data: { seriesId: 9998, seasonNumber: 1, episodeNumber: 1 },
+    });
+    expect(episode.id).toBe(1001);
+  } finally {
+    await pg.tvdbEpisode.deleteMany({ where: { seriesId: 9998 } });
+    await pg.tvdbSeries.deleteMany({ where: { id: 9998 } });
+    await pg.$disconnect();
+    sqlite.close();
   }
 });

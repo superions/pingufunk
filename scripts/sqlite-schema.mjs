@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +15,32 @@ export const modelNames = [
 ];
 function fail(reason) {
   throw new Error(reason);
+}
+
+/** Legacy empty ledgers are valid recovery sources, not evidence of applied DDL. */
+export function validateSourceLedger(db, variant) {
+  const rows = db
+    .prepare("SELECT migration_name,checksum,finished_at,rolled_back_at FROM _prisma_migrations")
+    .all();
+  if (rows.length === 0) return [];
+  const migrations = resolve(legacy, "migrations");
+  const known = readdirSync(migrations)
+    .filter((name) => /^\d{14}_/.test(name))
+    .sort();
+  if (rows.some((row) => !known.includes(row.migration_name)))
+    fail("Unknown SQLite migration ledger entry");
+  const expected = variant === "current" ? known : known.slice(0, -1);
+  const names = rows.map((row) => row.migration_name).sort();
+  if (variant === "bootstrap" || JSON.stringify(names) !== JSON.stringify(expected))
+    fail("SQLite source ledger incompatible with schema");
+  for (const row of rows) {
+    const checksum = createHash("sha256")
+      .update(readFileSync(resolve(migrations, row.migration_name, "migration.sql")))
+      .digest("hex");
+    if (!row.finished_at || row.rolled_back_at || row.checksum !== checksum)
+      fail("SQLite source migration incomplete or changed");
+  }
+  return names;
 }
 
 export function schemaShape(db) {

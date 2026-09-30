@@ -5,6 +5,16 @@ set -euo pipefail
 # media or existing database is used. Images must be built from this checkout.
 MIGRATOR_IMAGE="${PINGUFUNK_SMOKE_MIGRATOR_IMAGE:-pingufunk-p11-migrator-qa}"
 RUNNER_IMAGE="${PINGUFUNK_SMOKE_RUNNER_IMAGE:-pingufunk-p11-runtime-qa}"
+ROLLBACK_IMAGE="${PINGUFUNK_SMOKE_ROLLBACK_IMAGE:-}"
+if [[ -n "$ROLLBACK_IMAGE" ]]; then
+  [[ "$ROLLBACK_IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    echo "Rollback rehearsal requires an immutable local image ID" >&2; exit 1;
+  }
+  [[ "$(docker image inspect "$ROLLBACK_IMAGE" --format '{{.Id}}')" == "$ROLLBACK_IMAGE" ]] || exit 1
+  [[ "$(docker image inspect "$RUNNER_IMAGE" --format '{{.Id}}')" != "$ROLLBACK_IMAGE" ]] || {
+    echo "Rollback image must be distinct from the candidate application" >&2; exit 1;
+  }
+fi
 SMOKE_ID="${RANDOM}-${RANDOM}"
 PG_CONTAINER="pingufunk-smoke-pg-${SMOKE_ID}"
 APP_CONTAINER="pingufunk-smoke-app-${SMOKE_ID}"
@@ -33,13 +43,8 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
 chmod 600 "$SMOKE_ROOT/server.key"
 
 SMOKE_SOURCE="$SMOKE_ROOT/source/source.sqlite" node --input-type=module -e '
-  import { DatabaseSync } from "node:sqlite";
-  import { readFileSync } from "node:fs";
-  const db = new DatabaseSync(process.env.SMOKE_SOURCE);
-  try {
-    db.exec(readFileSync("prisma/legacy/sqlite/init-db.sql", "utf8"));
-    db.exec("INSERT INTO Config(key,value) VALUES ('\''smoke'\'','\''source'\'')");
-  } finally { db.close(); }
+  import { createSmokeSource } from "./scripts/postgresql-smoke-fixture.mjs";
+  createSmokeSource(process.env.SMOKE_SOURCE);
 '
 
 docker network create --internal "$SMOKE_NETWORK" >/dev/null
@@ -171,4 +176,70 @@ if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   exit 1
 fi
 
+if [[ -n "$ROLLBACK_IMAGE" ]]; then
+  docker stop "$APP_CONTAINER" >/dev/null
+  SMOKE_APP_STARTED=0
+  # Exercise the current composite identity in the post-write state as well.
+  docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U pingufunk_smoke_runtime \
+    -d pingufunk_smoke -c "INSERT INTO \"GeneratedRuleset\" (id,topic,\"tvdbId\",\"showName\",\"updatedAt\") SELECT 'smoke-second-rule',topic,8123,'Synthetic second',CURRENT_TIMESTAMP FROM \"GeneratedRuleset\" WHERE id='smoke-rule'" >/dev/null
+  # No app writer runs during backup/readback/rollback. Hash all persisted
+  # columns, not merely counts, without emitting any payload or connection URL.
+  domain_fingerprint() {
+    local database="$1"
+    docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U pingufunk_smoke_import \
+      -d "$database" -Atc '
+        SELECT jsonb_build_array(
+          (SELECT jsonb_agg(t ORDER BY id) FROM "TvdbSeries" t),
+          (SELECT jsonb_agg(t ORDER BY id) FROM "TvdbEpisode" t),
+          (SELECT jsonb_agg(t ORDER BY id) FROM "Download" t),
+          (SELECT jsonb_agg(t ORDER BY key) FROM "Config" t),
+          (SELECT jsonb_agg(t ORDER BY id) FROM "GeneratedRuleset" t),
+          (SELECT jsonb_agg(t ORDER BY id) FROM "TopicCategory" t),
+          (SELECT jsonb_agg(t ORDER BY key) FROM "MigrationCheckpoint" t)
+        )' | node -e '
+          const {createHash}=require("node:crypto"); const hash=createHash("sha256");
+          process.stdin.on("data",chunk=>hash.update(chunk));
+          process.stdin.on("end",()=>process.stdout.write(hash.digest("hex")));
+        '
+  }
+  before_rollback="$(domain_fingerprint pingufunk_smoke)"
+  umask 077
+  docker exec "$PG_CONTAINER" pg_dump -U pingufunk_smoke_import -d pingufunk_smoke \
+    --format=custom --no-owner --no-privileges > "$SMOKE_ROOT/backup/post-write.dump"
+  test -s "$SMOKE_ROOT/backup/post-write.dump"
+  docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+    -c 'CREATE DATABASE pingufunk_smoke_restore' >/dev/null
+  docker cp "$SMOKE_ROOT/backup/post-write.dump" "$PG_CONTAINER:/tmp/post-write.dump"
+  docker exec "$PG_CONTAINER" pg_restore -U postgres -d pingufunk_smoke_restore \
+    --exit-on-error --no-owner --no-privileges /tmp/post-write.dump
+  docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_smoke_restore \
+    -c 'GRANT CONNECT ON DATABASE pingufunk_smoke_restore TO pingufunk_smoke_import' \
+    -c 'GRANT USAGE ON SCHEMA public TO pingufunk_smoke_import' \
+    -c 'GRANT SELECT ON ALL TABLES IN SCHEMA public TO pingufunk_smoke_import' >/dev/null
+  [[ "$(domain_fingerprint pingufunk_smoke_restore)" == "$before_rollback" ]] || {
+    echo "Restored PostgreSQL backup differs from the post-write state" >&2; exit 1;
+  }
+  docker run --rm -d --name "$APP_CONTAINER" --network "$SMOKE_NETWORK" \
+    -e DATABASE_URL_FILE=/run/secrets/database_url \
+    --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
+    "$ROLLBACK_IMAGE" >/dev/null
+  SMOKE_APP_STARTED=1
+  ready=0
+  for ((attempt = 0; attempt < 30; attempt++)); do
+    if docker exec "$APP_CONTAINER" wget -q --spider http://localhost:6767/api/download?mode=version; then ready=1; break; fi
+    sleep 1
+  done
+  [[ "$ready" == 1 ]] || { echo "PG-compatible rollback image did not become ready" >&2; exit 1; }
+  docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/settings?key=smoke \
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="postgresql")process.exit(1)})'
+  docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/download?mode=history \
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(!JSON.parse(s).history.slots.some(x=>x.nzo_id==="smoke-download"))process.exit(1)})'
+  docker exec "$APP_CONTAINER" test ! -e /app/prisma/data/rundfunkarr.db
+  docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/rulesets \
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const rows=JSON.parse(s);if(!["smoke-rule","smoke-second-rule"].every(id=>rows.some(row=>row.id===id)))process.exit(1)})'
+  [[ "$(domain_fingerprint pingufunk_smoke)" == "$before_rollback" ]] || {
+    echo "Rollback maintenance reads changed PostgreSQL data" >&2; exit 1;
+  }
+  echo "Disposable post-write backup restore and immutable PG-compatible application rollback passed"
+fi
 echo "Disposable TLS container migration, maintenance read and first-write checkpoint passed"

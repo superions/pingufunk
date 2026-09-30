@@ -114,6 +114,20 @@ Die [Prisma-6-PostgreSQL-Dokumentation](https://www.prisma.io/docs/orm/v6/overvi
 liefert Connector-/Typdetails. Auch dort Versionsabschnitte prüfen: Prisma-7-
 Beispiele nicht unverändert auf den vorhandenen Client übertragen.
 
+Der Server-Preflight verbindet die explizite
+[Prisma-6-Versionsmatrix](https://www.prisma.io/docs/orm/v6/reference/supported-databases)
+mit dem [PostgreSQL-Supportkalender](https://www.postgresql.org/support/versioning/)
+(geprüft 30.09.2026): Majors 14–18 nur bis zum jeweiligen Supportende;
+14 ab 12.11.2026 gesperrt. Bereits abgekündigte Majors und ungeprüfte neue
+Majors brechen ab. Eine neue Matrix muss bewusst reviewt werden, nicht aus
+aktuellen Prisma-8-Beispielen entstehen. Aktuelle Minor-/Sicherheitsupdates
+bleiben eine Betriebsprüfung; ein bestandener Major-Gate beweist diese nicht.
+Readiness, Preflight nach DDL und Import prüfen außerdem die echten
+Ledgerchecksums sowie Tabellen, Spaltentypen/NULL/Defaults, PK/Unique/Indizes
+und FK im gewählten eigenen Schema. Fremde Tabellen, Views, RLS oder eigene
+Trigger/Rules sind kein freigegebener Importbereich. Diese Prüfung führt
+kein DDL aus und gibt weder Default- noch Zeilenwerte aus.
+
 ## Datenvertrag: erhalten statt neu erzeugen
 
 | Tabelle                               | Zwingend zu erhalten / prüfen                                                                                        |
@@ -151,7 +165,7 @@ Import-/Vergleichsabnahme in P11.5–P11.6 steht noch aus.
 | `firstAired`, `cachedAt`, `expiresAt`, `aired`, `createdAt`, `completedAt`, `updatedAt`                                                               | Nur explizite Unix-Millisekunden-Integer oder vollständiges ISO-8601 mit Offset und höchstens drei Dezimalstellen. In PostgreSQL `timestamptz(3)` als derselbe Zeitpunkt; gemischte Repräsentation pro Feld sowie naive/unklare Zeittexte brechen ab. Nicht belegte Zeiteinheiten werden nicht geraten. |
 | Alle nullable Felder                                                                                                                                  | `NULL` bleibt `NULL`; erforderliche Werte werden gegen den PostgreSQL-Modellvertrag geprüft, auch wenn ein historisches SQLite-Bootstrap eine Spalte nullable angelegt hat. Kein `now`, `0` oder leerer Ersatzstring.                                                                                   |
 | PK, `topic`-Unique und `TvdbEpisode.seriesId`-FK                                                                                                      | Quellspalten/-indizes/-FK gegen die historische Schemakontur prüfen, im Snapshot `foreign_key_check`; Original-IDs erhalten. Mengen- und Wertgleichheit bleibt P11.6-Gate.                                                                                                                              |
-| `_prisma_migrations`, `sqlite_sequence`                                                                                                               | Ledgereinträge nur gegen bekannte Legacy-Namen prüfen; nie als Anwendungstabellen importieren. PostgreSQL hat eigene Migrationshistorie und real zugehörige Sequences.                                                                                                                                  |
+| `_prisma_migrations`, `sqlite_sequence`                                                                                                               | Nichtleere Ledger müssen zum erkannten Schema passen, vollständig abgeschlossen sein und die echten SQL-Checksums tragen. Keine Ledgerübernahme. Historische AUTOINCREMENT-Höchststände einschließlich gelöschter IDs für tatsächlich entsprechende PG-Sequence-Spalten erhalten.                       |
 
 Ein mit SQLite `CURRENT_TIMESTAMP` erzeugter Text ohne Offset ist nachträglich
 nicht zweifelsfrei von einem manuell geschriebenen lokalen Zeitwert zu
@@ -168,8 +182,8 @@ läuft daher erst auf dem per Backup-API konsistent erzeugten privaten Snapshot.
 
 Lieferergebnisse stehen in P11.3–P11.8 der
 [Phasen-TODOs](../todo/proxy-retirement.md), ihre freigegebene produktive
-Ausführung in P10.2–P10.5. Runner und operatorfertiges Runbook existieren
-noch nicht. Gewählt ist explizit typisierter Snapshotimport, kein blinder
+Ausführung in P10.2–P10.5. Runner und Runbookentwurf sind implementiert; die
+vollständige Abnahme bleibt im TODO offen. Gewählt ist explizit typisierter Snapshotimport, kein blinder
 pgloader-Schemagenerator.
 
 Backupverfahren und die Trennung von Integrity-/FK-Prüfung stützen sich auf

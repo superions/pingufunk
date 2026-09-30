@@ -635,6 +635,15 @@ ausschließlich P10.3–P10.5.
       Produktionsbelege für Transport/TLS/Version, Runner/Image und echte Quelle
       bleiben bei einem gewählten Cutover P10.2 vorbehalten; ihre Abwesenheit
       blockiert keine rein disposable Entwicklungsabnahme.
+      Reviewkorrektur 30.09.2026: Der Preflight sperrt abgekündigte PG-Majors
+      sowie nach ihrem datierten Supportende auslaufende Majors; explizite
+      Prisma-6-Matrix statt aktueller Major-Doku. Nichtleere SQLite-Ledger müssen
+      zur erkannten Kontur passen und vollständige Originalchecksums tragen.
+      Nach DDL wird das echte PG-Katalogschema read-only gegen den generierten
+      Client/Schema geprüft, einschließlich Defaults, Indizes/FK und unerlaubter
+      zusätzlicher Relationen/RLS/Trigger. Richtige Ledgernamen allein reichen
+      nicht; veränderte Checksums oder offene Fehlversuche brechen ab. Negative
+      disposable Katalog-/Ledgerproben ergänzen die bisherigen Eingangsprüfungen.
 - [ ] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
       neuen Runner SQLite-Backup-API/CLI statt Kopie einer laufenden Hauptdatei
       verwenden; Snapshot außerhalb Git mit eingeschränkten Rechten und Hash.
@@ -720,6 +729,12 @@ ausschließlich P10.3–P10.5.
       `setval`, prüfte das Importmanifest nochmals lesend und wiederholte die
       Synchronisierung erfolgreich. Weitere Sequenzdrift- und Kollisionsfälle
       sowie die durable App-Write-Grenze bleiben offen.
+      Reviewkorrektur 30.09.2026: Sequence-Pläne werden vollständig geprüft,
+      bevor das erste nichttransaktionale `setval` ausgeführt wird. Zyklische,
+      fremd zugehörige und durch Inkrement erschöpfte Sequences brechen ab.
+      Der CLI verwendet auch den geprüften Snapshot-Höchststand für tatsächlich
+      korrespondierende AUTOINCREMENT-Spalten: eine gelöschte SQLite-ID 1000
+      wird im realen PG-Inserttest nicht wiederverwendet, nächste ID ist 1001.
 - [ ] **P11.7 — Dual-Backend-Harness beweist Runtime und beide Rückwege.**
       `src/lib/db-schema.test.ts`, passende Ownerintegration und neue Runner-
       Tests gegen disposable SQLite und PG aufnehmen; `vitest.config.ts`/
@@ -774,6 +789,24 @@ ausschließlich P10.3–P10.5.
       Erneute Fork-Abnahme: CI 36658718136 und Docker-/TLS-Container-Smoke
       36658718093 sind grün. Der UID-Fehler war auf den synthetischen
       Harness begrenzt; die privaten Betriebsrechte bleiben ungeprüft.
+      Ergänzung 30.09.2026: Der lokale TLS-Container-Smoke übernimmt synthetische
+      Daten aller sechs Modelle und probt optional den Rückweg nach einem
+      Settingswrite mit Checkpoint und zwei Serien am selben Topic. Writer
+      stoppen, privates PG-Dump, Restore in eine neue disposable DB und
+      semantischer Fingerprint sämtlicher Fachspalten plus Checkpoint;
+      danach ein anderes immutable PG-kompatibles App-Image lesend auf
+      demselben PG-Stand. Settings/History/beide Regeln und unveränderter
+      Fingerprint bestätigt; kein SQLite-Fallback. Dieser Rückweg ist ohne
+      `PINGUFUNK_SMOKE_ROLLBACK_IMAGE` ausdrücklich nicht geprüft. Der Standard-
+      Fork-Smoke enthält noch kein separat gebautes älteres Rollbackimage;
+      finaler P09-Worker-/Schema- und Rollbackgate bleiben offen.
+      Aktualisierte lokale Reviewprobe: 579 reguläre Tests und zehn gesonderte
+      PG-Tests erfolgreich; Typecheck, Lint, Produktformat und gebaute Runner-/
+      Migrator-Images grün. Der TLS-Smoke einschließlich privatem Backuprestore
+      und immutable PG-App-Rollback bestand auch nach Einführung der strengeren
+      Katalog-/Checksum-Prüfung. Die beiden beim Aufbau der neuen Prüfung
+      gefundenen Defaultdarstellungsfälle (Prisma-BigInt-String und PG-E-Literal)
+      wurden korrigiert und gegen reale Schema-Defaults erneut geprüft.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,
@@ -1078,7 +1111,7 @@ B04/B05/B06, R3.
       abortieren ohne Quelländerung. Final abgenommen mit Commit `96a570e`:
       Fork-CI `36756864402` und Docker-Buildvalidierung `36756864457` erfolgreich,
       ohne Imagepublikation oder produktive Migration.
-- [ ] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
+- [x] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
       ARTE-Kandidatensuche/Providerconsumer über Titel/Alias plus sichere Serie
       und gleiche Video-ID zur passenden DE-Fassung führen; deren Koordinaten
       und tatsächlichen Sprachstatus erneut prüfen. B04-Fallback hat weiterhin
@@ -1102,6 +1135,9 @@ B04/B05/B06, R3.
       `docs/arte-edition-contract.md`. Synthetische Zwei-Serien-RSS→NZB→Queue-
       Probe, Ausfall ohne Teilresponse, OV/AD, widersprüchliche Audiocodes,
       Qualitäts-/ID-Konflikte und Folgeseitenfehler sind implementiert.
+      Final abgenommen mit `1c7124e`: 573 reguläre Tests, Lint, Typecheck,
+      Formatcheck und Build grün; Fork-CI `36761536896` und Docker-/TLS-/
+      SQLite-Buildvalidierung `36761536831` erfolgreich, ohne Publikation.
 
 ## Phase P08 — Sichere Filmsuche ohne neue externe Konten
 
@@ -1150,6 +1186,17 @@ P07; B01/B11–B13, A5, R1/R2.
       bloßes Magazin-Topic, Ausstrahlungsjahr ohne Produktionsjahr, Remake-
       Konflikt, fehlende ID/Dauer und Quellenfehler. Fehlender Identitätsbeleg
       verhindert ID-Stempeln; bekannt sichere Bestandspfade bleiben erhalten.
+      Quellenreview 30.09.2026: Feldmatrix und gepinnte Primärquellen unter
+      `docs/movie-source-evidence.md`. MediathekView/ARTE-Player und bestehende
+      SRF-/ORF-Pfade belegen derzeit nicht zuverlässig Filmklassifikation und
+      Produktionsjahr/externe Filmidentität; ARD-Dokumentation ist nicht als
+      accountfreier Vertrag zugänglich, betrachteter ZDF-Detailparser liefert
+      Ausstrahlungs-/Editorialdatum. Kein erfundenes Produktionsjahr, kein
+      Radarr-/neuer Metadatenservice-Fallback. Konkrete positive Mediathekfälle
+      zur gezielten Quellenprüfung beim Nutzer angefragt. P08.1–P08.3 bleiben
+      offen; vorhandenes fuzzy-/ID-Stempel-Verhalten ist ausdrücklich nicht
+      abgenommen. Unabhängige P11-Abnahmen laufen weiter, P09 beginnt erst
+      nach dem vereinbarten P08-Gate.
 - [ ] **P08.2 — Ein kanonischer Filmkontext über alle Suchrouten.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts` und
       `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}` gemeinsam

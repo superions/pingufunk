@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
+import { validatePostgresqlStructure } from "./check-postgresql-schema.mjs";
 
 const required = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 const configured = process.env.PINGUFUNK_TEST_DATABASE_URL;
@@ -81,6 +82,47 @@ it.skipIf(!required)(
       await expect(
         pg.topicCategory.create({ data: { topic: original.topic, category: "movie" } })
       ).rejects.toThrow();
+      await validatePostgresqlStructure(pg);
+      const driftCases = [
+        [
+          'ALTER TABLE "Config" ALTER COLUMN "value" TYPE VARCHAR(255)',
+          'ALTER TABLE "Config" ALTER COLUMN "value" TYPE TEXT',
+        ],
+        [
+          'ALTER TABLE "Config" ADD COLUMN synthetic_extra TEXT',
+          'ALTER TABLE "Config" DROP COLUMN synthetic_extra',
+        ],
+        [
+          'ALTER TABLE "Config" ENABLE ROW LEVEL SECURITY',
+          'ALTER TABLE "Config" DISABLE ROW LEVEL SECURITY',
+        ],
+        [
+          'ALTER TABLE "Download" ALTER COLUMN "size" SET DEFAULT 99',
+          'ALTER TABLE "Download" ALTER COLUMN "size" SET DEFAULT 0',
+        ],
+        [
+          'ALTER TABLE "Config" ALTER COLUMN "value" DROP NOT NULL',
+          'ALTER TABLE "Config" ALTER COLUMN "value" SET NOT NULL',
+        ],
+        [
+          'CREATE INDEX synthetic_extra_index ON "Config" (value)',
+          "DROP INDEX synthetic_extra_index",
+        ],
+        [
+          'ALTER TABLE "TvdbEpisode" DROP CONSTRAINT "TvdbEpisode_seriesId_fkey"',
+          'ALTER TABLE "TvdbEpisode" ADD CONSTRAINT "TvdbEpisode_seriesId_fkey" FOREIGN KEY ("seriesId") REFERENCES "TvdbSeries"(id) ON DELETE CASCADE ON UPDATE CASCADE',
+        ],
+        ["CREATE TABLE synthetic_foreign_table (id INTEGER)", "DROP TABLE synthetic_foreign_table"],
+      ];
+      for (const [inject, restore] of driftCases) {
+        await pg.$executeRawUnsafe(inject);
+        try {
+          await expect(validatePostgresqlStructure(pg)).rejects.toThrow("drift");
+        } finally {
+          await pg.$executeRawUnsafe(restore);
+        }
+        await validatePostgresqlStructure(pg);
+      }
     } finally {
       await pg.$disconnect();
     }

@@ -69,6 +69,65 @@ it("rejects an unknown legacy migration ledger entry", () => {
   expect(() => inspectSource(path)).toThrow("Unknown SQLite migration ledger entry");
 });
 
+it("rejects incomplete, tampered and schema-inconsistent source ledgers without changing data", () => {
+  const path = source(
+    migrations,
+    `CREATE TABLE _prisma_migrations (
+    migration_name TEXT, checksum TEXT, finished_at TEXT, rolled_back_at TEXT
+  )`
+  );
+  const db = new DatabaseSync(path);
+  try {
+    const insert = db.prepare("INSERT INTO _prisma_migrations VALUES (?,?,?,NULL)");
+    for (const file of migrations) {
+      insert.run(
+        file.split("/").at(-2)!,
+        createHash("sha256").update(readFileSync(file)).digest("hex"),
+        "2026-09-30T00:00:00Z"
+      );
+    }
+    expect(inspectSource(path).ledgerNames).toHaveLength(3);
+    db.exec(
+      "UPDATE _prisma_migrations SET finished_at=NULL WHERE migration_name='20260116132336_init'"
+    );
+    expect(() => inspectSource(path)).toThrow("incomplete or changed");
+    db.exec(
+      "UPDATE _prisma_migrations SET finished_at='2026-09-30T00:00:00Z',checksum='tampered' WHERE migration_name='20260116132336_init'"
+    );
+    expect(() => inspectSource(path)).toThrow("incomplete or changed");
+    db.exec("DELETE FROM _prisma_migrations WHERE migration_name='20260116132336_init'");
+    expect(() => inspectSource(path)).toThrow("incompatible with schema");
+  } finally {
+    db.close();
+  }
+});
+
+it("bounds server compatibility by both the Prisma 6 matrix and dated PostgreSQL maintenance", () => {
+  const safe = {
+    database: "qa",
+    role: "qa",
+    version: 140024,
+    standby: false,
+    tls: true,
+    superuser: false,
+    createdb: false,
+    createrole: false,
+  };
+  const before = Date.parse("2026-09-30T00:00:00Z");
+  expect(assertTargetMetadata(safe, "qa", "qa", true, before).primary).toBe(true);
+  expect(() =>
+    assertTargetMetadata(safe, "qa", "qa", true, Date.parse("2026-11-12T00:00:00Z"))
+  ).toThrow("Unsupported");
+  for (const version of [90624, 130023, 190000, NaN, 170000.5]) {
+    expect(() => assertTargetMetadata({ ...safe, version }, "qa", "qa", true, before)).toThrow(
+      "Unsupported"
+    );
+  }
+  for (const version of [150000, 160000, 170000, 180000]) {
+    expect(assertTargetMetadata({ ...safe, version }, "qa", "qa", true, before).primary).toBe(true);
+  }
+});
+
 it("rejects ambiguous timestamps and preserves large integer evidence", () => {
   const path = source(
     [`${legacy}/init-db.sql`],

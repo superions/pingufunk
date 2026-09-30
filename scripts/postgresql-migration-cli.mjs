@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { DatabaseSync } from "node:sqlite";
 import { importSnapshot } from "./postgresql-import.mjs";
 import { inspectTarget } from "./postgresql-preflight.mjs";
 import { synchronizeOwnedSequences } from "./postgresql-verify.mjs";
@@ -58,9 +59,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (options.action === "sequences") {
       await inspectTarget(options.database, options.role, options.host);
       const pg = new PrismaClient({ log: [] });
+      const sqlite = new DatabaseSync(options.snapshotPath, { readOnly: true, readBigInts: true });
       try {
-        adjustedSequences = (await synchronizeOwnedSequences(pg)).adjustedSequences;
+        adjustedSequences = (await synchronizeOwnedSequences(pg, sqlite)).adjustedSequences;
       } finally {
+        sqlite.close();
         await pg.$disconnect();
       }
     }

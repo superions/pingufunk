@@ -14,7 +14,7 @@ RUN npm ci
 # Explicit one-shot migration runner, built from the same schema and pinned CLI.
 # This target is never part of a normal application container startup.
 FROM deps AS migrator
-COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/database-migrate.mjs scripts/load-database-environment.mjs scripts/sqlite-schema.mjs scripts/check-sqlite-schema.mjs scripts/sqlite-baseline.mjs scripts/migrate-entrypoint.sh scripts/postgresql-preflight.mjs scripts/postgresql-snapshot.mjs scripts/postgresql-row-transform.mjs scripts/postgresql-import.mjs scripts/postgresql-verify.mjs scripts/postgresql-run-manifest.mjs scripts/postgresql-migration-cli.mjs ./scripts/
+COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/database-migrate.mjs scripts/load-database-environment.mjs scripts/sqlite-schema.mjs scripts/check-sqlite-schema.mjs scripts/check-postgresql-schema.mjs scripts/sqlite-baseline.mjs scripts/migrate-entrypoint.sh scripts/postgresql-preflight.mjs scripts/postgresql-snapshot.mjs scripts/postgresql-row-transform.mjs scripts/postgresql-import.mjs scripts/postgresql-verify.mjs scripts/postgresql-run-manifest.mjs scripts/postgresql-migration-cli.mjs ./scripts/
 RUN apk add --no-cache su-exec && chmod +x ./scripts/migrate-entrypoint.sh
 ENTRYPOINT ["/app/scripts/migrate-entrypoint.sh"]
 CMD ["node", "/app/scripts/database-migrate.mjs"]

@@ -3,8 +3,12 @@ import { lstatSync, accessSync, statfsSync, constants } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import {
+  validatePostgresqlLedger,
+  validatePostgresqlStructure,
+} from "./check-postgresql-schema.mjs";
 
-import { modelNames, schemaShape, knownShapes } from "./sqlite-schema.mjs";
+import { modelNames, schemaShape, knownShapes, validateSourceLedger } from "./sqlite-schema.mjs";
 export const sourceFieldContract = {
   TvdbSeries: {
     int: ["id"],
@@ -186,18 +190,7 @@ export function inspectSource(sourcePath) {
       .get();
     let ledgerNames = [];
     if (ledger) {
-      ledgerNames = db
-        .prepare("SELECT migration_name FROM _prisma_migrations")
-        .all()
-        .map((row) => row.migration_name);
-      const historical = new Set([
-        "20260116132336_init",
-        "20260117120853_bigint_size_fields",
-        "20260708000000_add_topic_category",
-        "20260930002000_series_topic_identity",
-      ]);
-      if (ledgerNames.some((name) => !historical.has(name)))
-        fail("Unknown SQLite migration ledger entry");
+      ledgerNames = validateSourceLedger(db, variant);
     }
     return {
       variant,
@@ -223,11 +216,27 @@ function exists(path) {
   }
 }
 
-export function assertTargetMetadata(target, expectedDatabase, expectedRole, requireTls = true) {
+// Verified against the versioned Prisma 6 matrix and PostgreSQL's support
+// calendar on 2026-09-30. Unknown majors require an explicit compatibility review.
+export const postgresqlSupportEnds = {
+  14: "2026-11-12T00:00:00Z",
+  15: "2027-11-11T00:00:00Z",
+  16: "2028-11-09T00:00:00Z",
+  17: "2029-11-08T00:00:00Z",
+  18: "2030-11-14T00:00:00Z",
+};
+
+export function assertTargetMetadata(
+  target,
+  expectedDatabase,
+  expectedRole,
+  requireTls = true,
+  now = Date.now()
+) {
   if (target.database !== expectedDatabase || target.role !== expectedRole)
     fail("Unexpected PostgreSQL target identity");
-  // Prisma 6's supported server range is checked before any target write.
-  if (target.version < 90600 || target.version >= 190000)
+  const end = postgresqlSupportEnds[Math.floor(target.version / 10000)];
+  if (!Number.isInteger(target.version) || !end || !Number.isFinite(now) || now >= Date.parse(end))
     fail("Unsupported PostgreSQL server version");
   if (target.standby) fail("PostgreSQL target is a standby");
   if (requireTls && !target.tls) fail("PostgreSQL connection is not using TLS");
@@ -265,8 +274,22 @@ export async function inspectTarget(
         inet_server_addr()::text AS server_address,
         inet_server_port() AS server_port
     `;
+    const metadata = assertTargetMetadata(target, expectedDatabase, expectedRole, requireTls);
+    const relations = await prisma.$queryRaw`
+      SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname=current_schema() AND c.relkind IN ('r','p','v','m','f')
+    `;
+    let schemaState = "empty";
+    if (relations.some((relation) => relation.name === "_prisma_migrations")) {
+      await validatePostgresqlLedger(prisma);
+      await validatePostgresqlStructure(prisma);
+      schemaState = "validated";
+    } else if (relations.length !== 0) {
+      fail("Unowned PostgreSQL schema is not empty");
+    }
     return {
-      ...assertTargetMetadata(target, expectedDatabase, expectedRole, requireTls),
+      ...metadata,
+      schemaState,
       databaseOid: target.database_oid,
       serverAddress: target.server_address,
       serverPort: target.server_port,

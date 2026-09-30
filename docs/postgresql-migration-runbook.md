@@ -51,6 +51,26 @@ docker build --target runner -t pingufunk-p11-runtime-qa .
 bash scripts/postgresql-container-smoke.sh
 ```
 
+Die zusätzliche Probe **nach PG-Writes** verlangt ein anderes, zuvor geprüftes
+schema-/ledgerkompatibles lokales App-Image als immutable `sha256:…`-Image-ID:
+
+```sh
+# ROLLBACK_IMAGE_ID wurde aus dem tatsächlich geprüften lokalen Vorimage ermittelt.
+PINGUFUNK_SMOKE_ROLLBACK_IMAGE="${ROLLBACK_IMAGE_ID}" \
+  bash scripts/postgresql-container-smoke.sh
+```
+
+Dieser optionale Harnesszweig stoppt den neuen Appwriter, sichert den PG-Stand
+als privaten Custom-Dump, stellt ihn in einer **neuen disposable Datenbank**
+wieder her und vergleicht alle Spalten der sechs Fachmodelle plus Checkpoint
+intern per Hash. Das eigene alte App-Image startet danach am erhaltenen
+PG-Original im Wartungsmodus. Settings/History/zwei Serienregeln desselben
+Topics bleiben lesbar und alle Werte unverändert; kein SQLitefallback.
+Ein fehlender Parameter ist **keine** Rollbackabnahme. Die konkrete frühere
+Imageversion muss zur aktuellen Migration und zum Client passen; ein
+Vor-P07-Image mit globalem Topic-Unique ist kein geeigneter Rückweg. Dieser
+lokale Entwicklungsnachweis ersetzt weder P10.2 noch eine Freigabe.
+
 Das Skript verwendet ein eigenes Docker-Netz und nur ignorierte temporäre
 Dateien unter `downloads/`; sein Exit-Trap entfernt die selbst erzeugten
 Container, das Netz und die synthetischen Dateien. Es benutzt keine private
