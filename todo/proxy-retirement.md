@@ -1264,7 +1264,7 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Synthetische direkte/vermittelte ID-/RSS-Abfrage einschließlich
       RSS→NZB→Queue, Monitoring, Pagination und Providerfehler ohne
       Teilbestandcache erfolgreich. Keine reale Instanz angebunden.
-- [ ] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
+- [x] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts`,
       neuer Radarr-Owner und
       `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}`
@@ -1283,7 +1283,7 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Abnahme: sichere Treffer plus unaufgelöste plausible Kandidaten,
       Metadatenkonflikte, fehlendes Jahr/ID/Dauer, gleiche Titel verschiedener
       Werke und alle Routeformen; generische Nichtfilmverträge erhalten.
-- [ ] **P08.3 — Begrenzte Kandidatensuche ohne vorgespielte Gewissheit.**
+- [x] **P08.3 — Begrenzte Kandidatensuche ohne vorgespielte Gewissheit.**
       Film-/TV-Consumer, Content-Search und gemeinsame Release-/NZB-Owner:
       vollständige Titel/Aliase/Episodentitel sowie begrenzte markante Wörter
       und Umlautvarianten als Suchbegriffe nutzen. Begriffe, Pagination,
@@ -1298,7 +1298,7 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Abnahme: korrekte Reihenfolge/Counts/IDs/Titel/aktuelle Medien-URLs,
       Varianten vor Pagination, Quellenfehler ohne partiellen Erfolg oder
       Empty-Success-Cache, bounded Requests und RSS→NZB→Queue-Konsistenz.
-- [ ] **P08.4 — Direkter und Prowlarr-vermittelter Arr-Verbrauchervertrag.**
+- [x] **P08.4 — Direkter und Prowlarr-vermittelter Arr-Verbrauchervertrag.**
       `src/app/api/newznab/route.ts`, vorhandener API-Alias, RSS-/NZB-Owner,
       Sonarr-/Radarr-Consumerregressionen und Cutover-Runbook:
       gleiche Caps/Kategorien/Anfrageparameter, stabile Quell-/Fassungs-GUIDs,
@@ -1374,6 +1374,31 @@ TVDB→TMDB-Retrykaskade, Regelgenerierungsfehler und RSS-Reserve.
 zehn bedingte PG-Tests nicht in diesem Lauf ausgeführt. Keine Schemaänderung.
 Checkboxen P08.2–P08.4 nicht allein mit diesem Checkpoint schließen;
 vollständige Consumer-/Scopeabnahme vor P09 bleibt erforderlich.
+
+Abnahme P08.2–P08.4 am 01.10.2026 nach vollständigem Ownerreview:
+Suchziel und Quelle bleiben getrennt; keine Film-ID wird aus bloßer
+Titel/Jahr/Laufzeit-Korrelation erfunden. Belegte Kurzfilmkorrelation,
+fremde IDs/Jahre/Titel, unbekannte Felder und generische Nichtfilmverträge
+sind gesichert. Bekannte TV-Nachbarn und Daily-Date-Konflikte werden nicht
+durch neutrale Kandidaten wieder eingeführt. Alias-/Titel-/Episodentitel-
+Union, begrenzte Seiten, Dauer/Fassung/Renditions/Dedupe vor Pagination
+und gemeinsames Gesamtbudget über alle genannten HTTP-Owner geprüft.
+Versionierte Sonarr-/Radarr-Request-, Newznab-RSS-, Decision- und GUI-Override-
+Owner reviewt; Prowlarr-Sync nicht als Metadatenproxy interpretiert.
+Ein dabei gefundener realer Fehler ist behoben: relative NZB-Enclosures
+wurden im alten Test stillschweigend gegen eine Base-URL aufgelöst.
+Der echte GET-/Alias-Scope erzeugt jetzt absolute NZB-Links; optionaler
+öffentlicher URL-Unterpfad, parallele Caller und URL-bezogene RSS-Caches
+sind getestet. Keine Forwarded-Header-/Caller-/Manuellheuristik, keine
+XML-Umschreibeschicht. GUID-Werte unverändert, Hashes korrekt nicht als
+Permalinks markiert. Caps-Default entspricht 100; maximal 5.000 Ergebnisse,
+vollständig geprüfte eindeutige Paginationparameter vor Providerarbeit.
+Direkte/vermittelte ID-, Text-, RSS-, Caps-, Download-/Queue-Pfade und
+MIME/absolute Enclosures sind hermetisch abgesichert. Das ist versionierte
+Quellreview plus synthetischer Fach-/Transportnachweis, keine gestartete
+Arr-/Prowlarr-Instanz oder Garantie beliebiger GUI-Anzeige/Auto-Ablehnung.
+Leerfeed-/RSS-Parsergrenzen und GUID-Cutover stehen weiterhin im Runbook.
+P09 ist damit freigegeben; produktive P10-Gates bleiben separat.
 
 ## Phase P09 — Tatsächlicher Medieninhalt vor completed
 

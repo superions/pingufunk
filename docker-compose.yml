@@ -9,6 +9,7 @@ services:
       - DOWNLOAD_FOLDER_PATH=/downloads
       - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed  # Path mapping for Sonarr/Radarr
       - DATABASE_URL=file:/app/prisma/data/rundfunkarr.db
+      - PINGUFUNK_PUBLIC_URL=${PINGUFUNK_PUBLIC_URL:-}
     volumes:
       - ./downloads:/app/downloads        # Temporary download folder
       - ./prisma/data:/app/prisma/data    # SQLite persistence; initialize explicitly

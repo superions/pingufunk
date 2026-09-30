@@ -457,7 +457,7 @@ des Restbudgets nutzen, aber keine neue Deadline/Versuchszahl erhalten.
 Review-Findings korrigiert: Ablaufgrenze ist nicht identisch mit verbleibender
 Versuchszahl null nach dem letzten erfolgreichen Abruf; ein solcher vollständiger
 Abruf darf publiziert werden. TVDB-nameTranslations kann eine Sprachcodeliste
-statt benannter Texte sein. Optionale/null Episodenfelder und Folge null werden
+statt benannter Texte sein. Optionale/null Episodenfelder und Folge 0 werden
 nicht zu deutscher Sprache oder Laufzeitbelegen umgedeutet. Nicht gelesene
 Fehlerbodies werden abgebrochen. Fehlgeschlagene Basisprovider dürfen nicht
 nach erfolglosem Sonarr-Lookup als bestätigtes leeres Resultat erscheinen.
@@ -472,3 +472,31 @@ Fremd-ID, mehrdeutige TMDB-Findresultate und Staffel-Teilversagen ab.
 Lint, Typecheck, Formatcheck, Build und Diffcheck grün.
 Der neue Gesamtbudgetcheckpoint bleibt unabhängig von der abschließenden
 P08-Consumerabnahme, P09 sowie finalem DB-/Medien-End-to-End.
+
+## P08-Abschlussreview (01.10.2026)
+
+P08.2–P08.4 vollständig gegen den bestehenden Vertrag reviewt und abgenommen.
+Quelle/Suchziel/Requestkontext bleiben getrennt, sichere TV-Nachbarn geschlossen,
+neutrale Kandidaten ohne falsche IDs/Koordinaten/Jahre/Sprachen. Keine neue
+Senderseitenstrategie. Alle genannten HTTP-Owner teilen ihr Callerbudget.
+Versionierte Arr-RSS-/Request-/Decision-/Override-Owner und Prowlarr-Sync-
+Grenze dokumentiert; synthetische direkte/vermittelte Consumerpfade ausgeführt.
+
+Neues Consumerfinding behoben: relative NZB-Enclosures wurden vom alten Test
+gegen localhost repariert, obwohl der echte Arr-Consumer absolute Download-
+adressen braucht. Der vorhandene Linkowner erhält einen requestlokalen
+öffentlichen URL-Kontext, optional mit Deployment-Unterpfad; keine XML-
+Reparse-/Rewrite-Schicht. Gleichzeitige Caller und Responsecache-Fingerprints
+werden isoliert. Forwarding-/User-Agent-Header bestimmen keine URL oder
+Freigabe. Hash-GUID-Werte bleiben identisch, nicht als Permalink behauptet.
+Caps-Default auf tatsächliche 100 berichtigt, max 5.000 und eindeutige vollständige
+Paginationprüfung vor Requests. Die Tests prüfen die absolute URI ohne eine
+heimlich hinzugefügte Base sowie NZB-MIME/Quellidentität/Download/Queue.
+
+683 reguläre Tests erfolgreich; zehn bedingte PG-Tests nicht im regulären Lauf.
+Lint, Typecheck, Formatcheck, Build und Diffcheck grün. Budgetcheckpoint
+322c910 hat erfolgreiche Fork-CI 36790909761 samt disposable PG-Gates und
+Docker-Validierung 36790909775. Diese Evidenz wird nicht als Lauf des noch
+unveröffentlichten URL-Checkpoints ausgegeben. Keine DB-/Schemaänderung,
+Main-Integration, Instanzänderung oder produktive Suche/Migration.
+P09 kann beginnen; P10/P11-Endabnahme und Produktionsfreigabe bleiben separat.

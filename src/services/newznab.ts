@@ -328,7 +328,7 @@ function createRssItem(
   return {
     title: formattedTitle,
     guid: {
-      isPermaLink: true,
+      isPermaLink: false,
       value: buildReleaseGuid(
         item,
         quality,
@@ -527,7 +527,7 @@ function createMovieRssItem(
   return {
     title: formattedTitle,
     guid: {
-      isPermaLink: true,
+      isPermaLink: false,
       value: buildReleaseGuid(item, quality, url, `tmdb:${movieData.tmdbId}:movie`),
     },
     link: url,
@@ -868,7 +868,7 @@ function createGenericRssItem(
   return {
     title: formattedTitle,
     guid: {
-      isPermaLink: true,
+      isPermaLink: false,
       value: buildReleaseGuid(
         item,
         quality,

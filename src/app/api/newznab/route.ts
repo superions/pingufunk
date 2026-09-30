@@ -19,6 +19,7 @@ import {
 import type { TmdbMovieData, TvSearchContext } from "@/types";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { getRadarrMovie } from "@/services/radarr-provider";
+import { withIndexerUrl } from "@/lib/indexer-url";
 import {
   parseMovieSearchContext,
   assertMovieSearchGoal,
@@ -75,11 +76,19 @@ function parseTvSearchContext(searchParams: URLSearchParams): {
 }
 
 export async function GET(request: NextRequest) {
+  try {
+    return await withIndexerUrl(request.url, () => handleGet(request));
+  } catch {
+    return NextResponse.json({ error: "Indexer configuration unavailable" }, { status: 503 });
+  }
+}
+
+async function handleGet(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
 
   const t = searchParams.get("t");
-  const limit = parseInt(searchParams.get("limit") || "100", 10);
-  const offset = parseInt(searchParams.get("offset") || "0", 10);
+  const limit = parsePaginationParameter(searchParams, "limit", 100, 1, 5000);
+  const offset = parsePaginationParameter(searchParams, "offset", 0, 0, 2_147_483_647);
   const imdbid = searchParams.get("imdbid");
   const tmdbid = searchParams.get("tmdbid");
   const categoryIds = parseNewznabCategoryIds(searchParams.get("cat"));
@@ -88,7 +97,7 @@ export async function GET(request: NextRequest) {
   if (t === "caps") {
     const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <caps>
-    <limits max="5000" default="5000"/>
+    <limits max="5000" default="100"/>
     <registration available="no" open="no"/>
     <searching>
         <search available="yes" supportedParams="q"/>
@@ -113,6 +122,9 @@ export async function GET(request: NextRequest) {
       headers: { "Content-Type": "application/xml; charset=utf-8" },
     });
   }
+
+  if (limit === null || offset === null || searchParams.getAll("t").length > 1)
+    return NextResponse.json({ error: "Invalid search pagination or type" }, { status: 400 });
 
   // One contract for direct and Prowlarr-forwarded requests. No invented
   // manual/automatic detection; RSS has no concrete search goal.
@@ -247,4 +259,18 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ error: "Not found" }, { status: 404 });
+}
+
+function parsePaginationParameter(
+  params: URLSearchParams,
+  key: string,
+  fallback: number,
+  minimum: number,
+  maximum: number
+): number | null {
+  const values = params.getAll(key);
+  if (values.length === 0) return fallback;
+  if (values.length !== 1 || !/^\d+$/.test(values[0])) return null;
+  const value = Number(values[0]);
+  return Number.isSafeInteger(value) && value >= minimum && value <= maximum ? value : null;
 }

@@ -1,3 +1,5 @@
+import { indexerDownloadUrl } from "@/lib/indexer-url";
+
 /** Release identity shared by Newznab producers, NZB parsing, and the queue. */
 export interface NzbRelease {
   title: string;
@@ -22,7 +24,9 @@ export function createFakeNzbDownloadUrl(release: NzbRelease): string {
   const encodedUrl = Buffer.from(release.url, "utf-8").toString("base64");
   const encodedTitle = Buffer.from(release.title, "utf-8").toString("base64");
 
-  return `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}`;
+  return indexerDownloadUrl(
+    `/api/newznab/fake_nzb_download?encodedUrl=${encodeURIComponent(encodedUrl)}&encodedTitle=${encodeURIComponent(encodedTitle)}`
+  );
 }
 
 function escapeXml(value: string): string {

@@ -145,6 +145,16 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
   const targeted = await GET(new NextRequest("http://localhost/api/newznab?t=movie&tmdbid=42"));
   const parsed = await parseStringPromise(rss);
   const release = parsed.rss.channel[0].item[0];
+  // Pinned Arr Newznab parsers prefer the NZB enclosure; absent external IDs
+  // are unknown, not a license to copy search IDs into the release.
+  expect(release.enclosure[0].$.type).toBe("application/x-nzb");
+  expect(Number(release.enclosure[0].$.length)).toBeGreaterThan(0);
+  expect(new URL(release.enclosure[0].$.url).protocol).toMatch(/^https?:$/);
+  expect(release.guid[0].$.isPermaLink).toBe("false");
+  const attributes = release["newznab:attr"].map(
+    (attribute: { $: { name: string } }) => attribute.$.name
+  );
+  for (const unknown of ["tmdbid", "imdb", "language"]) expect(attributes).not.toContain(unknown);
   const searchRelease = (await parseStringPromise(await targeted.text())).rss.channel[0].item[0];
   expect(searchRelease.guid).toEqual(release.guid);
   const nzb = await downloadNzb(
@@ -160,6 +170,60 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
   );
   expect(queue.status).toBe(200);
   expect(state.addToQueue).toHaveBeenCalledWith(source.url_video, release.title[0], "movies");
+});
+
+it("exposes identical caps through the direct route and alias without caller/mode heuristics", async () => {
+  const direct = await GET(new NextRequest("http://localhost/api/newznab?t=caps"));
+  const forwarded = await alias(
+    new NextRequest("http://localhost/api/newznab/api?t=caps", {
+      headers: { "user-agent": "Prowlarr", "x-forwarded-for": "192.0.2.1" },
+    })
+  );
+  const caps = await direct.text();
+  expect(direct.status).toBe(200);
+  expect(forwarded.status).toBe(200);
+  expect(await forwarded.text()).toBe(caps);
+  const parsed = await parseStringPromise(caps);
+  const search = parsed.caps.searching[0];
+  expect(search["movie-search"][0].$.supportedParams.split(",")).toEqual(
+    expect.arrayContaining(["q", "imdbid", "tmdbid"])
+  );
+  expect(search["tv-search"][0].$.supportedParams.split(",")).toEqual(
+    expect.arrayContaining(["q", "tvdbid", "season", "ep"])
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("keeps absolute download hosts out of shared RSS caches and ignores forwarding-header spoofing", async () => {
+  const first = await GET(new NextRequest("https://direct.example.invalid/api/newznab?t=movie"));
+  const second = await GET(
+    new NextRequest("https://other.example.invalid/api/newznab?t=movie", {
+      headers: { "x-forwarded-host": "spoof.example.invalid", "x-forwarded-proto": "http" },
+    })
+  );
+  const item = async (response: Response) =>
+    (await parseStringPromise(await response.text())).rss.channel[0].item[0];
+  const a = await item(first);
+  const b = await item(second);
+  expect(new URL(a.enclosure[0].$.url).host).toBe("direct.example.invalid");
+  expect(new URL(b.enclosure[0].$.url).host).toBe("other.example.invalid");
+  expect(a.guid).toEqual(b.guid);
+});
+
+it("uses an explicit public URL including its deployment prefix without altering source identity", async () => {
+  vi.stubEnv("PINGUFUNK_PUBLIC_URL", "https://public.example.invalid/pingufunk/");
+  const response = await GET(
+    new NextRequest("http://internal.example.invalid/api/newznab?t=movie")
+  );
+  const release = (await parseStringPromise(await response.text())).rss.channel[0].item[0];
+  expect(new URL(release.enclosure[0].$.url).pathname).toBe(
+    "/pingufunk/api/newznab/fake_nzb_download"
+  );
+  const nzb = await downloadNzb(new NextRequest(release.enclosure[0].$.url));
+  expect(parseNzbContent(await nzb.text())).toEqual({
+    title: release.title[0],
+    url: source.url_video,
+  });
 });
 
 it("selects renditions before total and pagination", async () => {

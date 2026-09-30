@@ -5,6 +5,7 @@ import {
   type MediathekQueryOptions,
 } from "@/lib/mediathek-client";
 import { createHash } from "node:crypto";
+import { getIndexerBaseUrl } from "@/lib/indexer-url";
 import { cacheContextEpoch } from "@/lib/cache";
 import { getSetting } from "@/lib/settings";
 import { LANGUAGE_POLICY_SETTING_KEY, readLanguagePolicy } from "@/lib/language-policy";
@@ -55,7 +56,14 @@ export async function searchCacheContext(): Promise<string> {
     )
   );
   return createHash("sha256")
-    .update(JSON.stringify([cacheContextEpoch(), process.env.DATABASE_URL ?? null, values]))
+    .update(
+      JSON.stringify([
+        cacheContextEpoch(),
+        process.env.DATABASE_URL ?? null,
+        getIndexerBaseUrl(),
+        values,
+      ])
+    )
     .digest("hex")
     .slice(0, 24);
 }

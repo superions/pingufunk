@@ -52,6 +52,30 @@ beforeEach(() => {
   downloadMocks.addToQueue.mockResolvedValue({ id: "synthetic-queue-item" });
 });
 
+it.each([
+  "limit=-1",
+  "limit=0",
+  "limit=5001",
+  "limit=10junk",
+  "limit=NaN",
+  "limit=1&limit=1",
+  "offset=-1",
+  "offset=1junk",
+  "offset=2147483648",
+  "offset=0&offset=0",
+  "t=movie&t=tvsearch",
+])("rejects ambiguous or unsupported pagination before provider work: %s", async (parameters) => {
+  const response = await GET(
+    new NextRequest(
+      "http://localhost/api/newznab?" +
+        (parameters.startsWith("t=") ? parameters : "t=movie&" + parameters)
+    )
+  );
+  expect(response.status).toBe(400);
+  expect(radarrMocks.getRadarrMovie).not.toHaveBeenCalled();
+  expect(mediathekMocks.fetchMovieSearchForRssSync).not.toHaveBeenCalled();
+});
+
 describe("one movie contract for direct and forwarded indexer requests", () => {
   const movie = {
     tmdbId: 42,

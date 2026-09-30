@@ -142,8 +142,8 @@ Nachbarfolgen nicht irrtümlich als koordinatenlos durchgehen.
 
 ## Offene Abnahmegrenzen
 
-P08.1 ist abgenommen; P08.2–P08.4 bleiben bis zur vollständigen
-Vertragsabnahme offen. Film-Text/ID-Kontext und RSS→NZB→Queue sind synthetisch
+P08.1–P08.4 sind nach vollständigem Ownerreview und synthetischen
+Vertragsproben abgenommen. Film-Text/ID-Kontext und RSS→NZB→Queue sind synthetisch
 prüfbar, aber nicht dasselbe wie eine laufende Arr-/Prowlarr-Verbraucherprobe.
 Film-Recent/RSS und neutrale TV-Kandidaten sind implementiert und synthetisch
 prüfbar. Serienanbieter, Show-/Regelkataloge, Regel-Metadaten und
@@ -164,3 +164,31 @@ Die nameTranslations-Sprachcodeliste wird nicht als übersetzter Titel
 interpretiert; bereits unterstützte benannte Übersetzungsobjekte bleiben lesbar.
 Diese Grenzen nicht durch Änderung der Kriterien als erledigt ausgeben.
 P09 und die separate produktive P10-Freigabe bleiben nachgelagert.
+
+## RSS-Transportreview und absolute NZB-Links
+
+Die versionierten Newznab-RSS-Parser von
+[Sonarr](https://github.com/Sonarr/Sonarr/blob/cab419ade8ac7fcab5bf80394ee492abd35d5f5a/src/NzbDrone.Core/Indexers/Newznab/NewznabRssParser.cs)
+und [Radarr](https://github.com/Radarr/Radarr/blob/c90668a520664ad0c91812cfee57c41928ad2148/src/NzbDrone.Core/Indexers/Newznab/NewznabRssParser.cs)
+bevorzugen Usenet-Enclosures; die ID-Felder bleiben ohne Attribut unbekannt.
+Radarr prüft die Downloadadresse ausdrücklich als absolute URI. Der bisherige
+relative Pingufunk-NZB-Link war deshalb unzureichend; der Integrationstest
+hatte die fehlende Base-URL unzulässig selbst ergänzt.
+
+Der bestehende NZB-Linkowner erzeugt innerhalb des tatsächlichen GET-/Alias-
+Scopes absolute HTTP(S)-Adressen. Ohne öffentliche URL-Konfiguration gilt
+der Request-Origin. Optionale PINGUFUNK_PUBLIC_URL setzt den tatsächlich
+erreichbaren öffentlichen Root einschließlich Deployment-Unterpfad.
+Keine Credentials/Query/Fragment; leere optionale Variable bedeutet unset.
+Forwarded-Host/Proto/IP und User-Agent werden nicht zur Auswahl herangezogen.
+Ein Reverse-Proxy, dessen interner Request-Origin extern nicht erreichbar ist,
+muss den öffentlichen Root konfigurieren; keine konkrete Proxyarchitektur
+wird vorausgesetzt. Die Plattform muss ihre Host-/Routinggrenze selbst sichern.
+
+Request-lokale URL-Kontexte bleiben auch parallel isoliert; RSS-Responsecaches
+enthalten den URL-Kontext in ihrem Fingerprint. Quell- und Fassungs-GUIDs
+ändern sich dabei nicht. Hash-GUIDs sind keine Permalinks. MIME, positive
+Enclosurelänge, absolute Adresse, fehlende unbelegte IDs/Sprache und gleicher
+RSS→NZB→Queue-Pfad werden geprüft. Caps/Limit haben denselben Default 100
+und maximal 5.000; negative, unvollständige oder doppelte Paginationparameter
+werden vor Providerarbeit abgelehnt.
