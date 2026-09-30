@@ -285,6 +285,79 @@ describe("shared catalogue rules preserve identity and independent candidates", 
 });
 
 describe("fetchSearchResultsByString – generic result gating", () => {
+  it("keeps an ID-scoped unknown-coordinate candidate neutral while excluding source neighbors", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "A missing title",
+        url_video: "https://example.org/unknown.mp4",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02E12",
+        url_video: "https://example.org/neighbor.mp4",
+      }),
+    ]);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({
+        query: "Example Show",
+        tvdbId: 12345,
+        season: "2",
+        episode: "13",
+      }),
+      100,
+      0
+    );
+    expect(xml).toContain('total="1"');
+    expect(xml).toContain("Example.Show.A.missing.title");
+    expect(xml).toContain("unknown.mp4");
+    expect(xml).not.toContain("neighbor.mp4");
+    expect(xml).not.toMatch(/name="(?:tvdbid|season|episode)"|S02E13/);
+  });
+
+  it("keeps ID-search candidates tied to the verified series name, never the request's foreign title", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    const show: TvdbData = {
+      id: 12345,
+      name: "Example Show",
+      germanName: null,
+      aliases: [],
+      episodes: [
+        { name: "Known episode", seasonNumber: 2, episodeNumber: 13, aired: null, runtime: 60 },
+      ],
+    };
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "A missing title",
+        url_video: "https://example.org/unknown.mp4",
+      }),
+      makeItem({
+        topic: "Foreign Show",
+        title: "A missing title",
+        url_video: "https://example.org/foreign.mp4",
+      }),
+    ]);
+    const xml = await fetchSearchResultsById(
+      show,
+      makeTvSearchContext({
+        tvdbId: 12345,
+        season: "2",
+        episode: "13",
+      }),
+      100,
+      0
+    );
+    expect(xml).toContain('total="1"');
+    expect(xml).toContain("unknown.mp4");
+    expect(xml).not.toContain("foreign.mp4");
+    expect(xml).not.toMatch(/name="(?:tvdbid|season|episode)"|S02E13/);
+  });
   it("emits NO generic results for a season-only query (no q)", async () => {
     // Regression for tvsearch&season=01 without q: without the gate this
     // returned generic items for every unrelated show whose title contains "S01".
@@ -1133,7 +1206,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_v6-source-candidates_["Example",null,null,null]_1_1_720p_300'),
+      expect.stringContaining('q_v7-recent-candidates_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -1169,7 +1242,7 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v6-source-candidates_Documentary__100_0_all_2700"),
+      expect.stringContaining("movie_query_v7-recent-candidates_Documentary__100_0_all_2700"),
       expect.any(Object)
     );
   });
@@ -1201,7 +1274,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v6-source-candidates_[a-f0-9]{64}_100_0_all_2700/),
+      expect.stringMatching(/^movie_v7-recent-candidates_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });

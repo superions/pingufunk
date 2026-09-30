@@ -746,7 +746,7 @@ export function parseEpisodeFromTitle(title: string): {
   let episodeName = title;
 
   // Keep the whole E12E13 sequence; truncating it changes the release identity.
-  const sPattern = title.match(/\(?\bS(\d+)\/E(\d+(?:E\d+)*)\)?/i);
+  const sPattern = title.match(/\(?\bS(\d+)\/?E(\d+(?:E\d+)*)\)?/i);
   if (sPattern) {
     season = parseInt(sPattern[1], 10);
     episodes = sPattern[2].split(/E/i).map((value) => parseInt(value, 10));

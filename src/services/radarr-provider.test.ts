@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { getRadarrMovie, parseRadarrMovie } from "./radarr-provider";
+import { getRadarrMovie, getRadarrMonitoredMovies, parseRadarrMovie } from "./radarr-provider";
 import { getSetting } from "@/lib/settings";
 import { clearMetadataCaches } from "@/lib/cache";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
@@ -160,4 +160,54 @@ it("validates activation, URL and explicit percent units without accepting crede
   );
   expect(validateRadarrSetting("matching.movie.tolerancePercent", "26")).toBeNull();
   expect(validateRadarrSetting("matching.movie.tolerancePercent", "0")).toBe("0");
+});
+
+it("reads only monitored movie goals, strips library fields and caches isolated copies", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+    .mockResolvedValueOnce(
+      Response.json([
+        { ...movie(), monitored: true },
+        { monitored: false, path: "/not-a-goal" },
+      ])
+    );
+  const result = await getRadarrMonitoredMovies(new HttpRequestBudget(2));
+  expect(result).toEqual([parseRadarrMovie(movie())]);
+  result[0].aliases!.push("not persisted");
+  expect((await getRadarrMonitoredMovies(new HttpRequestBudget(1)))[0].aliases).toEqual([
+    "Verified alias",
+  ]);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(String(fetch.mock.calls[1][0])).toBe("https://arr.invalid/base/radarr/api/v3/movie");
+  expect(fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+});
+
+it("does not read a disabled inventory's credentials or make HTTP requests", async () => {
+  vi.mocked(getSetting).mockResolvedValue(null);
+  vi.mocked(externalCredential).mockClear();
+  const fetch = vi.spyOn(globalThis, "fetch");
+  expect(await getRadarrMonitoredMovies(new HttpRequestBudget())).toEqual([]);
+  expect(externalCredential).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("rejects duplicate monitored IDs and malformed monitoring without a partial inventory cache", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+    .mockResolvedValueOnce(
+      Response.json([
+        { ...movie(), monitored: true },
+        { ...movie(), monitored: true },
+      ])
+    )
+    .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+    .mockResolvedValueOnce(Response.json([{ ...movie(), monitored: "true" }]))
+    .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+    .mockResolvedValueOnce(Response.json([{ ...movie(), monitored: true }]));
+  await expect(getRadarrMonitoredMovies(new HttpRequestBudget(2))).rejects.toThrow();
+  await expect(getRadarrMonitoredMovies(new HttpRequestBudget(2))).rejects.toThrow();
+  expect(await getRadarrMonitoredMovies(new HttpRequestBudget(2))).toHaveLength(1);
+  expect(fetch).toHaveBeenCalledTimes(6);
 });

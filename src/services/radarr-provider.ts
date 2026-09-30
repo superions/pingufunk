@@ -49,6 +49,54 @@ export function parseRadarrMovie(payload: unknown): TmdbMovieData {
 }
 
 const cache = new LRUCache<string, { value: TmdbMovieData; expiresAt: number }>({ max: 256 });
+const inventories = new LRUCache<string, { value: TmdbMovieData[]; expiresAt: number }>({ max: 4 });
+
+/** A bounded monitored library supplies RSS goals, not identities for source videos. */
+export async function getRadarrMonitoredMovies(
+  budget: HttpRequestBudget
+): Promise<TmdbMovieData[]> {
+  if ((await getSetting("integration.radarr.enabled")) !== "true") return [];
+  try {
+    const epoch = cacheContextEpoch();
+    const url = await getSetting("integration.radarr.url");
+    const credential = await externalCredential("PINGUFUNK_RADARR_API_KEY");
+    if (!url || !credential.configured || !credential.value) throw new RadarrUnavailableError();
+    const key = metadataCacheKey("radarr-monitored-inventory", null, [url, credential.value]);
+    const assertCurrent = () => {
+      if (epoch !== cacheContextEpoch() || Date.now() >= budget.deadlineAt)
+        throw new RadarrUnavailableError();
+    };
+    assertCurrent();
+    const stored = inventories.get(key);
+    if (stored && Date.now() < stored.expiresAt) return structuredClone(stored.value);
+    const client = createReadOnlyArrJsonClient(url, credential.value);
+    const status = z
+      .object({ version: z.string().regex(/^6\.\d+\.\d+(?:\.\d+)?$/) })
+      .safeParse(await client("api/v3/system/status", undefined, { requestBudget: budget }));
+    if (!status.success) throw new RadarrUnavailableError();
+    const payload = z
+      .array(z.unknown())
+      .max(2000)
+      .safeParse(await client("api/v3/movie", undefined, { requestBudget: budget }));
+    if (!payload.success) throw new RadarrUnavailableError();
+    const seen = new Set<number>();
+    const movies: TmdbMovieData[] = [];
+    for (const row of payload.data) {
+      const monitored = z.object({ monitored: z.boolean() }).safeParse(row);
+      if (!monitored.success) throw new RadarrUnavailableError();
+      if (!monitored.data.monitored) continue;
+      const movie = parseRadarrMovie(row);
+      if (seen.has(movie.tmdbId)) throw new RadarrUnavailableError();
+      seen.add(movie.tmdbId);
+      movies.push(movie);
+    }
+    assertCurrent();
+    inventories.set(key, { value: structuredClone(movies), expiresAt: Date.now() + 60_000 });
+    return movies;
+  } catch {
+    throw new RadarrUnavailableError();
+  }
+}
 
 /** Disabled means no secret I/O or HTTP. Enabled failures cannot become empty success. */
 export async function getRadarrMovie(

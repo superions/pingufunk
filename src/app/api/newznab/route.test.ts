@@ -13,6 +13,7 @@ const mediathekMocks = vi.hoisted(() => ({
   fetchSearchResultsForRssSync: vi.fn(),
   fetchMovieSearchResults: vi.fn(),
   fetchMovieSearchByQuery: vi.fn(),
+  fetchMovieSearchForRssSync: vi.fn(),
 }));
 const showMocks = vi.hoisted(() => ({
   getShowInfoByTvdbId: vi.fn(),
@@ -47,6 +48,7 @@ beforeEach(() => {
   tmdbMocks.getMovieInfoByTmdbId.mockResolvedValue(null);
   tmdbMocks.getMovieInfoByImdbId.mockResolvedValue(null);
   mediathekMocks.fetchSearchResultsForRssSync.mockResolvedValue(EMPTY_RSS);
+  mediathekMocks.fetchMovieSearchForRssSync.mockResolvedValue(EMPTY_RSS);
   downloadMocks.addToQueue.mockResolvedValue({ id: "synthetic-queue-item" });
 });
 
@@ -246,7 +248,12 @@ describe("Newznab indexer validation", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mediathekMocks.fetchSearchResultsByString).toHaveBeenCalledWith(context, 100, 0);
+    expect(mediathekMocks.fetchSearchResultsByString).toHaveBeenCalledWith(
+      context,
+      100,
+      0,
+      showMocks.getShowInfoByTvdbId.mock.calls[0][1]
+    );
     expect(mediathekMocks.fetchSearchResultsById).not.toHaveBeenCalled();
   });
 
@@ -417,7 +424,7 @@ describe("Newznab indexer validation", () => {
     );
     expect(await response.text()).toBe(EMPTY_RSS);
   });
-  it("returns a movie-category result for the Radarr sync request", async () => {
+  it("routes the Radarr sync request to the movie Recent owner", async () => {
     const response = await GET(
       new NextRequest(
         "http://localhost/api/newznab/api?t=search&extended=1&cat=2040,2030,2000&apikey=test&limit=100&offset=0"
@@ -427,12 +434,10 @@ describe("Newznab indexer validation", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("application/xml");
-    expect(body).toContain('total="1"');
-    expect(body).toContain('name="category" value="2040"');
-    expect(body).toContain('name="category" value="2030"');
-    expect(body).toContain('name="category" value="2000"');
+    expect(body).toContain('total="0"');
     expect(body).not.toContain('name="category" value="5000"');
-    expect(mediathekMocks.fetchSearchResultsForRssSync).toHaveBeenCalledWith(100, 0);
+    expect(mediathekMocks.fetchMovieSearchForRssSync).toHaveBeenCalledWith(100, 0);
+    expect(mediathekMocks.fetchSearchResultsForRssSync).not.toHaveBeenCalled();
   });
 
   it("returns a TV-category result for a Sonarr sync request", async () => {
@@ -462,7 +467,7 @@ describe("Newznab indexer validation", () => {
 
   it("returns real RSS results unchanged", async () => {
     const rss = `<?xml version="1.0"?><rss><channel><newznab:response offset="0" total="1"/><item><title>Real result</title></item></channel></rss>`;
-    mediathekMocks.fetchSearchResultsForRssSync.mockResolvedValue(rss);
+    mediathekMocks.fetchMovieSearchForRssSync.mockResolvedValue(rss);
 
     const response = await GET(
       new NextRequest("http://localhost/api/newznab/api?t=search&cat=2000")
@@ -487,15 +492,14 @@ describe("Newznab indexer validation", () => {
     );
   });
 
-  it("uses the shared movie validation response for t=movie", async () => {
+  it("returns a genuinely empty film RSS feed rather than inventing a validation release", async () => {
     const response = await GET(
       new NextRequest("http://localhost/api/newznab/api?t=movie&limit=100&offset=0")
     );
     const body = await response.text();
 
-    expect(body).toContain('total="1"');
-    expect(body).toContain('name="category" value="2000"');
-    expect(body).toContain('name="category" value="2040"');
-    expect(body).not.toContain('name="category" value="5000"');
+    expect(body).toContain('total="0"');
+    expect(body).not.toContain("<item>");
+    expect(mediathekMocks.fetchMovieSearchForRssSync).toHaveBeenCalledWith(100, 0);
   });
 });

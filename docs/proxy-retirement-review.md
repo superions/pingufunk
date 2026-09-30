@@ -413,3 +413,32 @@ zehn bedingte PG-Tests im regulären Lauf nicht ausgeführt, keine neue PG-Evide
 Abhängigkeiten, Schema und Persistenzwriter unverändert. Film-Recent/RSS,
 TV-Kandidaten und vollständige Consumerabnahme noch offen: P08 nicht geschlossen,
 P09 nicht begonnen. Keine Produktionsabfrage, Aktivierung oder Datenmigration.
+
+## P08.1-Abnahme und Recent-/TV-Kandidatencheckpoint (01.10.2026)
+
+P08.1 ist nach Feldowner-, Transport-, Cache-, Credential- und Consumerreview
+abgenommen. Film-RSS liest nur überwachte optionale Radarr-Ziele; doppelte IDs,
+unschemahaftes Monitoring und fehlgeschlagene Source-Folgeseiten führen nicht
+zu teilweisem Erfolg. Begrenzter 60s-Bibliothekscache und minutenbezogenes
+Sourcefenster statt unverändertem Stunden-RSS. Direkte und vermittelte Anfragen
+nutzen denselben Handler; der reale RSS→NZB→Queue-Pfad ist hermetisch ausgeführt.
+Ohne Filmkontext ist der Feed leer, kein erfundener Indexertest-Treffer.
+Consumergrenzen bei leeren Feeds/nicht parsebaren RSS-Titeln bleiben benannt.
+
+Neue TV-Kandidaten dürfen Request-ID/Koordinaten nicht übernehmen. Review-
+Findings behoben und kausal getestet: Daily-Date-Fehler konnten erneut über
+den Unknown-Pfad erscheinen; kompakte S02E12-Quelltitel wurden vom früher
+Slash-only-Parser nicht erkannt; Sonarr klont Renditions, weshalb ein
+Referenzvergleich den verifizierten Treffer zusätzlich neutral ausgab.
+Letzteres schützt ein neuer positiver Doppel-/negativer Nachbarfall bei
+Minimum null. Bestehende Regeln, A7-Nachbarfilter und P07-Player bleiben erhalten.
+
+Neue lokale Evidenz: 651 reguläre Tests erfolgreich, zehn bedingte PG-Tests
+nicht im regulären Lauf ausgeführt; Lint, Typecheck, Formatcheck, Build und
+Diffcheck grün. Keine DB-/Schema-/Lockfileänderung. Vorheriger 48e08a0-
+Checkpoint hat erfolgreiche Fork-CI samt disposable PG-Gate und Docker-
+Validierung; diese Workflow-Evidenz ersetzt nicht den Lauf des neuen Commits.
+P08.2/P08.3/P08.4 bleiben bis zur restlichen Consumer-/Gesamtbudgetabnahme
+offen. Insbesondere alte Serienanbieter/Showrefresh/Regelauflösung noch nicht
+unter demselben Callerbudget nachgewiesen. Keine Main-Integration oder
+Produktionsoperation; P09 weiterhin abhängig von vollständiger P08-Abnahme.

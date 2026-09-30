@@ -183,6 +183,18 @@ it("supplements a local missing episode and round-trips exact, season and RSS th
   expect(fetchMock).toHaveBeenCalledTimes(beforePage);
 });
 
+it("does not republish a verified Sonarr episode as an unknown candidate or requested neighbor", async () => {
+  state.settings.set("matching.minDuration", "0");
+  const own = await GET(
+    new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=2&ep=3")
+  );
+  expect(await own.text()).toContain('total="1"');
+  const neighbor = await GET(
+    new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=1&ep=1")
+  );
+  expect(await neighbor.text()).toContain('total="0"');
+});
+
 it("does not turn an unavailable missing episode into a cached empty HTTP success", async () => {
   fetchMock.mockImplementation(async (value: string) => {
     if (new URL(value).pathname.endsWith("/system/status"))

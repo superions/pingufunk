@@ -5,6 +5,7 @@ import {
   fetchSearchResultsForRssSync,
   fetchMovieSearchResults,
   fetchMovieSearchByQuery,
+  fetchMovieSearchForRssSync,
 } from "@/services/mediathek";
 import { getShowInfoByTvdbId } from "@/services/shows";
 import { getMovieInfoByTmdbId, getMovieInfoByImdbId } from "@/services/tmdb";
@@ -79,7 +80,6 @@ export async function GET(request: NextRequest) {
   const t = searchParams.get("t");
   const limit = parseInt(searchParams.get("limit") || "100", 10);
   const offset = parseInt(searchParams.get("offset") || "0", 10);
-  const q = searchParams.get("q");
   const imdbid = searchParams.get("imdbid");
   const tmdbid = searchParams.get("tmdbid");
   const categoryIds = parseNewznabCategoryIds(searchParams.get("cat"));
@@ -116,16 +116,11 @@ export async function GET(request: NextRequest) {
 
   // One contract for direct and Prowlarr-forwarded requests. No invented
   // manual/automatic detection; RSS has no concrete search goal.
-  if (
-    t === "movie" ||
-    (t === "search" &&
-      isMovieCategoryRequest(categoryIds) &&
-      (q || tmdbid || imdbid || searchParams.has("year")))
-  ) {
+  if (t === "movie" || (t === "search" && isMovieCategoryRequest(categoryIds))) {
     try {
       const context = parseMovieSearchContext(searchParams);
       if (!context.query && context.tmdbId === null && context.imdbId === null) {
-        return new NextResponse(getValidationRss(["2000", "2040"]), {
+        return new NextResponse(await fetchMovieSearchForRssSync(limit, offset), {
           headers: { "Content-Type": "application/xml; charset=utf-8" },
         });
       }
@@ -191,7 +186,12 @@ export async function GET(request: NextRequest) {
 
         if (!tvdbData) {
           if (context.query || context.season || context.episode) {
-            const fallbackResults = await fetchSearchResultsByString(context, limit, offset);
+            const fallbackResults = await fetchSearchResultsByString(
+              context,
+              limit,
+              offset,
+              requestBudget
+            );
             return new NextResponse(fallbackResults, {
               status: 200,
               headers: { "Content-Type": "application/xml; charset=utf-8" },

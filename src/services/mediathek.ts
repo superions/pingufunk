@@ -1,5 +1,5 @@
 import { isRenditionAllowed } from "@/lib/stream-url";
-import { mediathekCache } from "@/lib/cache";
+import { cacheContextEpoch, mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
@@ -30,6 +30,7 @@ import {
 } from "./newznab";
 import { matchMovieItems } from "./movie-matcher";
 import { movieSearchTerms } from "./movie-search-terms";
+import { getRadarrMonitoredMovies } from "./radarr-provider";
 import type {
   ApiResultItem,
   TvdbData,
@@ -51,7 +52,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v6-source-candidates";
+const CONTENT_SEARCH_CACHE_VERSION = "v7-recent-candidates";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -78,6 +79,36 @@ function hasEpisodeCoordinates(context: TvSearchContext): boolean {
 function matchesGenericSearchContext(item: ApiResultItem, context: TvSearchContext): boolean {
   if (context.tvdbId !== null) return false;
   return !hasEpisodeCoordinates(context) || matchesSourceCoordinates(item, context);
+}
+
+/** Missing source coordinates permit a neutral candidate, never request-coordinate adoption. */
+function matchesUnknownTvCandidate(
+  item: ApiResultItem,
+  context: TvSearchContext,
+  show?: TvdbData
+): boolean {
+  // Date-scoped searches retain their exact aired-day gate; a malformed or
+  // neighboring date cannot re-enter as "unknown coordinates".
+  if (getDailyDateKey(context) !== undefined) return false;
+  const parsed = parseEpisodeFromTitle(item.title);
+  if (parsed.episodes.length > 0) return false;
+  const names = show
+    ? [show.name, show.germanName, ...show.aliases.map((alias) => alias.name)]
+    : [context.query];
+  const normalize = (value: string) =>
+    value.normalize("NFKC").toLocaleLowerCase("de-DE").replace(/\s+/g, " ").trim();
+  return names
+    .filter((name): name is string => !!name)
+    .some((name) => {
+      const goal = normalize(name);
+      const title = normalize(item.title);
+      return (
+        goal.length >= 3 &&
+        ((!isSharedSeriesTopic(item.topic) && normalize(item.topic) === goal) ||
+          title === goal ||
+          (title.startsWith(goal) && /^[\s:(\-–]/.test(title.slice(goal.length))))
+      );
+    });
 }
 
 async function isHlsEnabled(): Promise<boolean> {
@@ -960,6 +991,7 @@ export async function fetchSearchResultsById(
     );
     results = await queryContent([{ fields: QUERY_FIELDS, query: searchQuery }], 10000, {
       arteSeries: tvdbData,
+      deferLanguageSelection: true,
       ...(supplemented
         ? {
             requestBudget: requestBudget ?? new HttpRequestBudget(),
@@ -986,7 +1018,7 @@ export async function fetchSearchResultsById(
     );
   }
 
-  const { matchedEpisodes } = await applyRulesetFilters(
+  const { matchedEpisodes, unmatchedItems } = await applyRulesetFilters(
     results,
     tvdbData,
     hlsEnabled,
@@ -1013,9 +1045,28 @@ export async function fetchSearchResultsById(
   const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
     generateRssItems(info, quality, info.episode.metadataSource === "sonarr" ? false : hlsEnabled)
   );
+  // The Sonarr matcher clones rows while removing ineligible URLs. Compare
+  // source metadata, not object references or its sanitized rendition list.
+  const supplementalSourceKey = (item: ApiResultItem) =>
+    JSON.stringify({ ...item, url_video: "", url_video_low: "", url_video_hd: "" });
+  const supplementalSources = new Set(
+    supplementalMatches.map(({ item }) => supplementalSourceKey(item))
+  );
+  const sourceCandidates = selectLanguageVariants(
+    unmatchedItems.filter(
+      (item) =>
+        !supplementalSources.has(supplementalSourceKey(item)) &&
+        matchesUnknownTvCandidate(item, context, tvdbData)
+    ),
+    await getConfiguredLanguagePolicy()
+  ).flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "tv"));
   console.log(`[Mediathek] Generated ${newznabItems.length} Newznab items (quality: ${quality})`);
 
-  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
+  const response = convertItemsToRss(
+    dedupeNewznabItems([...newznabItems, ...sourceCandidates]),
+    limit,
+    offset
+  );
 
   mediathekCache.set(cacheKey, { response });
   return response;
@@ -1024,7 +1075,8 @@ export async function fetchSearchResultsById(
 export async function fetchSearchResultsByString(
   searchContext: TvSearchContext,
   limit: number,
-  offset: number
+  offset: number,
+  budget = new HttpRequestBudget()
 ): Promise<string> {
   const context: TvSearchContext = {
     ...searchContext,
@@ -1047,7 +1099,6 @@ export async function fetchSearchResultsByString(
   }
 
   const apiCacheKey = `mediathekapi_q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
-  const budget = new HttpRequestBudget();
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -1082,8 +1133,14 @@ export async function fetchSearchResultsByString(
         .filter((item) => matchesGenericSearchContext(item, context))
         .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled))
     : [];
+  const unknownCandidates =
+    hasTextQuery && (hasEpisodeCoordinates(context) || context.tvdbId !== null)
+      ? unmatchedItems
+          .filter((item) => matchesUnknownTvCandidate(item, context))
+          .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "tv"))
+      : [];
 
-  const allItems = dedupeNewznabItems([...newznabItems, ...genericItems]);
+  const allItems = dedupeNewznabItems([...newznabItems, ...genericItems, ...unknownCandidates]);
   const response = convertItemsToRss(allItems, limit, offset);
 
   mediathekCache.set(cacheKey, { response });
@@ -1150,6 +1207,71 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
 }
 
 // ============== MOVIE SEARCH FUNCTIONS ==============
+
+/**
+ * Recent film candidates need actual film goals. Without optional Radarr context
+ * an empty feed is honest; broadcasting all unrelated long videos is not.
+ */
+export async function fetchMovieSearchForRssSync(
+  limit: number,
+  offset: number,
+  budget = new HttpRequestBudget()
+): Promise<string> {
+  const epoch = cacheContextEpoch();
+  const movies = await getRadarrMonitoredMovies(budget);
+  if (movies.length === 0) return serializeRss(getEmptyRssResult(offset));
+  const quality = await getQualityPreference();
+  const minimum = await getMinDurationSeconds();
+  const hlsEnabled = await isHlsEnabled();
+  const sourceContext = await searchCacheContext();
+  const inventory = createHash("sha256").update(JSON.stringify(movies)).digest("hex");
+  // A minute-scoped source window cannot be kept stale by the usual hour TTL.
+  const window = Math.floor(Date.now() / 60_000);
+  const key = JSON.stringify(["movie-recent", CONTENT_SEARCH_CACHE_VERSION, window, sourceContext]);
+  const cached = mediathekCache.get(key);
+  let sources: ApiResultItem[];
+  if (cached && "results" in cached) sources = cached.results as ApiResultItem[];
+  else {
+    const fetched = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT, {
+      requestBudget: budget,
+      deferLanguageSelection: true,
+    });
+    if (fetched === null) throw new Error("Search provider unavailable");
+    sources = fetched;
+  }
+  const responseKey = JSON.stringify([key, inventory, limit, offset, quality, minimum, hlsEnabled]);
+  const response = mediathekCache.get(responseKey);
+  if (response && "response" in response) return response.response as string;
+  const eligible = sources.filter(
+    (item) => !SKIP_KEYWORDS.some((word) => item.title.includes(word))
+  );
+  const matches: ApiResultItem[] = [];
+  for (const movie of movies) {
+    if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
+      throw new Error("Search provider unavailable");
+    // RSS has no search target available to the consumer. Do not turn broad
+    // partial-title ranking into automatic recent-release announcements.
+    matches.push(
+      ...(await matchMovieItems(eligible, movie, minimum, hlsEnabled))
+        .filter(({ titleMatch }) => titleMatch === "exact")
+        .map(({ item }) => item)
+    );
+  }
+  const selected = selectLanguageVariants(matches, await getConfiguredLanguagePolicy());
+  const rss = convertItemsToRss(
+    dedupeNewznabItems(
+      selected.flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "movie"))
+    ),
+    limit,
+    offset
+  );
+  if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
+    throw new Error("Search provider unavailable");
+  // Publish neither source nor response cache after an incomplete snapshot.
+  mediathekCache.set(key, { results: sources });
+  mediathekCache.set(responseKey, { response: rss });
+  return rss;
+}
 
 /**
  * Search for a movie in the Mediathek by TMDB data

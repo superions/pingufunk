@@ -1231,7 +1231,7 @@ Keine fremde Rejection-/Confidence-Unterstützung oder Sicherheit durch ein
 freies XML-Attribut behaupten. Unsicherheit niemals durch erfundene
 Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
 
-- [ ] **P08.1 — Optionale strukturierte Metadaten statt Senderseiten-Parser.**
+- [x] **P08.1 — Optionale strukturierte Metadaten statt Senderseiten-Parser.**
       `src/services/sonarr-provider.ts`, neuer Radarr-Metadatenowner,
       `src/lib/read-only-arr-client.ts`, Settings-/Secret-/Cacheowner und
       `docs/movie-source-evidence.md`: vorhandene Sonarr-Anbindung erhalten,
@@ -1255,6 +1255,15 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Fehlern, URLs, argv oder Git; Ausfälle nicht erfolgreich leer cachen.
       Fehlende Metadaten stoppen nur die davon abhängige ID-Auflösung,
       nicht eine unabhängig mögliche ehrliche Text-Kandidatensuche.
+      Abnahme 01.10.2026: optionale Radarr-API v3/6.x, deaktiviert ohne
+      Credential-/HTTP-I/O, GET-only und Subpaths, Rotation, bounded Bodies,
+      gemeinsame Budgets, strenge Parser/IDs sowie maskierte Settings belegt.
+      Source-Seitenversuche entfernt, allgemeine Reader/P07 erhalten.
+      Zusätzlich überwachte Film-Recent-Ziele aus begrenzter Bibliotheksliste
+      (2.000 Zeilen/5 MiB/60s), keine lokalen Library-IDs/Paths/Keys im Ergebnis.
+      Synthetische direkte/vermittelte ID-/RSS-Abfrage einschließlich
+      RSS→NZB→Queue, Monitoring, Pagination und Providerfehler ohne
+      Teilbestandcache erfolgreich. Keine reale Instanz angebunden.
 - [ ] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts`,
       neuer Radarr-Owner und
@@ -1329,6 +1338,23 @@ Callerbudget-Kette und tatsächliche Arr-/Prowlarr-Consumerabnahme.
 Alle vier Checkboxen bleiben bis zum vollständigen Kriteriennachweis offen.
 Details und versionierte Primärquellen in
 docs/movie-source-evidence.md; GUID-Übergang im Cutover-Runbook.
+
+Fortschritt 01.10.2026 nach dem obigen Zwischenstand:
+Film-Recent/RSS ist kein Validierungsfeed mehr: überwachte optionale Radarr-Ziele
+werden gegen ein begrenztes aktuelles Sourcefenster geprüft. Ohne Filmkontext
+ehrlich leer, kein beliebiger TV-Langbeitrag als Film und kein manuell/automatisch-
+Zweitmodus. Nicht parsebare RSS-Titel können beim Arr-Consumer entfallen;
+ein leerer Feed kann beim dortigen Indexertest beanstandet werden. Das ist in
+der Fachreferenz ausdrücklich beschrieben, kein bereits freigegebener Betrieb.
+Neutrale TV-Kandidaten ohne Quellkoordinaten sind ergänzt; erkannte Nachbarn,
+Daily-Date-Fehler und verifizierte Sonarr-Zuordnungen dürfen nicht über diesen
+Fallback erneut erscheinen. Der kompakte zentrale SxxEyy-Parser und ein neuer
+Sonarr-Doppel-/Nachbarfall schützen diese Grenze. Der TV-Textfallback erhält
+den ursprünglichen ID-Callerbudgetscope.
+P08.3 bleibt wegen älterer TVDB-/TMDB-Serienanbieter, GitHub-Showrefresh und
+Regel-Metadatenauflösung offen: dort ist der vollständige Gesamtbudget-
+Nachweis noch nicht erbracht. P08.2/P08.4 nicht allein aus diesem Teilstand
+schließen; P09 weiterhin nach vollständiger P08-Abnahme.
 
 ## Phase P09 — Tatsächlicher Medieninhalt vor completed
 

@@ -12,8 +12,19 @@ import {
   getValidationRss,
   isMovieCategoryRequest,
   parseNewznabCategoryIds,
+  parseEpisodeFromTitle,
 } from "./newznab";
 import type { NewznabItem, ApiResultItem, MatchedEpisodeInfo, TmdbMovieData } from "@/types";
+
+it.each(["Example S02E12", "Example S02/E12", "Example S02E12E13"])(
+  "recognizes source coordinates before an unknown-candidate fallback: %s",
+  (title) => {
+    expect(parseEpisodeFromTitle(title)).toMatchObject({
+      season: 2,
+      episodes: title.endsWith("E13") ? [12, 13] : [12],
+    });
+  }
+);
 
 describe("generateAttributes", () => {
   it("should generate category attributes", () => {

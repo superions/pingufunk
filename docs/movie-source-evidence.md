@@ -82,6 +82,10 @@ Anfrage-URLs, Git oder Fehlertexten. Die vorhandene Settings-Maskierung gilt
 auch für api.radarr.key. Es gibt noch keine neue Radarr-UI-Bedienoberfläche.
 
 GET-only: system/status, movie/lookup/tmdb oder movie/lookup/imdb.
+Für Recent/RSS zusätzlich GET movie: nur überwachte Filme, maximal 2.000
+Bibliothekszeilen innerhalb desselben 5-MiB-Bodylimits. Monitoring muss ein
+Boolean sein, doppelte überwachte TMDB-IDs und unschemahafte Metadaten brechen
+den Snapshot ohne Teilergebnis ab. Keine realen Bibliotheksdaten im Git.
 Der [API-v3-Controller](https://github.com/Radarr/Radarr/blob/c90668a520664ad0c91812cfee57c41928ad2148/src/Radarr.Api.V3/Movies/MovieLookupController.cs)
 und die [MovieResource](https://github.com/Radarr/Radarr/blob/c90668a520664ad0c91812cfee57c41928ad2148/src/Radarr.Api.V3/Movies/MovieResource.cs)
 sind die überprüften Feldowner. Kein Film wird hinzugefügt oder verändert.
@@ -105,13 +109,43 @@ TVDB-/TMDB-Account ist für die lokale Arr-API-Anbindung erforderlich. Die
 eigenen Arr-Cloud-Anbieter werden nicht als neue Pingufunk-Runtime aktiviert,
 und im Arr-Quellcode enthaltene Projektschlüssel werden nicht kopiert.
 
+## Recent/RSS und neutrale TV-Kandidaten
+
+Film-Recent über t=movie ohne Suchziel und t=search mit Filmkategorie verwendet
+denselben Owner. Die optionale Radarr-Liste liefert überwachte Suchziele;
+ein auf höchstens 5.000 aktuelle Sourcezeilen begrenztes Mediathekfenster wird
+gegen vollständige Film-/Aliastitel geprüft. Partielles Wort-Ranking aus
+gezielter Suche wird nicht als Recent-Ankündigung übernommen. Identität bleibt
+Quellidentität, ohne angefragte IMDb-/TMDB-ID oder Jahresstempel.
+Bibliotheks-Snapshots leben höchstens 60 Sekunden; Sourcefenster und RSS-Cache
+sind zusätzlich minutengebunden. Sprache/Fassung, Rendition und Dedupe werden
+vor total/Pagination ausgewertet; Folgeseitenfehler ergeben 503 ohne
+Partial-Success-Cache. Das ist ein begrenztes Recentfenster, kein vollständiger
+Katalogscan und kein Neuheitsnachweis für jedes Video.
+
+Ohne aktivierte Radarr-Anbindung oder bei leerer überwachter Filmliste bleibt
+Film-Recent ehrlich leer. Keine erfundene Test-Veröffentlichung und kein
+Ausweichen auf beliebige lange TV-Beiträge. Text-/ID-Suche bleibt unabhängig
+nutzbar. Ein Client, der für seinen Indexertest zwingend einen RSS-Treffer
+verlangt, kann einen leeren Feed beanstanden; tatsächliches Clientverhalten ist
+vor dem produktiven Cutover gesondert zu prüfen. Kein manueller Zweitmodus
+wird zur Unterscheidung eines solchen Tests erfunden.
+
+Bei TV-Text-/ID-Suche dürfen plausible Quelltitel ohne Episodenkoordinaten
+neutral erscheinen, wenn der Serienname/Topic passt. Es werden keine
+Request-Koordinaten oder Serien-IDs übernommen. Bereits erkannte fremde
+Koordinaten und der genaue Daily-Date-Vertrag bleiben geschlossen. Verifizierte
+Sonarr-Zuordnungen dürfen nicht zusätzlich als unbekannte Kandidaten erscheinen.
+Der zentrale Quellparser erkennt sowohl S02/E12 als auch S02E12, damit bekannte
+Nachbarfolgen nicht irrtümlich als koordinatenlos durchgehen.
+
 ## Offene Abnahmegrenzen
 
 P08.1–P08.4 bleiben im ausführbaren TODO offen, bis alle dort genannten
 Abnahmen erfüllt sind. Film-Text/ID-Kontext und RSS→NZB→Queue sind synthetisch
 prüfbar, aber nicht dasselbe wie eine laufende Arr-/Prowlarr-Verbraucherprobe.
-Insbesondere der Film-Recent/RSS-Pfad ist noch nicht vollständig: t=movie
-ohne Suchziel liefert bisher den Validierungsfeed. TV-Kandidaten ohne sichere
-Koordinaten und verbleibende Callerbudget-Pfade benötigen weiteren Review.
+Film-Recent/RSS und neutrale TV-Kandidaten sind implementiert und synthetisch
+prüfbar. Verbleibende Callerbudget-Pfade der älteren TVDB-/TMDB-Serienanbieter
+und Regel-Metadatenauflösung benötigen weiterhin Review.
 Diese Grenzen nicht durch Änderung der Kriterien als erledigt ausgeben.
 P09 und die separate produktive P10-Freigabe bleiben nachgelagert.
