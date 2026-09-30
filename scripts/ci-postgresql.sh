@@ -67,6 +67,7 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   -c 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pingufunk_qa_import' \
   >/dev/null
 docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa \
+  -c 'CREATE SCHEMA p07_identity AUTHORIZATION pingufunk_qa_runtime' \
   -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_runtime' \
   -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_qa_runtime' \
@@ -83,7 +84,7 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
   DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  npx vitest run src/lib/db-schema.test.ts scripts/postgresql-runtime.test.ts
+  npx vitest run src/lib/db-schema.test.ts scripts/postgresql-runtime.test.ts scripts/postgresql-rule-identity.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DENIED_URL="postgresql://pingufunk_qa_denied@127.0.0.1:${port}/pingufunk_qa" \

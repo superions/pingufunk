@@ -169,7 +169,7 @@ async function loadRulesetSnapshot(): Promise<void> {
   }
 }
 
-async function loadGeneratedRulesets(): Promise<void> {
+export async function loadGeneratedRulesets(): Promise<void> {
   try {
     const generated = await getGeneratedRulesets();
     generatedRulesetsByTopic = new Map();
@@ -187,6 +187,9 @@ async function loadGeneratedRulesets(): Promise<void> {
     }
   } catch {
     console.warn("[Rulesets] Error loading generated rulesets");
+    generatedRulesetsByTopic = new Map();
+    mediathekCache.clear();
+    throw new Error("Generated rules unavailable");
   }
 }
 
@@ -245,7 +248,9 @@ export function hasRulesetForTvdbId(tvdbId: number): boolean {
  * Add a generated ruleset to the in-memory cache
  */
 export function addGeneratedRuleset(ruleset: Ruleset): void {
-  const existing = generatedRulesetsByTopic.get(ruleset.topic) || [];
+  const existing = (generatedRulesetsByTopic.get(ruleset.topic) || []).filter(
+    (entry) => entry.id !== ruleset.id && entry.media.media_tvdbId !== ruleset.media.media_tvdbId
+  );
   existing.push(ruleset);
   generatedRulesetsByTopic.set(ruleset.topic, existing);
   console.log(`[Rulesets] Added generated ruleset for topic "${ruleset.topic}"`);

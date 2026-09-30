@@ -1013,7 +1013,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
 Ergebnis: identitätsgesicherte Mehrserien-/Sprachzuordnung. Abhängigkeit P06;
 B04/B05/B06, R3.
 
-- [ ] **P07.1 — Regelquelle und Identität gemeinsam korrigieren.**
+- [x] **P07.1 — Regelquelle und Identität gemeinsam korrigieren.**
       `src/services/rulesets.ts::{loadRulesets,getRulesetsForTopicAndTvdbId}`,
       `src/services/ruleset-generator.ts` und `data/rulesets.json` prüfen:
       Remote-main wird vor lokal geladen, daher Quelle/Version/Updateweg explizit
@@ -1034,6 +1034,9 @@ B04/B05/B06, R3.
       542 reguläre Tests und alle normalen Gates grün; eine zusätzliche
       kausale Cachewechselprobe anschließend fokussiert erfolgreich. Finaler
       Fork-CI-Lauf/Abnahme noch offen, keine Bestandsmigration ausgeführt.
+      Finale Abnahme für 738a35b: Fork-CI 36753440953 und Docker-Validierung
+      36753440947 erfolgreich. Insgesamt 543 Tests einschließlich der kausalen
+      Cachewechselprobe im Fork bestanden. Kein Schema-/Betriebswrite in P07.1.
 - [ ] **P07.2 — Auto-Regeln für gemeinsam genutzte Topics.**
       `ruleset-generator.ts::{getGeneratedRulesetByTopic,getGeneratedRulesetByTvdbId}`,
       `GeneratedRuleset` und alle Read/Writeconsumer auf nachgewiesene kombinierte
@@ -1050,6 +1053,29 @@ B04/B05/B06, R3.
       mit Backup/Schema-/Datenvergleich liefern; kein blindes Ledger-Adoptieren,
       kein SQL-Replay über vorhandene Tabellen. Source-/Zielversion und
       Gegenprobe auf beiden disposable Backends gehören zur P07.2-Abnahme.
+      Implementierungscheckpoint (noch offen): beide Schemas/Clients verwenden
+      `(tvdbId, topic)`; additive Indexmigrationen und scoped Generierung/Read,
+      keine Änderung an TopicCategory. `scripts/sqlite-baseline.mjs` baut aus
+      privatem Snapshot eine neue migrierte SQLite-Datei, vergleicht sämtliche
+      Rohwerte aller sechs Modelle, erhält IDs/Sequenzhochstände und führt
+      deren Ledger tatsächlich aus. Quelle unverändert, identischer Repeat
+      lesend und Fremd-/Driftbestand abort. Baseline-/SQLite-Runtimeproben grün;
+      ein bevölkerter alter PG-Regelbestand wurde in isoliertem Schema migriert
+      und auf zwei Serien plus unveränderte Originalwerte geprüft. Neun
+      separate PG-Gates bestanden. Container-/finale Consumer-/Fork-Abnahme
+      bleibt offen; keine produktive Migration. Ablauf und Rückweg unter
+      `docs/sqlite-baseline-transition.md`.
+      Abnahmecheckpoint: 553 reguläre Tests, Lint, Typecheck, Formatcheck und
+      Produktionsbuild erfolgreich; sieben PG-Fälle dort bewusst getrennt,
+      neun Gates separat grün. Neue Runner-/Migrator-Images bestehen SQLite-
+      Fresh-/Bootstrap-Baseline-/Write-/Restartproben und PG-TLS-Import/Verify/
+      Sequences/Maintenance/Checkpoint. Vor neuen Zielwrites startete das
+      verifizierte Vor-P07-Image mit der ursprünglichen Bootstrap-Datei im
+      Maintenancebetrieb; Settings korrekt, Sourcehash unverändert. Dieser
+      optionale Vorimage-Rollback wurde lokal ausgeführt, nicht als Fork-CI-
+      Prüfung behauptet. Manifest bindet zusätzlich tatsächliche Zieldatei-
+      Identität; geänderte/fremde Daten und nicht erfüllbare Pflichtwerte
+      abortieren ohne Quelländerung. Finaler Fork-CI-Lauf bleibt offen.
 - [ ] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
       ARTE-Kandidatensuche/Providerconsumer über Titel/Alias plus sichere Serie
       und gleiche Video-ID zur passenden DE-Fassung führen; deren Koordinaten

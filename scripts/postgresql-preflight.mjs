@@ -194,6 +194,7 @@ export function inspectSource(sourcePath) {
         "20260116132336_init",
         "20260117120853_bigint_size_fields",
         "20260708000000_add_topic_category",
+        "20260930002000_series_topic_identity",
       ]);
       if (ledgerNames.some((name) => !historical.has(name)))
         fail("Unknown SQLite migration ledger entry");

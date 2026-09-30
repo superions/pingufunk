@@ -118,7 +118,8 @@ it.skipIf(!required)("checks the applied PostgreSQL catalog, types and relations
     const indexes = await pg.$queryRaw<Array<{ indexname: string }>>`
       SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()
     `;
-    expect(indexes.map((item) => item.indexname)).toContain("GeneratedRuleset_topic_key");
+    expect(indexes.map((item) => item.indexname)).toContain("GeneratedRuleset_tvdbId_topic_key");
+    expect(indexes.map((item) => item.indexname)).not.toContain("GeneratedRuleset_topic_key");
     expect(indexes.map((item) => item.indexname)).toContain("TopicCategory_topic_key");
     const foreignKeys = await pg.$queryRaw<Array<{ conname: string; confdeltype: string }>>`
       SELECT conname, confdeltype FROM pg_constraint

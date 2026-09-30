@@ -56,4 +56,32 @@ describe("versioned rule source", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(fetch.mock.calls[0][1]).toMatchObject({ redirect: "error" });
   });
+  it("indexes both series in a shared generated topic and removes stale identities on refresh", async () => {
+    const bundled = JSON.parse(await readFile("data/rulesets.json", "utf8"));
+    const first = {
+      ...bundled[0],
+      id: 7001,
+      topic: "Shared synthetic topic",
+      media: { ...bundled[0].media, media_tvdbId: 7 },
+    };
+    const second = { ...first, id: 8001, media: { ...first.media, media_tvdbId: 8 } };
+    const generator = await import("./ruleset-generator");
+    vi.mocked(generator.getGeneratedRulesets).mockResolvedValue([first, second]);
+    const rules = await import("./rulesets");
+    await rules.loadGeneratedRulesets();
+    expect(rules.getRulesetsForTopic(first.topic)).toHaveLength(2);
+    expect(rules.getRulesetsForTopicAndTvdbId(first.topic, 7)).toEqual([first]);
+    expect(rules.getRulesetsForTopicAndTvdbId(first.topic, 8)).toEqual([second]);
+    const before = rules.getRulesetContext();
+    rules.addGeneratedRuleset(first);
+    expect(rules.getRulesetsForTopic(first.topic)).toHaveLength(2);
+    vi.mocked(generator.getGeneratedRulesets).mockResolvedValue([second]);
+    await rules.loadGeneratedRulesets();
+    expect(rules.getRulesetContext()).not.toBe(before);
+    expect(rules.getRulesetsForTopicAndTvdbId(first.topic, 7)).toEqual([]);
+    expect(rules.getRulesetsForTopicAndTvdbId(first.topic, 8)).toEqual([second]);
+    vi.mocked(generator.getGeneratedRulesets).mockRejectedValueOnce(new Error("synthetic failure"));
+    await expect(rules.loadGeneratedRulesets()).rejects.toThrow("Generated rules unavailable");
+    expect(rules.getRulesetsForTopic(first.topic)).toEqual([]);
+  });
 });

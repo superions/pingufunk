@@ -137,8 +137,9 @@ setzen und spätere Inserts über den echten Client testen.
 ### P11.3-Feldvertrag des vorbereiteten Preflight
 
 Der aktuelle Preflight (`scripts/postgresql-preflight.mjs`) inspiziert alle sechs
-Modelle, akzeptiert nur die beiden aus der unveränderten Legacy-SQL-Historie
-rekonstruierten Schemakonturen und berichtet niemals Zeileninhalte. Die
+Modelle, akzeptiert historische Bootstrap-/Prisma-Konturen sowie die aktuelle
+append-only P07-Kontur mit kombiniertem Serien-/Topicindex und berichtet niemals
+Zeileninhalte. Historische SQL-Dateien bleiben unverändert. Die
 folgenden Regeln sind bereits als Eingangsprüfung implementiert; die
 Import-/Vergleichsabnahme in P11.5–P11.6 steht noch aus.
 

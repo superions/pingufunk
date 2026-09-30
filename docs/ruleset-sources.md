@@ -25,6 +25,7 @@ neutraler Treffer erhält dabei keine TVDB-Identität aus der angefragten Serie.
 Auto-Regeln verwenden keine beliebige einzelne Topicantwort mehr als
 Identitätsbeweis. Zulässig sind ein exakter Serien-/Aliastopic, dessen
 Staffeldekoration oder ein Sammeltopic mit überprüftem Serientitel im Video.
-Gemeinsam genutzte Topics benötigen darüber hinaus den noch in P07.2
-abzunehmenden kombinierten Datenbankschlüssel. ARTE-Fassungsauflösung bleibt
+Gemeinsam genutzte Topics verwenden darüber hinaus den kombinierten
+`(tvdbId, topic)`-Datenbankschlüssel; Bestandsübergang und Entwicklungsabnahme
+stehen in P07.2. ARTE-Fassungsauflösung bleibt
 P07.3; eine deutsche Website ist weiterhin kein Tonsprachenbeleg.

@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { NextRequest } from "next/server";
 import { checkSqliteSchema } from "./check-sqlite-schema.mjs";
+import { createSnapshot } from "./postgresql-snapshot.mjs";
+import { transitionSqliteSnapshot } from "./sqlite-baseline.mjs";
 
 const directories: string[] = [];
 let disconnect: (() => Promise<void>) | undefined;
@@ -97,7 +99,7 @@ function seed(filename: string, bootstrap: boolean) {
 it.each(["bootstrap", "migrated"])(
   "preserves %s SQLite data through readiness, real client writes and restart",
   async (variant) => {
-    const filename = location();
+    let filename = location();
     if (variant === "migrated") {
       const first = tool("database-migrate.mjs", filename);
       expect(first.status, first.stderr).toBe(0);
@@ -106,6 +108,19 @@ it.each(["bootstrap", "migrated"])(
       expect(hash(filename)).toBe(beforeRepeat);
     }
     seed(filename, variant === "bootstrap");
+    if (variant === "bootstrap") {
+      const original = filename;
+      const originalHash = hash(original);
+      expect(() => checkSqliteSchema(original)).toThrow("SQLite schema incompatible");
+      const snapshot = await createSnapshot(original, path.join(path.dirname(original), "backup"));
+      filename = path.join(path.dirname(original), "current.sqlite");
+      transitionSqliteSnapshot({
+        snapshotPath: snapshot.snapshotPath,
+        expectedHash: snapshot.sha256,
+        targetPath: filename,
+      });
+      expect(hash(original)).toBe(originalHash);
+    }
     const beforeReadiness = hash(filename);
     checkSqliteSchema(filename);
     const readiness = tool("check-database-schema.mjs", filename);
@@ -144,6 +159,34 @@ it.each(["bootstrap", "migrated"])(
     expect(
       (await prisma.generatedRuleset.findUnique({ where: { id: "original-rule" } }))?.filters
     ).toBe('[{"regex":"\\\\d+"}]');
+    await prisma.generatedRuleset.create({
+      data: {
+        id: "second-series-rule",
+        topic: "Synthetic Topic",
+        tvdbId: 9999,
+        showName: "Other series",
+      },
+    });
+    expect(
+      (
+        await prisma.generatedRuleset.findUnique({
+          where: { tvdbId_topic: { tvdbId: 7123, topic: "Synthetic Topic" } },
+        })
+      )?.id
+    ).toBe("original-rule");
+    expect(
+      (
+        await prisma.generatedRuleset.findUnique({
+          where: { tvdbId_topic: { tvdbId: 9999, topic: "Synthetic Topic" } },
+        })
+      )?.id
+    ).toBe("second-series-rule");
+    await expect(
+      prisma.generatedRuleset.create({
+        data: { topic: "Synthetic Topic", tvdbId: 7123, showName: "Duplicate" },
+      })
+    ).rejects.toThrow();
+    await prisma.generatedRuleset.delete({ where: { id: "second-series-rule" } });
     expect(
       (await prisma.topicCategory.findUnique({ where: { id: "original-category" } }))?.tmdbId
     ).toBeNull();

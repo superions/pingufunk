@@ -31,11 +31,12 @@ export function schemaShape(db) {
     const columns = db
       .prepare(`PRAGMA table_info("${name}")`)
       .all()
-      .map(({ name: field, type, notnull, pk }) => [
+      .map(({ name: field, type, notnull, pk, dflt_value }) => [
         field,
         type.toUpperCase(),
         Number(notnull),
         Number(pk),
+        dflt_value,
       ]);
     const indexes = db
       .prepare(`PRAGMA index_list("${name}")`)
@@ -52,7 +53,7 @@ export function schemaShape(db) {
     const foreignKeys = db
       .prepare(`PRAGMA foreign_key_list("${name}")`)
       .all()
-      .map(({ table, from, to, on_delete }) => [table, from, to, on_delete]);
+      .map(({ table, from, to, on_delete, on_update }) => [table, from, to, on_delete, on_update]);
     return [name, columns, indexes, foreignKeys];
   });
 }
@@ -60,6 +61,7 @@ export function schemaShape(db) {
 export function knownShapes() {
   const bootstrap = new DatabaseSync(":memory:");
   const migrated = new DatabaseSync(":memory:");
+  const current = new DatabaseSync(":memory:");
   try {
     bootstrap.exec(readFileSync(resolve(legacy, "init-db.sql"), "utf8"));
     const migrationNames = [
@@ -68,11 +70,24 @@ export function knownShapes() {
       "20260708000000_add_topic_category",
     ];
     for (const name of migrationNames) {
-      migrated.exec(readFileSync(resolve(legacy, "migrations", name, "migration.sql"), "utf8"));
+      const sql = readFileSync(resolve(legacy, "migrations", name, "migration.sql"), "utf8");
+      migrated.exec(sql);
+      current.exec(sql);
     }
-    return { bootstrap: schemaShape(bootstrap), migrated: schemaShape(migrated) };
+    current.exec(
+      readFileSync(
+        resolve(legacy, "migrations/20260930002000_series_topic_identity/migration.sql"),
+        "utf8"
+      )
+    );
+    return {
+      bootstrap: schemaShape(bootstrap),
+      migrated: schemaShape(migrated),
+      current: schemaShape(current),
+    };
   } finally {
     bootstrap.close();
     migrated.close();
+    current.close();
   }
 }

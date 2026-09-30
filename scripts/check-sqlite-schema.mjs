@@ -13,7 +13,7 @@ export function checkSqliteSchema(filename) {
   try {
     db.exec("PRAGMA query_only=ON");
     const actual = JSON.stringify(schemaShape(db));
-    if (!Object.values(knownShapes()).some((shape) => JSON.stringify(shape) === actual))
+    if (JSON.stringify(knownShapes().current) !== actual)
       throw new Error("SQLite schema incompatible");
     const integrity = db.prepare("PRAGMA quick_check").all();
     if (
@@ -34,9 +34,10 @@ export function checkSqliteSchema(filename) {
         'SELECT migration_name, checksum, finished_at, rolled_back_at FROM "_prisma_migrations"'
       )
       .all();
-    // Historical container bootstrap creates an empty ledger. Its complete
-    // schema is valid; do not manufacture applied migrations or rewrite data.
-    if (rows.length > 0) {
+    // Current runtimes require the actual executed chain; bootstrap transition
+    // creates a new database rather than manufacturing an applied ledger.
+    if (rows.length === 0) throw new Error("SQLite baseline transition required");
+    {
       const names = rows.map((row) => row.migration_name).sort();
       if (JSON.stringify(names) !== JSON.stringify(expected))
         throw new Error("SQLite ledger incompatible");

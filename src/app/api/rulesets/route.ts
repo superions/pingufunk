@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { writesEnabled } from "@/lib/write-gate";
+import { loadGeneratedRulesets } from "@/services/rulesets";
 
 // GET /api/rulesets - Fetch all rulesets
 export async function GET() {
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await loadGeneratedRulesets();
     return NextResponse.json(ruleset);
   } catch {
     console.error("Failed to update ruleset");
@@ -63,6 +65,7 @@ export async function DELETE(request: NextRequest) {
     await prisma.generatedRuleset.delete({
       where: { id },
     });
+    await loadGeneratedRulesets();
     return NextResponse.json({ success: true });
   } catch {
     console.error("Failed to delete ruleset");

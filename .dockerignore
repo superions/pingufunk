@@ -60,6 +60,7 @@ scripts/*
 !scripts/check-database-schema.mjs
 !scripts/check-sqlite-schema.mjs
 !scripts/sqlite-schema.mjs
+!scripts/sqlite-baseline.mjs
 !scripts/check-postgresql-schema.mjs
 !scripts/migrate-entrypoint.sh
 !scripts/postgresql-preflight.mjs

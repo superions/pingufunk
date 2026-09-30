@@ -35,11 +35,13 @@ wenden weder DDL noch einen Import an. Ein fehlendes, unbekanntes oder
 inkonsistentes Schema stoppt den Start. Bestehende Datenbanken zuerst sichern;
 die obige Fresh-Install-Folge ist **keine** Bestandsmigrationsanleitung.
 
-Historisches Container-Bootstrap mit vollständigen Tabellen und leerem
-Prisma-Ledger wird beim Start rein lesend geprüft und nicht umgeschrieben.
-`migrate deploy` adoptiert diesen Bestand nicht automatisch; keine Ledger-
-Manipulation, `db push` oder Reset-Abkürzung verwenden. Eine spätere SQLite-
-Schemaerweiterung benötigt dafür einen explizit getesteten Baselineübergang.
+Seit P07 benötigt der Appstart den aktuellen kombinierten Serien-/Topicindex
+und das vollständig ausgeführte Ledger. Historisches Container-Bootstrap mit
+leerem Ledger wird nicht still adoptiert. Der geprüfte kopierende Übergang
+steht unter [SQLite-Bestandsübergang](sqlite-baseline-transition.md).
+Normale Migrationen eines bereits vollständig migrierten SQLite-Bestands
+verwenden die append-only Kette; vor deren produktiver Ausführung sichern und
+separat freigeben. Keine Ledger-Manipulation, `db push` oder Reset-Abkürzung.
 
 ## Container und PostgreSQL-Option
 

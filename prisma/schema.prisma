@@ -59,7 +59,7 @@ model Config {
 
 model GeneratedRuleset {
   id               String   @id @default(uuid())
-  topic            String   @unique // MediathekView topic
+  topic            String // A catalogue topic can contain more than one series.
   tvdbId           Int
   showName         String
   germanName       String?
@@ -72,6 +72,7 @@ model GeneratedRuleset {
   updatedAt        DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([tvdbId])
+  @@unique([tvdbId, topic])
 }
 
 model TopicCategory {
