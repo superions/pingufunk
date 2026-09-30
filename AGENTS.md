@@ -33,7 +33,10 @@ request determines scope; a plan or skill never supplies deployment permission.
   automatically switch providers after a connection failure or create a second
   database implicitly. A PostgreSQL cutover is optional and separately approved.
   Missing PostgreSQL configuration selects SQLite; invalid/incomplete PostgreSQL
-  configuration does not permit fallback.
+  configuration does not permit fallback. Infer the provider from a validated
+  direct URL or resolved secret file: `postgres:`/`postgresql:` selects PostgreSQL,
+  `file:` selects SQLite. An explicit provider is an optional assertion and must
+  agree with the URL. Empty, unreadable or conflicting configuration must abort.
 - Maintain provider-specific, append-only migration chains and compatible
   generated clients. Preserve historical SQLite SQL; never replay it against
   PostgreSQL or copy its `_prisma_migrations` ledger into the target. Review both
