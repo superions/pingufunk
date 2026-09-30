@@ -506,6 +506,11 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       konservativen SQLite-Rollback-Grenzmarker. Ein späterer Transaktions-
       rollback kann ihn zu früh, aber nicht zu spät setzen; für den Betrieb
       bleibt eine durable, prozessübergreifende Grenzabnahme erforderlich.
+      Ergänzung 30.09.2026: Bei fehlenden Hilfsbinaries installiert weder
+      ein Wartungs-GET noch eine ORF-Suche yt-dlp/FFmpeg nebenbei; der
+      Proxy-Netzwerktest-POST ist im Wartungsmodus gesperrt. Kausale Tests
+      sichern den unterbliebenen Fetch und Dateischreibversuch. Andere
+      Nebenpfade und die dauerhafte Grenzmarkierung bleiben zu prüfen.
 - [ ] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
       versionierten Preflight unter `scripts/` mit Referenz auf alle sechs Modelle
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,
@@ -529,9 +534,11 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       konfigurierte Endpoint-Adresse muss explizit der erwarteten entsprechen.
       Der disposable PostgreSQL-17-Superuser wurde korrekt zurückgewiesen. Das
       Quellinventar meldet Pfad, Dateisystem-ID, freien Platz und WAL/SHM;
-      die Inhaltsprüfung läuft erst auf dem privaten Snapshot. Noch offen:
-      Zieltest mit scoped Rolle, echte HAProxy-/Versionsbelege, verfügbare
-      Runner-/Imageversionen und vollständige Fidelitymatrix.
+      die Inhaltsprüfung läuft erst auf dem privaten Snapshot. Ein Zieltest
+      mit scoped Rolle gegen disposable PG 17 bestand ohne TLS-Ausnahme im
+      Testharness; die feldweise Fidelitymatrix steht im Migrationsplan.
+      Noch offen: echte HAProxy-/TLS-/Versionsbelege, verfügbare produktive
+      Runner-/Imageversionen und Abgleich mit der tatsächlichen Quelle.
 - [ ] **P11.4 — Konsistenter Snapshot und eigener leerer Zielbereich.** Im
       neuen Runner SQLite-Backup-API/CLI statt Kopie einer laufenden Hauptdatei
       verwenden; Snapshot außerhalb Git mit eingeschränkten Rechten und Hash.
@@ -586,7 +593,8 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       verlangt; er ist ohne TLS-Ausnahme und führt keine Sequence-Korrektur
       oder App-Umschaltung nebenbei aus. `verify` ist nur auf einem validierten
       Manifest lesend, `sequences` ist ein separater bestätigungspflichtiger
-      Schritt nach demselben Vergleich. Ein vollständiges Runbook fehlt noch.
+      Schritt nach demselben Vergleich. Ein Runbookentwurf liegt unter
+      `docs/postgresql-migration-runbook.md`; seine End-to-End-Abnahme fehlt.
 - [ ] **P11.6 — Reale Sequences und semantischer Verifier.** Im neuen
       Verifier PG-Katalog/Ownership für tatsächlich sequencegebundene Spalten
       verwenden; MAX, leere Tabelle, Startwert und `is_called` korrekt. Keine
@@ -607,6 +615,9 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Sequence-Startwert. Eine gleich große, aber veränderte Config-Zeile
       wurde ohne Überschreiben zurückgewiesen. Sequence-Fehler-/Resume-
       Fälle und weitere Abweichungsproben stehen noch aus.
+      Der Sequence-CLI-Schritt fordert ausdrücklich sowohl gestoppte Writer
+      als auch den belegten Zustand ohne jeglichen App-Write seit dem Import;
+      bloß wieder leere Tabellen erlauben keinen rückwärts gesetzten Zähler.
 - [ ] **P11.7 — PostgreSQL-Harness beweist Runtime und beide Rückwege.**
       `src/lib/db-schema.test.ts`, passende Ownerintegration und neue Runner-
       Tests gegen disposable PG aufnehmen; `vitest.config.ts`/npm-Gates so routen,
@@ -625,9 +636,14 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Maintenance-/Schreibsperre, Runtime-CRUD, Abbruch/Resume, BigInt und
       Sequence-Inserts ab. Der gebaute Snapshot-Runner hat einen real sichtbaren
       Bind-Mount benutzt; der App-Maintenance-Start veränderte auf einem ebenso
-      geprüften Mount keine Sentinel-Metadaten. Noch offen: vollständige
-      Queue-/Ruleset-/Cache-Integration, tatsächlicher HAProxy-/TLS-Fall,
-      Rollback nach PG-Writes und ein kompletter Container-End-to-End-Lauf.
+      geprüften Mount keine Sentinel-Metadaten. Noch offen: Worker-/Datei-
+      abschluss, tatsächlicher HAProxy-/TLS-Fall, Rollback nach PG-Writes
+      und ein kompletter Container-End-to-End-Lauf.
+      Ergänzung 30.09.2026: Echte PG-Ownerreads für SAB-Queue/-History,
+      Ruleset-GET und TopicCategory-Cache laufen auch bei gesperrten Writes;
+      der synthetische Queue-Statuswechsel und Settings-API-Save/Readback
+      wurden in PG gelesen. Worker-/Dateiabschluss, breitere Fehlerfälle und
+      der separate Produktiv-Rollback bleiben weiterhin offen.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,

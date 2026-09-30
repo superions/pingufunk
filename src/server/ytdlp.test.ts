@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { downloadHlsStream, downloadVideo, testProxy } from "./ytdlp";
+import { downloadHlsStream, downloadVideo, ensureYtdlpExists, testProxy } from "./ytdlp";
 
-const { spawn, mergeVideoAudio, unlink, readdir, getSetting } = vi.hoisted(() => ({
+const { spawn, mergeVideoAudio, access, mkdir, unlink, readdir, getSetting } = vi.hoisted(() => ({
   spawn: vi.fn(),
   mergeVideoAudio: vi.fn(
     async (
@@ -15,6 +15,8 @@ const { spawn, mergeVideoAudio, unlink, readdir, getSetting } = vi.hoisted(() =>
     })
   ),
   unlink: vi.fn(async () => {}),
+  access: vi.fn(async () => {}),
+  mkdir: vi.fn(async () => {}),
   readdir: vi.fn(async (): Promise<string[]> => []),
   getSetting: vi.fn(
     async (key: string): Promise<string | null> =>
@@ -28,8 +30,8 @@ vi.mock("./ffmpeg", () => ({
   mergeVideoAudio,
 }));
 vi.mock("fs/promises", () => ({
-  access: vi.fn(async () => {}),
-  mkdir: vi.fn(async () => {}),
+  access,
+  mkdir,
   unlink,
   readdir,
 }));
@@ -50,12 +52,29 @@ beforeEach(() => {
   spawn.mockReturnValue(child);
   mergeVideoAudio.mockClear();
   unlink.mockClear();
+  access.mockReset();
+  access.mockResolvedValue(undefined);
+  mkdir.mockClear();
   readdir.mockReset();
   readdir.mockResolvedValue([]);
   getSetting.mockReset();
   getSetting.mockImplementation(async (key: string) =>
     key === "download.ytdlpPath" ? "/fixture/yt-dlp" : null
   );
+});
+
+it("never installs a missing yt-dlp binary during maintenance", async () => {
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+  vi.stubGlobal("fetch", vi.fn());
+  access.mockRejectedValueOnce(new Error("missing"));
+  try {
+    expect(await ensureYtdlpExists()).toBe(false);
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  }
 });
 
 it("rejects proxy credentials before they can enter process arguments", async () => {

@@ -4,6 +4,7 @@ import * as path from "path";
 import { createHash } from "crypto";
 import release from "./ytdlp-release.json";
 import { getSetting } from "@/lib/settings";
+import { writesEnabled } from "@/lib/write-gate";
 
 const isWindows = process.platform === "win32";
 const APP_DIR = process.cwd();
@@ -69,6 +70,7 @@ export async function ensureYtdlpExists(): Promise<boolean> {
     console.log(`[yt-dlp] Already exists at ${ytdlpPath}`);
     return true;
   } catch {
+    if (!writesEnabled()) return false;
     // If using custom path and it doesn't exist, that's an error
     const customPath = await getSetting("download.ytdlpPath");
     if (customPath && customPath.trim()) {

@@ -19,11 +19,17 @@ export function parseMigrationArgs(argv) {
     throw new Error("Unknown migration action");
   const options = { action };
   let writersStopped = false;
+  let noApplicationWrites = false;
   for (let index = 1; index < argv.length; index++) {
     const flag = argv[index];
     if (flag === "--confirm-writers-stopped") {
       if (writersStopped) throw new Error("Duplicate confirmation");
       writersStopped = true;
+      continue;
+    }
+    if (flag === "--confirm-no-app-writes-since-import") {
+      if (noApplicationWrites) throw new Error("Duplicate confirmation");
+      noApplicationWrites = true;
       continue;
     }
     const key = fields.get(flag);
@@ -35,6 +41,8 @@ export function parseMigrationArgs(argv) {
   if (
     (action !== "verify" && !writersStopped) ||
     (action === "verify" && writersStopped) ||
+    (action === "sequences" && !noApplicationWrites) ||
+    (action !== "sequences" && noApplicationWrites) ||
     [...fields.values()].some((key) => !options[key])
   )
     throw new Error("Explicit target and valid writer confirmation are required");

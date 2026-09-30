@@ -36,7 +36,8 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
   try {
     sqlite.exec(readFileSync("prisma/legacy/sqlite/init-db.sql", "utf8"));
     sqlite.exec(`
-      INSERT INTO TvdbSeries(id,name,cachedAt,expiresAt) VALUES (7123,'Synthetic',1780228800123,1780238800123);
+      INSERT INTO TvdbSeries(id,name,firstAired,cachedAt,expiresAt)
+        VALUES (7123,'Synthetic','2024-01-01T12:00:00.123+02:00',1780228800123,1780238800123);
       INSERT INTO TvdbEpisode(id,seriesId,seasonNumber,episodeNumber) VALUES (37,7123,1,2);
       INSERT INTO Config(key,value) VALUES ('qa-secret','synthetic-private');
       INSERT INTO Download(id,title,url,category,status,progress,size,totalSize,downloadedBytes,speed,createdAt)
@@ -79,6 +80,9 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     expect(await pg.download.count()).toBe(1);
     expect(await pg.generatedRuleset.count()).toBe(1);
     expect(await pg.topicCategory.count()).toBe(1);
+    expect(
+      (await pg.tvdbSeries.findUnique({ where: { id: 7123 } }))?.firstAired?.toISOString()
+    ).toBe("2024-01-01T10:00:00.123Z");
     expect((await pg.download.findUnique({ where: { id: "synthetic-download" } }))?.size).toBe(
       BigInt("9007199254740993")
     );

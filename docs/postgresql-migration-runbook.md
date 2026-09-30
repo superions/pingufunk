@@ -98,6 +98,8 @@ docker run --rm --network "${PG_NETWORK}" \
 # 6. Weiterhin ohne Writer: nur die im PG-Katalog tatsächlich zugeordneten
 #    Sequences korrigieren. setval ist NICHT transaktional; bei Fehler bleibt
 #    der Writer gestoppt und derselbe validierte Lauf wird erneut geprüft.
+#    Nach JEDEM App-Write ist dieser Schritt gesperrt, selbst wenn Tabellen
+#    inzwischen wieder leer aussehen.
 docker run --rm --network "${PG_NETWORK}" \
   --mount "type=bind,src=${BACKUP_PARENT},dst=/backup,readonly" \
   --mount "type=bind,src=${PG_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
@@ -105,7 +107,7 @@ docker run --rm --network "${PG_NETWORK}" \
   node /app/scripts/postgresql-migration-cli.mjs sequences \
   --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
   --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_HAPROXY_HOST}" \
-  --confirm-writers-stopped
+  --confirm-writers-stopped --confirm-no-app-writes-since-import
 ```
 
 Die Shell-Platzhalter sind **kein** fertiger Produktions-Deploybefehl. Vor

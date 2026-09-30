@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 
-const { state } = vi.hoisted(() => ({ state: { calls: [] as string[][] } }));
+const { state, access, mkdir } = vi.hoisted(() => ({
+  state: { calls: [] as string[][] },
+  access: vi.fn(async () => undefined),
+  mkdir: vi.fn(async () => undefined),
+}));
 
 vi.mock("child_process", () => ({
   spawn: vi.fn((_command: string, args: string[]) => {
@@ -14,14 +18,32 @@ vi.mock("child_process", () => ({
 }));
 
 vi.mock("fs/promises", () => ({
-  access: vi.fn(async () => undefined),
+  access,
+  mkdir,
   unlink: vi.fn(async () => undefined),
 }));
 
-import { convertMp4ToMkv, mergeVideoAudio } from "./ffmpeg";
+import { convertMp4ToMkv, ensureFfmpegExists, mergeVideoAudio } from "./ffmpeg";
 
 beforeEach(() => {
   state.calls.length = 0;
+  access.mockReset();
+  access.mockResolvedValue(undefined);
+  mkdir.mockClear();
+});
+
+it("never installs a missing FFmpeg binary during maintenance", async () => {
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+  vi.stubGlobal("fetch", vi.fn());
+  access.mockRejectedValueOnce(new Error("missing"));
+  try {
+    expect(await ensureFfmpegExists()).toBe(false);
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  }
 });
 
 describe("FFmpeg language metadata", () => {

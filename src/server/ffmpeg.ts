@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
+import { writesEnabled } from "@/lib/write-gate";
 
 const isWindows = process.platform === "win32";
 const APP_DIR = process.cwd();
@@ -24,6 +25,7 @@ export async function ensureFfmpegExists(): Promise<boolean> {
     console.log(`[FFmpeg] Already exists at ${FFMPEG_PATH}`);
     return true;
   } catch {
+    if (!writesEnabled()) return false;
     // FFmpeg doesn't exist, need to download
     console.log(`[FFmpeg] Not found at ${FFMPEG_PATH}. Starting download...`);
     return downloadFfmpeg();

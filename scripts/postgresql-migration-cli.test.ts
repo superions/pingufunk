@@ -26,6 +26,16 @@ it("requires an explicit private snapshot, target and stopped writers", () => {
   expect(() => parseMigrationArgs(["sequences", ...valid.slice(1, -1)])).toThrow(
     "writer confirmation"
   );
+  expect(() => parseMigrationArgs(["sequences", ...valid.slice(1)])).toThrow("writer confirmation");
+  expect(
+    (
+      parseMigrationArgs([
+        "sequences",
+        ...valid.slice(1),
+        "--confirm-no-app-writes-since-import",
+      ]) as Record<string, string>
+    ).action
+  ).toBe("sequences");
   expect(() => parseMigrationArgs(["unknown", ...valid.slice(1)])).toThrow(
     "Unknown migration action"
   );

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { testProxy, testYtdlp } from "@/server/ytdlp";
+import { writesEnabled } from "@/lib/write-gate";
 
 // POST /api/proxy-test - Test proxy connection
 export async function POST() {
+  if (!writesEnabled()) {
+    return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
+  }
   try {
     // First test if yt-dlp is available
     const ytdlpResult = await testYtdlp();
