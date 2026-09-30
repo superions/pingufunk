@@ -191,6 +191,19 @@ it("does not discard the old row when a retry cannot create a new job", async ()
   expect(start).not.toHaveBeenCalled();
 });
 
+it("blocks a direct delete or retry before touching files or rows in maintenance", async () => {
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+  await expect(deleteHistoryItem(id, true)).rejects.toThrow("writes are disabled");
+  await expect(retryDownload(id)).rejects.toThrow("writes are disabled");
+  await expect(addToQueue("https://example.org/video.mp4", title, category)).rejects.toThrow(
+    "writes are disabled"
+  );
+  expect(downloadFindUnique).not.toHaveBeenCalled();
+  expect(downloadCreate).not.toHaveBeenCalled();
+  expect(downloadDelete).not.toHaveBeenCalled();
+  expect(start).not.toHaveBeenCalled();
+});
+
 it("retries with a new job ID while retaining title, URL and public category", async () => {
   downloadFindUnique.mockResolvedValue({
     id,

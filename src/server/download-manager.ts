@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { assertWritesEnabled } from "@/lib/write-gate";
 import { isMkvConversionEnabled } from "@/lib/settings";
 import { downloadHlsStream } from "./ytdlp";
 import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
@@ -59,6 +60,7 @@ let rerunRequested = false;
 
 /** Only the single production worker calls this once at a cold start. */
 export async function recoverInterruptedDownloads(): Promise<number> {
+  assertWritesEnabled();
   const result = await prisma.download.updateMany({
     where: { status: { in: ["downloading", "converting"] } },
     data: {
@@ -71,6 +73,7 @@ export async function recoverInterruptedDownloads(): Promise<number> {
 }
 
 export async function startDownloadProcessing(): Promise<void> {
+  assertWritesEnabled();
   if (processingPromise) {
     // A new queue row can arrive just after the last empty poll. Run one
     // additional pass after the current drain rather than losing that wakeup.
@@ -169,6 +172,7 @@ async function moveIntoJobDir(
 }
 
 async function processDownload(downloadId: string): Promise<void> {
+  assertWritesEnabled();
   await downloadSemaphore.acquire();
 
   const startTime = Date.now();

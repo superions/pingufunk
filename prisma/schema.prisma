@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -14,9 +14,9 @@ model TvdbSeries {
   slug       String?
   overview   String?
   aliases    String?       // JSON array stored as string
-  firstAired DateTime?
-  cachedAt   DateTime      @default(now())
-  expiresAt  DateTime
+  firstAired DateTime?     @db.Timestamptz(3)
+  cachedAt   DateTime      @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime      @db.Timestamptz(3)
   episodes   TvdbEpisode[]
 }
 
@@ -26,7 +26,7 @@ model TvdbEpisode {
   seasonNumber  Int
   episodeNumber Int
   name          String?
-  aired         DateTime?
+  aired         DateTime?   @db.Timestamptz(3)
   runtime       Int?
   series        TvdbSeries  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
 
@@ -46,8 +46,8 @@ model Download {
   speed           BigInt    @default(0)
   filePath        String?
   error           String?
-  createdAt       DateTime  @default(now())
-  completedAt     DateTime?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  completedAt     DateTime? @db.Timestamptz(3)
 
   @@index([status])
 }
@@ -68,8 +68,8 @@ model GeneratedRuleset {
   episodeRegex     String   @default("(?<=[E/])(\\d{2})(?=\\))")
   seasonRegex      String   @default("(?<=[S(])(\\d{2})(?=[/E])")
   titleRegexRules  String   @default("[]")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([tvdbId])
 }
@@ -79,7 +79,7 @@ model TopicCategory {
   topic     String   @unique
   category  String   // "movie" | "tv" | "unknown"
   tmdbId    Int?
-  cachedAt  DateTime @default(now())
+  cachedAt  DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([topic])
 }

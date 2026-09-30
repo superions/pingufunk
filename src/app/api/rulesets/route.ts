@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { writesEnabled } from "@/lib/write-gate";
 
 // GET /api/rulesets - Fetch all rulesets
 export async function GET() {
@@ -17,6 +18,9 @@ export async function GET() {
 
 // POST /api/rulesets - Update a ruleset
 export async function POST(request: NextRequest) {
+  if (!writesEnabled()) {
+    return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
+  }
   try {
     const body = await request.json();
     const { id, ...data } = body;
@@ -45,6 +49,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/rulesets - Delete a ruleset
 export async function DELETE(request: NextRequest) {
+  if (!writesEnabled()) {
+    return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
+  }
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
 

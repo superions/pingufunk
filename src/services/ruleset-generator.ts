@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
 import { queryContent } from "./content-search";
 import type { Ruleset, TvdbData, ApiResultItem } from "@/types";
 
@@ -461,6 +462,8 @@ export async function generateRulesetForShow(
     return convertToRuleset(existingByTvdbId);
   }
 
+  if (!writesEnabled()) return null;
+
   // Search MediathekView for the show
   const searchQuery = showInfo.germanName || showInfo.name;
   console.log(`[RulesetGenerator] Searching MediathekView for: "${searchQuery}"`);
@@ -517,6 +520,7 @@ async function generateRulesetFromResults(
   const patterns = generateRegexPatterns(topicResults, strategy, matchingTopic);
 
   // Create new ruleset
+  assertWritesEnabled();
   console.log(
     `[RulesetGenerator] Creating new ruleset: topic="${matchingTopic}", strategy="${strategy}"`
   );

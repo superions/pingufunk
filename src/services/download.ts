@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { randomUUID } from "crypto";
+import { assertWritesEnabled } from "@/lib/write-gate";
 import path from "node:path";
 import {
   assertLocalFileSafeForRemoval,
@@ -109,6 +110,7 @@ export async function addToQueue(
   title: string,
   category: string
 ): Promise<{ id: string }> {
+  assertWritesEnabled();
   validateCategory(category);
   validateReleaseTitle(title);
   const download = await prisma.download.create({
@@ -221,6 +223,7 @@ export async function getHistory(): Promise<SabnzbdHistory> {
 }
 
 export async function deleteHistoryItem(nzoId: string, delFiles: boolean): Promise<boolean> {
+  assertWritesEnabled();
   const download = await prisma.download.findUnique({
     where: { id: nzoId },
   });
@@ -272,6 +275,7 @@ export async function deleteHistoryItem(nzoId: string, delFiles: boolean): Promi
 }
 
 export async function retryDownload(nzoId: string): Promise<{ id: string } | null> {
+  assertWritesEnabled();
   const download = await prisma.download.findUnique({
     where: { id: nzoId },
   });

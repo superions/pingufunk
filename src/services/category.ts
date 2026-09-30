@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { writesEnabled } from "@/lib/write-gate";
 import { searchMulti } from "./tmdb";
 
 export type CategoryType = "movie" | "tv" | "unknown";
@@ -25,13 +26,14 @@ export async function getCategoryForTopic(topic: string): Promise<CategoryType> 
   const result = await searchMulti(topic);
 
   // Store in database cache
-  await prisma.topicCategory.create({
-    data: {
-      topic,
-      category: result.mediaType,
-      tmdbId: result.tmdbId,
-    },
-  });
+  if (writesEnabled())
+    await prisma.topicCategory.create({
+      data: {
+        topic,
+        category: result.mediaType,
+        tmdbId: result.tmdbId,
+      },
+    });
 
   return result.mediaType;
 }
@@ -68,6 +70,7 @@ export async function getCategoriesForTopics(topics: string[]): Promise<Map<stri
 
   // Store new entries in database (use upsert to handle race conditions)
   for (const r of tmdbResults) {
+    if (!writesEnabled()) break;
     await prisma.topicCategory.upsert({
       where: { topic: r.topic },
       update: {},

@@ -14,6 +14,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:pg": "PINGUFUNK_REQUIRE_PG_TESTS=1 vitest run scripts/postgresql-runtime.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "postinstall": "prisma generate",

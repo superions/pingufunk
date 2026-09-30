@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { writesEnabled } from "@/lib/write-gate";
 import {
   getQueue,
   getHistory,
@@ -50,6 +51,9 @@ export async function GET(request: NextRequest) {
     }
 
     case "history": {
+      if (name && !writesEnabled()) {
+        return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
+      }
       // Handle history deletion
       if (name === "delete" && value) {
         const isDeleted = await deleteHistoryItem(value, delFiles);
@@ -80,6 +84,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!writesEnabled()) {
+    return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
+  }
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get("mode");
   const cat = searchParams.get("cat") || "default";

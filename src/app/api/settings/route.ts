@@ -1,6 +1,7 @@
 import { clearTokenCache as clearSrfTokenCache } from "@/services/srgssr-api";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { writesEnabled } from "@/lib/write-gate";
 import { clearSettingsCache, getSetting } from "@/lib/settings";
 import { clearTTLCache, clearMetadataCaches, mediathekCache, rulesetsCache } from "@/lib/cache";
 import { isTvdbCredentialSettingKey } from "@/lib/tvdb-auth";
@@ -121,6 +122,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/settings - Update settings
 export async function POST(request: NextRequest) {
+  if (!writesEnabled()) {
+    return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
+  }
   try {
     const body = await request.json();
     if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -204,6 +208,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/settings - Delete a setting (reset to default)
 export async function DELETE(request: NextRequest) {
+  if (!writesEnabled()) {
+    return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
+  }
   const { searchParams } = new URL(request.url);
   const key = searchParams.get("key");
 

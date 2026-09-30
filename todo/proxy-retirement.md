@@ -448,7 +448,7 @@ bewiesener Rollback. Abhängigkeit P05; O01/R9. Alle hier genannten neuen
 Runner-/Testartefakte sind **anzulegen**, nicht heute vorhandene Befehle.
 Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
 
-- [ ] **P11.1 — Native Schema-/Client-Kette und kompatibler Start.**
+- [x] **P11.1 — Native Schema-/Client-Kette und kompatibler Start.**
       `prisma/schema.prisma`, historische SQLite-Migrationen, `init-db.sql`,
       `src/lib/db.ts`, `Dockerfile`, `entrypoint.sh`, `.env.example` und
       `docker-compose.yml` gemeinsam auf PostgreSQL umstellen. CLI/Client aktuell
@@ -461,6 +461,17 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       und Restart gegen disposable PG funktionieren, kein stiller SQLitefallback;
       Runnerkommandos im gebauten Image tatsächlich ausführbar, SQLite-Ledger nie
       ins PG-Ziel kopiert und SQL-/Client-/Schema-Versionen konsistent.
+      Abgenommen am 30.09.2026 nur in isolierter Testumgebung: Prisma CLI und
+      Client 6.19.2, PostgreSQL-17-Container, native DDL für sechs Modelle mit
+      UTC-Zeitspalten (Millisekunden), unveränderte SQLite-SQL-Historie unter
+      `prisma/legacy/sqlite/`. Ein frisches Ziel wurde vom tatsächlich gebauten
+      `migrator`-Image per `migrate deploy` aufgebaut; der zweite Lauf war
+      wirkungslos, Schema-Diff leer. Das getrennt gebaute App-Image startete
+      gegen dieses Ziel, prüfte die vollständige erwartete PG-Ledgerkette und
+      startete nach Containerrestart erneut. Ohne DB-URL brach es ab; keine
+      SQLite-Datei wurde angelegt und kein Legacy-Ledger übernommen. Normale
+      Starts führen kein DDL/Import aus. Produktions-Primary, PostgreSQL-
+      Version, Rolle, TLS und HAProxy bleiben verpflichtende P11.3-/P10-Gates.
 - [ ] **P11.2 — Secretfähiger Single-Worker und vollständiger Writer-Gate.**
       Entrypoint/DB-Owner samt `src/instrumentation.ts`, Config-/Cache-, Ruleset-,
       Queue- und Worker-Schreibpfaden auf `DATABASE_URL_FILE` vor Prozessstart und
@@ -472,6 +483,19 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       unbegründetes `pgbouncer=true`; Single-Worker bleibt. Abnahme: Secretfehler,
       Netzverlust/Reconnect und alle Writeentrypoints getestet, Wartungslesechecks
       erzeugen null Writes und PG-Ausfall keinen zweiten Datenbestand.
+      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): `DATABASE_URL_FILE`
+      wird im Container vor Prisma ohne Log-/argv-Ausgabe gelesen; fehlende,
+      leere, widersprüchliche, mehrzeilige, relative und symlinkende Secrets
+      werden abgelehnt. Prisma-6-Pool/Connect/Query-Timeouts sind begrenzt,
+      explizite TLS-Parameter bleiben erhalten und `pgbouncer=true` wird
+      abgelehnt. Default ist `PINGUFUNK_WRITES_ENABLED=0`; Settings, Rulesets,
+      SAB-Queue/History, Kategoriecache, Ruleset-Generierung und Worker sind
+      damit gesperrt, Modellmutationen zusätzlich im Prisma-Client. Gegen
+      disposable PG führte DB-Pause zu 500, Wiederaufnahme zu 200, ohne
+      SQLite-Fallback oder neue Zeilen. Noch offen: sämtliche Nebenpfade auf
+      stille Writes/Dateieffekte reviewen, belastbare erste PG-Schreibgrenze
+      und vollständige Secret-/Wartungs-/Reconnect-Regression im finalen
+      PG-Harness; echter HAProxy/TLS/Rollenvertrag bleibt P11.3/P10.
 - [ ] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
       versionierten Preflight unter `scripts/` mit Referenz auf alle sechs Modelle
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,

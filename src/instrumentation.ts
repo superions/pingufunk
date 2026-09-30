@@ -6,7 +6,11 @@ export async function register() {
     const { initCacheTTL } = await import("@/lib/cache");
     await initCacheTTL();
     console.log("Cache TTL initialized from database");
-    if (process.env.PINGUFUNK_BOOT_QUEUE === "1" && !bootQueueStarted) {
+    if (
+      process.env.PINGUFUNK_BOOT_QUEUE === "1" &&
+      process.env.PINGUFUNK_WRITES_ENABLED === "1" &&
+      !bootQueueStarted
+    ) {
       bootQueueStarted = true;
       try {
         const { recoverInterruptedDownloads, startDownloadProcessing } =

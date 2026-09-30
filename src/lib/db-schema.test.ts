@@ -1,29 +1,32 @@
-import { readFileSync } from "fs";
-import path from "path";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-function getPrismaModelNames(schema: string): string[] {
+function modelNames(schema: string): string[] {
   return Array.from(schema.matchAll(/^model\s+(\w+)\s+\{/gm), (match) => match[1]);
 }
 
-function getInitDbTableNames(sql: string): Set<string> {
-  return new Set(
-    Array.from(
-      sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)["`]?\s*\(/gim),
-      (match) => match[1]
-    )
-  );
-}
-
-describe("database bootstrap schema", () => {
-  it("creates every Prisma model table in init-db.sql", () => {
+describe("PostgreSQL schema lineage", () => {
+  it("keeps all six models in a native baseline and archives SQLite SQL separately", () => {
     const root = process.cwd();
     const schema = readFileSync(path.join(root, "prisma", "schema.prisma"), "utf-8");
-    const initDbSql = readFileSync(path.join(root, "init-db.sql"), "utf-8");
+    const migration = readFileSync(
+      path.join(root, "prisma/migrations/20260930000000_postgresql_baseline/migration.sql"),
+      "utf8"
+    );
+    const lock = readFileSync(path.join(root, "prisma/migrations/migration_lock.toml"), "utf8");
+    const legacy = readFileSync(
+      path.join(root, "prisma/legacy/sqlite/migrations/migration_lock.toml"),
+      "utf8"
+    );
 
-    const initDbTables = getInitDbTableNames(initDbSql);
-    const missingTables = getPrismaModelNames(schema).filter((model) => !initDbTables.has(model));
-
-    expect(missingTables).toEqual([]);
+    expect(schema).toContain('provider = "postgresql"');
+    expect(lock).toContain('provider = "postgresql"');
+    expect(legacy).toContain('provider = "sqlite"');
+    expect(modelNames(schema)).toHaveLength(6);
+    for (const model of modelNames(schema)) {
+      expect(migration).toContain(`CREATE TABLE "${model}"`);
+    }
+    expect(migration).not.toContain("sqlite_sequence");
   });
 });

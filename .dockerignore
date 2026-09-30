@@ -49,5 +49,8 @@ docker-compose*
 README.md
 *.md
 
-# Scripts (dev-only)
-scripts
+# Only the migration/startup scripts belong in the production build context.
+scripts/*
+!scripts/resolve-database-url.mjs
+!scripts/check-postgresql-schema.mjs
+!scripts/migrate-entrypoint.sh

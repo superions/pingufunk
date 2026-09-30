@@ -22,6 +22,15 @@ it("does not mutate download rows outside the booted single-worker runtime", asy
   expect(recoverInterruptedDownloads).not.toHaveBeenCalled();
 });
 
+it("does not boot the queue when the legacy boot flag is set during maintenance", async () => {
+  vi.stubEnv("NEXT_RUNTIME", "nodejs");
+  vi.stubEnv("PINGUFUNK_BOOT_QUEUE", "1");
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+  await register();
+  expect(recoverInterruptedDownloads).not.toHaveBeenCalled();
+  expect(startDownloadProcessing).not.toHaveBeenCalled();
+});
+
 it("recovers interrupted rows once before draining queued work", async () => {
   vi.stubEnv("NEXT_RUNTIME", "nodejs");
   vi.stubEnv("PINGUFUNK_BOOT_QUEUE", "1");

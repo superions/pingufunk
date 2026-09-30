@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { InvalidDownloadInputError, UnsafeDownloadPathError } from "@/lib/download-paths";
 
@@ -22,6 +22,32 @@ vi.mock("@/services/download", () => ({
 import { GET, POST } from "./route";
 
 beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.unstubAllEnvs());
+
+it("keeps history readable but blocks GET mutations and addfile during maintenance", async () => {
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+  const history = await GET(new NextRequest("http://localhost/api/download?mode=history"));
+  expect(history.status).toBe(200);
+  expect(
+    (
+      await GET(
+        new NextRequest("http://localhost/api/download?mode=history&name=delete&value=job-id")
+      )
+    ).status
+  ).toBe(503);
+  expect(
+    (
+      await POST(
+        new NextRequest("http://localhost/api/download?mode=addfile", {
+          method: "POST",
+          body: "synthetic NZB",
+        })
+      )
+    ).status
+  ).toBe(503);
+  expect(deleteHistoryItem).not.toHaveBeenCalled();
+  expect(addToQueue).not.toHaveBeenCalled();
+});
 
 it("refuses unsafe history-file removal without reporting success", async () => {
   deleteHistoryItem.mockRejectedValue(

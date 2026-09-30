@@ -8,10 +8,11 @@ services:
       - TVDB_API_KEY=${TVDB_API_KEY}  # Required: Your TVDB API key
       - DOWNLOAD_FOLDER_PATH=/downloads
       - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed  # Path mapping for Sonarr/Radarr
-      - DATABASE_URL=file:/app/prisma/data/rundfunkarr.db
+      - DATABASE_URL_FILE=/run/secrets/pingufunk_database_url
     volumes:
-      - ./data:/app/prisma/data          # Database persistence
       - ./downloads:/app/downloads        # Temporary download folder
+    secrets:
+      - pingufunk_database_url
     ports:
       - "6767:6767"
     restart: unless-stopped
@@ -67,3 +68,9 @@ services:
     ports:
       - "9696:9696"
     restart: unless-stopped
+
+# The development stack uses an existing external PostgreSQL endpoint; it
+# does not start a PostgreSQL service or initialize application data.
+secrets:
+  pingufunk_database_url:
+    file: ${PINGUFUNK_DATABASE_URL_SECRET_FILE:?Set a local secret-file path}

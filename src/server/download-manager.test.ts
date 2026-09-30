@@ -139,6 +139,16 @@ afterEach(async () => {
   await rm(testRoot, { recursive: true, force: true });
 });
 
+it("blocks recovery and worker processing before any database or file access in maintenance", async () => {
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+  await expect(recoverInterruptedDownloads()).rejects.toThrow("writes are disabled");
+  await expect(startDownloadProcessing()).rejects.toThrow("writes are disabled");
+  await expect(processDownload("synthetic-job")).rejects.toThrow("writes are disabled");
+  expect(downloadUpdateMany).not.toHaveBeenCalled();
+  expect(downloadFindFirst).not.toHaveBeenCalled();
+  expect(downloadFindUnique).not.toHaveBeenCalled();
+});
+
 describe("processDownload", () => {
   it("rejects an HLS output symlink before invoking yt-dlp", async () => {
     downloadHlsStream.mockClear();

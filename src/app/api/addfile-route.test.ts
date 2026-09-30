@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { generateFakeNzb } from "@/services/nzb-release";
 
@@ -22,8 +22,25 @@ beforeEach(() => {
   vi.clearAllMocks();
   downloadMocks.addToQueue.mockResolvedValue({ id: "synthetic-queue-item" });
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("SABnzbd addfile release identity", () => {
+  it("blocks both addfile endpoints before parsing in maintenance", async () => {
+    vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+    for (const [routePath, handler] of [
+      ["/api", addToApi],
+      ["/api/download", addToDownloadApi],
+    ] as const) {
+      const response = await handler(
+        new NextRequest(`http://localhost${routePath}?mode=addfile`, {
+          method: "POST",
+          body: nzb,
+        })
+      );
+      expect(response.status).toBe(503);
+    }
+    expect(downloadMocks.addToQueue).not.toHaveBeenCalled();
+  });
   it.each([
     ["/api", addToApi],
     ["/api/download", addToDownloadApi],

@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET, POST, DELETE } from "./route";
 import {
@@ -51,6 +51,18 @@ beforeEach(() => {
     async ({ where, update }: { where: { key: string }; update: { value: string } }) =>
       values.set(where.key, update.value)
   );
+});
+afterEach(() => vi.unstubAllEnvs());
+
+it("keeps Settings readable but rejects every settings write in maintenance", async () => {
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+  expect((await GET(new NextRequest("http://localhost/api/settings"))).status).toBe(200);
+  expect((await post({ "download.path": "/synthetic" })).status).toBe(503);
+  expect(
+    (await DELETE(new NextRequest("http://localhost/api/settings?key=download.path"))).status
+  ).toBe(503);
+  expect(upsert).not.toHaveBeenCalled();
+  expect(values.has("download.path")).toBe(false);
 });
 
 function post(body: unknown) {
