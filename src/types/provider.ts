@@ -55,6 +55,8 @@ export interface ProviderVideoUrls {
  * Search query parameters for providers
  */
 export interface ProviderSearchQuery {
+  requestBudget?: import("@/lib/fetch-retry").HttpRequestBudget;
+  deadlineAt?: number;
   /** Search text */
   query: string;
   /** Maximum number of results to return */

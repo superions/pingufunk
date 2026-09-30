@@ -64,12 +64,15 @@ describe("Newznab indexer validation", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(showMocks.getShowInfoByTvdbId).toHaveBeenCalledWith(12345);
+    const budget = showMocks.getShowInfoByTvdbId.mock.calls[0][1];
+    expect(budget.remainingAttempts).toBe(10);
+    expect(showMocks.getShowInfoByTvdbId).toHaveBeenCalledWith(12345, budget);
     expect(mediathekMocks.fetchSearchResultsById).toHaveBeenCalledWith(
       show,
       { query: null, tvdbId: 12345, season: "2", episode: "2" },
       25,
-      5
+      5,
+      budget
     );
     expect(await response.text()).toBe(EMPTY_RSS);
   });

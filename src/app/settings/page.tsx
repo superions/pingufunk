@@ -96,6 +96,9 @@ function formatUptime(seconds: number): string {
 export default function SettingsPage() {
   const { settings, isLoading, updateSettings } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ error: boolean; message: string } | null>(
+    null
+  );
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearResult, setClearResult] = useState<{
@@ -139,6 +142,34 @@ export default function SettingsPage() {
     setFormState((prev) => ({ ...prev, [key]: value }));
   };
 
+  const sonarrFormError = (() => {
+    const window = getFieldValue("integration.sonarr.windowDays");
+    const tolerance = getFieldValue("matching.sonarr.tolerancePercent");
+    if (!/^\d+$/.test(window) || Number(window) < 1 || Number(window) > 90)
+      return "RSS-Fenster: ganze Tage zwischen 1 und 90 eingeben.";
+    if (!/^\d+$/.test(tolerance) || Number(tolerance) < 0 || Number(tolerance) > 25)
+      return "Laufzeittoleranz: ganze Prozent zwischen 0 und 25 eingeben.";
+    const value = getFieldValue("integration.sonarr.url").trim();
+    if (!value)
+      return getFieldValue("integration.sonarr.enabled") === "true"
+        ? "Zum Aktivieren eine Sonarr-Basis-URL eingeben."
+        : null;
+    try {
+      const url = new URL(value);
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      )
+        throw new Error();
+    } catch {
+      return "Basis-URL: HTTP(S) ohne Zugangsdaten, Query oder Fragment eingeben.";
+    }
+    return null;
+  })();
+
   const getLanguagePolicy = () =>
     readLanguagePolicy(getFieldValue(LANGUAGE_POLICY_SETTING_KEY) || DEFAULT_LANGUAGE_POLICY);
 
@@ -152,6 +183,7 @@ export default function SettingsPage() {
 
   const handleSave = async (keys: string[]) => {
     setIsSaving(true);
+    setSaveFeedback(null);
     try {
       const updates: Record<string, string> = {};
       for (const key of keys) {
@@ -163,6 +195,13 @@ export default function SettingsPage() {
         await updateSettings(updates);
         setFormState({});
       }
+      setSaveFeedback({ error: false, message: "Einstellungen gespeichert." });
+    } catch {
+      setSaveFeedback({
+        error: true,
+        message:
+          "Speichern fehlgeschlagen. Eingaben und Wartungsstatus prüfen; Änderungen bleiben zur Korrektur erhalten.",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -556,6 +595,131 @@ export default function SettingsPage() {
                     )}
                     Speichern
                   </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Optionale Sonarr-Metadaten</CardTitle>
+                  <CardDescription>
+                    Ergänzt fehlende Episoden aus einer Sonarr-3/4-Instanz, ohne vorhandene
+                    Metadaten zu ersetzen. Kein zusätzliches TVDB-/TMDB-Konto erforderlich.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={getFieldValue("integration.sonarr.enabled") === "true"}
+                      onChange={(event) =>
+                        setFieldValue("integration.sonarr.enabled", String(event.target.checked))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    <span className="text-sm font-medium">Sonarr-Ergänzung aktivieren</span>
+                  </label>
+                  <div>
+                    <label htmlFor="sonarr-url" className="text-sm font-medium">
+                      Sonarr-Basis-URL
+                    </label>
+                    <Input
+                      id="sonarr-url"
+                      type="url"
+                      value={getFieldValue("integration.sonarr.url")}
+                      onChange={(event) =>
+                        setFieldValue("integration.sonarr.url", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      HTTP(S), optional mit Unterpfad. Keine Zugangsdaten oder API-Keys in der URL.
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    API-Key ausschließlich serverseitig über <code>PINGUFUNK_SONARR_API_KEY</code>
+                    oder <code>PINGUFUNK_SONARR_API_KEY_FILE</code> konfigurieren. Status:{" "}
+                    {settings?.["api.sonarr.key"]
+                      ? "konfiguriert (verborgen)"
+                      : "nicht konfiguriert"}
+                    . Speichern führt keine Sonarr-Abfrage aus.
+                  </p>
+                  <div>
+                    <label htmlFor="sonarr-window" className="text-sm font-medium">
+                      RSS-Aktualitätsfenster (Tage)
+                    </label>
+                    <Input
+                      id="sonarr-window"
+                      type="number"
+                      min="1"
+                      max="90"
+                      step="1"
+                      value={getFieldValue("integration.sonarr.windowDays")}
+                      onChange={(event) =>
+                        setFieldValue("integration.sonarr.windowDays", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      1–90 Tage; nur überwachte Serien. Snapshots sind zeit- und mengenbegrenzt.
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="sonarr-tolerance" className="text-sm font-medium">
+                      Episoden-Laufzeittoleranz (%)
+                    </label>
+                    <Input
+                      id="sonarr-tolerance"
+                      type="number"
+                      min="0"
+                      max="25"
+                      step="1"
+                      value={getFieldValue("matching.sonarr.tolerancePercent")}
+                      onChange={(event) =>
+                        setFieldValue("matching.sonarr.tolerancePercent", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      0–25 %; 0 verlangt exakte Laufzeit. Kurze Folgen werden nur mit belegter
+                      Identität und Laufzeit zugelassen. Ohne Solllaufzeit gilt weiterhin die oben
+                      eingestellte Mindestdauer.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() =>
+                      handleSave([
+                        "integration.sonarr.enabled",
+                        "integration.sonarr.url",
+                        "integration.sonarr.windowDays",
+                        "matching.sonarr.tolerancePercent",
+                      ])
+                    }
+                    disabled={isSaving || sonarrFormError !== null}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    Sonarr-Einstellungen speichern
+                  </Button>
+                  {sonarrFormError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {sonarrFormError}
+                    </p>
+                  )}
+                  {saveFeedback && (
+                    <p
+                      role={saveFeedback.error ? "alert" : "status"}
+                      className={
+                        saveFeedback.error
+                          ? "text-sm text-destructive"
+                          : "text-sm text-muted-foreground"
+                      }
+                    >
+                      {saveFeedback.message}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 

@@ -105,7 +105,10 @@ describe("configured providers in normal search flows", () => {
 
   it("queries recent SRF episodes for RSS sync", async () => {
     await fetchSearchResultsForRssSync(50, 0);
-    expect(getLatestVideos).toHaveBeenCalledWith("SRF", 100);
+    expect(getLatestVideos).toHaveBeenCalledWith("SRF", 100, {
+      deadlineAt: expect.any(Number),
+      requestBudget: undefined,
+    });
   });
 
   it("does not query SRF when HLS is disabled", async () => {

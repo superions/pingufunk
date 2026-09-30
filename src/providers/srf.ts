@@ -106,8 +106,14 @@ export class SrfProvider extends BaseProvider {
       // Search SRF videos
       this.minDuration = (await getMinDurationSeconds()) * 1000;
       const results = searchQuery
-        ? await searchVideos(searchQuery, "SRF", Math.min(limit * 2, 100))
-        : await getLatestVideos("SRF", Math.min(limit, 100));
+        ? await searchVideos(searchQuery, "SRF", Math.min(limit * 2, 100), {
+            requestBudget: query.requestBudget,
+            deadlineAt: query.deadlineAt,
+          })
+        : await getLatestVideos("SRF", Math.min(limit, 100), {
+            requestBudget: query.requestBudget,
+            deadlineAt: query.deadlineAt,
+          });
 
       if (!results || results.length === 0) {
         console.log(`[${this.id}] No results found`);

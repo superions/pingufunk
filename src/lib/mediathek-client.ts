@@ -10,7 +10,7 @@
  * query and breaking ruleset auto-generation for every show. Consolidating
  * to one implementation removes that whole class of bug.
  */
-import { fetchWithRetry, requestDeadline } from "@/lib/fetch-retry";
+import { fetchWithRetry, requestDeadline, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import type { ApiResultItem, MediathekApiResponse } from "@/types";
 
@@ -31,6 +31,9 @@ export interface MediathekQueryOptions {
   future?: boolean;
   offset?: number;
   deadlineAt?: number;
+  requestBudget?: HttpRequestBudget;
+  /** Sonarr fallback is progressive-only until the P09 HLS validation gate. */
+  progressiveOnly?: boolean;
 }
 
 /**
@@ -57,7 +60,10 @@ export async function queryMediathekView(
     offset: normalizedOffset,
     size: normalizedSize,
   };
-  const deadlineAt = requestDeadline({ deadlineAt: options.deadlineAt });
+  const deadlineAt = requestDeadline({
+    deadlineAt: options.deadlineAt,
+    requestBudget: options.requestBudget,
+  });
 
   try {
     const response = await fetchWithRetry(
@@ -67,7 +73,7 @@ export async function queryMediathekView(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       },
-      { deadlineAt }
+      { deadlineAt, requestBudget: options.requestBudget }
     );
 
     if (!response.ok) {

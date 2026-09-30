@@ -4,7 +4,9 @@ Stand: 30.09.2026. Technische Referenz, kein zweiter Arbeitsplan.
 Abnahmen ausschließlich in [proxy-retirement.md](../todo/proxy-retirement.md).
 Sonarr ist optional, standardmäßig aus, zunächst eine Instanz. Keine echte
 Bibliothek abgefragt; `sonarr-metadata.test.ts` enthält eigenständig entworfene
-synthetische Ressourcen. Parser existieren, Netzwerk-/Suchintegration noch nicht.
+synthetische Ressourcen. Netzwerk-, Merge-, Such- und RSS-Consumer sind jetzt
+implementiert und werden ausschließlich mit synthetischen Antworten geprüft;
+das ist keine Live-Abnahme einer Betreiberinstanz.
 
 ## API und Herkunft
 
@@ -83,9 +85,10 @@ Die genehmigten technischen Startwerte stehen im TODO; keine Sonarr-Zusagen:
   1–90 Tage. Snapshot: maximal fünf Serien, 50 Episoden, zehn zusätzliche
   HTTP-Versuche **einschließlich Retries und Status/Inventar** und 15 s gesamte
   Deadline. Antwortbody lesen/parsen zählt zur Deadline. `HttpRequestBudget`
-  bietet jetzt den geteilten Versuchszähler/Deadline für den GET-JSON-Client;
-  P06.2 muss dasselbe Objekt durch den gesamten künftigen Sonarr-/Suchconsumer
-  reichen, nicht pro Unterabfrage zurücksetzen. Diese Integration ist noch offen.
+  zählt Status/Inventar/Episoden, Mediathek-Seiten und deren Retries gemeinsam.
+  Gemischte Basissuchen zählen auch SRF-Authentifizierung/-Suche im selben Scope;
+  vorhandene HLS-Basistreffer bleiben erhalten. Rein ergänzende Suchläufe sind
+  vor P09 progressive-only und fragen die HLS-only-SRF-Quelle deshalb nicht ab.
 - APIarrays sind ungepaginiert: lokal gefilterte Episoden begrenzen, keine
   Serverpagination vortäuschen. Parsercaps 5.000 Serien/20.000 Episoden sind
   technische Schutzgrenzen, keine Bibliothekssuche oder API-Limits. Der gemeinsame
@@ -96,6 +99,14 @@ Die genehmigten technischen Startwerte stehen im TODO; keine Sonarr-Zusagen:
 - Rotierender deterministischer Cursor über überwachte Serien, erst nach
   erfolgreichem Snapshot fortsetzen. Pagination liest denselben Snapshot;
   `total` ist dessen gefilterte Menge. TTL Metadaten zehn Minuten, RSS 60 s.
+  Ein kalter RSS-Snapshot reserviert nach Status/Inventar je zwei Versuche für
+  Episoden-/Quelllookup und wählt damit höchstens vier Serien; mit warmen
+  Metadaten höchstens fünf. Zusätzliche Seiten/Retry können einen ganzen
+  Snapshot scheitern lassen, aber niemals das Budget erweitern. Der Cursor
+  verschiebt sich nur um tatsächlich erfolgreich untersuchte Serien.
+  RSS vergleicht vorhandene lokale oder frisch im Basislookup gecachte
+  Metadaten; ohne diese liest es die lokale Shows-Datei. Es startet dafür
+  keine zusätzlichen TVDB-/TMDB-/Full-Library-Netzwerkabfragen.
   Änderung von Fenster/Budget/Instanz/Secret invalidiert Cache und inFlight-
   Epoche; spät eintreffende alte Antworten dürfen nicht die neue Epoche füllen.
 
@@ -109,6 +120,24 @@ bereits bearbeitete Fork-Owner.
 Selbstreview trennt Serien-/Episoden-/Instanz-ID, Minuten/Sekunden, Punkt/Tag,
 Metadaten/Medienbeweis, Array/Seitenvertrag und Entwicklungs-/Betriebsabnahme.
 P06.1 behauptet weder fertig integrierte Suche noch Liveversionsnachweis.
-P06.2 bleibt offen: Provider, durchgereichte gemeinsame Budgets, Cache/Merge, alle Consumer
-und persistente Controls mit Desktop-QA. P06.3 bleibt offen: Medien-Schlussfilter
-und RSS→NZB→Queue-Regressionen. Keine Bereitstellung oder Liveabfrage freigegeben.
+P06.2/P06.3 bleiben bis zur finalen Entwicklungsabnahme im TODO offen.
+Implemented: Default-off, External-Secret, zehnminütiger bounded Metadatencache,
+Coalescing mit jeweils eigener Caller-Deadline, epochengerechte Invalidierung,
+nicht überschreibender Merge und Konfliktmarker. Legacy-Rulesetmatching erhält
+ausschließlich Basisepisoden, niemals neue Sonarr-Episoden für Fuzzy-Matching.
+Exact/Staffel/RSS nutzen denselben Schlussfilter für positive endliche Dauer,
+Serienbindung, Titel/Jahr/Koordinaten und Fassungsregeln. Vor P09 nur HTTP(S)-URLs
+mit Dateiendung mp4/m4v/mkv/webm/mov, ohne Userinfo; HLS/DASH/Seitenreferenzen
+werden nicht als progressive Medien ausgegeben. Das ist Quellevidenz, kein
+vorweggenommener Inhaltsnachweis. Abweichungen muss P09 vor completed erkennen.
+Unabhängig belegte Basis-Suche/RSS bleiben bei Sonarr-Ausfall verwendbar;
+unbelegbare Sonarr-only-Anfragen melden 503 ohne erfolgreich leeren Cache.
+
+Die persistierten Controls liegen unter `/settings` → Matching; Schlüssel nur
+aus `PINGUFUNK_SONARR_API_KEY` oder dessen `_FILE`, nie Browser-Write.
+Desktopprüfung: tatsächliches Dev-Bundle auf einer isolierten Loopbackinstanz
+mit neuem SQLite-Testbestand, Matching vorher/nachher visuell geprüft. Ungültige
+91 Tage sperren Speichern mit Erklärung; URL/30 Tage/0 %/Aktivierung gespeichert,
+nach Reload und per API identisch. Browser-Konsole ohne Warnungen/Fehler;
+Screenshots im Browser geprüft, nicht öffentlich persistiert. Keine echte
+Sonarr-Abfrage, kein Download und keine produktiven Daten berührt.

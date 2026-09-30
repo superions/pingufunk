@@ -959,6 +959,21 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       seinen asynchronen Workerstart vor dem nächsten negativen Fall; dessen
       No-Start-/Historyschutz-Assertions unverändert. 457 reguläre Tests, Lint,
       Typecheck, Format und Build grün; keine realen APIs/DBs/Medien verwendet.
+      Implementierungscheckpoint 30.09.2026 (Abnahme noch offen): P06.2-Provider,
+      nicht überschreibender Merge, gemeinsames HTTP-/Zeitbudget durch Arr,
+      Mediathek und bei gemischten Basissuchen SRF; bounded RSS-Snapshot mit
+      Cursorrotation, 50-Episoden-Cap und 60s-Pagination. Derselbe neue
+      Schlussfilter schützt Exact/Staffel/RSS vor falscher Serie, Jahr,
+      Koordinaten, Laufzeit, Fassung und HLS/DASH/unsicherer URL. Legacy-Fuzzy-
+      Regeln bekommen ausschließlich Basisepisoden. Synthetischer vollständiger
+      API→lokale Missing-Episode→Sonarr→RSS→NZB→Queue-API-Pfad grün;
+      Sonarr-Outage lässt unabhängig belegte Basis-Suche/RSS nutzbar.
+      Desktop-only `/settings` → Matching auf einem neu erzeugten SQLite-
+      Testbestand: Default-off, ungültiges Fenster, Speichern, Reload und
+      API-Readback geprüft; tatsächliche Vorher-/Nachher-Screenshots betrachtet,
+      Konsole ohne Warnungen/Fehler. Kein Netzwerkzugriff auf reale Sonarr-
+      Bibliotheken. Finaler Gesamtlauf/Fork-CI und Scope-Review stehen noch aus;
+      deshalb keine Checkbox geschlossen und P07 noch nicht begonnen.
 - [ ] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
       TV-Suche/`newznab.ts` mit vollständigem Episodentitel oder letztem
       Separatorsegment ≥3 Zeichen nur innerhalb gesicherter Serie, Jahr/

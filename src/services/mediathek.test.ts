@@ -33,7 +33,11 @@ vi.mock("@/lib/fetch-retry", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/fetch-retry")>()),
   fetchWithRetry: vi.fn(),
 }));
-vi.mock("./shows", () => ({ getShowInfoByTvdbId: mediathekMocks.getShowInfoByTvdbId }));
+vi.mock("./shows", () => ({
+  getShowInfoByTvdbId: mediathekMocks.getShowInfoByTvdbId,
+  getBaseShowInfoByTvdbId: mediathekMocks.getShowInfoByTvdbId,
+  getBaseShowForSonarrRss: vi.fn(async () => null),
+}));
 // No rulesets by default -> every API result becomes an "unmatched" item.
 vi.mock("./rulesets", () => mediathekMocks.rulesets);
 vi.mock("./tmdb", () => ({
@@ -111,6 +115,86 @@ beforeEach(() => {
   mockedRulesetsForTopicAndTvdbId.mockReturnValue([]);
   mockedAllTopics.mockReturnValue([]);
   mockedGenerateRuleset.mockResolvedValue(null);
+});
+
+describe("Sonarr supplemental search consumer", () => {
+  const supplemental: TvdbData = {
+    id: 123,
+    name: "Synthetic series",
+    germanName: null,
+    aliases: [],
+    episodes: [
+      {
+        name: "Missing episode",
+        seasonNumber: 2,
+        episodeNumber: 3,
+        aired: new Date("2026-09-29T12:00:00Z"),
+        runtime: 2,
+        metadataSource: "sonarr",
+      },
+    ],
+  };
+
+  it("uses the same final short-episode filter for exact and season searches before pagination", async () => {
+    mockApi([
+      makeItem({ topic: "Synthetic series", title: "Missing episode", duration: 120 }),
+      makeItem({
+        topic: "Synthetic series",
+        title: "Missing episode Trailer",
+        duration: 120,
+        url_video: "https://example.invalid/trailer.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+      makeItem({
+        topic: "Foreign series",
+        title: "Missing episode",
+        duration: 120,
+        url_video: "https://example.invalid/foreign.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+    ]);
+    const exact = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2", episode: "3" }),
+      100,
+      0
+    );
+    const season = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2" }),
+      100,
+      0
+    );
+    expect(exact).toContain("S02E03");
+    expect(season).toContain("S02E03");
+    expect(exact).not.toContain("Trailer");
+    expect(exact).not.toContain("Foreign.series");
+    expect(exact).toContain('total="3"'); // Three progressive quality releases, one verified episode.
+    expect(exact).not.toContain("GERMAN");
+    const page = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2" }),
+      1,
+      1
+    );
+    expect(page).toContain('total="3"');
+    expect(page.match(/<item>/g)).toHaveLength(1);
+    expect(mockedGenerateRuleset).not.toHaveBeenCalled();
+  });
+
+  it("reports an unavailable missing episode instead of caching successful empty RSS", async () => {
+    await expect(
+      fetchSearchResultsById(
+        { ...supplemental, episodes: [], sonarrUnavailable: true },
+        makeTvSearchContext({ tvdbId: 123, season: "2", episode: "3" }),
+        100,
+        0
+      )
+    ).rejects.toThrow("Optional episode metadata unavailable");
+    expect(mockedCacheSet).not.toHaveBeenCalled();
+  });
 });
 
 describe("fetchSearchResultsByString – generic result gating", () => {

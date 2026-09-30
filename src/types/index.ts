@@ -45,6 +45,9 @@ export interface TvdbData {
   germanName: string | null;
   aliases: TvdbAlias[];
   episodes: TvdbEpisode[];
+  /** Transient provenance only; never persisted as authoritative base metadata. */
+  sonarrBlockedCoordinates?: string[];
+  sonarrUnavailable?: boolean;
 }
 
 // TMDB Movie Types
@@ -68,6 +71,7 @@ export interface TvdbEpisode {
   runtime: number | null;
   seasonNumber: number;
   episodeNumber: number;
+  metadataSource?: "sonarr";
 }
 
 /** TV search identity shared by Newznab routing and the episode-result owner. */

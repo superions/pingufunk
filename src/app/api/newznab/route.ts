@@ -16,6 +16,7 @@ import {
   parseNewznabCategoryIds,
 } from "@/services/newznab";
 import type { TvSearchContext } from "@/types";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 function normalizeEpisodeParameter(value: string | null): string | null {
   const trimmed = value?.trim() || null;
@@ -221,7 +222,8 @@ export async function GET(request: NextRequest) {
       // Search by TVDB ID
       if (context.tvdbId !== null) {
         console.log(`[Newznab] Searching by TVDB ID: ${context.tvdbId}`);
-        const tvdbData = await getShowInfoByTvdbId(context.tvdbId);
+        const requestBudget = new HttpRequestBudget();
+        const tvdbData = await getShowInfoByTvdbId(context.tvdbId, requestBudget);
         console.log(
           `[Newznab] TVDB lookup result: ${tvdbData ? `Found "${tvdbData.name}" (German: "${tvdbData.germanName}")` : "Not found"}`
         );
@@ -240,7 +242,13 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        const searchResults = await fetchSearchResultsById(tvdbData, context, limit, offset);
+        const searchResults = await fetchSearchResultsById(
+          tvdbData,
+          context,
+          limit,
+          offset,
+          requestBudget
+        );
         return new NextResponse(searchResults, {
           status: 200,
           headers: { "Content-Type": "application/xml; charset=utf-8" },

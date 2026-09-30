@@ -33,8 +33,16 @@ export async function searchCacheContext(): Promise<string> {
     "api.tvdb.key",
     "api.tvdb.pin",
     "api.tmdb.key",
+    "integration.sonarr.enabled",
+    "integration.sonarr.url",
+    "integration.sonarr.windowDays",
+    "matching.sonarr.tolerancePercent",
+    "api.sonarr.key",
   ];
-  const values = await Promise.all(keys.map(getSetting));
+  const sonarrEnabled = (await getSetting("integration.sonarr.enabled")) === "true";
+  const values = await Promise.all(
+    keys.map((key) => (key === "api.sonarr.key" && !sonarrEnabled ? null : getSetting(key)))
+  );
   return createHash("sha256")
     .update(JSON.stringify([cacheContextEpoch(), process.env.DATABASE_URL ?? null, values]))
     .digest("hex")
@@ -76,7 +84,10 @@ async function queryContentUncoalesced(
   size: number,
   options: MediathekQueryOptions = {}
 ): Promise<ApiResultItem[] | null> {
-  const deadlineAt = options.deadlineAt ?? Date.now() + 20_000;
+  const deadlineAt = Math.min(
+    options.deadlineAt ?? Date.now() + 20_000,
+    options.requestBudget?.deadlineAt ?? Infinity
+  );
   const [mvSetting, orfSetting, hlsSetting] = await Promise.all([
     getSetting("provider.mediathekview.enabled"),
     getSetting("provider.orf.enabled"),
@@ -85,7 +96,9 @@ async function queryContentUncoalesced(
   const languagePolicy = await getConfiguredLanguagePolicy();
   const mvEnabled = mvSetting !== "false";
   const orfEnabled = orfSetting === "true" && hlsSetting === "true";
-  const srfEnabled = await srfProvider.isEnabled();
+  // This scope cannot publish HLS/SRF references; avoid spending its bounded
+  // Sonarr budget on sources whose only renditions are currently ineligible.
+  const srfEnabled = !options.progressiveOnly && (await srfProvider.isEnabled());
 
   try {
     const [indexed, swiss] = await Promise.all([
@@ -102,6 +115,8 @@ async function queryContentUncoalesced(
         ? srfProvider.search({
             query: queries.find((q) => q.fields.includes("topic"))?.query || "",
             limit: Math.min(size, 100),
+            requestBudget: options.requestBudget,
+            deadlineAt,
           })
         : Promise.resolve([]),
     ]);
@@ -148,7 +163,8 @@ export async function queryContent(
 ): Promise<ApiResultItem[] | null> {
   // An explicit caller deadline is part of its contract and must not inherit
   // another request's remaining budget through coalescing.
-  if (options.deadlineAt !== undefined) return queryContentUncoalesced(queries, size, options);
+  if (options.deadlineAt !== undefined || options.requestBudget)
+    return queryContentUncoalesced(queries, size, options);
   const context = await searchCacheContext();
   const key = JSON.stringify([context, queries, size, options]);
   const pending = pendingSearches.get(key);

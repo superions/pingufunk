@@ -4,6 +4,10 @@ import { getSetting } from "@/lib/settings";
 import type { TvdbData } from "@/types";
 import { getShowInfoByTvdbId as getTvdbShow } from "./tvdb";
 import { getShowInfoByTvdbId as getTmdbShow } from "./tmdb";
+import { mergeSonarrShow, openSonarrSession, SonarrUnavailableError } from "./sonarr-provider";
+import type { HttpRequestBudget } from "@/lib/fetch-retry";
+import { LRUCache } from "lru-cache";
+import { metadataCacheKey } from "@/lib/cache";
 
 // Local shows data
 interface LocalShow {
@@ -24,6 +28,7 @@ let localShows: Map<number, LocalShow> = new Map();
 let localShowsLoaded = false;
 let lastShowsFetchTime: number = 0;
 const SHOWS_REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const baseShows = new LRUCache<string, TvdbData>({ max: 256, ttl: 600_000 });
 
 // GitHub raw URL for auto-update
 const GITHUB_SHOWS_URL =
@@ -86,7 +91,10 @@ async function loadLocalShows(): Promise<void> {
 function getLocalShow(tvdbId: number): TvdbData | null {
   const show = localShows.get(tvdbId);
   if (!show) return null;
+  return localShowMetadata(show);
+}
 
+function localShowMetadata(show: LocalShow): TvdbData {
   return {
     id: show.tvdbId,
     name: show.name,
@@ -108,7 +116,7 @@ function getLocalShow(tvdbId: number): TvdbData | null {
  * 2. TVDB API (if api.tvdb.key is configured in settings)
  * 3. TMDB API (if api.tmdb.key is configured in settings)
  */
-export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | null> {
+export async function getBaseShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | null> {
   if (tvdbId === undefined || tvdbId === null) {
     return null;
   }
@@ -145,4 +153,33 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
 
   console.log(`[Shows] No show found for TVDB ID ${tvdbId} in any source`);
   return null;
+}
+
+/** Optional supplementation never hides independently usable base metadata. */
+export async function getShowInfoByTvdbId(
+  tvdbId: number,
+  budget?: HttpRequestBudget
+): Promise<TvdbData | null> {
+  if (!Number.isSafeInteger(tvdbId) || tvdbId < 1) return null;
+  const base = await getBaseShowInfoByTvdbId(tvdbId);
+  if (base) baseShows.set(metadataCacheKey("sonarr-base", tvdbId, null), structuredClone(base));
+  try {
+    const session = await openSonarrSession();
+    return session ? mergeSonarrShow(base, await session.show(tvdbId, budget)) : base;
+  } catch {
+    if (base) return { ...base, sonarrUnavailable: true };
+    throw new SonarrUnavailableError();
+  }
+}
+
+/** RSS does not trigger unbounded TVDB/TMDB/library refreshes to supplement Sonarr. */
+export async function getBaseShowForSonarrRss(tvdbId: number): Promise<TvdbData | null> {
+  const cached = baseShows.get(metadataCacheKey("sonarr-base", tvdbId, null));
+  if (cached) return structuredClone(cached);
+  const loaded = getLocalShow(tvdbId);
+  if (loaded) return loaded;
+  const file = await fs.readFile(path.join(process.cwd(), "data", "shows.json"), "utf8");
+  const shows = JSON.parse(file) as LocalShow[];
+  const show = shows.find((item) => item.tvdbId === tvdbId);
+  return show ? localShowMetadata(show) : null;
 }

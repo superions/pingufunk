@@ -94,6 +94,53 @@ it("shows a usable TMDB read token only as presence", async () => {
   expect(JSON.stringify(all)).not.toContain("eyJ.synthetic.read.token");
 });
 
+it("defaults Sonarr off and accepts validated nonsecret controls with reload/readback", async () => {
+  const initial = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  expect(initial["integration.sonarr.enabled"]).toBe("false");
+  expect(initial["integration.sonarr.windowDays"]).toBe("14");
+  expect(
+    (
+      await post({
+        "integration.sonarr.enabled": "true",
+        "integration.sonarr.url": "https://example.invalid/sonarr",
+        "integration.sonarr.windowDays": "30",
+        "matching.sonarr.tolerancePercent": "0",
+      })
+    ).status
+  ).toBe(200);
+  const reloaded = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  expect(reloaded).toMatchObject({
+    "integration.sonarr.enabled": "true",
+    "integration.sonarr.windowDays": "30",
+    "matching.sonarr.tolerancePercent": "0",
+  });
+});
+
+it.each([
+  ["integration.sonarr.enabled", "yes"],
+  ["integration.sonarr.url", "https://user:private@example.invalid/sonarr"],
+  ["integration.sonarr.url", "https://example.invalid/sonarr?apikey=private"],
+  ["integration.sonarr.url", "file:///private/sonarr"],
+  ["integration.sonarr.windowDays", "0"],
+  ["integration.sonarr.windowDays", "91"],
+  ["integration.sonarr.windowDays", "1.5"],
+  ["matching.sonarr.tolerancePercent", "26"],
+  ["matching.sonarr.tolerancePercent", "NaN"],
+  ["matching.minDuration", "-1"],
+])("rejects malformed %s before any bulk write", async (key, value) => {
+  expect((await post({ "matching.strategy": "strict", [key]: value })).status).toBe(400);
+  expect(upsert).not.toHaveBeenCalled();
+});
+
+it("masks Sonarr keys and refuses browser credential writes", async () => {
+  values.set("api.sonarr.key", "private-sonarr-key");
+  const response = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  expect(response["api.sonarr.key"]).toBe("••••••••");
+  expect(JSON.stringify(response)).not.toContain("private-sonarr-key");
+  expect((await post({ "api.sonarr.key": "new-key" })).status).toBe(400);
+  expect(upsert).not.toHaveBeenCalled();
+});
+
 it("preserves stored credentials when a client saves masked settings again", async () => {
   const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
   expect((await post(all)).status).toBe(200);

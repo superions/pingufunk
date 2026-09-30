@@ -8,6 +8,7 @@ import {
   type SrgssrMediaComposition,
 } from "./srgssr-api";
 import { getSetting } from "@/lib/settings";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 vi.mock("@/lib/settings", () => ({ getSetting: vi.fn(async () => "fixture") }));
 const fetchMock = vi.fn();
@@ -70,6 +71,17 @@ it("does not report malformed responses or API outages as successful empty searc
   await expect(searchVideos("test")).rejects.toThrow("Invalid SRF search response");
   fetchMock.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
   await expect(searchVideos("test")).rejects.toThrow("SRF search failed");
+});
+
+it("counts authentication and search against the same caller budget", async () => {
+  const budget = new HttpRequestBudget(2);
+  fetchMock.mockResolvedValueOnce(Response.json({ searchResultListMedia: [] }));
+  expect(await searchVideos("Synthetic", "SRF", 10, { requestBudget: budget })).toEqual([]);
+  expect(budget.remainingAttempts).toBe(0);
+  await expect(searchVideos("Synthetic", "SRF", 10, { requestBudget: budget })).rejects.toThrow(
+    "SRF search failed"
+  );
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
 const validVideo = {

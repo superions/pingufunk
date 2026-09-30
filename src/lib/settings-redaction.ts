@@ -2,6 +2,7 @@ export const CREDENTIAL_ENV: Record<string, string> = {
   "api.tvdb.key": "PINGUFUNK_TVDB_KEY",
   "api.tvdb.pin": "PINGUFUNK_TVDB_PIN",
   "api.tmdb.key": "PINGUFUNK_TMDB_READ_TOKEN",
+  "api.sonarr.key": "PINGUFUNK_SONARR_API_KEY",
   "api.srgssr.consumerKey": "PINGUFUNK_SRGSSR_CONSUMER_KEY",
   "api.srgssr.consumerSecret": "PINGUFUNK_SRGSSR_CONSUMER_SECRET",
   "download.proxyUrl": "PINGUFUNK_STREAMING_PROXY_URL",
