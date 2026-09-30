@@ -1,5 +1,6 @@
 # Dependencies
 /node_modules
+/generated/
 /.pnp
 .pnp.js
 
@@ -23,8 +24,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Local env files
-.env
-.env*.local
+.env*
+!.env.example
 
 # Vercel
 .vercel

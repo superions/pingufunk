@@ -65,6 +65,7 @@ export async function importSnapshot({
     const scriptNames = [
       "postgresql-import.mjs",
       "postgresql-preflight.mjs",
+      "sqlite-schema.mjs",
       "postgresql-row-transform.mjs",
       "postgresql-verify.mjs",
       "postgresql-run-manifest.mjs",

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export DATABASE_PROVIDER=postgresql
 
 # Disposable, loopback-only PostgreSQL for fork CI and local development gates.
 # Trust auth is safe only inside this short-lived local container; never reuse

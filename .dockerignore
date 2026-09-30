@@ -1,5 +1,6 @@
 # Dependencies
 node_modules
+generated
 .pnp
 .pnp.js
 
@@ -13,8 +14,8 @@ dist
 coverage
 
 # Development
-.env*.local
-.env
+.env*
+!.env.example
 
 # IDE
 .idea
@@ -52,6 +53,13 @@ README.md
 # Only the migration/startup scripts belong in the production build context.
 scripts/*
 !scripts/resolve-database-url.mjs
+!scripts/database-config.mjs
+!scripts/database-migrate.mjs
+!scripts/load-database-environment.mjs
+!scripts/generate-database-clients.mjs
+!scripts/check-database-schema.mjs
+!scripts/check-sqlite-schema.mjs
+!scripts/sqlite-schema.mjs
 !scripts/check-postgresql-schema.mjs
 !scripts/migrate-entrypoint.sh
 !scripts/postgresql-preflight.mjs

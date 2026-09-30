@@ -88,14 +88,14 @@ docker run --rm --user 1000:1000 --entrypoint node \
 # 2. Separat mit DDL-Rolle und gleicher Image-/Schema-Version: migrate deploy.
 docker run --rm --network "${PG_NETWORK}" \
   --mount "type=bind,src=${DDL_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
-  -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}"
+  -e DATABASE_PROVIDER=postgresql -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}"
 
 # 3. Ab hier Runtime-/Importrollen-Secret verwenden. Read-only Preflight;
 #    PG muss Primary, versionstauglich und gemäß gewähltem Transport geschützt sein.
 docker run --rm --network "${PG_NETWORK}" \
   --mount "type=bind,src=${BACKUP_PARENT},dst=/backup,readonly" \
   --mount "type=bind,src=${PG_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
-  -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
+  -e DATABASE_PROVIDER=postgresql -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-preflight.mjs \
   "/backup/${RUN_NAME}/source.sqlite" "${PG_DATABASE}" "${PG_ROLE}" "${PG_ENDPOINT_HOST}"
 
@@ -104,7 +104,7 @@ docker run --rm --network "${PG_NETWORK}" \
 docker run --rm --network "${PG_NETWORK}" \
   --mount "type=bind,src=${BACKUP_PARENT},dst=/backup" \
   --mount "type=bind,src=${PG_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
-  -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
+  -e DATABASE_PROVIDER=postgresql -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-migration-cli.mjs import \
   --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
   --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_ENDPOINT_HOST}" \
@@ -114,7 +114,7 @@ docker run --rm --network "${PG_NETWORK}" \
 docker run --rm --network "${PG_NETWORK}" \
   --mount "type=bind,src=${BACKUP_PARENT},dst=/backup,readonly" \
   --mount "type=bind,src=${PG_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
-  -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
+  -e DATABASE_PROVIDER=postgresql -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-migration-cli.mjs verify \
   --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
   --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_ENDPOINT_HOST}"
@@ -127,7 +127,7 @@ docker run --rm --network "${PG_NETWORK}" \
 docker run --rm --network "${PG_NETWORK}" \
   --mount "type=bind,src=${BACKUP_PARENT},dst=/backup,readonly" \
   --mount "type=bind,src=${PG_SECRET_FILE},dst=/run/secrets/pingufunk_pg,readonly" \
-  -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
+  -e DATABASE_PROVIDER=postgresql -e DATABASE_URL_FILE=/run/secrets/pingufunk_pg "${IMAGE}" \
   node /app/scripts/postgresql-migration-cli.mjs sequences \
   --snapshot "/backup/${RUN_NAME}/source.sqlite" --sha256 "${SNAPSHOT_SHA256}" \
   --database "${PG_DATABASE}" --role "${PG_ROLE}" --host "${PG_ENDPOINT_HOST}" \
@@ -148,7 +148,7 @@ oder Zielidentität stoppen. Keine Truncate-/Drop-/Reset-/Upsert-Abkürzung.
 
 ## Start, Pausen und Rückwege
 
-Der neue App-Container startet standardmäßig mit
+Der ausdrücklich mit `DATABASE_PROVIDER=postgresql` gewählte App-Container startet standardmäßig mit
 `PINGUFUNK_WRITES_ENABLED=0`; er prüft die PG-Migrationskette, führt aber
 kein DDL und keinen Import aus. Erst eine separat freigegebene
 Schreibfreigabe setzt `PINGUFUNK_WRITES_ENABLED=1` bei genau einem Worker.
@@ -163,7 +163,8 @@ pro Prozess, ist aber keine Rollback-Entscheidungsgrundlage.
 - **Vor dem ersten neuen PG-Anwendungswrite und bei leerem Checkpoint:** Neue App/Writer stoppen,
   PG-Ziel/Manifest/Backups erhalten, ursprüngliches SQLite-Image mit
   unveränderter Quelle/Konfiguration wiederherstellen. Proxy und Routing
-  bleiben. Niemals ein PG-Image mit SQLite oder umgekehrt verbinden.
+  bleiben. Nur ein für den gewählten Provider geprüftes Image verwenden;
+  bei Dual-Backend-Images die ursprüngliche SQLite-Auswahl ausdrücklich wiederherstellen.
 - **Nach einem neuen PG-Anwendungswrite:** Altes SQLite ist veraltet.
   Writer stoppen, PG-Backup sichern und Jobs, Settings, Cache, Regeln und
   Dateieffekte abgleichen. Ein semantisch verlustfreier PG→SQLite-Rücktransfer

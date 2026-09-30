@@ -39,10 +39,11 @@ it.skipIf(!run)(
     vi.stubEnv("DATABASE_URL", testUrl);
     const { prisma } = await import("@/lib/db");
     const key = `qa-${randomUUID()}`;
+    const pg = new PrismaClient({ log: [], datasourceUrl: testUrl });
     try {
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
       const countBefore = await prisma.config.count();
-      expect(await prisma.migrationCheckpoint.count()).toBe(0);
+      expect(await pg.migrationCheckpoint.count()).toBe(0);
       const { GET: systemStatus } = await import("@/app/api/system/route");
       const status = await systemStatus();
       expect(status.status).toBe(200);
@@ -54,14 +55,14 @@ it.skipIf(!run)(
         prisma.$transaction(async (tx) => tx.config.create({ data: { key, value: "synthetic" } }))
       ).rejects.toThrow("Application writes are disabled");
       expect(await prisma.config.count()).toBe(countBefore);
-      expect(await prisma.migrationCheckpoint.count()).toBe(0);
+      expect(await pg.migrationCheckpoint.count()).toBe(0);
 
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
       const firstWrite = vi.spyOn(console, "warn").mockImplementation(() => {});
       await prisma.config.create({ data: { key, value: "synthetic" } });
       expect(
         (
-          await prisma.migrationCheckpoint.findUnique({
+          await pg.migrationCheckpoint.findUnique({
             where: { key: "first_application_write" },
           })
         )?.key
@@ -84,6 +85,7 @@ it.skipIf(!run)(
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
       await prisma.config.deleteMany({ where: { key } });
       await prisma.$disconnect();
+      await pg.$disconnect();
     }
   }
 );

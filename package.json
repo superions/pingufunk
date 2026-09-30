@@ -4,10 +4,10 @@
   "private": true,
   "description": "Rundfunk indexer for Sonarr/Radarr",
   "scripts": {
-    "dev": "next dev",
-    "dev:lan": "next dev -H 0.0.0.0",
+    "dev": "node scripts/application-entrypoint.mjs dev",
+    "dev:lan": "node scripts/application-entrypoint.mjs dev -H 0.0.0.0",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/application-entrypoint.mjs start",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css}\"",
@@ -17,9 +17,8 @@
     "test:pg": "bash scripts/ci-postgresql.sh",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "postinstall": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
+    "postinstall": "node scripts/generate-database-clients.mjs",
+    "db:migrate": "node scripts/database-migrate.mjs",
     "validate": "tsx scripts/validate-data.ts",
     "prepare": "husky"
   },
@@ -33,6 +32,7 @@
     ]
   },
   "dependencies": {
+    "@next/env": "16.1.6",
     "@prisma/client": "^6.19.2",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",

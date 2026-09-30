@@ -16,6 +16,7 @@ function run(overrides: Record<string, string | undefined>) {
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.DATABASE_URL;
   delete env.DATABASE_URL_FILE;
+  env.DATABASE_PROVIDER = "postgresql";
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) delete env[key];
     else env[key] = value;
@@ -73,4 +74,34 @@ it("rejects a symlinked secret file", () => {
   rmSync(link);
   expect(result.status).not.toBe(0);
   expect(result.stdout).toBe("");
+});
+
+it("defaults to historical SQLite persistence without a PostgreSQL configuration", () => {
+  const result = run({ DATABASE_PROVIDER: undefined });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe(`file:${path.join(process.cwd(), "prisma/data/rundfunkarr.db")}`);
+});
+
+it("keeps legacy SQLite paths relative to the historical prisma directory", () => {
+  const result = run({
+    DATABASE_PROVIDER: "sqlite",
+    DATABASE_URL: "file:./data/legacy.db?connection_limit=1&socket_timeout=30",
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe(
+    `file:${path.join(process.cwd(), "prisma/data/legacy.db")}?connection_limit=1&socket_timeout=30`
+  );
+});
+
+it.each([
+  { DATABASE_PROVIDER: "sqlite", DATABASE_URL: disposableUrl },
+  { DATABASE_PROVIDER: undefined, DATABASE_URL: disposableUrl },
+  { DATABASE_PROVIDER: "postgresql", DATABASE_URL: "file:./data/legacy.db" },
+  { DATABASE_PROVIDER: "unknown", DATABASE_URL: disposableUrl },
+  { DATABASE_PROVIDER: "sqlite", DATABASE_URL: "" },
+])("rejects mismatched provider selection without leaking the connection %#", (config) => {
+  const result = run(config);
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toBe("Invalid database connection configuration\n");
 });

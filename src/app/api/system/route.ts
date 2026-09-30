@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { prisma, databaseSizeBytes } from "@/lib/db";
 import { execSync } from "child_process";
 
 // GET /api/system - Get system information
@@ -19,12 +19,7 @@ export async function GET() {
     });
     const configCount = await prisma.config.count();
 
-    // The database is dedicated to Pingufunk; report its PostgreSQL size.
-    const [{ bytes }] = await prisma.$queryRaw<Array<{ bytes: string }>>`
-      SELECT pg_database_size(current_database())::text AS bytes
-    `;
-    const dbSizeBytes = Number(bytes);
-    if (!Number.isSafeInteger(dbSizeBytes)) throw new Error("Database size is not representable");
+    const dbSizeBytes = await databaseSizeBytes();
 
     // FFmpeg check
     let ffmpegVersion = null;

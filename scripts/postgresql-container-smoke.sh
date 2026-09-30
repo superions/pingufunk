@@ -79,7 +79,7 @@ docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c 'CREATE ROLE pingufunk_smoke_runtime LOGIN' \
   -c 'CREATE DATABASE pingufunk_smoke' >/dev/null
 DDL_URL="postgresql://postgres@${PG_CONTAINER}/pingufunk_smoke?sslmode=require"
-DATABASE_URL="$DDL_URL" docker run --rm --network "$SMOKE_NETWORK" -e DATABASE_URL \
+DATABASE_URL="$DDL_URL" docker run --rm --network "$SMOKE_NETWORK" -e DATABASE_URL -e DATABASE_PROVIDER=postgresql \
   "$MIGRATOR_IMAGE" >/dev/null
 docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_smoke \
   -c 'GRANT CONNECT ON DATABASE pingufunk_smoke TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
@@ -119,7 +119,7 @@ done
 
 RUNTIME_URL="postgresql://pingufunk_smoke_runtime@${PG_CONTAINER}/pingufunk_smoke?sslmode=require"
 DATABASE_URL="$RUNTIME_URL" docker run --rm -d --name "$APP_CONTAINER" \
-  --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=0 \
+  --network "$SMOKE_NETWORK" -e DATABASE_URL -e DATABASE_PROVIDER=postgresql -e PINGUFUNK_WRITES_ENABLED=0 \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
 ready=0
@@ -145,7 +145,7 @@ docker stop "$APP_CONTAINER" >/dev/null
 SMOKE_APP_STARTED=0
 
 DATABASE_URL="$RUNTIME_URL" docker run --rm -d --name "$APP_CONTAINER" \
-  --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 \
+  --network "$SMOKE_NETWORK" -e DATABASE_URL -e DATABASE_PROVIDER=postgresql -e PINGUFUNK_WRITES_ENABLED=1 \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
 for ((attempt = 0; attempt < 30; attempt++)); do

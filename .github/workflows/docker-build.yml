@@ -47,3 +47,6 @@ jobs:
 
       - name: Rehearse disposable TLS container migration
         run: bash scripts/postgresql-container-smoke.sh
+
+      - name: Verify isolated SQLite runtime and persistence
+        run: bash scripts/sqlite-container-smoke.sh

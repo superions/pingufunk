@@ -13,3 +13,11 @@ it("requires an exact explicit write enablement", () => {
   expect(writesEnabled()).toBe(true);
   expect(() => assertWritesEnabled()).not.toThrow();
 });
+
+it("allows default SQLite operation while PostgreSQL requires write release", () => {
+  vi.stubEnv("PINGUFUNK_WRITES_ENABLED", undefined);
+  vi.stubEnv("DATABASE_PROVIDER", undefined);
+  expect(writesEnabled()).toBe(true);
+  vi.stubEnv("DATABASE_PROVIDER", "postgresql");
+  expect(writesEnabled()).toBe(false);
+});

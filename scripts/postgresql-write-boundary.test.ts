@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+import { PrismaClient } from "@prisma/client";
 
 const required = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 const testUrl = process.env.PINGUFUNK_TEST_DENIED_URL;
@@ -25,15 +26,17 @@ it.skipIf(!required)(
     vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
     const { prisma } = await import("@/lib/db");
     const key = `qa-denied-${randomUUID()}`;
+    const pg = new PrismaClient({ log: [], datasourceUrl: testUrl });
     try {
-      expect(await prisma.migrationCheckpoint.count()).toBe(0);
+      expect(await pg.migrationCheckpoint.count()).toBe(0);
       await expect(
         prisma.config.create({ data: { key, value: "never-written" } })
       ).rejects.toThrow();
       expect(await prisma.config.count({ where: { key } })).toBe(0);
-      expect(await prisma.migrationCheckpoint.count()).toBe(0);
+      expect(await pg.migrationCheckpoint.count()).toBe(0);
     } finally {
       await prisma.$disconnect();
+      await pg.$disconnect();
       vi.unstubAllEnvs();
     }
   }

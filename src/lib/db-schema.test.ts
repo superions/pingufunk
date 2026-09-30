@@ -2,6 +2,35 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
+import { Prisma as PgPrisma } from "@prisma/client";
+import { Prisma as SqlitePrisma } from "../../generated/sqlite";
+
+it("keeps generated domain contracts equal across both clients", () => {
+  const domain = (models: typeof PgPrisma.dmmf.datamodel.models) =>
+    models
+      .filter((model) => model.name !== "MigrationCheckpoint")
+      .map((model) => ({
+        name: model.name,
+        uniqueFields: model.uniqueFields,
+        fields: model.fields.map((field) => ({
+          name: field.name,
+          type: field.type,
+          kind: field.kind,
+          isId: field.isId,
+          isList: field.isList,
+          isRequired: field.isRequired,
+          isUnique: field.isUnique,
+          default: field.default,
+          relationFromFields: field.relationFromFields,
+          relationToFields: field.relationToFields,
+          relationOnDelete: field.relationOnDelete,
+        })),
+      }));
+  expect(domain(SqlitePrisma.dmmf.datamodel.models)).toEqual(
+    domain(PgPrisma.dmmf.datamodel.models)
+  );
+  expect(SqlitePrisma.dmmf.datamodel.models).toHaveLength(6);
+});
 
 function modelNames(schema: string): string[] {
   return Array.from(schema.matchAll(/^model\s+(\w+)\s+\{/gm), (match) => match[1]);

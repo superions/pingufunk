@@ -35,15 +35,21 @@ echo "Running as user: $USER_NAME ($(id "$USER_NAME"))"
 
 # The database URL is resolved before dropping privileges so Docker secrets
 # need not be world-readable. Never echo the resolved value.
-DATABASE_URL=$(node /app/scripts/resolve-database-url.mjs) || fail "PostgreSQL configuration unavailable"
+DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite}
+export DATABASE_PROVIDER
+DATABASE_URL=$(node /app/scripts/resolve-database-url.mjs) || fail "Database configuration unavailable"
 export DATABASE_URL
 unset DATABASE_URL_FILE
 
-case "${PINGUFUNK_WRITES_ENABLED:-0}" in
+if [ "$DATABASE_PROVIDER" = sqlite ]; then DEFAULT_WRITES=1; else DEFAULT_WRITES=0; fi
+case "${PINGUFUNK_WRITES_ENABLED:-$DEFAULT_WRITES}" in
     0) export PINGUFUNK_WRITES_ENABLED=0; unset PINGUFUNK_BOOT_QUEUE ;;
     1) export PINGUFUNK_WRITES_ENABLED=1; export PINGUFUNK_BOOT_QUEUE=1 ;;
     *) fail "Invalid write gate configuration" ;;
 esac
+
+echo "Checking selected database schema without applying migrations..."
+su-exec "$USER_NAME" node /app/scripts/check-database-schema.mjs || fail "Database schema check failed"
 
 if [ "$PINGUFUNK_WRITES_ENABLED" = 1 ]; then
     # A maintenance boot must not create directories or recursively rewrite
@@ -60,8 +66,5 @@ if [ "$PINGUFUNK_WRITES_ENABLED" = 1 ]; then
     echo "Setting permissions..."
     chmod -R 755 "$DOWNLOAD_DIR" "$TEMP_DIR" 2>/dev/null || echo "Note: Could not chmod download directories (this is normal for mounted volumes)"
 fi
-
-echo "Checking PostgreSQL schema without applying migrations..."
-su-exec "$USER_NAME" node /app/scripts/check-postgresql-schema.mjs || fail "PostgreSQL schema check failed"
 
 exec su-exec "$USER_NAME" "$@"

@@ -7,10 +7,12 @@ und Daten-/Rollbackinvarianten. Einziger ausführbarer Entwicklungs- und
 Freigabevertrag: [Phasen-TODOs](../todo/proxy-retirement.md), P11 und P10.
 Keine produktive Migration ausgeführt, keine Deploymentfreigabe.
 
-Der derzeitige Entwicklungsbranch enthält noch einen **PostgreSQL-only**-
-Startpfad. Er erfüllt die neue Backendwahl nicht: P11.1 wurde wieder geöffnet.
-Die folgenden Zwischenstände belegen nur getestete PG-Teile, nicht SQLite-
-Lauffähigkeit oder einen fertigen Rücktransfer.
+Der Entwicklungsbranch unterstützt nach P11.1 wieder **beide Backendtypen**:
+SQLite als Default, PostgreSQL nach ausdrücklicher Auswahl. Getrennte Clients,
+Migrationen und Container-/Runtimeproben sind in
+[database-backends.md](database-backends.md) beschrieben. Ein fertiger
+PG→SQLite-Rücktransfer ist damit nicht behauptet; weitere PG-Abnahmen bleiben
+im Phasenvertrag offen.
 
 ## Entscheidung, Umfang und Reihenfolge
 

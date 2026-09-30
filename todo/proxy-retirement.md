@@ -21,9 +21,9 @@ erledigte Implementierung.
 - Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R10 bleiben in den Referenzen.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
-- Nächster Entwicklungspunkt ist **P11.1**: Der aktuelle PG-only-Branch muss
-  SQLite-Lauffähigkeit und ausdrückliche Backendwahl zurückerhalten. Danach
-  folgt der Proxy-Pfad P06 → P07 → P08 → P09 → P10 auf den abgenommenen P00–P05.
+- Nächster Entwicklungspunkt ist **P06.1**. P11.1 hat SQLite-Lauffähigkeit und
+  ausdrückliche Backendwahl wiederhergestellt. Es folgt der Proxy-Pfad
+  P06 → P07 → P08 → P09 → P10 auf den abgenommenen P00–P05.
   P11.2–P11.8 sichern die PostgreSQL-Option und müssen vor deren Betriebsfreigabe
   abgenommen sein; sie blockieren unabhängige Proxy-Arbeit auf SQLite nicht.
   PostgreSQL-Unterstützung gehört zum Entwicklungsumfang, ihre Nutzung und
@@ -462,7 +462,7 @@ einsatzbereite Produktionsbefehle zu behandeln.
 Produktive Anwendung des PG-Runbooks ist optional und gehört bei PG-Wahl
 ausschließlich P10.3–P10.5.
 
-- [ ] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
+- [x] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
       `prisma/schema.prisma`, historische SQLite-Migrationen,
       `prisma/legacy/sqlite/init-db.sql`,
       `src/lib/db.ts`, `Dockerfile`, `entrypoint.sh`, `.env.example` und
@@ -500,6 +500,21 @@ ausschließlich P10.3–P10.5.
       Starts führen kein DDL/Import aus. Produktions-Primary, PostgreSQL-
       Version, Rolle und gewählter Transport/TLS bleiben für einen PG-Cutover
       P11.3-/P10-Gates; HAProxy ist keine Vorgabe.
+      Dual-Backend-Abnahme 30.09.2026: SQLite als Default, ausdrücklich gewähltes
+      PostgreSQL; beide generierten Prisma-6.19.2-Clients. Gemeinsamer Resolver,
+      lokale Start-/Migrationswrapper und providergetrennte Schema-Readiness;
+      kein automatischer Import/DDL/Fallback. Historisches SQLite-Bootstrap
+      mit leerem Ledger bleibt lesend akzeptiert und unverändert. Eigene
+      Runtimeproben erhalten alle sechs Modelle, IDs/FK, Settings/History,
+      NULL, Millisekunden und BigInt >2^53; HMR verweigert geänderte DB-Auswahl.
+      `npm ci`, 398 reguläre Tests, acht separat ausgeführte PG-Gates, lint,
+      typecheck, format und Build grün. Tatsächlich gebaute Runner-/Migrator-
+      Images bestehen isolierte SQLite-Fresh-/Bootstrap-Starts mit Writes,
+      Persistenz/Restart sowie PG-TLS-Snapshot/Import/Start/Writeprobe.
+      Fehlstart bei fehlender SQLite-Datei, Providerwiderspruch und unerreichbarer
+      PG-DB erzeugt keinen Ersatzbestand. SQL-Historien unverändert; Compose-
+      Standard und optionaler PG-Override validiert. Bedienung unter
+      `docs/database-backends.md`. Keine produktiven Dienste/Daten berührt.
 - [ ] **P11.2 — Secretfähiger Single-Worker und vollständiger Writer-Gate.**
       Entrypoint/DB-Owner samt `src/instrumentation.ts`, Config-/Cache-, Ruleset-,
       Queue- und Worker-Schreibpfaden auf `DATABASE_URL_FILE` vor Prozessstart und
@@ -788,6 +803,12 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Nutzerentscheidung einholen; Proxy-20-Minutenheuristik kein globaler Default.
       Abnahme: begrenzter schriftlicher Vertrag ohne Identitätsguessing, bestehende
       Feeds erhalten, kein ungefragter Mehrinstanz-/Full-RSS-Scope.
+      Nutzerentscheidung 30.09.2026: Neben exakten Episoden auch Staffel-/RSS-
+      Fallbacks vorsehen. Sonarr bleibt optional, default-off und zunächst eine
+      Instanz; alle Pfade verlangen verifizierte Serien-/Episodenidentität.
+      Keine globale Proxy-20-Minutenheuristik übernehmen. Die ausdrückliche
+      Freigabe erweitert den Suchumfang, ersetzt aber nicht API-Verifikation,
+      konkrete Laufzeitpolitik oder die Abnahme des Consumers in P06.2/P06.3.
 - [ ] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
       Neuen Sonarradapter in `shows.ts`/TV-Suchowner anschließen, P05-Secret-/
       Budget-/Cachegrundlagen nutzen, nur GET und Base-URL-Unterpfade. Serien-ID,
