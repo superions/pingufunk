@@ -511,6 +511,14 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Proxy-Netzwerktest-POST ist im Wartungsmodus gesperrt. Kausale Tests
       sichern den unterbliebenen Fetch und Dateischreibversuch. Andere
       Nebenpfade und die dauerhafte Grenzmarkierung bleiben zu prüfen.
+      Nachtrag: Die zweite native PG-Migration ergänzt den ausschließlich
+      zielseitigen `MigrationCheckpoint`. Vor dem ersten Fachwrite wird er
+      in einer unabhängigen Transaktion dauerhaft gesetzt; ein verweigerter
+      Checkpoint-Insert verhindert den Fachwrite. Disposable PG-Tests prüfen
+      Maintenance ohne Marker, den ersten Write mit Marker sowie ein
+      eingeschränktes Rollenprofil ohne Insert-Recht. Der Marker kann
+      konservativ zu früh entstehen; externe Writer und das endgültige
+      Rollbackverfahren bleiben Betriebs-Gates.
 - [ ] **P11.3 — Read-only Preflight mit explizitem Fidelityvertrag.** Einen
       versionierten Preflight unter `scripts/` mit Referenz auf alle sechs Modelle
       bauen: tatsächlicher Sourcepfad/Mount/WAL/SHM, Spalten/Indizes/Ledger/Typen,
@@ -618,6 +626,8 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Der Sequence-CLI-Schritt fordert ausdrücklich sowohl gestoppte Writer
       als auch den belegten Zustand ohne jeglichen App-Write seit dem Import;
       bloß wieder leere Tabellen erlauben keinen rückwärts gesetzten Zähler.
+      Import und Sequence-Korrektur prüfen zusätzlich den persistenten
+      `MigrationCheckpoint` und brechen bei einem App-Write-Versuch ab.
       Eine disposable PG-Probe simulierte einen Fehler nach bereits wirksamem
       `setval`, prüfte das Importmanifest nochmals lesend und wiederholte die
       Synchronisierung erfolgreich. Weitere Sequenzdrift- und Kollisionsfälle

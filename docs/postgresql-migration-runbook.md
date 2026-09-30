@@ -30,6 +30,9 @@ SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
    weder URL noch Passwort in Argumenten, Debug-Ausgaben oder Run-Reports.
    DDL- und Runtime-/Importrollen erhalten getrennte Secretdateien. Die
    CLI-Argumente unten enthalten bewusst nur nichtgeheime Identitäten.
+   Die Runtime-Rolle braucht zusätzlich INSERT/SELECT auf der eigenen
+   `MigrationCheckpoint`-Tabelle; fehlen diese Rechte, bleiben App-Writes
+   gesperrt. Der Import-/Sequence-Runner benötigt dort SELECT.
 5. Ein naive SQLite-Zeittext (`YYYY-MM-DD HH:MM:SS`) wird zurzeit abgelehnt,
    selbst wenn eine Spalte `CURRENT_TIMESTAMP` als Default hat. Herkunft und
    Zeitzone müssen vor einer freigegebenen Normalisierung belegt sein. Keine
@@ -129,12 +132,14 @@ Der neue App-Container startet standardmäßig mit
 kein DDL und keinen Import aus. Erst eine separat freigegebene
 Schreibfreigabe setzt `PINGUFUNK_WRITES_ENABLED=1` bei genau einem Worker.
 Readiness, Settings und History ohne Seiteneffekt prüfen; dann tatsächliche
-Queue-/History-/Regel-/Cachewrites in der Probe validieren. Ein statischer
-Logmarker zeigt den ersten erfolgreichen Prisma-Modellwrite pro Prozess an.
-Er ist konservativ, aber allein nicht dauerhaft genug für eine produktive
-Rollback-Entscheidung.
+Queue-/History-/Regel-/Cachewrites in der Probe validieren. Vor dem ersten
+Prisma-Modellwrite wird `MigrationCheckpoint` unabhängig und dauerhaft
+geschrieben; falls dies fehlschlägt, unterbleibt der Fachwrite. Der Marker
+kann bei einem später gescheiterten Fachwrite konservativ zu früh gesetzt
+sein. Ein zusätzlicher Logeintrag meldet den ersten erfolgreichen Modellwrite
+pro Prozess, ist aber keine Rollback-Entscheidungsgrundlage.
 
-- **Vor dem ersten neuen PG-Anwendungswrite:** Neue App/Writer stoppen,
+- **Vor dem ersten neuen PG-Anwendungswrite und bei leerem Checkpoint:** Neue App/Writer stoppen,
   PG-Ziel/Manifest/Backups erhalten, ursprüngliches SQLite-Image mit
   unveränderter Quelle/Konfiguration wiederherstellen. Proxy und Routing
   bleiben. Niemals ein PG-Image mit SQLite oder umgekehrt verbinden.

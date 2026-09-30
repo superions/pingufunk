@@ -13,14 +13,35 @@ const MUTATIONS = new Set([
   "deleteMany",
 ]);
 let firstSuccessfulApplicationMutationLogged = false;
+let checkpointPersisted = false;
+let checkpointPending: Promise<void> | null = null;
 
 function createClient() {
-  return new PrismaClient({ log: [] }).$extends({
+  const base = new PrismaClient({ log: [] });
+  async function ensureFirstWriteCheckpoint(): Promise<void> {
+    if (checkpointPersisted) return;
+    if (!checkpointPending) {
+      // This independent transaction commits before the model operation. A
+      // failed or rolled-back operation may leave an early marker, never a late
+      // one. Reject the write if PostgreSQL cannot durably record the boundary.
+      checkpointPending = base.migrationCheckpoint
+        .createMany({ data: [{ key: "first_application_write" }], skipDuplicates: true })
+        .then(() => {
+          checkpointPersisted = true;
+        })
+        .finally(() => {
+          checkpointPending = null;
+        });
+    }
+    await checkpointPending;
+  }
+  return base.$extends({
     query: {
       $allModels: {
         async $allOperations({ operation, args, query }) {
           if (!MUTATIONS.has(operation)) return query(args);
           assertWritesEnabled();
+          await ensureFirstWriteCheckpoint();
           const result = await query(args);
           if (!firstSuccessfulApplicationMutationLogged) {
             firstSuccessfulApplicationMutationLogged = true;

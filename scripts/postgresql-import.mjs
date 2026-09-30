@@ -59,6 +59,8 @@ export async function importSnapshot({
       .sort();
     if (JSON.stringify(applied) !== JSON.stringify(expectedMigrations))
       throw new Error("PostgreSQL migration history mismatch");
+    if ((await pg.migrationCheckpoint.count()) !== 0)
+      throw new Error("Application PostgreSQL write checkpoint already exists");
     const scriptRoot = dirname(fileURLToPath(import.meta.url));
     const scriptNames = [
       "postgresql-import.mjs",

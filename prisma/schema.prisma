@@ -13,7 +13,7 @@ model TvdbSeries {
   germanName String?
   slug       String?
   overview   String?
-  aliases    String?       // JSON array stored as string
+  aliases    String? // JSON array stored as string
   firstAired DateTime?     @db.Timestamptz(3)
   cachedAt   DateTime      @default(now()) @db.Timestamptz(3)
   expiresAt  DateTime      @db.Timestamptz(3)
@@ -21,14 +21,14 @@ model TvdbSeries {
 }
 
 model TvdbEpisode {
-  id            Int         @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   seriesId      Int
   seasonNumber  Int
   episodeNumber Int
   name          String?
-  aired         DateTime?   @db.Timestamptz(3)
+  aired         DateTime?  @db.Timestamptz(3)
   runtime       Int?
-  series        TvdbSeries  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  series        TvdbSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
 
   @@index([seriesId, seasonNumber, episodeNumber])
 }
@@ -59,7 +59,7 @@ model Config {
 
 model GeneratedRuleset {
   id               String   @id @default(uuid())
-  topic            String   @unique  // MediathekView topic
+  topic            String   @unique // MediathekView topic
   tvdbId           Int
   showName         String
   germanName       String?
@@ -75,11 +75,17 @@ model GeneratedRuleset {
 }
 
 model TopicCategory {
-  id        String   @id @default(cuid())
-  topic     String   @unique
-  category  String   // "movie" | "tv" | "unknown"
-  tmdbId    Int?
-  cachedAt  DateTime @default(now()) @db.Timestamptz(3)
+  id       String   @id @default(cuid())
+  topic    String   @unique
+  category String // "movie" | "tv" | "unknown"
+  tmdbId   Int?
+  cachedAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([topic])
+}
+
+// PostgreSQL-only operational state; never imported from the legacy SQLite source.
+model MigrationCheckpoint {
+  key       String   @id
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 }

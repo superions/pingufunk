@@ -15,6 +15,10 @@ describe("PostgreSQL schema lineage", () => {
       path.join(root, "prisma/migrations/20260930000000_postgresql_baseline/migration.sql"),
       "utf8"
     );
+    const checkpointMigration = readFileSync(
+      path.join(root, "prisma/migrations/20260930001000_write_boundary/migration.sql"),
+      "utf8"
+    );
     const lock = readFileSync(path.join(root, "prisma/migrations/migration_lock.toml"), "utf8");
     const legacy = readFileSync(
       path.join(root, "prisma/legacy/sqlite/migrations/migration_lock.toml"),
@@ -24,9 +28,9 @@ describe("PostgreSQL schema lineage", () => {
     expect(schema).toContain('provider = "postgresql"');
     expect(lock).toContain('provider = "postgresql"');
     expect(legacy).toContain('provider = "sqlite"');
-    expect(modelNames(schema)).toHaveLength(6);
+    expect(modelNames(schema)).toHaveLength(7);
     for (const model of modelNames(schema)) {
-      expect(migration).toContain(`CREATE TABLE "${model}"`);
+      expect(migration + checkpointMigration).toContain(`CREATE TABLE "${model}"`);
     }
     expect(migration).not.toContain("sqlite_sequence");
   });
@@ -75,6 +79,7 @@ it.skipIf(!required)("checks the applied PostgreSQL catalog, types and relations
         "GeneratedRuleset",
         "TopicCategory",
         "_prisma_migrations",
+        "MigrationCheckpoint",
       ])
     );
     expect(column("Download", "size")?.data_type).toBe("bigint");

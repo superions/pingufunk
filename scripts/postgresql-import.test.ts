@@ -98,6 +98,7 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     expect(JSON.parse(readFileSync(manifestPath, "utf8")).status).toBe("validated");
     let sideEffectCompleted = false;
     const interruptedSequenceClient = {
+      migrationCheckpoint: pg.migrationCheckpoint,
       $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) =>
         pg.$queryRaw(strings, ...values),
       $queryRawUnsafe: async (sql: string, ...values: unknown[]) => {
@@ -133,6 +134,13 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     expect((await pg.config.findUnique({ where: { key: "qa-foreign" } }))?.value).toBe(
       "foreign-stays"
     );
+    await pg.migrationCheckpoint.create({ data: { key: "first_application_write" } });
+    await expect(synchronizeOwnedSequences(pg)).rejects.toThrow(
+      "Application PostgreSQL write checkpoint already exists"
+    );
+    await expect(importSnapshot(args)).rejects.toThrow(
+      "Application PostgreSQL write checkpoint already exists"
+    );
   } finally {
     if (sqliteOpen) sqlite.close();
     if (generatedId !== null) await pg.tvdbEpisode.deleteMany({ where: { id: generatedId } });
@@ -143,6 +151,7 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     await pg.config.deleteMany({ where: { key: "qa-foreign" } });
     await pg.generatedRuleset.deleteMany({ where: { id: "synthetic-rule" } });
     await pg.topicCategory.deleteMany({ where: { id: "synthetic-category" } });
+    await pg.migrationCheckpoint.deleteMany({ where: { key: "first_application_write" } });
     await pg.$disconnect();
     rmSync(dir, { recursive: true, force: true });
   }

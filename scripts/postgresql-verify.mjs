@@ -37,6 +37,8 @@ function quote(name) {
  * Re-running is safe while that no-writer condition remains true.
  */
 export async function synchronizeOwnedSequences(pg) {
+  if ((await pg.migrationCheckpoint.count()) !== 0)
+    throw new Error("Application PostgreSQL write checkpoint already exists");
   const sequences = await pg.$queryRaw`
     SELECT sns.nspname AS sequence_schema, seq.relname AS sequence_name,
            tns.nspname AS table_schema, tbl.relname AS table_name,

@@ -1,6 +1,7 @@
 import { afterAll, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
+import { PrismaClient } from "@prisma/client";
 
 const required = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 const testUrl = process.env.PINGUFUNK_TEST_DATABASE_URL;
@@ -20,7 +21,17 @@ if (required) {
   if (!safe) throw new Error("A loopback disposable pingufunk_qa database is required");
 }
 
-afterAll(() => vi.unstubAllEnvs());
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  if (!run) return;
+  process.env.DATABASE_URL = testUrl;
+  const cleanup = new PrismaClient({ log: [] });
+  try {
+    await cleanup.migrationCheckpoint.deleteMany({ where: { key: "first_application_write" } });
+  } finally {
+    await cleanup.$disconnect();
+  }
+});
 
 it.skipIf(!run)(
   "reads in maintenance and blocks model/transaction writes before PG mutation",
@@ -31,6 +42,7 @@ it.skipIf(!run)(
     try {
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
       const countBefore = await prisma.config.count();
+      expect(await prisma.migrationCheckpoint.count()).toBe(0);
       const { GET: systemStatus } = await import("@/app/api/system/route");
       const status = await systemStatus();
       expect(status.status).toBe(200);
@@ -42,10 +54,18 @@ it.skipIf(!run)(
         prisma.$transaction(async (tx) => tx.config.create({ data: { key, value: "synthetic" } }))
       ).rejects.toThrow("Application writes are disabled");
       expect(await prisma.config.count()).toBe(countBefore);
+      expect(await prisma.migrationCheckpoint.count()).toBe(0);
 
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
       const firstWrite = vi.spyOn(console, "warn").mockImplementation(() => {});
       await prisma.config.create({ data: { key, value: "synthetic" } });
+      expect(
+        (
+          await prisma.migrationCheckpoint.findUnique({
+            where: { key: "first_application_write" },
+          })
+        )?.key
+      ).toBe("first_application_write");
       expect(firstWrite).toHaveBeenCalledWith(
         "[Migration] First application PostgreSQL mutation observed; SQLite rollback requires reconciliation"
       );

@@ -47,6 +47,10 @@ fi
 
 docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c 'CREATE ROLE pingufunk_qa_import LOGIN' >/dev/null
+docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -c 'CREATE ROLE pingufunk_qa_runtime LOGIN' >/dev/null
+docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -c 'CREATE ROLE pingufunk_qa_denied LOGIN' >/dev/null
 for database in pingufunk_qa pingufunk_qa_fresh; do
   docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
     -c "CREATE DATABASE ${database}" >/dev/null
@@ -60,11 +64,29 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   -c 'GRANT ALL ON ALL TABLES IN SCHEMA public TO pingufunk_qa_import' \
   -c 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pingufunk_qa_import' \
   >/dev/null
+docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa \
+  -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_runtime' \
+  -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_runtime' \
+  -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_qa_runtime' \
+  -c 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "TvdbSeries", "TvdbEpisode", "Download", "Config", "GeneratedRuleset", "TopicCategory", "MigrationCheckpoint" TO pingufunk_qa_runtime' \
+  -c 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pingufunk_qa_runtime' \
+  >/dev/null
+docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa \
+  -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_denied' \
+  -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_denied' \
+  -c 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "Config" TO pingufunk_qa_denied' \
+  -c 'GRANT SELECT ON TABLE "MigrationCheckpoint" TO pingufunk_qa_denied' \
+  >/dev/null
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
-  PINGUFUNK_TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:${port}/pingufunk_qa" \
-  DATABASE_URL="postgresql://postgres@127.0.0.1:${port}/pingufunk_qa" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
   npx vitest run src/lib/db-schema.test.ts scripts/postgresql-runtime.test.ts
+
+PINGUFUNK_REQUIRE_PG_TESTS=1 \
+  PINGUFUNK_TEST_DENIED_URL="postgresql://pingufunk_qa_denied@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_denied@127.0.0.1:${port}/pingufunk_qa" \
+  npx vitest run scripts/postgresql-write-boundary.test.ts
 
 PINGUFUNK_REQUIRE_PG_IMPORT_TESTS=1 \
   PINGUFUNK_TEST_IMPORT_URL="postgresql://pingufunk_qa_import@127.0.0.1:${port}/pingufunk_qa_fresh" \

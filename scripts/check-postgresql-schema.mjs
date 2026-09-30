@@ -19,6 +19,7 @@ try {
     throw new Error("Schema migration not applied");
   }
   await prisma.config.count();
+  await prisma.migrationCheckpoint.count();
   console.log("PostgreSQL schema ready");
 } catch {
   console.error("PostgreSQL schema unavailable or incompatible");

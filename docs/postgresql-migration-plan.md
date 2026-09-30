@@ -63,6 +63,12 @@ alle Tabellen durch das Container-Bootstrap existieren.
   reviewen; nur gegen leere disposable Entwicklungs-/Shadow-Datenbanken.
   Für das echte Ziel die geprüfte Kette mit `prisma migrate deploy` anwenden.
   Kein `migrate reset`, produktives `migrate dev` oder blindes `db push`.
+- Die sechs fachlichen SQLite-Modelle bleiben die Importmenge. Eine zusätzliche
+  PostgreSQL-only-Tabelle `MigrationCheckpoint` hält vor dem ersten App-Write
+  einen dauerhaften, prozessübergreifenden Rollback-Grenzmarker. Ein fehlender
+  Insert-Grant oder PG-Ausfall muss den Fachwrite verhindern; der Importer und
+  die Sequence-Korrektur lehnen einen gesetzten Marker ab. Ein Marker kann nach
+  einem fehlgeschlagenen Fachwrite konservativ zu früh, nie zu spät entstehen.
 - Container-Migrationsrunner mit derselben gepinnten Prisma-Version und Schema-
   version wie das App-Image bereitstellen. Der aktuelle Runner hat keine
   ausdrücklich installierte Prisma-CLI. Nicht behaupten, ein Shell-Aufruf darin
@@ -183,7 +189,9 @@ Resume-Regeln; keine Behauptung eines vollständig atomaren Gesamtcutovers.
 - **Vor dem ersten tatsächlichen Anwendungsschreibvorgang auf PostgreSQL:** neue App stoppen, Ziel erhalten,
   ursprünglichen SQLite-Image-Digest und ursprüngliche Konfiguration mit
   unveränderter Quelle wiederherstellen. Dieser Punkt gilt nur, solange noch
-  keine neuen Anwendungsschreibvorgänge stattfanden. Niemals PG-App-Image an
+  keine neuen Anwendungsschreibvorgänge stattfanden und der persistente
+  `MigrationCheckpoint` leer ist. Ein gesetzter Marker sperrt diesen einfachen
+  Rückweg konservativ auch dann, wenn der Fachwrite später fehlschlug. Niemals PG-App-Image an
   SQLite oder altes SQLite-App-Image an die neue DB anschließen. Proxy/Routing bleibt.
 - **Nach neuen PostgreSQL-Schreibvorgängen:** SQLite-Snapshot ist veraltet.
   Auch automatische Cache-/Settingswrites zählen, nicht erst ein manueller Grab.
