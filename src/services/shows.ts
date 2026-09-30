@@ -1,6 +1,5 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { tvdbCache } from "@/lib/cache";
 import { getSetting } from "@/lib/settings";
 import type { TvdbData } from "@/types";
 import { getShowInfoByTvdbId as getTvdbShow } from "./tvdb";
@@ -114,19 +113,11 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
     return null;
   }
 
-  // Check memory cache first
-  const cacheKey = `show_${tvdbId}`;
-  const cached = tvdbCache.get(cacheKey) as TvdbData | undefined;
-  if (cached) {
-    return cached;
-  }
-
   // 1. Check local shows file first (no API needed)
   await loadLocalShows();
   const localShow = getLocalShow(tvdbId);
   if (localShow) {
     console.log(`[Shows] Found "${localShow.name}" in local database`);
-    tvdbCache.set(cacheKey, localShow);
     return localShow;
   }
 
@@ -137,19 +128,17 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
     const tvdbResult = await getTvdbShow(tvdbId);
     if (tvdbResult) {
       console.log(`[Shows] Found "${tvdbResult.name}" via TVDB`);
-      tvdbCache.set(cacheKey, tvdbResult);
       return tvdbResult;
     }
   }
 
   // 3. Try TMDB if API key is configured
   const tmdbApiKey = await getSetting("api.tmdb.key");
-  if (tmdbApiKey) {
+  if (tmdbApiKey?.startsWith("eyJ")) {
     console.log(`[Shows] Trying TMDB for ID ${tvdbId}`);
     const tmdbResult = await getTmdbShow(tvdbId);
     if (tmdbResult) {
       console.log(`[Shows] Found "${tmdbResult.name}" via TMDB`);
-      tvdbCache.set(cacheKey, tmdbResult);
       return tmdbResult;
     }
   }

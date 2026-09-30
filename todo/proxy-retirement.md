@@ -362,7 +362,7 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Größen-, JSON-/Schema- und Cache-Recovery-Regressionen bestanden. Node
       24.15.0: 305 Tests in 30 Dateien, Lint, Typecheck, Formatcheck und Build
       erfolgreich; kein produktiver Request ausgeführt.
-- [ ] **P05.2 — Kontextgebundene bounded Caches.**
+- [x] **P05.2 — Kontextgebundene bounded Caches.**
       `src/lib/cache.ts`, `src/lib/settings.ts`, die Cache-API und Providerconsumer auf
       begrenzte Positiv-/Negativcaches, Coalescing und passende TTLs bringen.
       Identität, Instanz, Staffel/Folge/Daily, Sprache/Qualität/HLS und relevante
@@ -370,16 +370,28 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Instanz-/Credentialkontexte, Ausfall erzeugt keinen Empty-Success-Eintrag.
       Abnahme: Contextcollision, gleichzeitige Requests, Expiry, Rotation und
       Settingswechsel synthetisch getestet; Speicher/Requests bleiben begrenzt.
-      Zwischenstand 30.09.2026 (noch **nicht** abgenommen): Settings-Lookups
-      haben 256 LRU-Einträge, kurze Negativ-TTL und Single-Flight mit
-      generationensicherer Invalidierung; Cache-TTLs sind begrenzt und `0`
-      deaktiviert Speicherung. Mediathek-RSS/API-Schlüssel enthalten einen
-      nicht umkehrbar ausgegebenen Hash aus Instanz-, Provider-, Credential-
-      und Matching-Kontext; gleichzeitige identische Suchläufe werden nur
-      während der Ausführung zusammengelegt. Tests für Rotation, Expiry und
-      Coalescing bestanden. Noch offen: die anderen Metadaten-Cache-Owner,
-      deren persistierte Quellkollisionen, Negativfälle und Cache-API vollständig
-      prüfen; erst dann P05.2 schließen.
+      Abgenommen am 30.09.2026: Settings-Lookups haben 256 LRU-Einträge,
+      kurze Negativ-TTL und Single-Flight mit generationensicherer
+      Invalidierung; Such-/Metadaten-TTLs sind begrenzt und `0` deaktiviert
+      Speicherung. Mediathek-RSS/API-Schlüssel binden Instanz, Provider,
+      Credentials, Matching, Sprache, Qualität und HLS; identische Suchläufe
+      werden nur während der Ausführung zusammengelegt. TVDB-/TMDB-Metadaten
+      haben getrennte, gehashte Schlüssel aus Quelle, ID, DB-Instanz,
+      Credentials und Invalidierungsgeneration, maximal 1.000 positive bzw.
+      256 definitive negative Einträge und 128 gleichzeitig laufende
+      Metadaten-Requests. Bestätigte Misses laufen spätestens nach fünf
+      Minuten ab; 5xx, Schemafehler und unvollständige Staffeln werden nicht
+      als leerer Erfolg gespeichert. Das bisherige quellübergreifende
+      `TvdbSeries`/`TvdbEpisode`-Schema wird nicht mehr als aktiver Cache
+      verwendet: bestehende Zeilen bleiben als historische Migrationsdaten
+      erhalten, auch bei `DELETE /api/cache`. Das bedeutet bewusst keinen
+      Offline-Fallback aus diesen nicht herkunftsgebundenen Altzeilen.
+      Synthetische Tests prüfen Kontextkollision, Coalescing, Kapazität,
+      Ablauf, Rotation, Fehlerwiederholung und Cache-API. 345 Tests,
+      Lint, Typecheck, Formatcheck und Build bestanden; Cache-/System-Tab,
+      Löschdialog und Erfolgsmeldung wurden gegen einen isolierten
+      Baseline-Checkout desktop-visuell verglichen, Konsole ohne Fehler.
+      Keine produktive Datenbank oder Laufzeit wurde verändert.
 - [x] **P05.3 — Eine serverseitige Secret-/Base-URL-Grenze.**
       `src/lib/settings.ts`, `src/lib/settings-redaction.ts`, Settings-API/-UI
       einschließlich der bisherigen SRF-Maskierung,

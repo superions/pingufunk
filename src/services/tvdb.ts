@@ -1,5 +1,10 @@
-import { prisma } from "@/lib/db";
-import { tvdbCache } from "@/lib/cache";
+import {
+  cacheMetadataMiss,
+  coalesceMetadata,
+  hasMetadataMiss,
+  metadataCacheKey,
+  tvdbCache,
+} from "@/lib/cache";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { getSettings } from "@/lib/settings";
 import { buildTvdbLoginPayload } from "@/lib/tvdb-auth";
@@ -81,43 +86,25 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
     return null;
   }
 
-  // Check memory cache first
-  const cacheKey = `tvdb_${tvdbId}`;
+  const settings = await getSettings(["api.tvdb.key", "api.tvdb.pin"]);
+  if (!buildTvdbLoginPayload(settings["api.tvdb.key"], settings["api.tvdb.pin"])) return null;
+  const cacheKey = metadataCacheKey("tvdb-series", tvdbId, [
+    settings["api.tvdb.key"],
+    settings["api.tvdb.pin"],
+  ]);
   const cached = tvdbCache.get(cacheKey) as TvdbData | undefined;
   if (cached) {
     return cached;
   }
 
-  // Check database cache
-  const dbSeries = await prisma.tvdbSeries.findUnique({
-    where: { id: tvdbId },
-    include: { episodes: true },
-  });
+  if (hasMetadataMiss(cacheKey)) return null;
 
-  if (dbSeries && new Date() < dbSeries.expiresAt) {
-    const tvdbData: TvdbData = {
-      id: dbSeries.id,
-      name: dbSeries.name,
-      germanName: dbSeries.germanName,
-      aliases: dbSeries.aliases ? JSON.parse(dbSeries.aliases) : [],
-      episodes: dbSeries.episodes.map((ep) => ({
-        name: ep.name || "",
-        aired: ep.aired,
-        runtime: ep.runtime,
-        seasonNumber: ep.seasonNumber,
-        episodeNumber: ep.episodeNumber,
-      })),
-    };
-
-    tvdbCache.set(cacheKey, tvdbData);
-    return tvdbData;
-  }
-
-  // Fetch from TVDB API
-  return fetchAndCacheSeriesData(tvdbId);
+  return coalesceMetadata(cacheKey, () => fetchAndCacheSeriesData(tvdbId, cacheKey)).catch(
+    () => null
+  );
 }
 
-async function fetchAndCacheSeriesData(tvdbId: number): Promise<TvdbData | null> {
+async function fetchAndCacheSeriesData(tvdbId: number, cacheKey: string): Promise<TvdbData | null> {
   const token = await getToken();
   if (!token) {
     return null;
@@ -133,6 +120,12 @@ async function fetchAndCacheSeriesData(tvdbId: number): Promise<TvdbData | null>
         },
       }
     );
+
+    if (response.status === 404) {
+      cacheMetadataMiss(cacheKey);
+      return null;
+    }
+    if (!response.ok) return null;
 
     const data = await response.json();
 
@@ -155,26 +148,6 @@ async function fetchAndCacheSeriesData(tvdbId: number): Promise<TvdbData | null>
         name: alias.name,
       }));
 
-    // Calculate cache expiry based on activity
-    const now = new Date();
-    const lastUpdated = series.lastUpdated ? new Date(series.lastUpdated) : new Date("1970-01-01");
-    const nextAired = series.nextAired ? new Date(series.nextAired) : new Date("1970-01-01");
-    const lastAired = series.lastAired ? new Date(series.lastAired) : new Date("1970-01-01");
-
-    let cacheExpiry = new Date();
-    const daysDiff = (d1: Date, d2: Date) =>
-      Math.abs(d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24);
-
-    if (
-      daysDiff(lastUpdated, now) < 7 ||
-      (nextAired.getTime() > 0 && daysDiff(nextAired, now) < 6) ||
-      (lastAired.getTime() > 0 && daysDiff(lastAired, now) < 3)
-    ) {
-      cacheExpiry.setDate(cacheExpiry.getDate() + 2);
-    } else {
-      cacheExpiry.setDate(cacheExpiry.getDate() + 6);
-    }
-
     // Map episodes
     const episodes: TvdbEpisode[] = (series.episodes || []).map(
       (ep: {
@@ -192,50 +165,6 @@ async function fetchAndCacheSeriesData(tvdbId: number): Promise<TvdbData | null>
       })
     );
 
-    // Store in database
-    await prisma.$transaction(async (tx) => {
-      // Delete existing data
-      await tx.tvdbEpisode.deleteMany({ where: { seriesId: tvdbId } });
-      await tx.tvdbSeries.deleteMany({ where: { id: tvdbId } });
-
-      // Insert series
-      await tx.tvdbSeries.create({
-        data: {
-          id: tvdbId,
-          name: series.name,
-          germanName: germanName,
-          slug: series.slug || null,
-          firstAired: series.firstAired ? new Date(series.firstAired) : null,
-          aliases: JSON.stringify(germanAliases),
-          expiresAt: cacheExpiry,
-        },
-      });
-
-      // Insert episodes in batch
-      const episodesData = (series.episodes || []).map(
-        (ep: {
-          id: number;
-          name?: string;
-          aired?: string;
-          runtime?: number;
-          seasonNumber: number;
-          number: number;
-        }) => ({
-          id: ep.id,
-          seriesId: tvdbId,
-          name: ep.name || "",
-          aired: ep.aired ? new Date(ep.aired) : null,
-          runtime: ep.runtime || null,
-          seasonNumber: ep.seasonNumber,
-          episodeNumber: ep.number,
-        })
-      );
-
-      if (episodesData.length > 0) {
-        await tx.tvdbEpisode.createMany({ data: episodesData });
-      }
-    });
-
     const tvdbData: TvdbData = {
       id: tvdbId,
       name: series.name,
@@ -244,8 +173,6 @@ async function fetchAndCacheSeriesData(tvdbId: number): Promise<TvdbData | null>
       episodes: episodes,
     };
 
-    // Store in memory cache
-    const cacheKey = `tvdb_${tvdbId}`;
     tvdbCache.set(cacheKey, tvdbData);
 
     return tvdbData;

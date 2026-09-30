@@ -5,6 +5,7 @@ import {
   type MediathekQueryOptions,
 } from "@/lib/mediathek-client";
 import { createHash } from "node:crypto";
+import { cacheContextEpoch } from "@/lib/cache";
 import { getSetting } from "@/lib/settings";
 import { LANGUAGE_POLICY_SETTING_KEY, readLanguagePolicy } from "@/lib/language-policy";
 import { srfProvider } from "@/providers/srf";
@@ -35,7 +36,7 @@ export async function searchCacheContext(): Promise<string> {
   ];
   const values = await Promise.all(keys.map(getSetting));
   return createHash("sha256")
-    .update(JSON.stringify([process.env.DATABASE_URL ?? null, values]))
+    .update(JSON.stringify([cacheContextEpoch(), process.env.DATABASE_URL ?? null, values]))
     .digest("hex")
     .slice(0, 24);
 }

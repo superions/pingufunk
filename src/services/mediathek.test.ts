@@ -21,6 +21,7 @@ vi.mock("@/lib/settings", () => ({
   getMinDurationSeconds: vi.fn().mockResolvedValue(300),
 }));
 vi.mock("@/lib/cache", () => ({
+  cacheContextEpoch: () => 0,
   mediathekCache: {
     get: vi.fn((key: string) => mediathekMocks.cacheEntries.get(key)),
     set: vi.fn((key: string, value: { response?: string; results?: ApiResultItem[] }) =>

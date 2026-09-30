@@ -32,8 +32,8 @@ vi.mock("@/lib/settings", () => ({
 }));
 vi.mock("@/lib/cache", () => ({
   clearTTLCache: vi.fn(),
+  clearMetadataCaches: vi.fn(),
   mediathekCache: { clear: vi.fn() },
-  tvdbCache: { clear: vi.fn() },
   rulesetsCache: { clear: vi.fn() },
 }));
 vi.mock("@/services/tvdb", () => ({ clearTvdbTokenCache: vi.fn() }));

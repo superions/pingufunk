@@ -1,5 +1,6 @@
 import { LRUCache } from "lru-cache";
 import { prisma } from "@/lib/db";
+import { createHash } from "node:crypto";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CacheValue = Record<string, any>;
@@ -75,7 +76,7 @@ export function clearTTLCache(): void {
   cachedMetadataTTL = null;
   lastTTLFetch = 0;
   mediathekCache.clear();
-  tvdbCache.clear();
+  clearMetadataCaches();
 }
 
 // Cache with custom TTL stored per entry
@@ -132,6 +133,67 @@ export const mediathekCache = new DynamicTTLCache(500, getSearchTTL);
 
 // Cache for TVDB data (configurable TTL)
 export const tvdbCache = new DynamicTTLCache(1000, getMetadataTTL);
+
+// Only definitive provider misses belong here. Authentication/network failures
+// remain retryable and never become an empty-success cache entry.
+export const metadataMissCache = new LRUCache<string, { expiresAt: number }>({ max: 256 });
+
+export function hasMetadataMiss(key: string): boolean {
+  const entry = metadataMissCache.get(key);
+  if (!entry) return false;
+  if (Date.now() < entry.expiresAt) return true;
+  metadataMissCache.delete(key);
+  return false;
+}
+
+export function cacheMetadataMiss(key: string): void {
+  const ttlMs = Math.min(getMetadataTTL() * 1000, 5 * 60 * 1000);
+  if (ttlMs > 0) metadataMissCache.set(key, { expiresAt: Date.now() + ttlMs });
+}
+
+const metadataInFlight = new Map<string, Promise<unknown>>();
+const MAX_METADATA_IN_FLIGHT = 128;
+let cacheEpoch = 0;
+
+export class MetadataConcurrencyError extends Error {
+  constructor() {
+    super("Metadata request capacity exceeded");
+  }
+}
+
+export function cacheContextEpoch(): number {
+  return cacheEpoch;
+}
+
+/** Cache keys bind the provider, logical identity, DB instance and credentials. */
+export function metadataCacheKey(source: string, identity: unknown, context: unknown): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([cacheEpoch, source, identity, process.env.DATABASE_URL ?? null, context])
+    )
+    .digest("hex");
+}
+
+export function coalesceMetadata<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const pending = metadataInFlight.get(key);
+  if (pending) return pending as Promise<T>;
+  if (metadataInFlight.size >= MAX_METADATA_IN_FLIGHT) {
+    return Promise.reject(new MetadataConcurrencyError());
+  }
+  const promise = load().finally(() => {
+    if (metadataInFlight.get(key) === promise) metadataInFlight.delete(key);
+  });
+  metadataInFlight.set(key, promise);
+  return promise;
+}
+
+export function clearMetadataCaches(): void {
+  cacheEpoch++;
+  tvdbCache.clear();
+  metadataMissCache.clear();
+  // Keep old in-flight entries counted until they settle; their epoch-bound
+  // keys can no longer be consumed after this invalidation.
+}
 
 // Cache for rulesets (1 hour TTL - not configurable)
 export const rulesetsCache = new LRUCache<string, CacheValue>({

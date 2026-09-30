@@ -1,5 +1,10 @@
-import { prisma } from "@/lib/db";
-import { tvdbCache } from "@/lib/cache";
+import {
+  cacheMetadataMiss,
+  coalesceMetadata,
+  hasMetadataMiss,
+  metadataCacheKey,
+  tvdbCache,
+} from "@/lib/cache";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { getSetting } from "@/lib/settings";
 import type { TvdbData, TvdbEpisode, TmdbMovieData } from "@/types";
@@ -73,42 +78,23 @@ export async function getShowInfoByTvdbId(tvdbId: number): Promise<TvdbData | nu
     return null;
   }
 
-  // Check memory cache first
-  const cacheKey = `tmdb_${tvdbId}`;
+  const cacheKey = metadataCacheKey("tmdb-series", tvdbId, apiKey);
   const cached = tvdbCache.get(cacheKey) as TvdbData | undefined;
   if (cached) {
     return cached;
   }
 
-  // Check database cache
-  const dbSeries = await prisma.tvdbSeries.findUnique({
-    where: { id: tvdbId },
-    include: { episodes: true },
-  });
-
-  if (dbSeries && new Date() < dbSeries.expiresAt) {
-    const tvdbData: TvdbData = {
-      id: dbSeries.id,
-      name: dbSeries.name,
-      germanName: dbSeries.germanName,
-      aliases: dbSeries.aliases ? JSON.parse(dbSeries.aliases) : [],
-      episodes: dbSeries.episodes.map((ep) => ({
-        name: ep.name || "",
-        aired: ep.aired,
-        runtime: ep.runtime,
-        seasonNumber: ep.seasonNumber,
-        episodeNumber: ep.episodeNumber,
-      })),
-    };
-
-    tvdbCache.set(cacheKey, tvdbData);
-    return tvdbData;
-  }
-
-  return fetchAndCacheSeriesData(tvdbId, apiKey);
+  if (hasMetadataMiss(cacheKey)) return null;
+  return coalesceMetadata(cacheKey, () => fetchAndCacheSeriesData(tvdbId, apiKey, cacheKey)).catch(
+    () => null
+  );
 }
 
-async function fetchAndCacheSeriesData(tvdbId: number, apiKey: string): Promise<TvdbData | null> {
+async function fetchAndCacheSeriesData(
+  tvdbId: number,
+  apiKey: string,
+  cacheKey: string
+): Promise<TvdbData | null> {
   try {
     console.log(`[TMDB] Looking up TVDB ID ${tvdbId}`);
     const headers = getAuthHeaders(apiKey);
@@ -122,7 +108,7 @@ async function fetchAndCacheSeriesData(tvdbId: number, apiKey: string): Promise<
     }
 
     const findData: TmdbFindResult = await findResponse.json();
-    return processShowData(tvdbId, findData, apiKey);
+    return processShowData(tvdbId, findData, apiKey, cacheKey);
   } catch {
     console.error("[TMDB] Error fetching data");
     return null;
@@ -132,10 +118,13 @@ async function fetchAndCacheSeriesData(tvdbId: number, apiKey: string): Promise<
 async function processShowData(
   tvdbId: number,
   findData: TmdbFindResult,
-  apiKey: string
+  apiKey: string,
+  cacheKey: string
 ): Promise<TvdbData | null> {
-  if (!findData.tv_results || findData.tv_results.length === 0) {
+  if (!Array.isArray(findData.tv_results)) return null;
+  if (findData.tv_results.length === 0) {
     console.log(`[TMDB] No show found for TVDB ID ${tvdbId}`);
+    cacheMetadataMiss(cacheKey);
     return null;
   }
 
@@ -153,6 +142,7 @@ async function processShowData(
   }
 
   const details: TmdbTvDetails = await detailsResponse.json();
+  if (!Array.isArray(details.seasons)) return null;
 
   // Prefer a real TMDB "de" translation; but when none is populated (common -
   // translations aren't always filled in), fall back to original_name rather
@@ -179,56 +169,26 @@ async function processShowData(
       const seasonUrl = getApiUrl(`/tv/${tmdbId}/season/${season.season_number}?language=de-DE`);
       const seasonResponse = await fetchWithRetry(seasonUrl, { headers });
 
-      if (seasonResponse.ok) {
-        const seasonData: TmdbSeasonDetails = await seasonResponse.json();
+      if (!seasonResponse.ok) return null;
+      const seasonData: TmdbSeasonDetails = await seasonResponse.json();
+      if (!Array.isArray(seasonData.episodes)) return null;
 
-        for (const ep of seasonData.episodes) {
-          episodes.push({
-            name: ep.name || "",
-            aired: ep.air_date ? new Date(ep.air_date) : null,
-            runtime: ep.runtime || null,
-            seasonNumber: ep.season_number,
-            episodeNumber: ep.episode_number,
-          });
-        }
+      for (const ep of seasonData.episodes) {
+        episodes.push({
+          name: ep.name || "",
+          aired: ep.air_date ? new Date(ep.air_date) : null,
+          runtime: ep.runtime || null,
+          seasonNumber: ep.season_number,
+          episodeNumber: ep.episode_number,
+        });
       }
     } catch {
       console.error(`[TMDB] Error fetching season ${season.season_number}`);
+      return null;
     }
   }
 
   console.log(`[TMDB] Loaded ${episodes.length} episodes for "${details.name}"`);
-
-  const cacheExpiry = new Date();
-  cacheExpiry.setDate(cacheExpiry.getDate() + 7);
-
-  await prisma.$transaction(async (tx) => {
-    await tx.tvdbEpisode.deleteMany({ where: { seriesId: tvdbId } });
-    await tx.tvdbSeries.deleteMany({ where: { id: tvdbId } });
-
-    await tx.tvdbSeries.create({
-      data: {
-        id: tvdbId,
-        name: details.name,
-        germanName: germanName,
-        aliases: JSON.stringify([]),
-        expiresAt: cacheExpiry,
-      },
-    });
-
-    for (const ep of episodes) {
-      await tx.tvdbEpisode.create({
-        data: {
-          seriesId: tvdbId,
-          name: ep.name,
-          aired: ep.aired,
-          runtime: ep.runtime,
-          seasonNumber: ep.seasonNumber,
-          episodeNumber: ep.episodeNumber,
-        },
-      });
-    }
-  });
 
   const tvdbData: TvdbData = {
     id: tvdbId,
@@ -238,7 +198,6 @@ async function processShowData(
     episodes: episodes,
   };
 
-  const cacheKey = `tmdb_${tvdbId}`;
   tvdbCache.set(cacheKey, tvdbData);
 
   return tvdbData;
@@ -280,13 +239,25 @@ export async function getMovieInfoByTmdbId(tmdbId: number): Promise<TmdbMovieDat
   }
 
   // Check memory cache first
-  const cacheKey = `tmdb_movie_${tmdbId}`;
+  const cacheKey = metadataCacheKey("tmdb-movie", tmdbId, apiKey);
   const cached = tvdbCache.get(cacheKey) as TmdbMovieData | undefined;
   if (cached) {
     console.log(`[TMDB] Movie cache hit for TMDB ID ${tmdbId}`);
     return cached;
   }
 
+  if (hasMetadataMiss(cacheKey)) return null;
+
+  return coalesceMetadata(cacheKey, () => fetchAndCacheMovie(tmdbId, apiKey, cacheKey)).catch(
+    () => null
+  );
+}
+
+async function fetchAndCacheMovie(
+  tmdbId: number,
+  apiKey: string,
+  cacheKey: string
+): Promise<TmdbMovieData | null> {
   try {
     console.log(`[TMDB] Looking up movie by TMDB ID ${tmdbId}`);
     const headers = getAuthHeaders(apiKey);
@@ -297,6 +268,7 @@ export async function getMovieInfoByTmdbId(tmdbId: number): Promise<TmdbMovieDat
 
     if (!detailsResponse.ok) {
       console.error(`[TMDB] Movie details request failed: ${detailsResponse.status}`);
+      if (detailsResponse.status === 404) cacheMetadataMiss(cacheKey);
       return null;
     }
 
@@ -306,11 +278,9 @@ export async function getMovieInfoByTmdbId(tmdbId: number): Promise<TmdbMovieDat
     const germanUrl = getApiUrl(`/movie/${tmdbId}?language=de-DE`);
     const germanResponse = await fetchWithRetry(germanUrl, { headers });
 
-    let germanTitle = details.title; // fallback to original
-    if (germanResponse.ok) {
-      const germanDetails: TmdbMovieDetails = await germanResponse.json();
-      germanTitle = germanDetails.title || details.title;
-    }
+    if (!germanResponse.ok) return null;
+    const germanDetails: TmdbMovieDetails = await germanResponse.json();
+    const germanTitle = germanDetails.title || details.title;
 
     const movieData: TmdbMovieData = {
       tmdbId: details.id,
@@ -363,13 +333,26 @@ export async function searchMovieByTitle(
   }
 
   // Check memory cache first
-  const cacheKey = `tmdb_movie_search_${title}_${year || ""}`;
+  const cacheKey = metadataCacheKey("tmdb-movie-search", [title, year], apiKey);
   const cached = tvdbCache.get(cacheKey) as TmdbMovieData | undefined;
   if (cached) {
     console.log(`[TMDB] Movie search cache hit for "${title}" (${year})`);
     return cached;
   }
 
+  if (hasMetadataMiss(cacheKey)) return null;
+
+  return coalesceMetadata(cacheKey, () =>
+    fetchAndCacheMovieSearch(title, year, apiKey, cacheKey)
+  ).catch(() => null);
+}
+
+async function fetchAndCacheMovieSearch(
+  title: string,
+  year: number | null | undefined,
+  apiKey: string,
+  cacheKey: string
+): Promise<TmdbMovieData | null> {
   try {
     console.log(`[TMDB] Searching movie by title: "${title}"${year ? ` (${year})` : ""}`);
     const headers = getAuthHeaders(apiKey);
@@ -389,8 +372,10 @@ export async function searchMovieByTitle(
 
     const searchData: TmdbSearchMovieResult = await searchResponse.json();
 
-    if (!searchData.results || searchData.results.length === 0) {
+    if (!Array.isArray(searchData.results)) return null;
+    if (searchData.results.length === 0) {
       console.log(`[TMDB] No movie found for "${title}"`);
+      cacheMetadataMiss(cacheKey);
       return null;
     }
 
@@ -428,13 +413,25 @@ export async function getMovieInfoByImdbId(imdbId: string): Promise<TmdbMovieDat
   }
 
   // Check memory cache first
-  const cacheKey = `tmdb_movie_imdb_${imdbId}`;
+  const cacheKey = metadataCacheKey("tmdb-movie-imdb", imdbId, apiKey);
   const cached = tvdbCache.get(cacheKey) as TmdbMovieData | undefined;
   if (cached) {
     console.log(`[TMDB] Movie cache hit for IMDB ID ${imdbId}`);
     return cached;
   }
 
+  if (hasMetadataMiss(cacheKey)) return null;
+
+  return coalesceMetadata(cacheKey, () =>
+    fetchAndCacheMovieByImdbId(imdbId, apiKey, cacheKey)
+  ).catch(() => null);
+}
+
+async function fetchAndCacheMovieByImdbId(
+  imdbId: string,
+  apiKey: string,
+  cacheKey: string
+): Promise<TmdbMovieData | null> {
   try {
     console.log(`[TMDB] Looking up movie by IMDB ID ${imdbId}`);
     const headers = getAuthHeaders(apiKey);
@@ -450,8 +447,10 @@ export async function getMovieInfoByImdbId(imdbId: string): Promise<TmdbMovieDat
 
     const findData: TmdbFindMovieResult = await findResponse.json();
 
-    if (!findData.movie_results || findData.movie_results.length === 0) {
+    if (!Array.isArray(findData.movie_results)) return null;
+    if (findData.movie_results.length === 0) {
       console.log(`[TMDB] No movie found for IMDB ID ${imdbId}`);
+      cacheMetadataMiss(cacheKey);
       return null;
     }
 

@@ -12,8 +12,10 @@ vi.mock("@/lib/fetch-retry", () => ({ fetchWithRetry }));
 vi.mock("@/lib/db", () => ({ prisma: { tvdbSeries: { findUnique } } }));
 
 import { clearTvdbTokenMemoryCache, getShowInfoByTvdbId } from "./tvdb";
+import { clearMetadataCaches } from "@/lib/cache";
 
 beforeEach(() => {
+  clearMetadataCaches();
   clearTvdbTokenMemoryCache();
   settings.key = "first-key";
   settings.pin = "";
@@ -27,6 +29,25 @@ beforeEach(() => {
     }
     return Response.json({ status: "failure", privateMessage: "synthetic-private-provider-body" });
   });
+});
+
+it("briefly caches a confirmed TVDB 404 but retries a transient provider failure", async () => {
+  let seriesRequests = 0;
+  fetchWithRetry.mockImplementation(async (url: string) => {
+    if (url.endsWith("/login")) {
+      return Response.json({ status: "success", data: { token: "synthetic-token" } });
+    }
+    seriesRequests++;
+    return new Response(null, { status: seriesRequests === 1 ? 503 : 404 });
+  });
+
+  expect(await getShowInfoByTvdbId(2002)).toBeNull();
+  expect(await getShowInfoByTvdbId(2002)).toBeNull();
+  expect(await getShowInfoByTvdbId(2002)).toBeNull();
+  expect(seriesRequests).toBe(2);
+  settings.key = "rotated-key";
+  expect(await getShowInfoByTvdbId(2002)).toBeNull();
+  expect(seriesRequests).toBe(3);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -43,5 +64,6 @@ it("rotates TVDB bearer tokens in memory without writing DB tokens or logging re
   expect(series[0][1].headers.Authorization).toBe("Bearer synthetic-token-1");
   expect(series[1][1].headers.Authorization).toBe("Bearer synthetic-token-2");
   expect(fetchWithRetry.mock.calls.every(([url]) => !String(url).includes("first-key"))).toBe(true);
+  expect(findUnique).not.toHaveBeenCalled();
   expect(JSON.stringify(errorLog.mock.calls)).not.toContain("synthetic-private-provider-body");
 });

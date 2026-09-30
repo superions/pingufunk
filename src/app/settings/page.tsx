@@ -182,7 +182,8 @@ export default function SettingsPage() {
         setClearResult({
           show: true,
           success: true,
-          message: `${data.cleared.tvdbSeries} Serien und ${data.cleared.tvdbEpisodes} Episoden gelöscht.`,
+          message:
+            "Temporäre Such- und Metadaten-Caches geleert; historische Datenbankzeilen bleiben erhalten.",
         });
       } else {
         setClearResult({
@@ -662,8 +663,8 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Tipp: &quot;Cache leeren&quot; erzwingt das Neuladen aller Daten bei der
-                    nächsten Anfrage.
+                    Tipp: &quot;Cache leeren&quot; erneuert die temporären Caches bei der nächsten
+                    Anfrage.
                   </p>
                 </CardContent>
               </Card>
@@ -735,11 +736,11 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Gecachte Shows</p>
+                        <p className="text-xs text-muted-foreground">Historische Shows</p>
                         <p className="font-medium">{systemInfo?.database.shows ?? "..."}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Gecachte Episoden</p>
+                        <p className="text-xs text-muted-foreground">Historische Episoden</p>
                         <p className="font-medium">{systemInfo?.database.episodes ?? "..."}</p>
                       </div>
                       <div>
@@ -786,8 +787,8 @@ export default function SettingsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cache leeren?</AlertDialogTitle>
             <AlertDialogDescription>
-              Alle gecachten Daten werden gelöscht und bei der nächsten Anfrage neu geladen. Dies
-              betrifft Mediathek-Suchergebnisse und TVDB-Metadaten.
+              Nur temporäre Such- und Metadaten-Caches werden geleert. Historische
+              Serien-/Episodenzeilen in der Datenbank bleiben erhalten.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -2,7 +2,7 @@ import { clearTokenCache as clearSrfTokenCache } from "@/services/srgssr-api";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { clearSettingsCache, getSetting } from "@/lib/settings";
-import { clearTTLCache, mediathekCache, tvdbCache, rulesetsCache } from "@/lib/cache";
+import { clearTTLCache, clearMetadataCaches, mediathekCache, rulesetsCache } from "@/lib/cache";
 import { isTvdbCredentialSettingKey } from "@/lib/tvdb-auth";
 import { clearTvdbTokenCache } from "@/services/tvdb";
 import {
@@ -58,7 +58,7 @@ function visibleSetting(key: string, value: string): string {
 function invalidateSettingConsumers(keys: string[]): void {
   clearSettingsCache();
   mediathekCache.clear();
-  tvdbCache.clear();
+  clearMetadataCaches();
   rulesetsCache.clear();
   clearSrfTokenCache();
   if (keys.some((key) => key.startsWith("cache."))) clearTTLCache();

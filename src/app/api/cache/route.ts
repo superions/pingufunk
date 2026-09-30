@@ -1,25 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { mediathekCache, tvdbCache, rulesetsCache } from "@/lib/cache";
+import { mediathekCache, clearMetadataCaches, rulesetsCache } from "@/lib/cache";
 
 // DELETE /api/cache - Clear all caches
 export async function DELETE() {
   try {
     // Clear in-memory caches
     mediathekCache.clear();
-    tvdbCache.clear();
+    clearMetadataCaches();
     rulesetsCache.clear();
-
-    // Clear database caches (TVDB series and episodes)
-    const deletedEpisodes = await prisma.tvdbEpisode.deleteMany({});
-    const deletedSeries = await prisma.tvdbSeries.deleteMany({});
 
     return NextResponse.json({
       success: true,
       cleared: {
-        memoryCaches: ["mediathekCache", "tvdbCache", "rulesetsCache"],
-        tvdbSeries: deletedSeries.count,
-        tvdbEpisodes: deletedEpisodes.count,
+        memoryCaches: ["mediathekCache", "metadataCaches", "rulesetsCache"],
+        legacyDatabaseRows: "preserved",
       },
     });
   } catch {
