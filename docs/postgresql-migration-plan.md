@@ -8,7 +8,8 @@ Freigabevertrag: [Phasen-TODOs](../todo/proxy-retirement.md), P11 und P10.
 Keine produktive Migration ausgeführt, keine Deploymentfreigabe.
 
 Der Entwicklungsbranch unterstützt nach P11.1 wieder **beide Backendtypen**:
-SQLite als Default, PostgreSQL nach ausdrücklicher Auswahl. Getrennte Clients,
+Beide Backends sind gleichwertig unterstützt; ohne PG-Konfiguration wird SQLite
+verwendet. Getrennte Clients,
 Migrationen und Container-/Runtimeproben sind in
 [database-backends.md](database-backends.md) beschrieben. Ein fertiger
 PG→SQLite-Rücktransfer ist damit nicht behauptet; weitere PG-Abnahmen bleiben

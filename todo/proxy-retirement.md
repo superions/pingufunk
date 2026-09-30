@@ -11,9 +11,11 @@ erledigte Implementierung.
 ## Gemeinsame Regeln und Abnahme
 
 - PostgreSQL ist für Pingufunks eigene Datenbank optional, nicht erneut eine
-  Servarr-main/log-Migration. SQLite bleibt der Standard für bestehende und
-  neue Installationen; PostgreSQL wird ausdrücklich aktiviert. Pro Installation
-  genau einen Provider verwenden; niemals bei DB-Fehler still wechseln.
+  Servarr-main/log-Migration. SQLite und PostgreSQL sind gleichwertig unterstützte
+  Backends; es gibt keinen fachlich bevorzugten Datenbankstandard. Ohne
+  PostgreSQL-Konfiguration wird SQLite verwendet. Pro Installation genau einen
+  Provider verwenden; unvollständige/widersprüchliche PostgreSQL-Konfiguration
+  und Verbindungsfehler brechen ab, statt still auf SQLite zu wechseln.
 - Bestehende Architektur/Owner nutzen, kein neuer interner HTTP/XML-Proxy.
   Shipped IDs, RSS/NZB-Identität, öffentliche Kategorien, Queue/History,
   Konfiguration und Pfade erhalten bzw. explizit kompatibel überführen.
@@ -453,7 +455,7 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
 
 ## Phase P11 — Backendwahl herstellen und PostgreSQL-Unterstützung absichern
 
-Ergebnis: SQLite als Standard, ausdrücklich wählbares PostgreSQL,
+Ergebnis: gleichwertiger SQLite-/PostgreSQL-Support; ohne PG-Konfiguration SQLite,
 reproduzierbarer Importer und geprüfte App-Rollbacks. Abhängigkeit P05;
 O01/R9/R10. P11.1 ist der gemeinsame Kompatibilitäts-Schritt vor P06;
 P11.2–P11.8 sind Abnahmegates für die PG-Option, P11.9 bleibt optional.
@@ -500,7 +502,7 @@ ausschließlich P10.3–P10.5.
       Starts führen kein DDL/Import aus. Produktions-Primary, PostgreSQL-
       Version, Rolle und gewählter Transport/TLS bleiben für einen PG-Cutover
       P11.3-/P10-Gates; HAProxy ist keine Vorgabe.
-      Dual-Backend-Abnahme 30.09.2026: SQLite als Default, ausdrücklich gewähltes
+      Dual-Backend-Abnahme 30.09.2026: SQLite ohne PG-Konfiguration, konfiguriertes
       PostgreSQL; beide generierten Prisma-6.19.2-Clients. Gemeinsamer Resolver,
       lokale Start-/Migrationswrapper und providergetrennte Schema-Readiness;
       kein automatischer Import/DDL/Fallback. Historisches SQLite-Bootstrap
@@ -809,6 +811,17 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Keine globale Proxy-20-Minutenheuristik übernehmen. Die ausdrückliche
       Freigabe erweitert den Suchumfang, ersetzt aber nicht API-Verifikation,
       konkrete Laufzeitpolitik oder die Abnahme des Consumers in P06.2/P06.3.
+      Präzisierung des Nutzers 30.09.2026: Sonarr ergänzt zunächst nur fehlende
+      Episoden; vorhandene lokale/TVDB-/TMDB-Angaben nicht ersetzen. Widersprüche
+      verhindern automatische Zuordnung. Dauerprüfung konfigurierbar und soweit
+      verfügbar anhand belegter Episodenlaufzeit; kurze Episoden nicht pauschal
+      ausschließen, fehlende Laufzeit nicht automatisch als bestanden werten.
+      RSS-Fallback ausschließlich für überwachte Serien, mit begrenztem
+      Aktualitätsbereich und Abfragebudget; keine vollständige Bibliothekssuche
+      bei jedem RSS-Abruf. Konkrete Einheiten, Grenzwerte/Toleranzen und Budgets
+      technisch begründen, dokumentieren und mit kurzen/fehlenden Laufzeiten,
+      unüberwachten Serien und Grenzfällen regressionsprüfen. Die Fachentscheidungen
+      sind geklärt; API-Verifikation und technische Vertragsabnahme bleiben offen.
 - [ ] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
       Neuen Sonarradapter in `shows.ts`/TV-Suchowner anschließen, P05-Secret-/
       Budget-/Cachegrundlagen nutzen, nur GET und Base-URL-Unterpfade. Serien-ID,
@@ -874,6 +887,15 @@ P07; B01/B11–B13, A5, R1/R2.
       Entscheidung einholen; Proxy-60-Minutenheuristik kein globaler Default.
       Abnahme: accountfreie begrenzte Strategie mit sicheren Ausfallsemantiken,
       kein garantierter fremder APIvertrag und kein neuer Kontozwang behauptet.
+      Nutzerentscheidung 30.09.2026: Vorhandene lokale Radarr-Instanz als
+      accountfreien Metadatenanbieter bevorzugen. Öffentlicher Dienst nur optional
+      nach belastbarer Schnittstellen-/Terms-/Datenschutzprüfung, kein zwingender
+      zweiter Anbieter und kein neuer Kontozwang. Kurzfilme nicht pauschal durch
+      eine 60-Minuten-Grenze ausschließen; belegte Laufzeit und konfigurierbare
+      Dauerprüfung nutzen, fehlende Laufzeit nicht als automatisch bestanden
+      behandeln. P03-Sprach-/Variantenentscheidungen gelten auch hier, nicht
+      über Kanal/Domain eine Sprache oder AD-Fassung erfinden. Radarr-API-Vertrag
+      und sichere Consumer-Abnahme bleiben technische Gates.
 - [ ] **P08.2 — Ein kanonischer Filmkontext über alle Suchrouten.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts` und
       `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}` gemeinsam
@@ -909,6 +931,17 @@ Abhängigkeit P08; B10/R7.
       Producer/Consumervertrag mit realen Units/Evidenz, alte NZBs weiter lesbar;
       kein Voll-Download als Voraussetzung jeder Suche und kein erfundener
       Audio-/1080p-Nachweis allein aus Quelllabeln.
+      Nutzerentscheidung 30.09.2026: Alte NZBs/Jobs ohne erwartete Medienwerte
+      dürfen nach grundlegender lokaler Medienprüfung weiterhin completed werden,
+      sofern Audio/Video intakt und Download/Mux nachweislich abgeschlossen sind.
+      Nicht vorhandene Soll-Laufzeit-/Sprach-/Auflösungswerte bleiben unbekannt;
+      deren Nachweis weder behaupten noch als erfüllt speichern. Vorhandene
+      Erwartungen weiter prüfen. Neue Jobs erhalten strengere evidenzbasierte
+      Prüfungen; fehlende neue Pflichtwerte nicht durch Legacy-Einstufung umgehen.
+      Legacy-/Neu-Unterscheidung und Probevertrag in Producer, Parser, Persistenz
+      und Worker gemeinsam festlegen und positiv/negativ testen. P09.2 muss bei
+      evidenzarmen Altjobs echte Defekte ablehnen, nicht unbekannte Sollwerte als
+      bewiesene Samples oder umgekehrt jeden Legacy-Job pauschal als failed werten.
 - [ ] **P09.2 — Fertigmeldung nur nach verifiziertem Medienabschluss.**
       Manager-/FFmpeg-/yt-dlp-Owner nach Download/Mux per lokaler Probe tatsächliche
       Dauer, Audio/Video, Sprache soweit beweisbar, Auflösung und Abschluss prüfen.

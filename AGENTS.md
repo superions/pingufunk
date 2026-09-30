@@ -3,8 +3,9 @@
 ## Purpose
 
 This fork aims to replace an external Sonarr/Radarr compatibility proxy with
-native, tested RundfunkArr fixes and optional integrations. **SQLite remains a
-supported backend; PostgreSQL is an optional, explicitly selected backend.** Read
+native, tested RundfunkArr fixes and optional integrations. **SQLite and PostgreSQL
+are equally supported; without PostgreSQL configuration use SQLite. Neither is
+a preferred product backend.** Read
 `todo/proxy-retirement.md` (the sole executable phased contract),
 `docs/proxy-retirement-plan.md`, its review and `docs/postgresql-migration-plan.md`
 before changing the relevant behavior. Re-check upstream before implementing a
@@ -31,6 +32,8 @@ request determines scope; a plan or skill never supplies deployment permission.
 - Support a deliberate SQLite or PostgreSQL selection per installation. Never
   automatically switch providers after a connection failure or create a second
   database implicitly. A PostgreSQL cutover is optional and separately approved.
+  Missing PostgreSQL configuration selects SQLite; invalid/incomplete PostgreSQL
+  configuration does not permit fallback.
 - Maintain provider-specific, append-only migration chains and compatible
   generated clients. Preserve historical SQLite SQL; never replay it against
   PostgreSQL or copy its `_prisma_migrations` ledger into the target. Review both
