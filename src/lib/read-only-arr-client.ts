@@ -1,5 +1,6 @@
 import { externalCredential, CredentialConfigurationError } from "./credential-settings";
-import { fetchWithRetry, type RetryOptions } from "./fetch-retry";
+import { fetchWithRetry, requestDeadline, type RetryOptions } from "./fetch-retry";
+import { readBoundedProviderJson } from "./bounded-provider-json";
 
 export class ArrRequestError extends Error {
   constructor() {
@@ -45,16 +46,53 @@ export async function fetchReadOnlyArr(
 ): Promise<Response> {
   const credential = await externalCredential(credentialEnvName);
   if (!credential.configured || !credential.value) throw new CredentialConfigurationError();
+  return fetchArrResponse(baseUrl, route, credential.value, query, budget);
+}
+
+async function fetchArrResponse(
+  baseUrl: string,
+  route: string,
+  credential: string,
+  query?: URLSearchParams,
+  budget?: RetryOptions
+): Promise<Response> {
   const url = arrApiUrl(baseUrl, route, query);
   try {
     const response = await fetchWithRetry(
       url,
-      { method: "GET", headers: { "X-Api-Key": credential.value } },
+      { method: "GET", headers: { "X-Api-Key": credential } },
       budget
     );
-    if (!response.ok) throw new ArrRequestError();
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
+      throw new ArrRequestError();
+    }
     return response;
   } catch {
     throw new ArrRequestError();
   }
+}
+
+const MAX_ARR_JSON_BYTES = 5 * 1024 * 1024;
+
+/** A captured credential makes one multi-request operation rotation-consistent. */
+export function createReadOnlyArrJsonClient(baseUrl: string, credential: string) {
+  if (!credential.trim()) throw new CredentialConfigurationError();
+  arrApiUrl(baseUrl, "api/v3/system/status");
+  return async (
+    route: string,
+    query?: URLSearchParams,
+    budget: RetryOptions = {}
+  ): Promise<unknown> => {
+    const deadlineAt = requestDeadline(budget);
+    const response = await fetchArrResponse(baseUrl, route, credential, query, {
+      ...budget,
+      deadlineAt,
+    });
+    try {
+      return await readBoundedProviderJson(response, deadlineAt, MAX_ARR_JSON_BYTES);
+    } catch {
+      throw new ArrRequestError();
+    }
+  };
 }

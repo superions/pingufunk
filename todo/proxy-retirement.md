@@ -944,6 +944,21 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       total, Budget einschließlich Retry/Folgeseite, Abbruch ohne Teilsnapshot
       und invalidierte spät eintreffende Antworten kausal testen. Bestehende
       RSS-/Validierungsfeeds und die gesamte RSS→NZB→Queue-Kette regressionsprüfen.
+      Teilfortschritt 30.09.2026, keine Abnahme: `HttpRequestBudget` zählt
+      Retries/Unterabfragen gemeinsam (maximal zehn Versuche/15 Sekunden).
+      `createReadOnlyArrJsonClient` hält ein Credential pro Operation fest,
+      verwendet GET/Header/Unterpfad und den gemeinsamen
+      `readBoundedProviderJson`-Owner mit Mediathek. Arr 5 MiB, Mediathek
+      weiterhin 8 MiB, maximal 8.192 nichtleere Chunks, striktes UTF-8;
+      Header-/Body-/Parsezeit gehört zur selben Deadline. Fehlertexte bleiben
+      generisch; Timeout wartet nicht auf eine hängende Streamcancellation.
+      Noch kein Sonarr-Netzconsumer aktiviert und keine neuen UI-Controls;
+      Provider/Cache/Merge, Budgetdurchreichung durch die Suchkette, RSS-
+      Snapshots und Desktop-UI-Abnahme bleiben hier offen. Nebenfund im
+      bestehenden Download-Retry-Test behoben: vorheriger Erfolgstest drainiert
+      seinen asynchronen Workerstart vor dem nächsten negativen Fall; dessen
+      No-Start-/Historyschutz-Assertions unverändert. 457 reguläre Tests, Lint,
+      Typecheck, Format und Build grün; keine realen APIs/DBs/Medien verwendet.
 - [ ] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
       TV-Suche/`newznab.ts` mit vollständigem Episodentitel oder letztem
       Separatorsegment ≥3 Zeichen nur innerhalb gesicherter Serie, Jahr/

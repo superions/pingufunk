@@ -82,13 +82,17 @@ Die genehmigten technischen Startwerte stehen im TODO; keine Sonarr-Zusagen:
 - RSS nur überwachte Serien, UTC-Fenster `[jetzt − 14 Tage, jetzt]`, einstellbar
   1–90 Tage. Snapshot: maximal fünf Serien, 50 Episoden, zehn zusätzliche
   HTTP-Versuche **einschließlich Retries und Status/Inventar** und 15 s gesamte
-  Deadline. Antwortbody lesen/parsen zählt zur Deadline. P05 begrenzt bisher
-  Header-Retries, aber noch keinen geteilten Versuchszähler/Body; P06.2 muss
-  diese Grenze tatsächlich durchsetzen, nicht pro Unterabfrage zurücksetzen.
+  Deadline. Antwortbody lesen/parsen zählt zur Deadline. `HttpRequestBudget`
+  bietet jetzt den geteilten Versuchszähler/Deadline für den GET-JSON-Client;
+  P06.2 muss dasselbe Objekt durch den gesamten künftigen Sonarr-/Suchconsumer
+  reichen, nicht pro Unterabfrage zurücksetzen. Diese Integration ist noch offen.
 - APIarrays sind ungepaginiert: lokal gefilterte Episoden begrenzen, keine
   Serverpagination vortäuschen. Parsercaps 5.000 Serien/20.000 Episoden sind
-  technische Schutzgrenzen, keine Bibliothekssuche oder API-Limits. In P06.2
-  Bodybytes begrenzen; Überschreitung/Abbruch darf keinen Teilsnapshot liefern.
+  technische Schutzgrenzen, keine Bibliothekssuche oder API-Limits. Der gemeinsame
+  JSON-Reader begrenzt Arr-Antworten auf 5 MiB, Mediathek auf weiterhin 8 MiB und
+  beide auf 8.192 nichtleere Chunks; prüft UTF-8 strikt und verwirft Überschreitung/
+  Deadlinefehler. Diese Transportcaps sind keine fremden API-Zusagen.
+  Überschreitung/Abbruch darf keinen Teilsnapshot liefern.
 - Rotierender deterministischer Cursor über überwachte Serien, erst nach
   erfolgreichem Snapshot fortsetzen. Pagination liest denselben Snapshot;
   `total` ist dessen gefilterte Menge. TTL Metadaten zehn Minuten, RSS 60 s.
@@ -105,6 +109,6 @@ bereits bearbeitete Fork-Owner.
 Selbstreview trennt Serien-/Episoden-/Instanz-ID, Minuten/Sekunden, Punkt/Tag,
 Metadaten/Medienbeweis, Array/Seitenvertrag und Entwicklungs-/Betriebsabnahme.
 P06.1 behauptet weder fertig integrierte Suche noch Liveversionsnachweis.
-P06.2 bleibt offen: Client, geteilte Budgets/Bodylimit, Cache/Merge, alle Consumer
+P06.2 bleibt offen: Provider, durchgereichte gemeinsame Budgets, Cache/Merge, alle Consumer
 und persistente Controls mit Desktop-QA. P06.3 bleibt offen: Medien-Schlussfilter
 und RSS→NZB→Queue-Regressionen. Keine Bereitstellung oder Liveabfrage freigegeben.

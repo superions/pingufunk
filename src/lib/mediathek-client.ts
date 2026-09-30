@@ -11,6 +11,7 @@
  * to one implementation removes that whole class of bug.
  */
 import { fetchWithRetry, requestDeadline } from "@/lib/fetch-retry";
+import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import type { ApiResultItem, MediathekApiResponse } from "@/types";
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
@@ -30,52 +31,6 @@ export interface MediathekQueryOptions {
   future?: boolean;
   offset?: number;
   deadlineAt?: number;
-}
-
-async function readBoundedJson(response: Response, deadlineAt: number): Promise<unknown> {
-  const advertisedLength = Number(response.headers.get("content-length"));
-  if (advertisedLength > MAX_RESPONSE_BYTES || !response.body) {
-    throw new Error("Provider response exceeds size limit or has no body");
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const remaining = deadlineAt - Date.now();
-      if (remaining <= 0) throw new Error("Provider response deadline exceeded");
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          void reader.cancel().catch(() => {});
-          reject(new Error("Provider response deadline exceeded"));
-        }, remaining);
-      });
-      const next = await Promise.race([reader.read(), timeout]).finally(() => {
-        if (timer) clearTimeout(timer);
-      });
-      if (next.done) break;
-      size += next.value.byteLength;
-      if (size > MAX_RESPONSE_BYTES) throw new Error("Provider response exceeds size limit");
-      chunks.push(next.value);
-    }
-  } catch (error) {
-    void reader.cancel().catch(() => {});
-    throw error;
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-      // A pending read can release its lock after cancellation settles.
-    }
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return JSON.parse(new TextDecoder().decode(bytes));
 }
 
 /**
@@ -121,7 +76,11 @@ export async function queryMediathekView(
       return null;
     }
 
-    const parsed = (await readBoundedJson(response, deadlineAt)) as MediathekApiResponse;
+    const parsed = (await readBoundedProviderJson(
+      response,
+      deadlineAt,
+      MAX_RESPONSE_BYTES
+    )) as MediathekApiResponse;
     if (parsed?.err || !Array.isArray(parsed?.result?.results)) {
       console.error("[MediathekClient] Invalid or unsuccessful API response");
       return null;

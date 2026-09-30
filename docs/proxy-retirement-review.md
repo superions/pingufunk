@@ -355,3 +355,29 @@ der später gewählten Sonarr-Instanz oder die RSS→NZB→Queue-Abnahme.
 Upstream wurde neu abgerufen: 1b41ebb verbessert TVDB-Suche/Settings, enthält
 keinen Sonarradapter. Die überlappenden Fork-Owner nicht blind durch Merge
 ersetzt. Main, andere Checkouts, Produktivdienste und reale Daten unverändert.
+
+## P06.2-Transportgrundlage und Testisolation (30.09.2026)
+
+Selbstreview des Teilfortschritts; P06.2 bleibt offen. Gemeinsamer getypter
+Versuchszähler mit unverlängerbarer Deadline, GET-JSON-Client mit captured
+Credential und ein gemeinsamer Bodyreader statt zweier unabhängiger Parser.
+Arr-Grenze 5 MiB, Mediathek weiterhin 8 MiB; Byte- und Chunkcaps, striktes UTF-8,
+kontrollierte Cancellation und generische Fehlertexte. Tests prüfen Retrybudget
+über mehrere Calls, erschöpften/abgelaufenen Scope, langsamere Header plus Body,
+stalled/oversized/invalid Responses, UTF-8-Chunkgrenzen und tatsächlichen Abbruch
+eines ansonsten gültigen kleinen JSONs bei zu vielen Chunks. Zeitordnungsprobe
+nutzt Fake-Timer, nicht eine flakey Wallclock-Wette.
+
+Erster Gesamtlauf: 453 Tests grün, ein bestehender Download-Retry-Test fehlgeschlagen.
+Owning-Code ruft den Worker via asynchronem Import auf; der vorherige erfolgreiche
+Retrytest hatte diesen Start nicht drainiert. Dessen Mockcall traf nach dem Reset
+den folgenden Fehlerfall. Korrigiert wird die Isolation mit einer zusätzlichen
+positiven Start-Assertion im Erfolgstest, weder Produktverhalten noch negative
+No-Start-/Historyschutz-Assertion verändert. Anschließend 457 reguläre Tests,
+Lint, Typecheck, Format und Build erfolgreich; nach Umstellung der neuen
+Zeitordnungsprobe separat deren Suite erneut grün. DB-/Schema-/Dependencyinputs
+unverändert; die letzte PG-/Container-Evidenz ist dafür wiederverwendbar.
+
+Noch keine Sonarraktivierung, keine fertige Merge-/RSS-/UI-Integration. Das neue
+Budgetobjekt ist Infrastruktur, kein Beweis, dass jeder künftige Suchcall es schon
+verwendet. Keine Checkbox geschlossen, keine Produktivdienste oder Daten berührt.

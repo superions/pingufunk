@@ -5,6 +5,7 @@ export interface RetryOptions {
   maxDelayMs?: number;
   deadlineAt?: number;
   timeoutMs?: number;
+  requestBudget?: HttpRequestBudget;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -13,6 +14,39 @@ const MAX_TIMEOUT_MS = 30_000;
 export class FetchBudgetError extends Error {
   constructor() {
     super("Provider request deadline exceeded");
+  }
+}
+
+/** One deadline and attempt counter shared across a complete provider operation. */
+export class HttpRequestBudget {
+  readonly deadlineAt: number;
+  private remaining: number;
+
+  constructor(attempts = 10, timeoutMs = 15_000) {
+    if (
+      !Number.isSafeInteger(attempts) ||
+      attempts < 1 ||
+      attempts > 10 ||
+      !Number.isSafeInteger(timeoutMs) ||
+      timeoutMs < 1 ||
+      timeoutMs > 15_000
+    )
+      throw new FetchBudgetError();
+    this.remaining = attempts;
+    this.deadlineAt = Date.now() + timeoutMs;
+  }
+
+  get remainingAttempts(): number {
+    return this.remaining;
+  }
+
+  assertAvailable(): void {
+    if (this.remaining <= 0 || Date.now() >= this.deadlineAt) throw new FetchBudgetError();
+  }
+
+  takeAttempt(): void {
+    this.assertAvailable();
+    this.remaining--;
   }
 }
 
@@ -31,7 +65,11 @@ export function requestDeadline(options: RetryOptions = {}): number {
     MAX_TIMEOUT_MS
   );
   const callerDeadline = Number.isFinite(options.deadlineAt) ? options.deadlineAt! : Infinity;
-  return Math.min(callerDeadline, Date.now() + timeout);
+  return Math.min(
+    callerDeadline,
+    options.requestBudget?.deadlineAt ?? Infinity,
+    Date.now() + timeout
+  );
 }
 
 async function waitWithinBudget(
@@ -73,6 +111,7 @@ export async function fetchWithRetry(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const remaining = deadlineAt - Date.now();
     if (remaining <= 0 || init.signal?.aborted) throw new FetchBudgetError();
+    options.requestBudget?.takeAttempt();
     const controller = new AbortController();
     const signal = init.signal
       ? AbortSignal.any([init.signal, controller.signal])
@@ -102,6 +141,7 @@ export async function fetchWithRetry(
     } finally {
       if (timer) clearTimeout(timer);
     }
+    options.requestBudget?.assertAvailable();
     const delay = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
     await waitWithinBudget(delay, deadlineAt, init.signal ?? undefined);
   }
