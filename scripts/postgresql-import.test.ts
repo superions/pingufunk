@@ -96,6 +96,25 @@ it.skipIf(!enabled)("imports all six models atomically and refuses a nonempty re
     expect((await importSnapshot(args)).imported).toBe(false);
     expect((await importSnapshot({ ...args, verifyOnly: true })).imported).toBe(false);
     expect(JSON.parse(readFileSync(manifestPath, "utf8")).status).toBe("validated");
+    let sideEffectCompleted = false;
+    const interruptedSequenceClient = {
+      $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) =>
+        pg.$queryRaw(strings, ...values),
+      $queryRawUnsafe: async (sql: string, ...values: unknown[]) => {
+        const result = await pg.$queryRawUnsafe(sql, ...values);
+        if (sql.startsWith("SELECT setval")) {
+          sideEffectCompleted = true;
+          throw new Error("Synthetic failure after nontransactional setval");
+        }
+        return result;
+      },
+    };
+    await expect(synchronizeOwnedSequences(interruptedSequenceClient)).rejects.toThrow(
+      "Synthetic failure after nontransactional setval"
+    );
+    expect(sideEffectCompleted).toBe(true);
+    // Re-reading the verified snapshot is the caller's prerequisite before retry.
+    expect((await importSnapshot({ ...args, verifyOnly: true })).imported).toBe(false);
     expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);
     expect((await synchronizeOwnedSequences(pg)).adjustedSequences).toBe(1);
     const next = await pg.tvdbEpisode.create({

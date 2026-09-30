@@ -618,6 +618,10 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       Der Sequence-CLI-Schritt fordert ausdrücklich sowohl gestoppte Writer
       als auch den belegten Zustand ohne jeglichen App-Write seit dem Import;
       bloß wieder leere Tabellen erlauben keinen rückwärts gesetzten Zähler.
+      Eine disposable PG-Probe simulierte einen Fehler nach bereits wirksamem
+      `setval`, prüfte das Importmanifest nochmals lesend und wiederholte die
+      Synchronisierung erfolgreich. Weitere Sequenzdrift- und Kollisionsfälle
+      sowie die durable App-Write-Grenze bleiben offen.
 - [ ] **P11.7 — PostgreSQL-Harness beweist Runtime und beide Rückwege.**
       `src/lib/db-schema.test.ts`, passende Ownerintegration und neue Runner-
       Tests gegen disposable PG aufnehmen; `vitest.config.ts`/npm-Gates so routen,
@@ -644,6 +648,11 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       der synthetische Queue-Statuswechsel und Settings-API-Save/Readback
       wurden in PG gelesen. Worker-/Dateiabschluss, breitere Fehlerfälle und
       der separate Produktiv-Rollback bleiben weiterhin offen.
+      Ein eigener Fork-CI-Job startet jetzt eine kurzlebige, nur an Loopback
+      gebundene PostgreSQL-17-Instanz, spielt die native Prisma-Migration auf
+      zwei Testdatenbanken ein und führt Katalog-/Runtime- sowie scoped
+      Import-/Resume-Proben aus. Der identische `npm run test:pg`-Ablauf
+      bestand lokal; der tatsächliche Fork-CI-Lauf ist noch zu prüfen.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,
