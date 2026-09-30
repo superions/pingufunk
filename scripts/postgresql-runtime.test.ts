@@ -2,6 +2,8 @@ import { afterAll, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
 
 const required = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 const testUrl = process.env.PINGUFUNK_TEST_DATABASE_URL;
@@ -37,6 +39,19 @@ it.skipIf(!run)(
   "reads in maintenance and blocks model/transaction writes before PG mutation",
   async () => {
     vi.stubEnv("DATABASE_URL", testUrl);
+    vi.stubEnv("DATABASE_PROVIDER", undefined);
+    const env: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL: testUrl };
+    delete env.DATABASE_PROVIDER;
+    delete env.DATABASE_URL_FILE;
+    delete env.PINGUFUNK_WRITES_ENABLED;
+    // Exercise the real startup readiness wrapper, then exit via Next's help
+    // option instead of opening a server or booting a production worker.
+    const localStart = spawnSync(
+      process.execPath,
+      [path.resolve("scripts/application-entrypoint.mjs"), "start", "--help"],
+      { env, encoding: "utf8", timeout: 30_000 }
+    );
+    expect(localStart.status === 0).toBe(true);
     const { prisma } = await import("@/lib/db");
     const key = `qa-${randomUUID()}`;
     const pg = new PrismaClient({ log: [], datasourceUrl: testUrl });
@@ -94,6 +109,7 @@ it.skipIf(!run)(
   "serves queue, history, rulesets and category cache from disposable PostgreSQL",
   async () => {
     vi.stubEnv("DATABASE_URL", testUrl);
+    vi.stubEnv("DATABASE_PROVIDER", undefined);
     vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
     const { prisma } = await import("@/lib/db");
     const id = randomUUID();

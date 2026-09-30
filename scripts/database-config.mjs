@@ -3,8 +3,9 @@ import { resolve } from "node:path";
 
 /** Resolve one chosen provider; connection failures must never select another. */
 export function resolveDatabaseConfig(env = process.env) {
-  const provider = env.DATABASE_PROVIDER ?? "sqlite";
-  if (!["sqlite", "postgresql"].includes(provider)) throw new Error("Invalid database provider");
+  const selected = env.DATABASE_PROVIDER;
+  if (selected !== undefined && !["sqlite", "postgresql"].includes(selected))
+    throw new Error("Invalid database provider");
   const directPresent = env.DATABASE_URL !== undefined;
   const filePresent = env.DATABASE_URL_FILE !== undefined;
   if (directPresent && filePresent) throw new Error("Conflicting database configuration");
@@ -17,8 +18,12 @@ export function resolveDatabaseConfig(env = process.env) {
     const contents = readFileSync(file, "utf8");
     value = contents.endsWith("\n") ? contents.slice(0, -1) : contents;
   }
-  if (!directPresent && !filePresent && provider === "sqlite") value = "file:./data/rundfunkarr.db";
+  if (!directPresent && !filePresent && selected !== "postgresql")
+    value = "file:./data/rundfunkarr.db";
   if (!value || /[\r\n\0]/.test(value)) throw new Error("Invalid database connection");
+  // Infer from validated configuration, never from connection success. An
+  // explicitly selected provider still rejects a conflicting URL protocol.
+  const provider = selected ?? (value.startsWith("file:") ? "sqlite" : "postgresql");
   if (provider === "sqlite") {
     if (!value.startsWith("file:")) throw new Error("Database provider and URL disagree");
     const location = value.slice(5);

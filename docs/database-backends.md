@@ -10,8 +10,14 @@ seine eigene Kette unter `prisma/migrations/`.
 
 ## Lokale Entwicklung mit SQLite
 
-`.env.example` beschreibt `DATABASE_PROVIDER=sqlite` und
-`DATABASE_URL=file:./data/rundfunkarr.db`. Relative Dateipfade bleiben relativ
+`.env.example` beschreibt `DATABASE_URL=file:./data/rundfunkarr.db`.
+Der Provider wird ohne Schalter aus dem URL-Protokoll erkannt, auch nach
+sicherem Auflösen einer `DATABASE_URL_FILE`: `file:` wählt SQLite,
+`postgres:`/`postgresql:` wählen PostgreSQL. Ohne URL/Secret und ohne explizite
+PG-Auswahl wird die bisherige SQLite-Datei verwendet. Der optionale
+`DATABASE_PROVIDER` ist eine Konsistenzbehauptung: Widerspruch zur URL ist ein
+Fehler, kein Ausweichweg. Explizites postgresql ohne URL ist ebenfalls ungültig.
+Relative Dateipfade bleiben relativ
 zum ursprünglichen `prisma/`-Verzeichnis, nicht zum neuen Schema-Unterordner.
 Vor einer **neuen disposable Entwicklungsinstallation** das Elternverzeichnis
 anlegen und den ausdrücklich ausgewählten Migrator ausführen:

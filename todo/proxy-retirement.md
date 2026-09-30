@@ -23,9 +23,8 @@ erledigte Implementierung.
 - Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R10 bleiben in den Referenzen.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
-- Nächster Entwicklungspunkt ist die eng begrenzte Auswahlkorrektur in
-  **P11.1**, danach **P06.1**. Beide Backend-Laufzeitketten sind geprüft;
-  die Auswahl bei allein konfigurierter PG-URL ist noch nicht umgesetzt.
+- Nächster Entwicklungspunkt ist **P06.1**. Beide Backend-Laufzeitketten und
+  die URL-/Secret-basierte Auswahl aus **P11.1** sind geprüft.
   Es folgt der Proxy-Pfad
   P06 → P07 → P08 → P09 → P10 auf den abgenommenen P00–P05.
   P11.2–P11.8 sichern die PostgreSQL-Option und müssen vor deren Betriebsfreigabe
@@ -466,7 +465,7 @@ einsatzbereite Produktionsbefehle zu behandeln.
 Produktive Anwendung des PG-Runbooks ist optional und gehört bei PG-Wahl
 ausschließlich P10.3–P10.5.
 
-- [ ] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
+- [x] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
       `prisma/schema.prisma`, historische SQLite-Migrationen,
       `prisma/legacy/sqlite/init-db.sql`,
       `src/lib/db.ts`, `Dockerfile`, `entrypoint.sh`, `.env.example` und
@@ -539,6 +538,18 @@ ausschließlich P10.3–P10.5.
       loggen. Tests für Resolver, beide Startwrapper und gebaute Images erweitern;
       `docs/database-backends.md`/`.env.example` entsprechend angleichen. Historische
       Produktgates nicht als Nachweis dieser noch fehlenden Auswahl ausgeben.
+      Auswahlkorrektur abgenommen 30.09.2026: Der gemeinsame Resolver inferiert
+      den Provider aus direkter URL oder sicher aufgelöster Secretdatei; fehlende
+      Konfiguration bleibt SQLite. Explizite Provider sind optionale Assertions.
+      Shell-Entrypoints exportieren keinen vorzeitigen SQLite-Default; lokale
+      Start-/DDL-Wrapper verwenden dieselbe Entscheidung. PG startet auch ohne
+      Selektor im Maintenancebetrieb. 408 reguläre Tests und acht separate
+      disposable PG-Tests bestanden, einschließlich echter lokaler Startwrapper.
+      Neu gebaute Runner-/Migrator-Images bestehen die isolierten SQLite-
+      Fresh-/Bootstrap-/Restartproben und PG-TLS-Import-/Secret-/Writeproben
+      ohne Selektor. Unerreichbares PG erzeugt keine SQLite-Ersatzdatei.
+      Lint, Typecheck, Format, Container-Produktionsbuild, Shellsyntax,
+      Compose-Standard und Diffprüfung grün. Keine Produktionsausführung.
 - [ ] **P11.2 — Secretfähiger Single-Worker und vollständiger Writer-Gate.**
       Entrypoint/DB-Owner samt `src/instrumentation.ts`, Config-/Cache-, Ruleset-,
       Queue- und Worker-Schreibpfaden auf `DATABASE_URL_FILE` vor Prozessstart und

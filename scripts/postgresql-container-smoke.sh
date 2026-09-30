@@ -79,7 +79,7 @@ docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c 'CREATE ROLE pingufunk_smoke_runtime LOGIN' \
   -c 'CREATE DATABASE pingufunk_smoke' >/dev/null
 DDL_URL="postgresql://postgres@${PG_CONTAINER}/pingufunk_smoke?sslmode=require"
-DATABASE_URL="$DDL_URL" docker run --rm --network "$SMOKE_NETWORK" -e DATABASE_URL -e DATABASE_PROVIDER=postgresql \
+DATABASE_URL="$DDL_URL" docker run --rm --network "$SMOKE_NETWORK" -e DATABASE_URL \
   "$MIGRATOR_IMAGE" >/dev/null
 docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_smoke \
   -c 'GRANT CONNECT ON DATABASE pingufunk_smoke TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
@@ -118,8 +118,13 @@ for action in import verify sequences; do
 done
 
 RUNTIME_URL="postgresql://pingufunk_smoke_runtime@${PG_CONTAINER}/pingufunk_smoke?sslmode=require"
-DATABASE_URL="$RUNTIME_URL" docker run --rm -d --name "$APP_CONTAINER" \
-  --network "$SMOKE_NETWORK" -e DATABASE_URL -e DATABASE_PROVIDER=postgresql -e PINGUFUNK_WRITES_ENABLED=0 \
+SMOKE_SECRET="$SMOKE_ROOT/runtime-secret" SMOKE_URL="$RUNTIME_URL" node --input-type=module -e '
+  import {writeFileSync} from "node:fs";
+  writeFileSync(process.env.SMOKE_SECRET,process.env.SMOKE_URL,{mode:0o600,flag:"wx"});
+'
+docker run --rm -d --name "$APP_CONTAINER" \
+  --network "$SMOKE_NETWORK" -e DATABASE_URL_FILE=/run/secrets/database_url \
+  --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
 ready=0
@@ -145,9 +150,10 @@ docker stop "$APP_CONTAINER" >/dev/null
 SMOKE_APP_STARTED=0
 
 DATABASE_URL="$RUNTIME_URL" docker run --rm -d --name "$APP_CONTAINER" \
-  --network "$SMOKE_NETWORK" -e DATABASE_URL -e DATABASE_PROVIDER=postgresql -e PINGUFUNK_WRITES_ENABLED=1 \
+  --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
+ready=0
 for ((attempt = 0; attempt < 30; attempt++)); do
   if docker exec "$APP_CONTAINER" wget -q --spider http://localhost:6767/api/download?mode=version; then
     ready=1
@@ -155,6 +161,8 @@ for ((attempt = 0; attempt < 30; attempt++)); do
   fi
   sleep 1
 done
+[[ "$ready" == 1 ]] || { echo "Disposable PG writer start failed" >&2; exit 1; }
+docker exec "$APP_CONTAINER" test ! -e /app/prisma/data/rundfunkarr.db
 docker exec "$APP_CONTAINER" curl -fsS -X POST -H 'Content-Type: application/json' \
   -d '{"key":"smoke","value":"postgresql"}' http://localhost:6767/api/settings >/dev/null
 if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \

@@ -35,7 +35,7 @@ echo "Running as user: $USER_NAME ($(id "$USER_NAME"))"
 
 # The database URL is resolved before dropping privileges so Docker secrets
 # need not be world-readable. Never echo the resolved value.
-DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite}
+DATABASE_PROVIDER=$(node /app/scripts/resolve-database-url.mjs --provider) || fail "Database configuration unavailable"
 export DATABASE_PROVIDER
 DATABASE_URL=$(node /app/scripts/resolve-database-url.mjs) || fail "Database configuration unavailable"
 export DATABASE_URL

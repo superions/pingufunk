@@ -30,7 +30,7 @@ for variant in fresh bootstrap; do
   mkdir "$SMOKE_ROOT/$variant"
   if [[ "$variant" == fresh ]]; then
     for attempt in 1 2; do
-      docker run --rm --network none --user "$(id -u):$(id -g)" -e DATABASE_PROVIDER=sqlite \
+      docker run --rm --network none --user "$(id -u):$(id -g)" \
         -e DATABASE_URL=file:/qa/database.sqlite \
         --mount "type=bind,src=${SMOKE_ROOT}/${variant},dst=/qa" \
         --entrypoint node "$MIGRATOR_IMAGE" /app/scripts/database-migrate.mjs >/dev/null
@@ -48,7 +48,7 @@ for variant in fresh bootstrap; do
   '
   for cycle in initial restart; do
     docker run --rm -d --name "$APP_CONTAINER" --network none \
-      -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e DATABASE_PROVIDER=sqlite \
+      -e "PUID=$(id -u)" -e "PGID=$(id -g)" \
       -e DATABASE_URL=file:/qa/database.sqlite \
       --mount "type=bind,src=${SMOKE_ROOT}/${variant},dst=/qa" "$RUNNER_IMAGE" >/dev/null
     APP_STARTED=1
@@ -83,7 +83,7 @@ for provider in sqlite postgresql; do
   fi
   [[ ! -e "$SMOKE_ROOT/missing/missing.sqlite" ]]
 done
-if docker run --rm --network none -e DATABASE_PROVIDER=postgresql \
+if docker run --rm --network none \
   -e 'DATABASE_URL=postgresql://synthetic@127.0.0.1:5432/disposable?connect_timeout=1' \
   --mount "type=bind,src=${SMOKE_ROOT}/missing,dst=/app/prisma/data" "$RUNNER_IMAGE" >/dev/null 2>&1; then
   echo 'Unreachable PostgreSQL unexpectedly started' >&2; exit 1

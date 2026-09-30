@@ -8,7 +8,6 @@ services:
       - TVDB_API_KEY=${TVDB_API_KEY:-}  # Optional metadata account
       - DOWNLOAD_FOLDER_PATH=/downloads
       - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed  # Path mapping for Sonarr/Radarr
-      - DATABASE_PROVIDER=sqlite
       - DATABASE_URL=file:/app/prisma/data/rundfunkarr.db
     volumes:
       - ./downloads:/app/downloads        # Temporary download folder

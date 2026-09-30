@@ -27,10 +27,10 @@ function location() {
 function environment(filename: string) {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    DATABASE_PROVIDER: "sqlite",
     DATABASE_URL: `file:${filename}`,
   };
   delete env.DATABASE_URL_FILE;
+  delete env.DATABASE_PROVIDER;
   return env;
 }
 function tool(script: string, filename: string, args: string[] = []) {
@@ -112,8 +112,11 @@ it.each(["bootstrap", "migrated"])(
     expect(readiness.status, readiness.stderr).toBe(0);
     expect(readiness.stdout).toBe("sqlite schema ready\n");
     expect(hash(filename)).toBe(beforeReadiness);
+    const localStart = tool("application-entrypoint.mjs", filename, ["start", "--help"]);
+    expect(localStart.status, localStart.stderr).toBe(0);
+    expect(hash(filename)).toBe(beforeReadiness);
 
-    vi.stubEnv("DATABASE_PROVIDER", "sqlite");
+    vi.stubEnv("DATABASE_PROVIDER", undefined);
     vi.stubEnv("DATABASE_URL", `file:${filename}`);
     vi.stubEnv("DATABASE_URL_FILE", undefined);
     vi.stubEnv("PINGUFUNK_WRITES_ENABLED", undefined);
