@@ -9,8 +9,8 @@ export async function GET() {
     });
 
     return NextResponse.json(rulesets);
-  } catch (error) {
-    console.error("Failed to fetch rulesets:", error);
+  } catch {
+    console.error("Failed to fetch rulesets");
     return NextResponse.json({ error: "Failed to fetch rulesets" }, { status: 500 });
   }
 }
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(ruleset);
-  } catch (error) {
-    console.error("Failed to update ruleset:", error);
+  } catch {
+    console.error("Failed to update ruleset");
     return NextResponse.json({ error: "Failed to update ruleset" }, { status: 500 });
   }
 }
@@ -57,8 +57,8 @@ export async function DELETE(request: NextRequest) {
       where: { id },
     });
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Failed to delete ruleset:", error);
+  } catch {
+    console.error("Failed to delete ruleset");
     return NextResponse.json({ error: "Failed to delete ruleset" }, { status: 500 });
   }
 }

@@ -380,7 +380,7 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Coalescing bestanden. Noch offen: die anderen Metadaten-Cache-Owner,
       deren persistierte Quellkollisionen, Negativfälle und Cache-API vollständig
       prüfen; erst dann P05.2 schließen.
-- [ ] **P05.3 — Eine serverseitige Secret-/Base-URL-Grenze.**
+- [x] **P05.3 — Eine serverseitige Secret-/Base-URL-Grenze.**
       `src/lib/settings.ts`, `src/lib/settings-redaction.ts`, Settings-API/-UI
       einschließlich der bisherigen SRF-Maskierung,
       `src/lib/db.ts`, Entrypoint und künftige Metadataadapter so vorbereiten,
@@ -390,6 +390,25 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Leaks verhindern. Sonarr-Key hat technisch breite Rechte, Adapter nur GET.
       Abnahme: leere/unlesbare/widersprüchliche Secrets fail closed, Rotation
       wirksam; bestehende gespeicherte Settings unverändert migrierbar.
+      Abgenommen am 30.09.2026: TVDB, TMDB-Read-Token, SRG-SSR und die
+      Streaming-Proxy-URL werden für neue Konfiguration aus ignorierter Umgebung
+      oder absoluten Secretdateien gelesen; leere, widersprüchliche, fehlende und
+      symlinkende Dateien brechen generisch ab. Bestehende DB-Werte bleiben
+      unverändert, werden nicht mehr browserseitig bearbeitet oder im Klartext
+      ausgegeben. Der alte TMDB-v3-Key bleibt gespeichert, gilt aber mangels
+      sicherer Header-Authentifizierung nicht mehr als aktiv. TVDB-/SRG-Token
+      rotieren mit der Secretquelle; TVDB schreibt neue Tokens nicht mehr in
+      Config. Provider- und Downloadfehler sind redigiert, Auth-Redirects
+      gesperrt, Prisma-/Entrypoint-URL-Logs entfernt. Der GET-only-Arr-Client
+      erhält Base-URL-Unterpfade und hält den API-Key aus der URL. Proxy-URLs
+      mit Userinfo werden abgelehnt, damit yt-dlp keine Credentials in argv
+      trägt. Settings und Setup wurden in isolierter Desktop-Instanz gegen
+      dieselben Baseline-Routen/-Zustände visuell verglichen; Screenshots wurden
+      im Browser geprüft, nicht persistiert, Browser-Konsole ohne Warnungen/
+      Fehler. Setup-Speichern erzeugte im disposable DB nur `download.path`;
+      keinerlei produktive Settings, Jobs oder Datenbank wurden verändert.
+      Die explizite Betreiberprüfung auf bisher authentifizierte Proxy-URLs
+      bleibt vor einem späteren Deployment erforderlich.
 - [x] **P05.4 — Queue kann nach Fehlern weiterarbeiten.**
       `download-manager.ts::{processQueue,startDownloadProcessing,markAsFailed}`
       und `download.ts::triggerDownloadProcessing` über gesamte Fehler-/Abbruch-

@@ -16,12 +16,9 @@ export async function POST() {
     // Test proxy connection
     const proxyResult = await testProxy();
     return NextResponse.json(proxyResult);
-  } catch (error) {
-    console.error("Proxy test failed:", error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+  } catch {
+    console.error("Proxy test failed");
+    return NextResponse.json({ success: false, error: "Proxy test failed" }, { status: 500 });
   }
 }
 
@@ -30,11 +27,8 @@ export async function GET() {
   try {
     const result = await testYtdlp();
     return NextResponse.json(result);
-  } catch (error) {
-    console.error("yt-dlp test failed:", error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+  } catch {
+    console.error("yt-dlp test failed");
+    return NextResponse.json({ success: false, error: "yt-dlp test failed" }, { status: 500 });
   }
 }

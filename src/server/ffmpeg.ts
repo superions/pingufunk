@@ -65,8 +65,8 @@ async function downloadFfmpeg(): Promise<boolean> {
     console.log(`[FFmpeg] Successfully installed at ${FFMPEG_PATH}`);
 
     return true;
-  } catch (error) {
-    console.error("[FFmpeg] Error during download/extraction:", error);
+  } catch {
+    console.error("[FFmpeg] Error during download/extraction");
     return false;
   } finally {
     // Cleanup temp file
@@ -247,21 +247,20 @@ export async function convertMp4ToMkv(
         try {
           await fs.unlink(mp4Path);
           console.log(`[FFmpeg] Deleted original file: ${mp4Path}`);
-        } catch (err) {
-          console.warn(`[FFmpeg] Could not delete original file: ${err}`);
+        } catch {
+          console.warn("[FFmpeg] Could not delete original file");
         }
 
         resolve({ success: true, outputPath: mkvPath });
       } else {
         console.error(`[FFmpeg] Conversion failed with code ${code}`);
-        console.error(`[FFmpeg] Error output: ${stderr}`);
         resolve({ success: false, error: `FFmpeg exited with code ${code}` });
       }
     });
 
-    proc.on("error", (err) => {
-      console.error(`[FFmpeg] Process error: ${err}`);
-      resolve({ success: false, error: err.message });
+    proc.on("error", () => {
+      console.error("[FFmpeg] Process error");
+      resolve({ success: false, error: "FFmpeg process failed" });
     });
   });
 }
@@ -303,11 +302,7 @@ export async function mergeVideoAudio(
     console.log(`[FFmpeg] Muxing video+audio: ${videoPath} + ${audioPath} -> ${outputPath}`);
     const proc = spawn(FFMPEG_PATH, args);
 
-    let stderr = "";
-
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.on("data", () => {});
 
     proc.on("close", (code) => {
       if (code === 0) {
@@ -315,14 +310,13 @@ export async function mergeVideoAudio(
         resolve({ success: true, outputPath });
       } else {
         console.error(`[FFmpeg] Mux failed with code ${code}`);
-        console.error(`[FFmpeg] Error output: ${stderr}`);
-        resolve({ success: false, error: `FFmpeg exited with code ${code}: ${stderr}` });
+        resolve({ success: false, error: `FFmpeg exited with code ${code}` });
       }
     });
 
-    proc.on("error", (err) => {
-      console.error(`[FFmpeg] Process error: ${err}`);
-      resolve({ success: false, error: err.message });
+    proc.on("error", () => {
+      console.error("[FFmpeg] Process error");
+      resolve({ success: false, error: "FFmpeg process failed" });
     });
   });
 }

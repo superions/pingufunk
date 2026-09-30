@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useSettings } from "@/contexts/settings-context";
-import { buildTvdbLoginPayload } from "@/lib/tvdb-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -24,8 +23,6 @@ import {
   Sliders,
   Database,
   Info,
-  Check,
-  X,
   Loader2,
   Save,
   RefreshCw,
@@ -110,8 +107,6 @@ export default function SettingsPage() {
     success: false,
     message: "",
   });
-  const [validatingApi, setValidatingApi] = useState<string | null>(null);
-  const [apiStatus, setApiStatus] = useState<Record<string, boolean | null>>({});
   const [systemInfo, setSystemInfo] = useState<{
     version: { node: string; ffmpeg: string | null; ytdlp: string | null };
     database: { sizeBytes: number; shows: number; episodes: number; configEntries: number };
@@ -170,47 +165,6 @@ export default function SettingsPage() {
       }
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const validateTvdbApi = async () => {
-    setValidatingApi("tvdb");
-    try {
-      const key = getFieldValue("api.tvdb.key");
-      const pin = getFieldValue("api.tvdb.pin");
-      const payload = buildTvdbLoginPayload(key, pin);
-      if (!payload) {
-        setApiStatus((prev) => ({ ...prev, tvdb: false }));
-        return;
-      }
-      // Attempt to login to TVDB
-      const res = await fetch("https://api4.thetvdb.com/v4/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      setApiStatus((prev) => ({ ...prev, tvdb: res.ok }));
-    } catch {
-      setApiStatus((prev) => ({ ...prev, tvdb: false }));
-    } finally {
-      setValidatingApi(null);
-    }
-  };
-
-  const validateTmdbApi = async () => {
-    setValidatingApi("tmdb");
-    try {
-      const key = getFieldValue("api.tmdb.key");
-      if (!key) {
-        setApiStatus((prev) => ({ ...prev, tmdb: false }));
-        return;
-      }
-      const res = await fetch(`https://api.themoviedb.org/3/configuration?api_key=${key}`);
-      setApiStatus((prev) => ({ ...prev, tmdb: res.ok }));
-    } catch {
-      setApiStatus((prev) => ({ ...prev, tmdb: false }));
-    } finally {
-      setValidatingApi(null);
     }
   };
 
@@ -415,24 +369,21 @@ export default function SettingsPage() {
                     </p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Proxy-URL (optional)</label>
-                    <Input
-                      value={getFieldValue("download.proxyUrl")}
-                      onChange={(e) => setFieldValue("download.proxyUrl", e.target.value)}
-                      placeholder="socks5://localhost:1080"
-                      className="mt-1"
-                    />
+                    <label className="text-sm font-medium">Streaming-Proxy (optional)</label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Proxy für geo-blockierte Inhalte (SRF/ORF). Unterstützt HTTP, HTTPS, SOCKS4
-                      und SOCKS5.
+                      Serverseitig über PINGUFUNK_STREAMING_PROXY_URL_FILE konfigurieren. Proxy-URLs
+                      mit Zugangsdaten werden abgelehnt, da yt-dlp sie sonst in Prozessargumenten
+                      führen würde.
                     </p>
+                    <Badge variant="outline">
+                      {settings?.["download.proxyUrl"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                    </Badge>
                   </div>
                   <Button
                     onClick={() =>
                       handleSave([
                         "download.enableHLS",
                         "download.ytdlpPath",
-                        "download.proxyUrl",
                         "provider.orf.enabled",
                       ])
                     }
@@ -468,48 +419,13 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">API Key</label>
-                    <Input
-                      value={getFieldValue("api.tvdb.key")}
-                      onChange={(e) => setFieldValue("api.tvdb.key", e.target.value)}
-                      placeholder="TVDB API Key"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">PIN (optional)</label>
-                    <Input
-                      value={getFieldValue("api.tvdb.pin")}
-                      onChange={(e) => setFieldValue("api.tvdb.pin", e.target.value)}
-                      placeholder="TVDB PIN (optional)"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={validateTvdbApi}
-                      disabled={validatingApi === "tvdb"}
-                    >
-                      {validatingApi === "tvdb" ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                      )}
-                      Testen
-                    </Button>
-                    {apiStatus.tvdb !== undefined && (
-                      <Badge variant={apiStatus.tvdb ? "default" : "destructive"}>
-                        {apiStatus.tvdb ? (
-                          <Check className="w-3 h-3 mr-1" />
-                        ) : (
-                          <X className="w-3 h-3 mr-1" />
-                        )}
-                        {apiStatus.tvdb ? "Verbunden" : "Fehler"}
-                      </Badge>
-                    )}
-                  </div>
+                  <p className="text-sm">
+                    Zugang serverseitig über PINGUFUNK_TVDB_KEY_FILE konfigurieren; PIN optional
+                    über PINGUFUNK_TVDB_PIN_FILE.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.tvdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </Badge>
                 </CardContent>
               </Card>
 
@@ -529,39 +445,14 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">API Key</label>
-                    <Input
-                      value={getFieldValue("api.tmdb.key")}
-                      onChange={(e) => setFieldValue("api.tmdb.key", e.target.value)}
-                      placeholder="TMDB API Key"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={validateTmdbApi}
-                      disabled={validatingApi === "tmdb"}
-                    >
-                      {validatingApi === "tmdb" ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                      )}
-                      Testen
-                    </Button>
-                    {apiStatus.tmdb !== undefined && (
-                      <Badge variant={apiStatus.tmdb ? "default" : "destructive"}>
-                        {apiStatus.tmdb ? (
-                          <Check className="w-3 h-3 mr-1" />
-                        ) : (
-                          <X className="w-3 h-3 mr-1" />
-                        )}
-                        {apiStatus.tmdb ? "Verbunden" : "Fehler"}
-                      </Badge>
-                    )}
-                  </div>
+                  <p className="text-sm">
+                    TMDB Read Access Token serverseitig über PINGUFUNK_TMDB_READ_TOKEN_FILE
+                    konfigurieren. Ein alter v3-API-Key in der Datenbank wird nicht mehr für
+                    URL-Authentifizierung verwendet.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.tmdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </Badge>
                 </CardContent>
               </Card>
 
@@ -581,53 +472,21 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">Consumer Key</label>
-                    <Input
-                      value={getFieldValue("api.srgssr.consumerKey")}
-                      onFocus={(e) => e.currentTarget.select()}
-                      onChange={(e) => setFieldValue("api.srgssr.consumerKey", e.target.value)}
-                      placeholder="SRG-SSR Consumer Key"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Consumer Secret</label>
-                    <Input
-                      type="password"
-                      value={getFieldValue("api.srgssr.consumerSecret")}
-                      onFocus={(e) => e.currentTarget.select()}
-                      onChange={(e) => setFieldValue("api.srgssr.consumerSecret", e.target.value)}
-                      placeholder="SRG-SSR Consumer Secret"
-                      className="mt-1"
-                    />
-                  </div>
+                  <p className="text-sm">
+                    Consumer Key und Secret serverseitig über PINGUFUNK_SRGSSR_CONSUMER_KEY_FILE und
+                    PINGUFUNK_SRGSSR_CONSUMER_SECRET_FILE konfigurieren.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.srgssr.consumerKey"] && settings?.["api.srgssr.consumerSecret"]
+                      ? "Konfiguriert"
+                      : "Nicht konfiguriert"}
+                  </Badge>
                   <p className="text-xs text-muted-foreground">
                     Hinweis: Inhalte von SRF sind oft geo-blockiert. Konfiguriere einen Schweizer
                     Proxy in den Streaming-Einstellungen für Zugriff aus dem Ausland.
                   </p>
                 </CardContent>
               </Card>
-
-              <Button
-                onClick={() =>
-                  handleSave([
-                    "api.tvdb.key",
-                    "api.tvdb.pin",
-                    "api.tmdb.key",
-                    "api.srgssr.consumerKey",
-                    "api.srgssr.consumerSecret",
-                  ])
-                }
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                API-Keys speichern
-              </Button>
             </TabsContent>
 
             {/* Matching Tab */}

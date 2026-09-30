@@ -22,8 +22,8 @@ export async function DELETE() {
         tvdbEpisodes: deletedEpisodes.count,
       },
     });
-  } catch (error) {
-    console.error("Failed to clear cache:", error);
+  } catch {
+    console.error("Failed to clear cache");
     return NextResponse.json({ error: "Failed to clear cache" }, { status: 500 });
   }
 }
@@ -38,8 +38,8 @@ export async function GET() {
       tvdbSeries: seriesCount,
       tvdbEpisodes: episodesCount,
     });
-  } catch (error) {
-    console.error("Failed to get cache stats:", error);
+  } catch {
+    console.error("Failed to get cache stats");
     return NextResponse.json({ error: "Failed to get cache stats" }, { status: 500 });
   }
 }

@@ -23,13 +23,15 @@ export async function GET() {
 
     // Database file size
     let dbSizeBytes = 0;
-    const dbPath = process.env.DATABASE_URL?.replace("file:", "") || "./prisma/data/rundfunkarr.db";
-    const absoluteDbPath = path.isAbsolute(dbPath) ? dbPath : path.join(process.cwd(), dbPath);
-    try {
-      const stats = fs.statSync(absoluteDbPath);
-      dbSizeBytes = stats.size;
-    } catch {
-      // Database file might not exist yet
+    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith("file:")) {
+      const dbPath =
+        process.env.DATABASE_URL?.replace("file:", "") || "./prisma/data/rundfunkarr.db";
+      const absoluteDbPath = path.isAbsolute(dbPath) ? dbPath : path.join(process.cwd(), dbPath);
+      try {
+        dbSizeBytes = fs.statSync(absoluteDbPath).size;
+      } catch {
+        // Database file might not exist yet
+      }
     }
 
     // FFmpeg check
@@ -76,8 +78,8 @@ export async function GET() {
       },
       uptime: uptimeSeconds,
     });
-  } catch (error) {
-    console.error("Failed to get system info:", error);
+  } catch {
+    console.error("Failed to get system info");
     return NextResponse.json({ error: "Failed to get system info" }, { status: 500 });
   }
 }

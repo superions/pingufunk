@@ -33,8 +33,8 @@ async function fetchFromGitHub(): Promise<Ruleset[] | null> {
     const rulesets: Ruleset[] = await response.json();
     console.log(`[Rulesets] Fetched ${rulesets.length} rulesets from GitHub`);
     return rulesets;
-  } catch (error) {
-    console.warn("[Rulesets] Error fetching from GitHub:", error);
+  } catch {
+    console.warn("[Rulesets] Error fetching from GitHub");
     return null;
   }
 }
@@ -87,8 +87,8 @@ export async function loadRulesets(): Promise<void> {
     await loadGeneratedRulesets();
 
     lastFetchTime = Date.now();
-  } catch (error) {
-    console.error("[Rulesets] Error loading rulesets:", error);
+  } catch {
+    console.error("[Rulesets] Error loading rulesets");
   }
 }
 
@@ -108,8 +108,8 @@ async function loadGeneratedRulesets(): Promise<void> {
         `[Rulesets] Loaded ${generated.length} generated rulesets for ${generatedRulesetsByTopic.size} topics`
       );
     }
-  } catch (error) {
-    console.warn("[Rulesets] Error loading generated rulesets:", error);
+  } catch {
+    console.warn("[Rulesets] Error loading generated rulesets");
   }
 }
 
@@ -219,7 +219,7 @@ let initPromise: Promise<void> | null = null;
 export async function ensureRulesetsLoaded(): Promise<void> {
   if (isRulesetsLoaded()) {
     // Check for hourly refresh in background
-    refreshRulesetsIfNeeded().catch(console.error);
+    refreshRulesetsIfNeeded().catch(() => console.error("Failed to refresh rulesets"));
     return;
   }
 

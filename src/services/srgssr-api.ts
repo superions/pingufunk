@@ -9,6 +9,7 @@
  */
 
 import { getSetting } from "@/lib/settings";
+import { createHash } from "node:crypto";
 
 // API Base URLs
 const API_BASE_URL = "https://api.srgssr.ch";
@@ -20,7 +21,7 @@ const TOKEN_EXPIRY_BUFFER_MS = 60000;
 export type SrgssrBusinessUnit = "SRF" | "RTS" | "RSI" | "RTR" | "SWI";
 
 // Token cache
-let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedToken: { token: string; expiresAt: number; credentialHash: string } | null = null;
 
 /**
  * Get API credentials from settings
@@ -44,15 +45,17 @@ async function getApiCredentials(): Promise<{
  * Uses client credentials grant type
  */
 async function getAccessToken(): Promise<string | null> {
-  // Check cache
-  if (cachedToken && Date.now() < cachedToken.expiresAt - TOKEN_EXPIRY_BUFFER_MS) {
-    return cachedToken.token;
-  }
-
   const credentials = await getApiCredentials();
   if (!credentials) {
     console.error("[SRG-SSR] No API credentials configured");
     return null;
+  }
+  const credentialHash = createHash("sha256")
+    .update(JSON.stringify([credentials.consumerKey, credentials.consumerSecret]))
+    .digest("hex");
+  if (cachedToken?.credentialHash !== credentialHash) cachedToken = null;
+  if (cachedToken && Date.now() < cachedToken.expiresAt - TOKEN_EXPIRY_BUFFER_MS) {
+    return cachedToken.token;
   }
 
   try {
@@ -64,6 +67,7 @@ async function getAccessToken(): Promise<string | null> {
       `${API_BASE_URL}/oauth/v1/accesstoken?grant_type=client_credentials`,
       {
         method: "POST",
+        redirect: "error",
         signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Basic ${authHeader}`,
@@ -73,7 +77,7 @@ async function getAccessToken(): Promise<string | null> {
     );
 
     if (!response.ok) {
-      console.error(`[SRG-SSR] Token request failed: ${response.status} ${response.statusText}`);
+      console.error(`[SRG-SSR] Token request failed: ${response.status}`);
       return null;
     }
 
@@ -92,6 +96,7 @@ async function getAccessToken(): Promise<string | null> {
     cachedToken = {
       token,
       expiresAt: Date.now() + expiresIn * 1000,
+      credentialHash,
     };
 
     console.log(`[SRG-SSR] Obtained access token, expires in ${expiresIn}s`);
@@ -119,6 +124,7 @@ async function apiRequest<T>(
     console.log("[SRG-SSR] API request started");
 
     const response = await fetch(url, {
+      redirect: "error",
       signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${token}`,
@@ -127,7 +133,7 @@ async function apiRequest<T>(
     });
 
     if (!response.ok) {
-      console.error(`[SRG-SSR] API request failed: ${response.status} ${response.statusText}`);
+      console.error(`[SRG-SSR] API request failed: ${response.status}`);
       return null;
     }
 
@@ -356,11 +362,11 @@ export async function checkApiStatus(): Promise<{
   try {
     const videos = await getLatestVideos("SRF", 1);
     return { configured: true, working: videos.length > 0 };
-  } catch (error) {
+  } catch {
     return {
       configured: true,
       working: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: "SRG-SSR request failed",
     };
   }
 }

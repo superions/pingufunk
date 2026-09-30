@@ -7,10 +7,13 @@ import {
   getBestStreamUrl,
   type SrgssrMediaComposition,
 } from "./srgssr-api";
+import { getSetting } from "@/lib/settings";
 
 vi.mock("@/lib/settings", () => ({ getSetting: vi.fn(async () => "fixture") }));
 const fetchMock = vi.fn();
 beforeEach(() => {
+  vi.mocked(getSetting).mockReset();
+  vi.mocked(getSetting).mockImplementation(async () => "fixture");
   clearTokenCache();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
@@ -41,6 +44,25 @@ it("uses latest episodes for RSS and resolves compositions from stable URNs", as
   expect(fetchMock.mock.calls[2][0]).toBe(
     "https://api.srgssr.ch/videometadata/v2/11111111-1111-4111-8111-111111111111/mediaComposition?bu=srf"
   );
+});
+
+it("re-authenticates when a mounted credential rotates", async () => {
+  const current = vi.mocked(getSetting);
+  current.mockImplementation(async (key) =>
+    key === "api.srgssr.consumerSecret" ? "first-secret" : "fixture"
+  );
+  fetchMock.mockResolvedValueOnce(Response.json({ searchResultListMedia: [] }));
+  await searchVideos("News");
+  current.mockImplementation(async (key) =>
+    key === "api.srgssr.consumerSecret" ? "second-secret" : "fixture"
+  );
+  fetchMock.mockResolvedValueOnce(
+    Response.json({ access_token: "second-token", expires_in: 3600 })
+  );
+  fetchMock.mockResolvedValueOnce(Response.json({ searchResultListMedia: [] }));
+  await searchVideos("News");
+  expect(fetchMock.mock.calls[2][0]).toContain("/oauth/v1/accesstoken");
+  expect(fetchMock.mock.calls[2][1].redirect).toBe("error");
 });
 
 it("does not report malformed responses or API outages as successful empty searches", async () => {

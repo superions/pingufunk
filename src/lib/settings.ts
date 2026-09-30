@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { credentialOverride } from "@/lib/credential-settings";
 
 interface SettingEntry {
   value: string | null;
@@ -38,6 +39,8 @@ function putSetting(key: string, value: string | null): void {
 
 /** Coalesce lookups and keep misses short-lived; invalidation beats late reads. */
 export async function getSetting(key: string): Promise<string | null> {
+  const external = await credentialOverride(key);
+  if (external.configured) return external.value;
   const cached = cachedSetting(key);
   if (cached) return cached.value;
   const pending = inFlight.get(key);

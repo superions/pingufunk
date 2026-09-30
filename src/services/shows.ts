@@ -46,8 +46,8 @@ async function fetchShowsFromGitHub(): Promise<LocalShow[] | null> {
     const shows: LocalShow[] = await response.json();
     console.log(`[Shows] Fetched ${shows.length} shows from GitHub`);
     return shows;
-  } catch (error) {
-    console.warn("[Shows] Error fetching from GitHub:", error);
+  } catch {
+    console.warn("[Shows] Error fetching from GitHub");
     return null;
   }
 }
@@ -79,8 +79,8 @@ async function loadLocalShows(): Promise<void> {
     console.log(`[Shows] Indexed ${localShows.size} local shows`);
     localShowsLoaded = true;
     lastShowsFetchTime = now;
-  } catch (error) {
-    console.error("[Shows] Error loading local shows:", error);
+  } catch {
+    console.error("[Shows] Error loading local shows");
   }
 }
 

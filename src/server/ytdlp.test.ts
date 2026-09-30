@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { downloadHlsStream, downloadVideo } from "./ytdlp";
+import { downloadHlsStream, downloadVideo, testProxy } from "./ytdlp";
 
 const { spawn, mergeVideoAudio, unlink, readdir, getSetting } = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -16,8 +16,9 @@ const { spawn, mergeVideoAudio, unlink, readdir, getSetting } = vi.hoisted(() =>
   ),
   unlink: vi.fn(async () => {}),
   readdir: vi.fn(async (): Promise<string[]> => []),
-  getSetting: vi.fn(async (key: string) =>
-    key === "download.ytdlpPath" ? "/fixture/yt-dlp" : null
+  getSetting: vi.fn(
+    async (key: string): Promise<string | null> =>
+      key === "download.ytdlpPath" ? "/fixture/yt-dlp" : null
   ),
 }));
 vi.mock("child_process", () => ({ spawn }));
@@ -51,7 +52,18 @@ beforeEach(() => {
   unlink.mockClear();
   readdir.mockReset();
   readdir.mockResolvedValue([]);
-  getSetting.mockClear();
+  getSetting.mockReset();
+  getSetting.mockImplementation(async (key: string) =>
+    key === "download.ytdlpPath" ? "/fixture/yt-dlp" : null
+  );
+});
+
+it("rejects proxy credentials before they can enter process arguments", async () => {
+  getSetting.mockImplementation(async (key: string) =>
+    key === "download.proxyUrl" ? "http://user:secret@proxy.invalid" : "/fixture/yt-dlp"
+  );
+  await expect(testProxy()).rejects.toThrow("Unsupported proxy configuration");
+  expect(spawn).not.toHaveBeenCalled();
 });
 
 it.each(["mkv", "mp4"] as const)(
@@ -95,7 +107,7 @@ it("removes the partial video temp file when the video download fails", async ()
   child.stderr.emit("data", Buffer.from("some yt-dlp error\n"));
   child.emit("close", 1);
 
-  expect(await done).toEqual({ success: false, error: "some yt-dlp error\n" });
+  expect(await done).toEqual({ success: false, error: "yt-dlp exited with code 1" });
   expect(unlink).toHaveBeenCalledWith(videoTempPath);
   // Audio is never attempted once video already failed.
   expect(spawn).toHaveBeenCalledTimes(1);
@@ -114,7 +126,7 @@ it("removes both temp files when the audio download fails", async () => {
   child.stderr.emit("data", Buffer.from("audio fetch failed\n"));
   child.emit("close", 1);
 
-  expect(await done).toEqual({ success: false, error: "audio fetch failed\n" });
+  expect(await done).toEqual({ success: false, error: "yt-dlp exited with code 1" });
   expect(unlink).toHaveBeenCalledWith(videoTempPath);
   expect(unlink).toHaveBeenCalledWith(audioTempPath);
 });
@@ -175,7 +187,7 @@ it("cleans up the finished video temp file when preparing the audio download rej
   // turn into an unhandled rejection out of downloadHlsStream.
   getSetting.mockRejectedValueOnce(new Error("db unavailable"));
 
-  expect(await done).toEqual({ success: false, error: "db unavailable" });
+  expect(await done).toEqual({ success: false, error: "Stream download failed" });
   expect(unlink).toHaveBeenCalledWith(videoTempPath);
   // The audio process never even got to spawn.
   expect(spawn).toHaveBeenCalledTimes(1);
@@ -316,7 +328,7 @@ it("clears the download timeout after a process error", async () => {
     });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
     child.emit("error", new Error("spawn failed"));
-    expect(await done).toEqual({ success: false, error: "spawn failed" });
+    expect(await done).toEqual({ success: false, error: "yt-dlp process failed" });
     await vi.advanceTimersByTimeAsync(11 * 60_000);
     expect(child.kill).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);

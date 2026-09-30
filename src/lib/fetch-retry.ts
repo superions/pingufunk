@@ -85,7 +85,10 @@ export async function fetchWithRetry(
           reject(new FetchBudgetError());
         }, remaining);
       });
-      const response = await Promise.race([fetch(url, { ...init, signal }), timeout]);
+      const response = await Promise.race([
+        fetch(url, { ...init, redirect: "error", signal }),
+        timeout,
+      ]);
       if (response.ok || !isRetryable(response.status) || attempt === maxRetries) {
         return response;
       }

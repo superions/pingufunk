@@ -134,10 +134,10 @@ function triggerDownloadProcessing(): void {
   // Use dynamic import to load the download manager only on server-side
   import("@/server/download-manager")
     .then(({ startDownloadProcessing }) => {
-      startDownloadProcessing().catch(console.error);
+      startDownloadProcessing().catch(() => console.error("Failed to start download processing"));
     })
-    .catch((err) => {
-      console.error("Failed to load download manager:", err);
+    .catch(() => {
+      console.error("Failed to load download manager");
     });
 }
 

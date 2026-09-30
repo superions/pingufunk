@@ -111,11 +111,8 @@ export async function POST(request: NextRequest) {
       status: true,
       nzo_ids: [queueItem.id],
     });
-  } catch (error) {
-    console.error("[API] Error adding file:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+  } catch {
+    console.error("[API] Error adding file");
+    return NextResponse.json({ error: "Failed to add file" }, { status: 500 });
   }
 }

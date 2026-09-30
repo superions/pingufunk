@@ -69,7 +69,6 @@ fi
 # Initialize and validate the database schema
 echo "Initializing database schema..."
 if [ "${DEBUG:-false}" = "true" ]; then
-    echo "DATABASE_URL: $DATABASE_URL"
     echo "Checking prisma directory..."
     ls -la /app/prisma/ 2>&1 || echo "Cannot list /app/prisma/"
     ls -la /app/prisma/data/ 2>&1 || echo "Cannot list /app/prisma/data/"

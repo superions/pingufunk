@@ -26,7 +26,10 @@ vi.mock("@/lib/db", () => ({
     },
   },
 }));
-vi.mock("@/lib/settings", () => ({ clearSettingsCache: vi.fn() }));
+vi.mock("@/lib/settings", () => ({
+  clearSettingsCache: vi.fn(),
+  getSetting: vi.fn(async (key: string) => values.get(key) ?? null),
+}));
 vi.mock("@/lib/cache", () => ({
   clearTTLCache: vi.fn(),
   mediathekCache: { clear: vi.fn() },
@@ -41,6 +44,9 @@ beforeEach(() => {
   values.clear();
   values.set("api.srgssr.consumerKey", "private-key");
   values.set("api.srgssr.consumerSecret", "private-secret");
+  values.set("api.tmdb.key", "legacy-v3-key");
+  values.set("download.proxyUrl", "http://user:private-password@proxy.invalid");
+  values.set("tvdb_token", "legacy-private-token");
   upsert.mockImplementation(
     async ({ where, update }: { where: { key: string }; update: { value: string } }) =>
       values.set(where.key, update.value)
@@ -56,11 +62,24 @@ function post(body: unknown) {
 it("masks both SRF credentials in bulk and single-setting responses", async () => {
   const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
   expect(JSON.stringify(all)).not.toContain("private-");
+  expect(JSON.stringify(all)).not.toContain("proxy.invalid");
+  expect(JSON.stringify(all)).not.toContain("legacy-private-token");
+  expect(all["api.tmdb.key"]).toBe("");
   expect(all["api.srgssr.consumerSecret"]).toBeTruthy();
   const single = await (
     await GET(new NextRequest("http://localhost/api/settings?key=api.srgssr.consumerKey"))
   ).json();
   expect(single.value).toBe(all["api.srgssr.consumerKey"]);
+  expect((await GET(new NextRequest("http://localhost/api/settings?key=tvdb_token"))).status).toBe(
+    404
+  );
+});
+
+it("shows a usable TMDB read token only as presence", async () => {
+  values.set("api.tmdb.key", "eyJ.synthetic.read.token");
+  const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  expect(all["api.tmdb.key"]).toBeTruthy();
+  expect(JSON.stringify(all)).not.toContain("eyJ.synthetic.read.token");
 });
 
 it("preserves stored credentials when a client saves masked settings again", async () => {
@@ -71,14 +90,20 @@ it("preserves stored credentials when a client saves masked settings again", asy
   expect(values.get("api.srgssr.consumerSecret")).toBe("private-secret");
 });
 
-it("allows replacing and clearing a credential and invalidates the token", async () => {
-  await post({ "api.srgssr.consumerSecret": "new-secret" });
-  expect(values.get("api.srgssr.consumerSecret")).toBe("new-secret");
-  await post({ key: "api.srgssr.consumerSecret", value: "" });
-  expect(values.get("api.srgssr.consumerSecret")).toBe("");
-  expect(clearSrfTokenCache).toHaveBeenCalledTimes(2);
-  await DELETE(new NextRequest("http://localhost/api/settings?key=api.srgssr.consumerKey"));
-  expect(clearSrfTokenCache).toHaveBeenCalledTimes(3);
+it("rejects browser credential writes without changing legacy stored credentials", async () => {
+  expect((await post({ "api.srgssr.consumerSecret": "new-secret" })).status).toBe(400);
+  expect((await post({ key: "api.srgssr.consumerSecret", value: "" })).status).toBe(400);
+  expect((await post({ "matching.strategy": "strict", "api.tvdb.key": "new-key" })).status).toBe(
+    400
+  );
+  expect(
+    (await DELETE(new NextRequest("http://localhost/api/settings?key=api.srgssr.consumerKey")))
+      .status
+  ).toBe(400);
+  expect(values.get("api.srgssr.consumerSecret")).toBe("private-secret");
+  expect(values.has("matching.strategy")).toBe(false);
+  expect(upsert).not.toHaveBeenCalled();
+  expect(clearSrfTokenCache).not.toHaveBeenCalled();
 });
 
 it("returns the conservative versioned language policy for missing settings", async () => {

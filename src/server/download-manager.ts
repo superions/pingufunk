@@ -186,7 +186,6 @@ async function processDownload(downloadId: string): Promise<void> {
     }
 
     console.log(`[Download] Starting: ${download.title}`);
-    console.log(`[Download] URL: ${download.url}`);
 
     // Mark as downloading
     await prisma.download.update({
@@ -409,9 +408,9 @@ async function processDownload(downloadId: string): Promise<void> {
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB)`
       );
     }
-  } catch (error) {
-    console.error(`[Download] Error processing download ${downloadId}:`, error);
-    await markAsFailed(downloadId, error instanceof Error ? error.message : "Unknown error");
+  } catch {
+    console.error(`[Download] Error processing download ${downloadId}`);
+    await markAsFailed(downloadId, "Download processing failed");
   } finally {
     // Remove only empty directories owned by this job. A failed tool's
     // unexpected leftovers remain visible for diagnosis, never swept broadly.
@@ -419,7 +418,7 @@ async function processDownload(downloadId: string): Promise<void> {
       if (!directory) continue;
       await fs.rmdir(directory).catch((error: NodeJS.ErrnoException) => {
         if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code ?? "")) {
-          console.error("[Download] Could not remove empty job directory:", error);
+          console.error("[Download] Could not remove empty job directory");
         }
       });
     }
@@ -473,10 +472,10 @@ async function downloadFile(
 
   try {
     resetStallTimer();
-    const response = await fetch(url, { signal: abortController.signal });
+    const response = await fetch(url, { redirect: "error", signal: abortController.signal });
 
     if (!response.ok || !response.body) {
-      console.error(`[Download] HTTP error: ${response.status} ${response.statusText}`);
+      console.error(`[Download] HTTP error: ${response.status}`);
       return false;
     }
 
@@ -529,15 +528,15 @@ async function downloadFile(
 
     completed = await new Promise<boolean>((resolve) => {
       fileStream!.once("finish", () => resolve(true));
-      fileStream!.once("error", (err) => {
-        console.error(`[Download] Write error: ${err}`);
+      fileStream!.once("error", () => {
+        console.error("[Download] Write error");
         resolve(false);
       });
       fileStream!.end();
     });
     return completed;
-  } catch (error) {
-    console.error(`[Download] Error downloading file:`, error);
+  } catch {
+    console.error("[Download] Error downloading file");
     return false;
   } finally {
     clearTimeout(stallTimer);

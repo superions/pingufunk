@@ -4,64 +4,48 @@ import { fetchWithRetry } from "@/lib/fetch-retry";
 import { getSettings } from "@/lib/settings";
 import { buildTvdbLoginPayload } from "@/lib/tvdb-auth";
 import type { TvdbData, TvdbEpisode, TvdbAlias } from "@/types";
+import { createHash } from "node:crypto";
 
 const TVDB_API_URL = "https://api4.thetvdb.com/v4";
 
 // Token management
 let cachedToken: string | null = null;
 let tokenExpiry: Date | null = null;
+let tokenCredentialHash: string | null = null;
 
 export function clearTvdbTokenMemoryCache(): void {
   cachedToken = null;
   tokenExpiry = null;
+  tokenCredentialHash = null;
 }
 
 export async function clearTvdbTokenCache(): Promise<void> {
   clearTvdbTokenMemoryCache();
-  await prisma.config.deleteMany({
-    where: { key: { in: ["tvdb_token", "tvdb_token_expiry"] } },
-  });
 }
 
 async function getToken(): Promise<string | null> {
-  // Check if we have a valid cached token
-  if (cachedToken && tokenExpiry && new Date() < tokenExpiry) {
-    return cachedToken;
-  }
-
-  // Check database for stored token
-  const storedToken = await prisma.config.findUnique({
-    where: { key: "tvdb_token" },
-  });
-
-  const storedExpiry = await prisma.config.findUnique({
-    where: { key: "tvdb_token_expiry" },
-  });
-
-  if (storedToken && storedExpiry) {
-    const expiry = new Date(storedExpiry.value);
-    if (new Date() < expiry) {
-      cachedToken = storedToken.value;
-      tokenExpiry = expiry;
-      return cachedToken;
-    }
-  }
-
-  // Need to refresh token
-  return refreshToken();
-}
-
-async function refreshToken(): Promise<string | null> {
   const settings = await getSettings(["api.tvdb.key", "api.tvdb.pin"]);
   const apiKey = settings["api.tvdb.key"];
   const pin = settings["api.tvdb.pin"];
   const payload = buildTvdbLoginPayload(apiKey, pin);
-
   if (!payload) {
     console.error("TVDB API key not configured in settings");
     return null;
   }
+  const credentialHash = createHash("sha256")
+    .update(JSON.stringify([apiKey, pin]))
+    .digest("hex");
+  if (credentialHash !== tokenCredentialHash) clearTvdbTokenMemoryCache();
+  if (cachedToken && tokenExpiry && new Date() < tokenExpiry) return cachedToken;
 
+  return refreshToken(payload, credentialHash);
+}
+
+async function refreshToken(
+  payload: ReturnType<typeof buildTvdbLoginPayload>,
+  credentialHash: string
+): Promise<string | null> {
+  if (!payload) return null;
   try {
     const response = await fetchWithRetry(`${TVDB_API_URL}/login`, {
       method: "POST",
@@ -75,29 +59,18 @@ async function refreshToken(): Promise<string | null> {
       const token = data.data.token;
       const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      // Store in database
-      await prisma.config.upsert({
-        where: { key: "tvdb_token" },
-        update: { value: token },
-        create: { key: "tvdb_token", value: token },
-      });
-
-      await prisma.config.upsert({
-        where: { key: "tvdb_token_expiry" },
-        update: { value: expiry.toISOString() },
-        create: { key: "tvdb_token_expiry", value: expiry.toISOString() },
-      });
-
+      // Legacy DB token rows are left intact for migration but never reused.
       cachedToken = token;
       tokenExpiry = expiry;
+      tokenCredentialHash = credentialHash;
 
       return token;
     }
 
-    console.error("Failed to get TVDB token:", data);
+    console.error("Failed to get TVDB token");
     return null;
-  } catch (error) {
-    console.error("Error refreshing TVDB token:", error);
+  } catch {
+    console.error("Error refreshing TVDB token");
     return null;
   }
 }
@@ -164,7 +137,7 @@ async function fetchAndCacheSeriesData(tvdbId: number): Promise<TvdbData | null>
     const data = await response.json();
 
     if (!data || data.status !== "success") {
-      console.error("Failed to fetch data from TVDB:", data);
+      console.error("Failed to fetch data from TVDB");
       return null;
     }
 
@@ -276,8 +249,8 @@ async function fetchAndCacheSeriesData(tvdbId: number): Promise<TvdbData | null>
     tvdbCache.set(cacheKey, tvdbData);
 
     return tvdbData;
-  } catch (error) {
-    console.error("Error fetching TVDB data:", error);
+  } catch {
+    console.error("Error fetching TVDB data");
     return null;
   }
 }

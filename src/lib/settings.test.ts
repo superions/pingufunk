@@ -58,6 +58,7 @@ describe("bounded setting lookups", () => {
       )
       .mockResolvedValueOnce({ value: "new" });
     const oldRead = getSetting("api.tvdb.key");
+    await vi.waitFor(() => expect(findUnique).toHaveBeenCalledTimes(1));
     clearSettingsCache();
     expect(await getSetting("api.tvdb.key")).toBe("new");
     resolveOld({ value: "old" });
