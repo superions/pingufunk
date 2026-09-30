@@ -652,7 +652,7 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       gebundene PostgreSQL-17-Instanz, spielt die native Prisma-Migration auf
       zwei Testdatenbanken ein und führt Katalog-/Runtime- sowie scoped
       Import-/Resume-Proben aus. Der identische `npm run test:pg`-Ablauf
-      bestand lokal; der tatsächliche Fork-CI-Lauf ist noch zu prüfen.
+      bestand lokal und im Fork-CI-Lauf 36656647880 (beide Jobs grün).
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,

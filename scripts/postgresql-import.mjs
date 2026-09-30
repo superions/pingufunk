@@ -16,8 +16,9 @@ async function hashFile(path) {
 }
 
 /**
- * First-write core for a private, empty PostgreSQL target. This deliberately
- * has no CLI until repeat verification and a persisted run identity exist.
+ * Import core for a private, empty PostgreSQL target. The CLI requires a
+ * persisted run identity and separates import, read-only verification and
+ * nontransactional sequence synchronization into explicit actions.
  */
 export async function importSnapshot({
   snapshotPath,
