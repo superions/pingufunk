@@ -663,6 +663,11 @@ Produktive Anwendung des Runbooks gehört ausschließlich P10.3–P10.5.
       zwei Testdatenbanken ein und führt Katalog-/Runtime- sowie scoped
       Import-/Resume-Proben aus. Der identische `npm run test:pg`-Ablauf
       bestand lokal und im Fork-CI-Lauf 36656647880 (beide Jobs grün).
+      Die additive Checkpoint-Migration und Rollen-Grenztests bestanden
+      im Fork-CI-Lauf 36657639865; die zugehörige Docker-Build-Validierung
+      36657639887 war ebenfalls grün. Ein vorheriger CI-Lauf fand einen
+      Start-Race im Testharness (Socket statt finalem TCP-Server); die
+      korrigierte TCP-Bereitschaftsprüfung wurde erneut erfolgreich ausgeführt.
 - [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,
