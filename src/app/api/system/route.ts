@@ -12,7 +12,8 @@ export async function GET() {
       where: { status: "completed" },
     });
     const downloadsInQueue = await prisma.download.count({
-      where: { status: { in: ["queued", "downloading", "processing"] } },
+      // The worker persists "converting"; retain legacy "processing" rows too.
+      where: { status: { in: ["queued", "downloading", "converting", "processing"] } },
     });
     const downloadsFailed = await prisma.download.count({
       where: { status: "failed" },
