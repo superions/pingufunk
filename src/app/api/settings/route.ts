@@ -2,6 +2,7 @@ import { clearTokenCache as clearSrfTokenCache } from "@/services/srgssr-api";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { writesEnabled } from "@/lib/write-gate";
+import { isDownloadPathInput } from "@/lib/download-path-input";
 import { SONARR_DEFAULT_SETTINGS, validateSonarrSetting } from "@/lib/sonarr-settings";
 import { RADARR_DEFAULT_SETTINGS, validateRadarrSetting } from "@/lib/radarr-settings";
 import { clearSettingsCache, getSetting } from "@/lib/settings";
@@ -70,6 +71,10 @@ function invalidateSettingConsumers(keys: string[]): void {
 }
 
 function validateSettingValue(key: string, value: unknown): string | null {
+  if (key === "download.path") {
+    // An empty setting explicitly selects the existing environment/default path.
+    return value === "" || isDownloadPathInput(value) ? value : null;
+  }
   const radarrValue = validateRadarrSetting(key, value);
   if (radarrValue !== undefined) return radarrValue;
   const sonarrValue = validateSonarrSetting(key, value);
@@ -238,12 +243,13 @@ export async function DELETE(request: NextRequest) {
       await clearTvdbTokenCache();
     }
     return NextResponse.json({ success: true, key });
-  } catch {
-    // Key might not exist, which is fine
-    invalidateSettingConsumers([key]);
-    if (isTvdbCredentialSettingKey(key)) {
-      await clearTvdbTokenCache();
+  } catch (error) {
+    // Only an absent key is an idempotent success; DB failure is not a reset.
+    if (error instanceof Error && "code" in error && error.code === "P2025") {
+      invalidateSettingConsumers([key]);
+      return NextResponse.json({ success: true, key });
     }
-    return NextResponse.json({ success: true, key });
+    console.error("Failed to reset setting");
+    return NextResponse.json({ error: "Failed to reset setting" }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/contexts/settings-context";
+import { isDownloadPathInput } from "@/lib/download-path-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -33,9 +34,11 @@ const STEPS = [
 
 export default function SetupPage() {
   const router = useRouter();
-  const { settings, updateSettings } = useSettings();
+  const { settings, isLoading, updateSettings, refreshSettings } = useSettings();
   const [currentStep, setCurrentStep] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Form state - use settings as initial values, track local overrides
   const [localOverrides, setLocalOverrides] = useState<Record<string, string>>({});
@@ -61,9 +64,7 @@ export default function SetupPage() {
 
   const validatePath = async () => {
     setIsValidating(true);
-    // In a real app, this would check if the path exists and is writable
-    // For now, just check if it's not empty
-    setPathValid(downloadPath.trim().length > 0);
+    setPathValid(isDownloadPathInput(downloadPath));
     setIsValidating(false);
   };
 
@@ -81,17 +82,33 @@ export default function SetupPage() {
   };
 
   const saveAndContinue = async () => {
-    await updateSettings({
-      "download.path": downloadPath,
-    });
-    setCurrentStep((prev) => prev + 1);
+    if (!isDownloadPathInput(downloadPath) || isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updateSettings({ "download.path": downloadPath });
+      setCurrentStep((prev) => prev + 1);
+    } catch {
+      setSaveError(
+        "Speichern fehlgeschlagen. Der Schritt bleibt offen; Eingaben prüfen und erneut versuchen."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const finishSetup = async () => {
-    await updateSettings({
-      "system.setupComplete": "true",
-    });
-    router.push("/");
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updateSettings({ "system.setupComplete": "true" });
+      router.push("/");
+    } catch {
+      setSaveError("Setup-Abschluss wurde nicht gespeichert. Bitte erneut versuchen.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -105,8 +122,22 @@ export default function SetupPage() {
     return "http://localhost:3000";
   };
 
+  if (isLoading) return <p className="p-8">Einstellungen werden geladen...</p>;
+  if (!settings)
+    return (
+      <div className="p-8 space-y-4">
+        <p role="alert">Einstellungen konnten nicht geladen werden. Setup bleibt unverändert.</p>
+        <Button onClick={refreshSettings}>Erneut laden</Button>
+      </div>
+    );
+
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto">
+      {saveError && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {saveError}
+        </p>
+      )}
       {/* Progress Steps */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -182,15 +213,15 @@ export default function SetupPage() {
                   placeholder="/downloads"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Hier wird nur geprüft, ob der Pfad nicht leer ist; Existenz und Schreibrechte
-                  werden nicht geprüft.
+                  Prüft lokale Pfadsyntax ohne URL oder Steuerzeichen; Existenz und Schreibrechte
+                  des Mounts werden nicht geprüft.
                 </p>
               </div>
 
               {pathValid !== null && (
                 <Badge variant={pathValid ? "default" : "destructive"}>
                   {pathValid ? <Check className="w-3 h-3 mr-1" /> : <X className="w-3 h-3 mr-1" />}
-                  {pathValid ? "Eingabe vorhanden" : "Pfad leer"}
+                  {pathValid ? "Pfadsyntax gültig" : "Ungültige Pfadeingabe"}
                 </Badge>
               )}
 
@@ -204,7 +235,10 @@ export default function SetupPage() {
                     {isValidating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                     Eingabe prüfen
                   </Button>
-                  <Button onClick={() => setCurrentStep(2)}>
+                  <Button
+                    onClick={() => setCurrentStep(2)}
+                    disabled={!isDownloadPathInput(downloadPath)}
+                  >
                     Weiter
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
@@ -287,7 +321,7 @@ export default function SetupPage() {
                     {isValidating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                     Status prüfen
                   </Button>
-                  <Button onClick={saveAndContinue}>
+                  <Button onClick={saveAndContinue} disabled={isSaving}>
                     Weiter
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
@@ -752,7 +786,7 @@ export default function SetupPage() {
                 </ul>
               </div>
 
-              <Button onClick={finishSetup} size="lg">
+              <Button onClick={finishSetup} size="lg" disabled={isSaving}>
                 Zum Dashboard
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>

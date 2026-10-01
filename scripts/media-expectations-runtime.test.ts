@@ -85,6 +85,28 @@ for (const provider of ["sqlite", "postgresql"] as const) {
         mediaExpectations: JSON.stringify(expectations),
         mediaValidation: null,
       });
+      const sabPaths = ["/api", "/api/download"];
+      const sabHandlers = [
+        await import("@/app/api/route"),
+        await import("@/app/api/download/route"),
+      ];
+      for (const [index, handler] of sabHandlers.entries()) {
+        const queued = await handler.GET(
+          new NextRequest(`http://localhost${sabPaths[index]}?mode=queue`)
+        );
+        expect((await queued.json()).queue.slots).toEqual([
+          expect.objectContaining({
+            nzo_id: id,
+            filename: release.title,
+            cat: "sonarr",
+            status: "Queued",
+          }),
+        ]);
+        const status = await handler.GET(
+          new NextRequest(`http://localhost${sabPaths[index]}?mode=fullstatus`)
+        );
+        expect((await status.json()).status.noofslots).toBe(1);
+      }
       await prisma.download.update({
         where: { id },
         data: { status: "failed", mediaValidation: '{"version":1,"durationSeconds":120}' },
@@ -96,8 +118,22 @@ for (const provider of ["sqlite", "postgresql"] as const) {
       expect((await prisma.download.findUniqueOrThrow({ where: { id } })).mediaExpectations).toBe(
         stored.mediaExpectations
       );
+      const { GET: sab } = await import("@/app/api/download/route");
+      const failed = await sab(new NextRequest("http://localhost/api/download?mode=history"));
+      expect((await failed.json()).history.slots).toEqual([
+        expect.objectContaining({
+          nzo_id: id,
+          name: release.title,
+          category: "sonarr",
+          status: "Failed",
+        }),
+      ]);
       const { retryDownload, addToQueue } = await import("@/services/download");
-      const retried = await retryDownload(id);
+      const retry = await sab(
+        new NextRequest(`http://localhost/api/download?mode=history&name=retry&value=${id}`)
+      );
+      expect(retry.status).toBe(200);
+      const retried = { id: (await retry.json()).nzo_id as string };
       expect(retried?.id).not.toBe(id);
       expect(await prisma.download.findUnique({ where: { id } })).toBeNull();
       expect(await prisma.download.findUniqueOrThrow({ where: { id: retried!.id } })).toMatchObject(
@@ -112,6 +148,11 @@ for (const provider of ["sqlite", "postgresql"] as const) {
         data: { status: "failed", mediaExpectations: "{}" },
       });
       await expect(retryDownload(legacy.id)).rejects.toThrow("Invalid media expectations");
+      expect(await prisma.download.findUnique({ where: { id: legacy.id } })).not.toBeNull();
+      const rejectedRetry = await sab(
+        new NextRequest(`http://localhost/api/download?mode=history&name=retry&value=${legacy.id}`)
+      );
+      expect(rejectedRetry.status).toBe(409);
       expect(await prisma.download.findUnique({ where: { id: legacy.id } })).not.toBeNull();
       queryContent.mockResolvedValue([
         {
@@ -158,6 +199,21 @@ for (const provider of ["sqlite", "postgresql"] as const) {
             resolution: null,
           });
         }
+      }
+      // Removal is exercised through both shipped URLs against persisted rows;
+      // real completed-file ownership and media validity have separate image gates.
+      for (const [index, handler] of sabHandlers.entries()) {
+        const removedId = uiIds.pop()!;
+        await prisma.download.update({ where: { id: removedId }, data: { status: "failed" } });
+        const removal = await handler.GET(
+          new NextRequest(
+            `http://localhost${sabPaths[index]}?mode=history&name=delete&value=${removedId}`
+          )
+        );
+        expect(removal.status).toBe(200);
+        expect(await removal.json()).toEqual({ status: true });
+        expect(await prisma.download.findUnique({ where: { id: removedId } })).toBeNull();
+        expect(await prisma.download.findUnique({ where: { id: uiIds[0] } })).not.toBeNull();
       }
       await prisma.download.deleteMany({
         where: { id: { in: [retried!.id, legacy.id, ...uiIds] } },

@@ -9,9 +9,10 @@ import {
 import { clearSettingsCache } from "@/lib/settings";
 import { mediathekCache } from "@/lib/cache";
 
-const { values, upsert, clearSrfTokenCache } = vi.hoisted(() => ({
+const { values, upsert, deleteSetting, clearSrfTokenCache } = vi.hoisted(() => ({
   values: new Map<string, string>(),
   upsert: vi.fn(),
+  deleteSetting: vi.fn(),
   clearSrfTokenCache: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({
@@ -22,7 +23,7 @@ vi.mock("@/lib/db", () => ({
       ),
       findMany: vi.fn(async () => [...values].map(([key, value]) => ({ key, value }))),
       upsert,
-      delete: vi.fn(async ({ where }: { where: { key: string } }) => values.delete(where.key)),
+      delete: deleteSetting,
     },
   },
 }));
@@ -42,6 +43,10 @@ vi.mock("@/services/srgssr-api", () => ({ clearTokenCache: clearSrfTokenCache })
 beforeEach(() => {
   vi.clearAllMocks();
   values.clear();
+  deleteSetting.mockReset();
+  deleteSetting.mockImplementation(async ({ where }: { where: { key: string } }) =>
+    values.delete(where.key)
+  );
   values.set("api.srgssr.consumerKey", "private-key");
   values.set("api.srgssr.consumerSecret", "private-secret");
   values.set("api.tmdb.key", "legacy-v3-key");
@@ -53,6 +58,22 @@ beforeEach(() => {
   );
 });
 afterEach(() => vi.unstubAllEnvs());
+
+it("does not acknowledge an unsuccessful reset as success or expose DB errors", async () => {
+  deleteSetting.mockRejectedValue(new Error("synthetic private database detail"));
+  const response = await DELETE(new NextRequest("http://localhost/api/settings?key=download.path"));
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({ error: "Failed to reset setting" });
+  expect(clearSettingsCache).not.toHaveBeenCalled();
+});
+
+it("keeps reset idempotent when the requested key is already absent", async () => {
+  deleteSetting.mockRejectedValue(Object.assign(new Error("missing"), { code: "P2025" }));
+  const response = await DELETE(new NextRequest("http://localhost/api/settings?key=download.path"));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ success: true, key: "download.path" });
+  expect(clearSettingsCache).toHaveBeenCalled();
+});
 
 it("keeps Settings readable but rejects every settings write in maintenance", async () => {
   vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
@@ -127,6 +148,9 @@ it.each([
   ["matching.sonarr.tolerancePercent", "26"],
   ["matching.sonarr.tolerancePercent", "NaN"],
   ["matching.minDuration", "-1"],
+  ["download.path", "https://example.invalid/media"],
+  ["download.path", "folder\u0000other"],
+  ["download.path", 123],
 ])("rejects malformed %s before any bulk write", async (key, value) => {
   expect((await post({ "matching.strategy": "strict", [key]: value })).status).toBe(400);
   expect(upsert).not.toHaveBeenCalled();

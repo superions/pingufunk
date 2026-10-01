@@ -94,7 +94,7 @@ function formatUptime(seconds: number): string {
 }
 
 export default function SettingsPage() {
-  const { settings, isLoading, updateSettings } = useSettings();
+  const { settings, isLoading, updateSettings, refreshSettings } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<{ error: boolean; message: string } | null>(
     null
@@ -193,7 +193,14 @@ export default function SettingsPage() {
       }
       if (Object.keys(updates).length > 0) {
         await updateSettings(updates);
-        setFormState({});
+        // Saving one card must not discard unsaved changes in another card.
+        setFormState((previous) => {
+          const remaining = { ...previous };
+          for (const [key, value] of Object.entries(updates)) {
+            if (remaining[key] === value) delete remaining[key];
+          }
+          return remaining;
+        });
       }
       setSaveFeedback({ error: false, message: "Einstellungen gespeichert." });
     } catch {
@@ -251,6 +258,17 @@ export default function SettingsPage() {
     );
   }
 
+  if (!settings) {
+    return (
+      <div className="p-8 space-y-4">
+        <p role="alert">
+          Einstellungen konnten nicht geladen werden. Es werden keine Ersatzwerte gespeichert.
+        </p>
+        <Button onClick={refreshSettings}>Erneut laden</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -258,6 +276,17 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground text-sm">Konfiguriere RundfunkArr</p>
       </div>
+
+      {saveFeedback && (
+        <p
+          role={saveFeedback.error ? "alert" : "status"}
+          className={
+            saveFeedback.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"
+          }
+        >
+          {saveFeedback.message}
+        </p>
+      )}
 
       {/* Tabs */}
       <Card>
@@ -706,18 +735,6 @@ export default function SettingsPage() {
                   {sonarrFormError && (
                     <p role="alert" className="text-sm text-destructive">
                       {sonarrFormError}
-                    </p>
-                  )}
-                  {saveFeedback && (
-                    <p
-                      role={saveFeedback.error ? "alert" : "status"}
-                      className={
-                        saveFeedback.error
-                          ? "text-sm text-destructive"
-                          : "text-sm text-muted-foreground"
-                      }
-                    >
-                      {saveFeedback.message}
                     </p>
                   )}
                 </CardContent>

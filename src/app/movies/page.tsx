@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Download, Film } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
+import { useContentSearch } from "@/hooks/use-content-search";
 
 interface SearchResult {
   id: string;
@@ -33,28 +34,19 @@ type QualityOption = {
 
 export default function MoviesPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const {
+    results: searchResults,
+    isSearching,
+    submittedQuery,
+    error: searchError,
+    search,
+  } = useContentSearch<SearchResult>("movie");
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
 
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    try {
-      const res = await fetch(
-        `/api/search?q=${encodeURIComponent(searchQuery)}&limit=50&type=movie`
-      );
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setSearchResults(data.results || []);
-    } catch (error) {
-      console.error("Search failed:", error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
+    setDownloadError(null);
+    await search(searchQuery);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -79,6 +71,7 @@ export default function MoviesPage() {
 
   const handleDownload = async (result: SearchResult, nzbContent: string, qualityKey: string) => {
     const downloadKey = `${result.id}-${qualityKey}`;
+    setDownloadError(null);
     setDownloadingIds((prev) => new Set(prev).add(downloadKey));
 
     try {
@@ -91,10 +84,12 @@ export default function MoviesPage() {
       }
       const data = await res.json();
       if (!data.status) {
-        console.error("Download failed");
+        throw new Error("Download rejected");
       }
-    } catch (error) {
-      console.error("Download failed:", error);
+    } catch {
+      setDownloadError(
+        "Der Download wurde nicht bestätigt. Queue prüfen, bevor du erneut einreihst."
+      );
     } finally {
       setDownloadingIds((prev) => {
         const next = new Set(prev);
@@ -110,7 +105,7 @@ export default function MoviesPage() {
       <div>
         <h1 className="text-2xl font-bold">Filme</h1>
         <p className="text-muted-foreground text-sm">
-          Suche nach Filmen in den Mediatheken (min. 60 Min.)
+          Suche nach Filmen in den Mediatheken mit den konfigurierten Suchfiltern
         </p>
       </div>
 
@@ -143,6 +138,12 @@ export default function MoviesPage() {
           </p>
         </CardContent>
       </Card>
+
+      {(searchError || downloadError) && (
+        <p role="alert" className="text-sm text-destructive">
+          {searchError || downloadError}
+        </p>
+      )}
 
       {/* Search Results */}
       {searchResults.length > 0 && (
@@ -212,10 +213,10 @@ export default function MoviesPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && searchResults.length === 0 && searchQuery && (
+      {!isSearching && !searchError && searchResults.length === 0 && submittedQuery && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
-            Keine Filme gefunden für &quot;{searchQuery}&quot;
+            Keine Filme gefunden für &quot;{submittedQuery}&quot;
           </CardContent>
         </Card>
       )}

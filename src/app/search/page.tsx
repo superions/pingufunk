@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Download } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
+import { useContentSearch } from "@/hooks/use-content-search";
 
 interface SearchResult {
   id: string;
@@ -27,26 +28,19 @@ interface SearchResult {
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const {
+    results: searchResults,
+    isSearching,
+    submittedQuery,
+    error: searchError,
+    search,
+  } = useContentSearch<SearchResult>();
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
 
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}&limit=50`);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setSearchResults(data.results || []);
-    } catch (error) {
-      console.error("Search failed:", error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
+    setDownloadError(null);
+    await search(searchQuery);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -58,6 +52,7 @@ export default function SearchPage() {
   const handleDownload = async (result: SearchResult) => {
     const nzbContent = result.nzbDownloads.hd || result.nzbDownloads.sd || result.nzbDownloads.low;
     if (!nzbContent) return;
+    setDownloadError(null);
     setDownloadingIds((prev) => new Set(prev).add(result.id));
 
     // Use category for download folder: movie -> /movie, tv -> /tv
@@ -73,10 +68,12 @@ export default function SearchPage() {
       }
       const data = await res.json();
       if (!data.status) {
-        console.error("Download failed");
+        throw new Error("Download rejected");
       }
-    } catch (error) {
-      console.error("Download failed:", error);
+    } catch {
+      setDownloadError(
+        "Der Download wurde nicht bestätigt. Queue prüfen, bevor du erneut einreihst."
+      );
     } finally {
       setDownloadingIds((prev) => {
         const next = new Set(prev);
@@ -117,6 +114,12 @@ export default function SearchPage() {
           </div>
         </CardContent>
       </Card>
+
+      {(searchError || downloadError) && (
+        <p role="alert" className="text-sm text-destructive">
+          {searchError || downloadError}
+        </p>
+      )}
 
       {/* Search Results */}
       {searchResults.length > 0 && (
@@ -180,10 +183,10 @@ export default function SearchPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && searchResults.length === 0 && searchQuery && (
+      {!isSearching && !searchError && searchResults.length === 0 && submittedQuery && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
-            Keine Ergebnisse gefunden für &quot;{searchQuery}&quot;
+            Keine Ergebnisse gefunden für &quot;{submittedQuery}&quot;
           </CardContent>
         </Card>
       )}

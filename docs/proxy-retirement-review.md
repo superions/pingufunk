@@ -625,3 +625,39 @@ die Root-SAB-Route behandelt Remove-/Retry-Fehler anders als ihr API-Alias.
 Diese vorhandenen Consumerbefunde gehören zur vollständigen P10.1-Abnahme;
 sie werden nicht als bereits behoben ausgegeben. P09 wartet auf aktuellen
 UI-Checkpoint/Forklauf; historische Produkt-/Mediengates nur wiederverwendet.
+
+## P09-Abnahme und P10-Consumercheckpoint (01.10.2026)
+
+P09 und P11.7/P11.8 sind nach CI 36798866207 und Dockerlauf 36798866196
+abgenommen; dort 782 reguläre Tests und die separat ausgeführten DB-Gates.
+Kein Deployment, kein PG→SQLite-Rücktransfer nach Writes und keine
+produktive Arr-Verbraucherprobe.
+
+P10.1 bleibt offen. Die beiden shipped SAB-URLs haben jetzt einen gemeinsamen
+Owner samt `fullstatus`, Maintenance und redigierten Fehlern. Native
+SQLite-/PG-Routeproben prüfen Queue, Failed-History, Retry mit erhaltenen
+Erwartungen und gezieltes Remove. Dabei wurde der tatsächliche
+`MediaExpectationsError` beim beschädigten Retry zunächst als 500 behandelt;
+der reale Regressionstest schlug fehl. Jetzt kontrollierter 409, unveränderte
+History, kein Legacy-Downgrade. Ein fehlgeschlagener Settingsreset wird nicht
+mehr als Erfolg ausgegeben; nur Prisma-P2025 ist idempotenter Erfolg.
+
+Such-/Filmfehler erhalten sichtbares Feedback statt falschem Leerzustand,
+Keyboardsubmission teilt den In-flight-Guard des Buttons, Reads sind begrenzt.
+Film-Mindestdauertext folgt dem konfigurierbaren Vertrag. Shows beschreiben
+historische Persistenz statt einen nicht mehr aktiven Cache. Ruleset-/Download-
+Read-/Mutationsfehler werden angezeigt; aktive Downloads zeigen keinen
+funktionslosen Abbruch als verfügbare Aktion. Das ist kein neuer Cancel-Worker.
+Lokale Pfadsyntax wird ohne URL/Steuerzeichen geprüft; bestehende relative
+Pfade bleiben gültig. Existenz/Mountrechte werden ausdrücklich nicht attestiert.
+Setup wartet auf Settings und fängt fehlgeschlagenes Speichern ab; Speichern
+einer Settingskarte verwirft nicht mehr andere ungespeicherte Eingaben.
+
+Produktgates vor visueller Abnahme: 814 reguläre Tests, Lint, Typecheck,
+Format und Build grün; aktualisierte native Routeprobe und alle 15 gesonderten
+DB-Ausführungen bestanden. Der Medien-Imageharness prüft zusätzlich beide
+Historyadressen, echtes jobisoliertes Dateientfernen und erneut probtes Retry;
+dieser neue Imagegate und die vollständige Desktopabnahme stehen noch aus.
+Baseline 933a304 wird separat gebaut, damit Assets nicht mit einem gerade
+überschriebenen laufenden `.next` vermischt werden. Zwei dadurch ungültige
+Zwischencaptures für Settings/Setup sind keine Abnahmeevidenz.

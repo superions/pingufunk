@@ -89,6 +89,11 @@ for (const [filename, duration, status, convert] of [
   )
     throw new Error("Synthetic media status/persistence mismatch");
   const history = request("api?mode=history").history.slots.find((slot) => slot.nzo_id === id);
+  const aliasHistory = request("api/download?mode=history").history.slots.find(
+    (slot) => slot.nzo_id === id
+  );
+  if (JSON.stringify(aliasHistory) !== JSON.stringify(history))
+    throw new Error("SAB aliases disagree on persisted history");
   if (!history || history.status !== (status === "completed" ? "Completed" : "Failed"))
     throw new Error("SAB consumer status mismatch");
   if (status === "completed") {
@@ -130,6 +135,57 @@ for (const [id, before] of terminalSnapshots) {
 console.log(
   "Real progressive/mux/HLS probe, negative media, queue continuation and SAB history passed"
 );
+
+// Real consumer mutations use only this harness's rows and private job files.
+const completedIds = [...terminalSnapshots]
+  .filter(([, row]) => row.status === "completed")
+  .map(([id]) => id);
+function fileExists(file) {
+  return (
+    run([
+      "exec",
+      container,
+      "node",
+      "-e",
+      'console.log(require("node:fs").existsSync(process.argv[1]))',
+      file,
+    ]).trim() === "true"
+  );
+}
+const neighborPath = terminalSnapshots.get(completedIds[2]).filePath;
+for (const [index, endpoint] of ["api", "api/download"].entries()) {
+  const id = completedIds[index];
+  const ownPath = terminalSnapshots.get(id).filePath;
+  if (!fileExists(ownPath) || !fileExists(neighborPath))
+    throw new Error("Missing owned completion fixture");
+  const removed = request(`${endpoint}?mode=history&name=delete&value=${id}&del_files=1`);
+  if (
+    removed.status !== true ||
+    fileExists(ownPath) ||
+    !fileExists(neighborPath) ||
+    request(`${endpoint}?mode=history`).history.slots.some((row) => row.nzo_id === id)
+  )
+    throw new Error("History removal failed to isolate its completed file");
+}
+const failedEntry = [...terminalSnapshots].find(([, row]) => row.status === "failed");
+const retried = request(`api/download?mode=history&name=retry&value=${failedEntry[0]}`);
+if (retried.status !== true || !retried.nzo_id || retried.nzo_id === failedEntry[0])
+  throw new Error("Retry failed to create an independent job");
+const retryDeadline = Date.now() + 30_000;
+while (
+  Date.now() < retryDeadline &&
+  !["completed", "failed"].includes(readJob(retried.nzo_id).status)
+)
+  await delay(200);
+const retryRow = readJob(retried.nzo_id);
+if (
+  retryRow.status !== "failed" ||
+  retryRow.validation !== null ||
+  retryRow.expectations !== failedEntry[1].expectations ||
+  request("api?mode=history").history.slots.some((row) => row.nzo_id === failedEntry[0])
+)
+  throw new Error("Retry lost expectations or bypassed the failed-media gate");
+console.log("Both SAB aliases, real isolated completed-file removal and re-probed retry passed");
 
 const pgContainer = process.env.PINGUFUNK_MEDIA_QA_PG_CONTAINER;
 if (pgContainer) {
