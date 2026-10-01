@@ -6,6 +6,7 @@ set -euo pipefail
 MIGRATOR_IMAGE="${PINGUFUNK_SMOKE_MIGRATOR_IMAGE:-pingufunk-p11-migrator-qa}"
 RUNNER_IMAGE="${PINGUFUNK_SMOKE_RUNNER_IMAGE:-pingufunk-p11-runtime-qa}"
 ROLLBACK_IMAGE="${PINGUFUNK_SMOKE_ROLLBACK_IMAGE:-}"
+SQLITE_ROLLBACK_IMAGE="${PINGUFUNK_SMOKE_SQLITE_ROLLBACK_IMAGE:-}"
 SOURCE_VARIANT="${PINGUFUNK_SMOKE_SOURCE_VARIANT:-bootstrap}"
 [[ "$SOURCE_VARIANT" == bootstrap || "$SOURCE_VARIANT" == current ]] || {
   echo "Unknown disposable source variant" >&2; exit 1;
@@ -18,6 +19,13 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   [[ "$(docker image inspect "$RUNNER_IMAGE" --format '{{.Id}}')" != "$ROLLBACK_IMAGE" ]] || {
     echo "Rollback image must be distinct from the candidate application" >&2; exit 1;
   }
+fi
+if [[ -n "$SQLITE_ROLLBACK_IMAGE" ]]; then
+  [[ "$SOURCE_VARIANT" == bootstrap && "$SQLITE_ROLLBACK_IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    echo "Original-source rollback requires bootstrap and an immutable SQLite image" >&2; exit 1;
+  }
+  [[ "$(docker image inspect "$SQLITE_ROLLBACK_IMAGE" --format '{{.Id}}')" == "$SQLITE_ROLLBACK_IMAGE" ]]
+  [[ "$(docker image inspect "$RUNNER_IMAGE" --format '{{.Id}}')" != "$SQLITE_ROLLBACK_IMAGE" ]]
 fi
 SMOKE_ID="${RANDOM}-${RANDOM}"
 PG_CONTAINER="pingufunk-smoke-pg-${SMOKE_ID}"
@@ -191,6 +199,28 @@ if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   exit 1
 fi
 stop_app
+
+if [[ -n "$SQLITE_ROLLBACK_IMAGE" ]]; then
+  # The same full cutover rehearsal returns to its original source before the
+  # first PG write. Preserve the source byte-for-byte; no target cleanup.
+  source_hash="$(SMOKE_SOURCE="$SMOKE_ROOT/source/source.sqlite" node -e 'console.log(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.env.SMOKE_SOURCE)).digest("hex"))')"
+  docker run -d --name "$APP_CONTAINER" --network none \
+    -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e PINGUFUNK_WRITES_ENABLED=0 \
+    -e DATABASE_URL=file:/source/source.sqlite \
+    --mount "type=bind,src=${SMOKE_ROOT}/source,dst=/source" "$SQLITE_ROLLBACK_IMAGE" >/dev/null
+  SMOKE_APP_STARTED=1
+  ready=0
+  for ((attempt=0;attempt<30;attempt++)); do
+    if docker exec "$APP_CONTAINER" curl -fsS 'http://localhost:6767/api/settings?key=smoke' \
+      | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="source")process.exit(1)})' 2>/dev/null; then ready=1; break; fi
+    sleep 1
+  done
+  [[ "$ready" == 1 ]] || { echo "Original SQLite image rollback did not become ready" >&2; exit 1; }
+  stop_app
+  SMOKE_SOURCE="$SMOKE_ROOT/source/source.sqlite" EXPECTED_HASH="$source_hash" node -e 'if(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.env.SMOKE_SOURCE)).digest("hex")!==process.env.EXPECTED_HASH)process.exit(1)'
+  [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc 'SELECT count(*) FROM "MigrationCheckpoint"')" == 0 ]]
+  echo "Immutable original SQLite rollback after PG maintenance passed with unchanged source and empty checkpoint"
+fi
 
 DATABASE_URL="$RUNTIME_URL" docker run -d --name "$APP_CONTAINER" \
   --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 \

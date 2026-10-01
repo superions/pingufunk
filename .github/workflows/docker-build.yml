@@ -54,9 +54,8 @@ jobs:
       - name: Rehearse disposable TLS migration and post-write rollback
         run: |
           export PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-pg-maintenance-rollback-qa --format '{{.Id}}')"
-          for variant in bootstrap current; do
-            PINGUFUNK_SMOKE_SOURCE_VARIANT="$variant" bash scripts/postgresql-container-smoke.sh
-          done
+          PINGUFUNK_SMOKE_SQLITE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-sqlite-source-rollback-qa --format '{{.Id}}')" bash scripts/postgresql-container-smoke.sh
+          PINGUFUNK_SMOKE_SOURCE_VARIANT=current bash scripts/postgresql-container-smoke.sh
 
       - name: Verify isolated SQLite runtime and persistence
         run: |

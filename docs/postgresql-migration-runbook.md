@@ -87,9 +87,9 @@ git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | \
 PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-sqlite-source-rollback-qa --format '{{.Id}}')" \
   bash scripts/sqlite-container-smoke.sh
 export PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-pg-maintenance-rollback-qa --format '{{.Id}}')"
-for variant in bootstrap current; do
-  PINGUFUNK_SMOKE_SOURCE_VARIANT="$variant" bash scripts/postgresql-container-smoke.sh
-done
+PINGUFUNK_SMOKE_SQLITE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-sqlite-source-rollback-qa --format '{{.Id}}')" \
+  bash scripts/postgresql-container-smoke.sh
+PINGUFUNK_SMOKE_SOURCE_VARIANT=current bash scripts/postgresql-container-smoke.sh
 unset PINGUFUNK_SMOKE_ROLLBACK_IMAGE
 ```
 
@@ -97,7 +97,10 @@ Voraussetzung: zuvor gebaute Kandidaten unter den oberen `pingufunk-p11-*`-
 Testnamen. Beide Rückwege verlangen unterschiedliche immutable lokale Image-IDs.
 Der aktuelle Sourcefall führt die tatsächliche SQLite-Kette samt Checksums aus
 und enthält nichtleere P09-Payloads. Import, Backuprestore und Rollback vergleichen
-auch diese Werte, nicht nur Rowcounts. Bootstrap bleibt ein separater Fall.
+auch diese Werte, nicht nur Rowcounts. Bootstrap bleibt ein separater Fall:
+Nach PG-Maintenance kehrt derselbe Ablauf vor dem ersten PG-Write zum
+ursprünglichen SQLite-Image zurück und prüft Quellhash und leeren PG-Checkpoint;
+anschließend setzt er die eigene PG-Schreib-/Backup-/Rollbackprobe fort.
 Der Fork-Dockerworkflow führt beide Varianten und Rückwege ohne Veröffentlichung
 aus. Lokale Image-ID ist weder Registry-Digest noch Releasefreigabe.
 
