@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Download } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
+import type { UiNzbDownloads } from "@/types";
 
 interface SearchResult {
   id: string;
@@ -21,6 +22,7 @@ interface SearchResult {
   url_video_hd: string;
   url_website: string;
   category?: "movie" | "tv" | "unknown";
+  nzbDownloads: UiNzbDownloads;
 }
 
 export default function SearchPage() {
@@ -54,17 +56,9 @@ export default function SearchPage() {
   };
 
   const handleDownload = async (result: SearchResult) => {
+    const nzbContent = result.nzbDownloads.hd || result.nzbDownloads.sd || result.nzbDownloads.low;
+    if (!nzbContent) return;
     setDownloadingIds((prev) => new Set(prev).add(result.id));
-
-    const fileName = `${result.topic} - ${result.title}`.replace(/[<>:"/\\|?*]/g, "_");
-    const nzbContent = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">
-<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">
-  <head>
-    <meta type="filename" filename="${fileName}.nzb"/>
-  </head>
-  <!-- ${result.url_video_hd || result.url_video} -->
-</nzb>`;
 
     // Use category for download folder: movie -> /movie, tv -> /tv
     const cat = result.category === "movie" ? "movie" : result.category === "tv" ? "tv" : "default";
@@ -171,7 +165,9 @@ export default function SearchPage() {
                   <Button
                     size="sm"
                     onClick={() => handleDownload(result)}
-                    disabled={downloadingIds.has(result.id)}
+                    disabled={
+                      downloadingIds.has(result.id) || Object.keys(result.nzbDownloads).length === 0
+                    }
                   >
                     <Download className="w-4 h-4 mr-1" />
                     {downloadingIds.has(result.id) ? "..." : "Download"}

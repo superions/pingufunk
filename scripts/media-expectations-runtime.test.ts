@@ -8,6 +8,9 @@ import { generateFakeNzb } from "@/services/nzb-release";
 import { unknownMediaExpectations } from "@/lib/media-expectations";
 
 vi.mock("@/server/download-manager", () => ({ startDownloadProcessing: vi.fn(async () => {}) }));
+const { queryContent } = vi.hoisted(() => ({ queryContent: vi.fn() }));
+vi.mock("@/services/content-search", () => ({ queryContent }));
+vi.mock("@/services/category", () => ({ getCategoriesForTopics: vi.fn(async () => new Map()) }));
 const enabled = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 const pgUrl = process.env.PINGUFUNK_TEST_DATABASE_URL;
 if (enabled) {
@@ -110,7 +113,56 @@ for (const provider of ["sqlite", "postgresql"] as const) {
       });
       await expect(retryDownload(legacy.id)).rejects.toThrow("Invalid media expectations");
       expect(await prisma.download.findUnique({ where: { id: legacy.id } })).not.toBeNull();
-      await prisma.download.deleteMany({ where: { id: { in: [retried!.id, legacy.id] } } });
+      queryContent.mockResolvedValue([
+        {
+          channel: "Synthetic",
+          topic: "Synthetic UI",
+          title: "Example",
+          description: "",
+          duration: 120,
+          size: 1000,
+          filmlisteTimestamp: 1700000000,
+          url_website: "https://example.invalid/page",
+          url_video: release.url,
+          url_video_hd: "https://example.invalid/hd.mp4",
+          url_video_low: "https://example.invalid/low.mp4",
+        },
+      ]);
+      const { GET: search } = await import("@/app/api/search/route");
+      await prisma.config.create({ data: { key: "matching.minDuration", value: "0" } });
+      const uiIds: string[] = [];
+      for (const type of ["", "&type=movie"]) {
+        const found = await search(
+          new NextRequest(`http://localhost/api/search?q=Synthetic${type}`)
+        );
+        const uiItem = (await found.json()).results[0];
+        for (const key of ["hd", "sd", "low"]) {
+          const queued = await POST(
+            new NextRequest("http://localhost/api?mode=addfile&cat=default", {
+              method: "POST",
+              body: uiItem.nzbDownloads[key],
+            })
+          );
+          expect(queued.status).toBe(200);
+          const uiId = (await queued.json()).nzo_ids[0];
+          uiIds.push(uiId);
+          const actual = await prisma.download.findUniqueOrThrow({ where: { id: uiId } });
+          expect(actual.title).toBe("Synthetic UI - Example");
+          expect(actual.url).toBe(
+            key === "sd" ? release.url : `https://example.invalid/${key}.mp4`
+          );
+          expect(JSON.parse(actual.mediaExpectations!)).toEqual({
+            version: 1,
+            duration: { seconds: 120, provenance: "source_catalogue" },
+            audio: null,
+            resolution: null,
+          });
+        }
+      }
+      await prisma.download.deleteMany({
+        where: { id: { in: [retried!.id, legacy.id, ...uiIds] } },
+      });
+      await prisma.config.delete({ where: { key: "matching.minDuration" } });
     }
   );
 }

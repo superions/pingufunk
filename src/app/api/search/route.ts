@@ -6,6 +6,8 @@ import type { ProviderContentItem } from "@/types/provider";
 
 import { queryContent } from "@/services/content-search";
 import { isStreamingUrl } from "@/lib/stream-url";
+import { createUiNzbDownloads } from "@/services/ui-nzb";
+import type { UiNzbDownloads } from "@/types";
 
 async function isHlsEnabled(): Promise<boolean> {
   const setting = await getSetting("download.enableHLS");
@@ -27,6 +29,7 @@ export interface SearchResult {
   url_website: string;
   category?: CategoryType;
   providerId?: string;
+  nzbDownloads: UiNzbDownloads;
 }
 
 /**
@@ -34,6 +37,7 @@ export interface SearchResult {
  */
 function providerItemToSearchResult(
   item: ProviderContentItem,
+  hlsEnabled: boolean,
   category?: CategoryType
 ): SearchResult {
   return {
@@ -51,6 +55,17 @@ function providerItemToSearchResult(
     url_website: item.websiteUrl,
     category,
     providerId: item.providerId,
+    nzbDownloads: createUiNzbDownloads(
+      {
+        ...item,
+        filmlisteTimestamp: item.timestamp,
+        url_website: item.websiteUrl,
+        url_video: item.videoUrls.standard,
+        url_video_hd: item.videoUrls.high || item.videoUrls.standard,
+        url_video_low: item.videoUrls.low || "",
+      },
+      hlsEnabled
+    ),
   };
 }
 
@@ -119,8 +134,9 @@ async function handleProviderSearch(
     const categoryMap = await getCategoriesForTopics(topics);
 
     // Convert to SearchResult format
+    const hlsEnabled = await isHlsEnabled();
     const results: SearchResult[] = items.map((item) =>
-      providerItemToSearchResult(item, categoryMap.get(item.topic))
+      providerItemToSearchResult(item, hlsEnabled, categoryMap.get(item.topic))
     );
 
     return NextResponse.json({
@@ -176,35 +192,22 @@ async function handleDefaultSearch(
     // Get categories for all topics
     const categoryMap = await getCategoriesForTopics(topics);
 
-    const results: SearchResult[] = filteredItems.map(
-      (item: {
-        channel: string;
-        topic: string;
-        title: string;
-        description: string;
-        filmlisteTimestamp: number;
-        duration: number;
-        size: number;
-        url_video: string;
-        url_video_hd: string;
-        url_video_low: string;
-        url_website: string;
-      }) => ({
-        id: `${item.channel}-${item.topic}-${item.title}-${item.filmlisteTimestamp}`,
-        channel: item.channel,
-        topic: item.topic,
-        title: item.title,
-        description: item.description,
-        timestamp: item.filmlisteTimestamp,
-        duration: item.duration,
-        size: item.size,
-        url_video: item.url_video,
-        url_video_hd: item.url_video_hd || item.url_video,
-        url_video_low: item.url_video_low || "",
-        url_website: item.url_website,
-        category: categoryMap.get(item.topic),
-      })
-    );
+    const results: SearchResult[] = filteredItems.map((item) => ({
+      id: `${item.channel}-${item.topic}-${item.title}-${item.filmlisteTimestamp}`,
+      channel: item.channel,
+      topic: item.topic,
+      title: item.title,
+      description: item.description,
+      timestamp: item.filmlisteTimestamp,
+      duration: item.duration,
+      size: item.size,
+      url_video: item.url_video,
+      url_video_hd: item.url_video_hd || item.url_video,
+      url_video_low: item.url_video_low || "",
+      url_website: item.url_website,
+      category: categoryMap.get(item.topic),
+      nzbDownloads: createUiNzbDownloads(item, hlsEnabled),
+    }));
 
     return NextResponse.json({ results });
   } catch {

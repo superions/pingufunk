@@ -32,7 +32,7 @@ export interface MediathekQueryOptions {
   offset?: number;
   deadlineAt?: number;
   requestBudget?: HttpRequestBudget;
-  /** Sonarr fallback is progressive-only until the P09 HLS validation gate. */
+  /** Callers can restrict their candidate window to progressive renditions. */
   progressiveOnly?: boolean;
   /** Verified metadata owner; shared-topic ARTE editions are resolved before language selection. */
   arteSeries?: TvdbData;

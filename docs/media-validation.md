@@ -8,6 +8,12 @@ ungültiger, doppelter oder unbekannt versionierter Block wird vor dem Queuewrit
 abgelehnt. Nur das Fehlen des Blocks bleibt Legacy-kompatibel; es beweist kein
 Erzeugungsdatum.
 
+Auch die Websuche/Filmoberfläche erhält pro Rendition ein serverseitig erzeugtes
+NZB aus demselben Owner (`SearchResult.nzbDownloads`). Der Browser wählt und
+sendet das opaque NZB unverändert; keine eigene XML-/Sollwertberechnung und
+kein neuer Downloadendpoint. Die bisherige UI-Dateinamen-/Kategorieauswahl
+bleibt erhalten. Eine deklarierte v1-Erwartung wird nicht als Legacy umgangen.
+
 ## Erwartungen und Datenbestand
 
 Kataloglaufzeit ist in Sekunden; verifizierte Episodenmetadaten werden einmal

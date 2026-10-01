@@ -1,4 +1,7 @@
 // Mediathek API Types
+/** Server-authored NZBs selected by rendition; clients treat the payload as opaque. */
+export type UiNzbDownloads = Partial<Record<"hd" | "sd" | "low", string>>;
+
 export interface MediathekApiResponse {
   result: MediathekApiResult;
   err: unknown | null;

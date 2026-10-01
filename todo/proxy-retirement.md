@@ -1529,6 +1529,14 @@ lokal grün. Details/Prüfgrenzen unter `docs/media-validation.md` und dem
 P09-Workerreview. P09.1/P09.2 sowie P11.7/P11.8 bleiben bis aktuellem Fork-CI-
 und Dockerlauf offen; kein produktiver Cutover oder SQLite-Rücktransfer.
 
+P09-UI-Nachreview: Die eigenständigen Legacy-NZB-Producer in `/search` und
+`/movies` waren im vorherigen Pfadreview übersehen. Beide erhalten jetzt pro
+Rendition serverseitige v1-NZBs aus demselben Owner; Kategorie-/Dateinamenvertrag
+unverändert. Echte SQLite-/PG-Queuewrites plus Desktop-Pointer-/Tastaturprüfung,
+gematchte Light-/Dark-Bilder und abgefangene NZB-POSTs bestanden. Details und
+vorhandene zusätzliche P10-Consumerbefunde im Review; P09 bleibt bis aktuellem
+Forklauf offen.
+
 ## Phase P10 — Vollständige Parität und getrennt freigegebener Betrieb
 
 Ergebnis: nachgewiesene Gesamtkette auf dem gewählten Backend, danach kein Proxy.

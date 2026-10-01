@@ -590,3 +590,38 @@ unveränderter SQLitequelle vor neuen Zielwrites erfolgreich. Der Forkworkflow
 baut beide gepinnten Checkpoints selbst und prüft alle Rückwege; lokale
 Image-IDs sind keine veröffentlichten Registry-Digests. P09/P11.7/P11.8 bleiben
 bis erfolgreichem aktuellen Forklauf offen. Produktion/Main/upstream unverändert.
+
+## P09-UI-Producer-Nachreview (01.10.2026)
+
+Nach dem grünen Worker-/Rollbackcheckpoint 1b24208 (Fork-CI 36797426991,
+Docker 36797426815) fand der zusätzliche Browserconsumerreview die noch
+eigenständig erzeugten Legacy-NZBs in Suche und Filmoberfläche. Der vorherige
+Ownerreview war in diesem Punkt nicht vollständig; keine P09-Abnahme erteilt.
+Die Search-API liefert jetzt serverseitige NZBs je Rendition aus dem gemeinsamen
+Erwartungs-/NZB-Owner. UI-Dateinamen/Kategorien bleiben erhalten, Browser
+berechnet weder XML noch Audio-/Dauersollwerte. Default- und Providerantworten
+einschließlich expliziter Audioevidenz getestet; echte Addfile-/Queuewrites
+derselben UI-NZBs auf beiden disposable Backends belegt.
+
+Desktopprüfung mit eigenem headed Playwright, 1440×1000, tatsächliches
+Produktionsbundle auf eigener Loopbackinstanz und synthetischer SQLite-DB:
+Baseline-Build-ID `siOR6pQddUEi3JLo8Imfx`, neuer Build
+`JFt0FjMEQj08lMP6HlvdG`. Gematchte `/search`-/`/movies`-Ergebniszustände in
+Light und Dark selbst angesehen, kein Layout-/Fokus-/Overflowregressionsbefund.
+Suchfeld mit Tastatur/Enter und Suchen-/Download-/HD-/SD-/Low-Buttons mit Pointer
+bedient. Browser-POSTs wurden vor jeglichem Download abgefangen: neuer
+v1-Block, 120 Sekunden, unbekannte Audio/Dimensionen und tatsächliche gewählte
+URL bei allen drei Qualitätsaktionen verifiziert. Serverprovider ist ein
+ausdrücklich gesicherter synthetischer Preload; alle externen Fetches gesperrt.
+Kein echter Grab und keine produktive Konfiguration.
+
+Screenshots liegen nur ignoriert im eigenen QA-Verzeichnis unter
+`downloads/ui-qa.*/output/playwright/{search,movies}-{light,dark}-{before,after}.png`;
+keine Bilder im öffentlichen Git. Nachprüfung Konsole ohne Warnungen/Fehler.
+Der erste Baseline-Aufruf hatte separat einen vorhandenen favicon-404.
+P10-Reviewinput: Filmsubtitle behauptet weiterhin fest „min. 60 Min.“ trotz
+konfigurierbarer API-Regel; Suchfehler erscheinen nur als leerer Zustand und
+die Root-SAB-Route behandelt Remove-/Retry-Fehler anders als ihr API-Alias.
+Diese vorhandenen Consumerbefunde gehören zur vollständigen P10.1-Abnahme;
+sie werden nicht als bereits behoben ausgegeben. P09 wartet auf aktuellen
+UI-Checkpoint/Forklauf; historische Produkt-/Mediengates nur wiederverwendet.

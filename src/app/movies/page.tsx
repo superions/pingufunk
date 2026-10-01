@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, Film } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
+import type { UiNzbDownloads } from "@/types";
 
 interface SearchResult {
   id: string;
@@ -21,12 +22,13 @@ interface SearchResult {
   url_video_hd: string;
   url_video_low: string;
   url_website: string;
+  nzbDownloads: UiNzbDownloads;
 }
 
 type QualityOption = {
   label: string;
-  url: string;
-  key: string;
+  nzb: string;
+  key: keyof UiNzbDownloads;
 };
 
 export default function MoviesPage() {
@@ -63,31 +65,21 @@ export default function MoviesPage() {
 
   const getQualityOptions = (result: SearchResult): QualityOption[] => {
     const options: QualityOption[] = [];
-    if (result.url_video_hd && result.url_video_hd !== result.url_video) {
-      options.push({ label: "HD", url: result.url_video_hd, key: "hd" });
+    if (result.nzbDownloads.hd && result.url_video_hd !== result.url_video) {
+      options.push({ label: "HD", nzb: result.nzbDownloads.hd, key: "hd" });
     }
-    if (result.url_video) {
-      options.push({ label: "SD", url: result.url_video, key: "sd" });
+    if (result.nzbDownloads.sd) {
+      options.push({ label: "SD", nzb: result.nzbDownloads.sd, key: "sd" });
     }
-    if (result.url_video_low) {
-      options.push({ label: "Low", url: result.url_video_low, key: "low" });
+    if (result.nzbDownloads.low) {
+      options.push({ label: "Low", nzb: result.nzbDownloads.low, key: "low" });
     }
     return options;
   };
 
-  const handleDownload = async (result: SearchResult, url: string, qualityKey: string) => {
+  const handleDownload = async (result: SearchResult, nzbContent: string, qualityKey: string) => {
     const downloadKey = `${result.id}-${qualityKey}`;
     setDownloadingIds((prev) => new Set(prev).add(downloadKey));
-
-    const fileName = `${result.topic} - ${result.title}`.replace(/[<>:"/\\|?*]/g, "_");
-    const nzbContent = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">
-<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">
-  <head>
-    <meta type="filename" filename="${fileName}.nzb"/>
-  </head>
-  <!-- ${url} -->
-</nzb>`;
 
     try {
       const res = await fetch("/api/download?mode=addfile&cat=default", {
@@ -202,7 +194,7 @@ export default function MoviesPage() {
                           key={option.key}
                           size="sm"
                           variant={option.key === "hd" ? "default" : "outline"}
-                          onClick={() => handleDownload(result, option.url, option.key)}
+                          onClick={() => handleDownload(result, option.nzb, option.key)}
                           disabled={downloadingIds.has(downloadKey)}
                           className="min-w-[80px]"
                         >
