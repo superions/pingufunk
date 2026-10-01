@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 30.09.2026. **Offener Entwicklungsvertrag, keine Deploymentfreigabe.**
+Stand: 01.10.2026. **Offener Entwicklungsvertrag, keine Deploymentfreigabe.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -23,7 +23,8 @@ erledigte Implementierung.
 - Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R10 bleiben in den Referenzen.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
-- Nächster Entwicklungspunkt ist **P06.2**. Beide Backend-Laufzeitketten und
+- Nächster Entwicklungspunkt ist **P10.1**. P00–P09 und P11.1–P11.8 sind
+  technisch abgenommen. Beide Backend-Laufzeitketten und
   die URL-/Secret-basierte Auswahl aus **P11.1** sind geprüft.
   Es folgt der Proxy-Pfad
   P06 → P07 → P08 → P09 → P10 auf den abgenommenen P00–P05.
@@ -798,7 +799,7 @@ ausschließlich P10.3–P10.5.
       Sequences, gelöschte hohe IDs, Ownership-/Overflow-Fehler und Fehler nach
       setval samt sicherem Repeat. Durable App-Checkpoint sperrt Rücksetzen;
       echte neue Prisma-Inserts kollisionsfrei. setval bleibt nicht rückrollbar.
-- [ ] **P11.7 — Dual-Backend-Harness beweist Runtime und beide Rückwege.**
+- [x] **P11.7 — Dual-Backend-Harness beweist Runtime und beide Rückwege.**
       `src/lib/db-schema.test.ts`, passende Ownerintegration und neue Runner-
       Tests gegen disposable SQLite und PG aufnehmen; `vitest.config.ts`/
       npm-Gates so routen,
@@ -870,7 +871,16 @@ ausschließlich P10.3–P10.5.
       Katalog-/Checksum-Prüfung. Die beiden beim Aufbau der neuen Prüfung
       gefundenen Defaultdarstellungsfälle (Prisma-BigInt-String und PG-E-Literal)
       wurden korrigiert und gegen reale Schema-Defaults erneut geprüft.
-- [ ] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
+      Abgenommen 01.10.2026: Fork-CI 36798866207 und Dockerprobe 36798866196
+      erfolgreich. Bootstrap und aktueller SQLite-Schemastand mit P09-Payloads
+      durchlaufen TLS-Import, semantischen Vergleich, native Starts und Writes.
+      Im selben Cutover wurden vor PG-Writes das immutable alte SQLiteimage
+      auf unveränderter Quelle und nach PG-Writes Backuprestore plus ein
+      anderes immutable PG-Image geprüft. Letzteres ist ausschließlich ein
+      lesender Wartungsrollback, kein freigegebener älterer Worker. Echte
+      Medienabschlüsse, Restart und DB-Ausfall-/Weckrufrecovery auf beiden
+      Backends bestanden; kein Rücktransfer nach SQLite oder Produktionszugriff.
+- [x] **P11.8 — Operatorfertiges Runbook aus realen Commands.**
       `docs/postgresql-migration-plan.md` als Referenz und ein zugehöriges Runbook
       mit tatsächlich implementierter CLI/Flags, dry/read-only Preflight,
       Schreibfreigabe, Stop/Backup/Prepare/Import/Verify/Maintenancestart/Pause/
@@ -893,6 +903,13 @@ ausschließlich P10.3–P10.5.
       Der Snapshot-Einstieg wurde im gebauten Image mit tatsächlich sichtbarem
       Bind-Mount unter UID 1000 erprobt; ein erster Test unter einem vom
       Docker-Host nicht geteilten Temp-Pfad war ungültig und wurde verworfen.
+      Abgenommen 01.10.2026: `docs/postgresql-migration-runbook.md` enthält
+      tatsächlich ausgeführte Commands für beide Quellvarianten und getrennte
+      immutable Rückwege, Image-/Schemaidentitäten, private Secretdateien,
+      Wartungs-/Writegrenzen und Restore in eine neue DB. Die vollständige
+      disposable Forkprobe 36798866196 ist grün. Private Installationswerte,
+      produktive Mountrechte, Retention und Schreibfreigaben bleiben P10.2;
+      keine fertige private Deploymentkonfiguration wird vorgetäuscht.
 - [ ] **P11.9 — Optionaler verlustfreier PG→SQLite-Rücktransfer nach PG-Writes.**
       Zuerst Aufwand anhand der sechs Modelle, späterer Schemaerweiterungen und
       vorhandener Import-/Vergleichsbausteine begrenzt prüfen. Nur bei vertretbarem
@@ -1405,7 +1422,7 @@ P09 ist damit freigegeben; produktive P10-Gates bleiben separat.
 Ergebnis: falsche/kaputte Downloads werden nicht importierbereit gemeldet.
 Abhängigkeit P08; B10/R7.
 
-- [ ] **P09.1 — Erwartungs- und Legacyvertrag gemeinsam festlegen.**
+- [x] **P09.1 — Erwartungs- und Legacyvertrag gemeinsam festlegen.**
       RSS/NZB-Producer, `download.ts::parseNzbContent`, `Download`-Modell und
       `download-manager.ts` gemeinsam auf verlässliche erwartete Medienmetadaten
       planen: optionale neue Felder benötigen eigene append-only Migrationen
@@ -1451,7 +1468,15 @@ Abhängigkeit P08; B10/R7.
       neue deklarierte Version mit fehlender/kaputter Struktur abgelehnt und
       gleiche Daten-/NULL-Semantik auf beiden disposable Backends. Keine
       reine Spaltenexistenz-/HTTP-200-Abnahme.
-- [ ] **P09.2 — Fertigmeldung nur nach verifiziertem Medienabschluss.**
+      Abgenommen 01.10.2026: Alle RSS-/Fake-NZB- und UI-Producer liefern v1
+      aus serverseitigen Ownern; Parser, beide Addfile-Routen, Queue, Retry und
+      Restart erhalten belegte Sekundenwerte und explizites NULL. Beide
+      append-only Schemata und alle historischen SQLite-Übergänge sind geprüft.
+      Fork-CI 36798866207: 782 reguläre Tests; zwölf bedingte DB-Tests werden
+      separat mit 15 Ausführungen (darunter eine SQLite-Runtimeprobe) abgedeckt.
+      Desktop-UI-Consumer für Suche und HD/SD/Low einschließlich abgefangener
+      v1-POSTs und gematchter Light-/Dark-Screenshots bestanden.
+- [x] **P09.2 — Fertigmeldung nur nach verifiziertem Medienabschluss.**
       Manager-/FFmpeg-/yt-dlp-Owner nach Download/Mux per lokaler Probe tatsächliche
       Dauer, Audio/Video, Sprache soweit beweisbar, Auflösung und Abschluss prüfen.
       HTTP-200-HTML, nachweisbare Samples, Abbruch, fehlende Audiospur und kaputte Artefakte
@@ -1489,6 +1514,15 @@ Abhängigkeit P08; B10/R7.
       completed oder Spinloop, Reconnect nimmt sicher wieder auf. Retry/Restart
       erhält Status-/Erwartungsvertrag. Öffentliche
       Kategorie, Release-ID, Importpfad und Remote-Path-Mapping unverändert.
+
+      Abgenommen 01.10.2026: Gemeinsamer lokaler Probe-/Abschlussowner in allen
+      progressiven/HLS-/Muxzweigen; unbekannte Sollwerte werden nicht als
+      bestanden gespeichert. Reale synthetische MP4-/HLS-/MKV-Containerproben
+      auf beiden Backends, negatives Audio/HTML/Truncation/Sample, Queuefortsetzung,
+      Restart und PG-Ausfall mit sicherem Weckruf bestanden. Timeout-/Output-/
+      Jobpfad-/Commitfehler sind kausal getestet. Docker-Forklauf 36798866196,
+      CI 36798866207 einschließlich Lint/Typecheck/Format/Build grün. HLS bleibt
+      opt-in; ffprobe beweist keinen Voll-Decode oder unbekannte Inhaltsidentität.
 
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und
