@@ -156,6 +156,17 @@ describe.each([
     ).toBe(500);
   });
 
+  it.each(["queue", "fullstatus", "get_config"])(
+    "fails its DB-dependent %s read rather than reporting healthy",
+    async (mode) => {
+      getQueue.mockRejectedValue(new Error("synthetic private DB detail"));
+      getConfigResponse.mockRejectedValue(new Error("synthetic private DB detail"));
+      const response = await GET(new NextRequest(`http://localhost${path}?mode=${mode}`));
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "Failed to read download API" });
+    }
+  );
+
   it.each([
     new InvalidDownloadInputError("Invalid media expectations"),
     new MediaExpectationsError(),

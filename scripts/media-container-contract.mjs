@@ -235,6 +235,20 @@ if (pgContainer) {
       if (!pausedFailure) await delay(200);
     } while (!pausedFailure && Date.now() < deadline);
     if (!pausedFailure) throw new Error("Worker did not pause at its failed DB write");
+    const unavailable = run([
+      "exec",
+      container,
+      "curl",
+      "-sS",
+      "--max-time",
+      "5",
+      "-o",
+      "/dev/null",
+      "-w",
+      "%{http_code}",
+      "http://localhost:6767/api/download?mode=queue",
+    ]).trim();
+    if (unavailable !== "500") throw new Error("DB outage still reported healthy queue API");
   } finally {
     run(["unpause", pgContainer]);
   }

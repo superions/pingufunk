@@ -117,7 +117,7 @@ ENV HOSTNAME="0.0.0.0"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:6767/api/download?mode=version || exit 1
+    CMD wget -q --spider http://localhost:6767/api/download?mode=queue || exit 1
 
 # Start the application with entrypoint for PUID/PGID support
 ENTRYPOINT ["/entrypoint.sh"]

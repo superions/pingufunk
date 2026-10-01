@@ -5,19 +5,19 @@ services:
     container_name: rundfunkarr
     environment:
       - TZ=Europe/Berlin
-      - TVDB_API_KEY=${TVDB_API_KEY:-}  # Optional metadata account
+      - TVDB_API_KEY=${TVDB_API_KEY:-} # Optional metadata account
       - DOWNLOAD_FOLDER_PATH=/downloads
-      - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed  # Path mapping for Sonarr/Radarr
+      - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed # Path mapping for Sonarr/Radarr
       - DATABASE_URL=file:/app/prisma/data/rundfunkarr.db
       - PINGUFUNK_PUBLIC_URL=${PINGUFUNK_PUBLIC_URL:-}
     volumes:
-      - ./downloads:/app/downloads        # Temporary download folder
-      - ./prisma/data:/app/prisma/data    # SQLite persistence; initialize explicitly
+      - ./downloads:/app/downloads # Temporary download folder
+      - ./prisma/data:/app/prisma/data # SQLite persistence; initialize explicitly
     ports:
       - "6767:6767"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6767/api/download?mode=version"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6767/api/download?mode=queue"]
       interval: 30s
       timeout: 10s
       retries: 3
