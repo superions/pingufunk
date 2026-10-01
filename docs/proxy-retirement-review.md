@@ -661,3 +661,69 @@ dieser neue Imagegate und die vollständige Desktopabnahme stehen noch aus.
 Baseline 933a304 wird separat gebaut, damit Assets nicht mit einem gerade
 überschriebenen laufenden `.next` vermischt werden. Zwei dadurch ungültige
 Zwischencaptures für Settings/Setup sind keine Abnahmeevidenz.
+
+## P10-Paritätsreview: Verbraucher und Ausfallgrenzen (01.10.2026)
+
+Die konkrete B01–B16/O01–O02-Zuordnung steht in
+`docs/proxy-retirement-parity.md`. Historische Proxymechanismen werden nicht
+pauschal kopiert: insbesondere kein öffentlicher Radarr-Metadatendienst,
+keine Senderseitenparser, kein HTTP-Proxytransport, keine getrennten Endpunkte
+für vermeintlich manuelle und automatische Aufrufe. Direkte und vermittelte
+Indexerrequests verwenden denselben Vertrag.
+
+Desktopabnahme gegen Baseline `933a304` und serviertes P10-UI:
+acht Routen, Light/Dark, 32 gematchte Bilder visuell geprüft. Pointer und
+Tastatur prüfen Ergebnisse, Leer-/Fehler-/Ladezustände, Duplicate-Enter-Guard,
+Filter, synthetische Historyaktionen, Settingssave/Reload/API-Readback,
+Erhalten fremder ungespeicherter Karten, Pfadsyntax und Secretpräsenz.
+Absichtlich fehlgeschlagene Settings- und Setup-Saves erhalten Eingaben,
+persistieren nichts und lassen den Setupschritt offen; Recovery bestätigt.
+Ein Capture mitten in der Dialoganimation wurde ersetzt. Nach frischer
+Navigation aller acht gesunden Routen keine Konsolenwarnungen/-fehler oder
+Pageerrors; injizierte HTTP-Ausfälle erzeugen erwartete Resource-Errors.
+Nur ignorierte synthetic/disposable Artefakte; keine Mobilprüfung.
+
+Die Systemstatistik zählte bisher `processing`, aber nicht den aktuellen
+Workerzustand `converting`. Der kausale Test zählt beide sowie queued und
+downloading, ohne historische Zeilen umzudeuten. Der gemeinsame SAB-Owner
+begrenzt ausschließlich Reads auf drei Sekunden. Die erweiterte Imageprobe
+fand einen hängenden Read über eine bestehende Verbindung zum angehaltenen
+PG-Server; ein bloßer Exceptioncatch genügte nicht. Timeout ergibt generischen
+500 statt leerem Erfolg. Prisma kann den bestehenden Read dort nicht
+abbrechen; dessen spätere Antwort wird ignoriert. Mutationen erhalten bewusst
+keinen solchen Timeout/Retryvertrag, weil ihr ACK unsicher sein könnte.
+Fake-Timer-Regressionen prüfen alle vier Readmodi auf beiden URLs, die exakte
+Deadline und Timercleanup. Health prüft Queue statt statischem Versionserfolg.
+
+Der vollständige Medienharness ergänzt echte Newznab-RSS→Enclosure→NZB→
+Queue→lokal geprüfte Datei→SAB-History auf beiden nativen Backends und
+beiden Newznabadressen. Seine Quelle ist ein streng DB-/Owner-gebundener
+Preload mit externer Fetchsperre. Zwei Harnessfehler wurden kausal korrigiert:
+Next bündelt xml2js statt eines Node-require-Moduls im Runner; Parsing nutzt
+deshalb gelockte npm-ci-Dependencies. Die öffentliche Testadresse wird explizit
+auf eigene Loopback gesetzt, nicht aus einem internen Next-Host geraten.
+Lokale Probe mit altem P09-Image bestand für SQLite und die PG-Medienkette,
+scheiterte aber am noch unbegrenzten PG-Ausfallread; sie ist kein aktueller
+grüner Gesamtgate. Die vollständige neue Imageabnahme muss den Checkpoint mit
+Readdeadline prüfen. Fork-CI/Docker 36801029863/36801029824 waren für den
+vorherigen Health-/Historycheckpoint grün, nicht bereits dieser neue Nachweis.
+
+P10.1 bleibt bis zur aktuellen vollständigen Forkprobe offen. Echte
+Arr-Instanzen, private Pfadmappings und Produktions-Cutover sind weiterhin
+separate Freigabegates. P11.9 wurde nach P09 erneut auf Aufwand geprüft und
+bleibt ausdrücklich optional zurückgestellt, nicht als durchgeführt markiert.
+
+Abschließende Abnahme: Produktcheckpoint `8de3148aade50de88bfe71ca374e4076c5be5260`
+ist im eigenen Fork verifiziert. CI 36802563431 und Dockerprobe 36802563450
+sind vollständig grün, einschließlich beider Quellvarianten mit TLS und
+Rollback, isolierter SQLite-Persistenz und vollständiger Medien-/Ausfallkette
+auf beiden Backends. Lokal 830 reguläre Tests (12 DB-konditionale Tests separat
+ausgeführt), 15 native DB-Testausführungen, Lint, Typecheck, Format und Build
+bestanden. P10.1 ist damit abgenommen; die zuvor genannten offenen Imagegates
+sind geschlossen. Die ergänzte Readdeadline wurde im realen PG-Ausfall geprüft.
+UI-Evidenz wird wiederverwendet: spätere Änderungen betreffen nur SAB-Reads,
+Systemstatistik und Testharness, nicht die geprüfte UI. Eigene Desktoplaufzeit
+und Browser beendet; fremde Container unverändert. Keine offenen Findings
+innerhalb der beauftragten synthetischen Entwicklungsabnahme. Tatsächliche
+Arr-Interoperabilität und P10.2–P10.7 bleiben unfreigegebene externe/betriebliche
+Gates; P11.9 bleibt ausdrücklich optional zurückgestellt.
