@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Install locked harness dependencies
+        run: npm ci
+
       - name: Build application image without publishing
         uses: docker/build-push-action@v7
         with:

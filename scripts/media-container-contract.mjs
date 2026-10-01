@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
+import { parseStringPromise } from "xml2js";
 
 const container = process.argv[2];
 const owner = process.env.PINGUFUNK_MEDIA_QA_OWNER;
@@ -33,6 +34,9 @@ function request(endpoint, body) {
   if (body !== undefined) args.push("-X", "POST", "--data-binary", "@-");
   return JSON.parse(run([...args, `http://localhost:6767/${endpoint}`], body));
 }
+function rawRequest(url) {
+  return run(["exec", container, "curl", "-fsS", "--max-time", "5", url]);
+}
 function nzb(filename, duration) {
   const expected =
     duration === undefined
@@ -57,6 +61,62 @@ function readJob(id) {
   return JSON.parse(run(["exec", container, "node", "-e", code, id]));
 }
 const terminalSnapshots = new Map();
+request(
+  "api/settings",
+  JSON.stringify({
+    "matching.minDuration": "0",
+    "download.quality": "all",
+    "download.convertToMkv": "false",
+  })
+);
+let previousGuid;
+for (const endpoint of ["api/newznab", "api/newznab/api"]) {
+  const rss = rawRequest(`http://localhost:6767/${endpoint}?t=search&q=Synthetic&limit=1`);
+  // Parse the actual producer with the same XML library used by this product;
+  // this is not a hand-authored NZB or a string-only RSS success assertion.
+  // Next bundles this dependency; it is not a standalone Node module in the
+  // runner image. Parse in the harness's npm-ci environment instead.
+  const parsed = await parseStringPromise(rss);
+  const channel = parsed.rss.channel[0];
+  if (channel.item?.length !== 1 || channel["newznab:response"][0].$.total !== "1")
+    throw new Error("Source RSS count mismatch");
+  const item = channel.item[0];
+  const guid = item.guid[0]._;
+  if (previousGuid !== undefined && guid !== previousGuid)
+    throw new Error("Newznab aliases changed source GUID");
+  previousGuid = guid;
+  const nzbUrl = new URL(item.enclosure[0].$.url);
+  if (
+    !["localhost", "127.0.0.1"].includes(nzbUrl.hostname) ||
+    nzbUrl.port !== "6767" ||
+    nzbUrl.pathname !== "/api/newznab/fake_nzb_download"
+  )
+    throw new Error("Unexpected source enclosure");
+  const body = rawRequest(nzbUrl.href);
+  const added = request("api/download?mode=addfile&cat=sonarr", body);
+  if (added.status !== true || added.nzo_ids.length !== 1)
+    throw new Error("RSS NZB enqueue failed");
+  const id = added.nzo_ids[0];
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline && !["completed", "failed"].includes(readJob(id).status))
+    await delay(200);
+  const row = readJob(id);
+  const expected = JSON.parse(row.expectations ?? "null");
+  const facts = JSON.parse(row.validation ?? "null");
+  const history = request("api?mode=history").history.slots.find((slot) => slot.nzo_id === id);
+  if (
+    row.status !== "completed" ||
+    expected?.duration?.seconds !== 2 ||
+    expected.duration.provenance !== "source_catalogue" ||
+    expected.audio !== null ||
+    facts?.expectedChecks.duration !== "passed" ||
+    history?.status !== "Completed" ||
+    history.storage !== row.filePath.slice(0, row.filePath.lastIndexOf("/"))
+  )
+    throw new Error("RSS to verified-media consumer mismatch");
+  terminalSnapshots.set(id, row);
+}
+console.log("Both actual Newznab paths to NZB, queue, verified file and SAB history passed");
 for (const [filename, duration, status, convert] of [
   ["valid.mp4", undefined, "completed", false],
   ["valid.mp4", null, "completed", false],
