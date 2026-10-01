@@ -12,6 +12,24 @@ import {
   retryDownload,
 } from "@/services/download";
 
+/** Bound read responses, including an established socket to an unavailable DB.
+ * Prisma reads cannot be cancelled here; their eventual result is ignored.
+ * Never wrap mutations: a timeout must not suggest a failed write is retry-safe.
+ */
+async function boundedRead<T>(operation: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Download read deadline exceeded")), 3000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Both shipped SAB URLs share status, mutation and redacted failure contracts. */
 export async function GET(request: NextRequest) {
   try {
@@ -34,10 +52,10 @@ async function getResponse(request: NextRequest) {
       return NextResponse.json({ version: "4.3.3" });
 
     case "get_config":
-      return NextResponse.json(await getConfigResponse());
+      return NextResponse.json(await boundedRead(getConfigResponse));
 
     case "fullstatus": {
-      const queue = await getQueue();
+      const queue = await boundedRead(getQueue);
       return NextResponse.json({
         status: {
           paused: false,
@@ -52,7 +70,7 @@ async function getResponse(request: NextRequest) {
     }
 
     case "queue": {
-      const queue = await getQueue();
+      const queue = await boundedRead(getQueue);
       return NextResponse.json({ queue });
     }
 
@@ -99,7 +117,7 @@ async function getResponse(request: NextRequest) {
       }
 
       // Return history list
-      const history = await getHistory();
+      const history = await boundedRead(getHistory);
       return NextResponse.json({ history });
     }
 

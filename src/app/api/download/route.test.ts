@@ -35,12 +35,39 @@ import * as alias from "./route";
 import * as root from "../route";
 
 beforeEach(() => vi.resetAllMocks());
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
+});
 
 describe.each([
   { path: "/api", ...root },
   { path: "/api/download", ...alias },
 ])("SAB $path", ({ path, GET, POST }) => {
+  it.each(["queue", "fullstatus", "history", "get_config"])(
+    "bounds a hung %s read without claiming healthy empty data",
+    async (mode) => {
+      vi.useFakeTimers();
+      for (const read of [getQueue, getHistory, getConfigResponse])
+        read.mockImplementation(() => new Promise(() => {}));
+      const pending = GET(new NextRequest(`http://localhost${path}?mode=${mode}`));
+      await vi.advanceTimersByTimeAsync(2999);
+      let resolved = false;
+      void pending.then(() => {
+        resolved = true;
+      });
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const response = await pending;
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "Failed to read download API" });
+      expect(vi.getTimerCount()).toBe(0);
+      expect(addToQueue).not.toHaveBeenCalled();
+      expect(retryDownload).not.toHaveBeenCalled();
+    }
+  );
+
   it("keeps history readable but blocks GET mutations and addfile during maintenance", async () => {
     vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
     const history = await GET(new NextRequest("http://localhost/api/download?mode=history"));
