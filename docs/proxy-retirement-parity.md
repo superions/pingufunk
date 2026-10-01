@@ -61,9 +61,10 @@ Medien oder Zugangsdaten gehören ins öffentliche Git. Keine Mobilprüfung.
 
 ## Noch getrennt freizugeben
 
-Keine tatsächliche Sonarr-/Radarr-/Prowlarr-Instanz wurde in dieser Probe
-kontaktiert. Vor einem Interoperabilitätsnachweis müssen deren konkrete
-Versionen und Parameter in separat genehmigten isolierten Instanzen belegt
-werden. Das ersetzt weder Produktionsparameter, Backup-/Mountrechte noch
-Cutoverfreigabe. P10.2–P10.7 bleiben deshalb Betriebsarbeit, nicht implizit
-erledigte Entwicklung.
+Die oben beschriebene synthetische Paritätsprobe kontaktierte keine echte
+Arr-Instanz. Die anschließend genehmigten isolierten Instanzen sind in
+`arr-test-instances.md` dokumentiert: tatsächliche Versionen und grundlegende
+Verbindungstests belegt, jedoch ein neuer Radarr-Setupbefund bei leerem Filmfeed.
+P10.1 ist deshalb wieder offen; vollständige direkte/vermittelte
+Interoperabilität ist noch nicht attestiert. Produktionsparameter,
+Backup-/Mountrechte und Cutover bleiben P10.2–P10.7, nicht implizit freigegeben.

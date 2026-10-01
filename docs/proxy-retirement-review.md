@@ -727,3 +727,25 @@ und Browser beendet; fremde Container unverändert. Keine offenen Findings
 innerhalb der beauftragten synthetischen Entwicklungsabnahme. Tatsächliche
 Arr-Interoperabilität und P10.2–P10.7 bleiben unfreigegebene externe/betriebliche
 Gates; P11.9 bleibt ausdrücklich optional zurückgestellt.
+
+## Genehmigtes Arr-Testsetup und neuer Verbraucherbefund (01.10.2026)
+
+Vier eigene lokale Container im internen Docker-Netz eingerichtet, mit eigener
+Pingufunk-SQLite-Datei und getrennten privaten Arr-Konfigurationen. Tatsächliche
+Versionen: Sonarr 4.0.20.3014, Radarr 6.4.4.10685, Prowlarr 2.6.5.5623.
+Images und Mounts werden bei APIoperationen gegen das eigene Manifest geprüft;
+keine fremden Container oder Produktion. Native Sonarr-Newznab/SAB-,
+Radarr-SAB- und Prowlarr-Newznab-Tests bestanden. Prowlarr benötigte seinen
+tatsächlichen AppProfileId, nicht eine erratene Konstante. Der erste Versuch mit
+Hostports im internen Netz wurde gezielt gestoppt; Controllerzugriffe erfolgen
+jetzt per stdin aus dem eigenen Container. Secrets nicht in argv/URL/Git.
+
+Radarr-Newznab schlägt reproduzierbar mit HTTP 400 fehl: erfolgreiche Anfrage,
+aber keine Ergebnisse in den Filmkategorien. Der native Movie-Recent-Owner
+liefert ohne optionalen Filmkontext absichtlich leer. Dies ist kein
+scheinbarer API-Erfolg und kein Anlass, einen Film zur Einrichtung zu erfinden.
+P10.1 wurde für den tatsächlichen Setupvertrag wieder geöffnet. Noch kein
+gespeicherter Indexer/Downloadclient, keine Weiterleitung über Prowlarr, kein
+Grab oder Import attestiert. Aufbau, Stopcommand und Grenzen unter
+`docs/arr-test-instances.md`. Produktcode, Main und Produktion unverändert;
+vorhandene synthetische Produkt-/DB-/UI-Gates bleiben gültig.

@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 01.10.2026. **Entwicklungsabnahmen erfüllt, keine Deploymentfreigabe.**
+Stand: 01.10.2026. **Erweiterte Verbraucherabnahme offen, keine Deploymentfreigabe.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -23,13 +23,14 @@ erledigte Implementierung.
 - Herkunftsnachweise, B01–B16/O01–O02 und A1–A7/R1–R10 bleiben in den Referenzen.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
-- P00–P09, **P10.1** und P11.1–P11.8 sind
+- P00–P09 und P11.1–P11.8 sind
   technisch abgenommen. Beide Backend-Laufzeitketten und
   die URL-/Secret-basierte Auswahl aus **P11.1** sind geprüft.
-  Der Entwicklungs-Proxy-Pfad P06 → P07 → P08 → P09 → P10.1 ist abgenommen.
-  Nächster Betriebsplanungspunkt ist **P10.2**; private Installationswerte
-  und separate Freigaben fehlen weiterhin. Echte Arr-Integration bleibt
-  separat genehmigungspflichtig. P11.9 ist optional zurückgestellt.
+  P10.1 ist nach der genehmigten isolierten Arr-Probe wieder offen: Radarr
+  lehnt den leeren Filmfeed beim Indexertest ab. Die bisherigen synthetischen
+  Gates bleiben gültig, ersetzen diesen Verbraucherbefund jedoch nicht.
+  P10.2 erfordert weiterhin private Installationswerte und separate
+  Betriebsfreigaben. P11.9 ist optional zurückgestellt.
   P11.2–P11.8 sichern die PostgreSQL-Option und müssen vor deren Betriebsfreigabe
   abgenommen sein; sie blockieren unabhängige Proxy-Arbeit auf SQLite nicht.
   PostgreSQL-Unterstützung gehört zum Entwicklungsumfang, ihre Nutzung und
@@ -1589,7 +1590,7 @@ Abhängigkeit P09 und alle für den gewählten Betriebsweg relevanten
 Entwicklungsabnahmen; B16/O01/O02, R6/R9/R10. P11.1 gilt für beide Betriebswege;
 P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optional.
 
-- [x] **P10.1 — Komplette Paritätsabnahme ohne Produktion.** Beide Newznab-
+- [ ] **P10.1 — Komplette Paritätsabnahme ohne Produktion.** Beide Newznab-
       Pfade einschließlich Caps/Validation/RSS, ID-/Text-/Staffel-/Episode-/Movie-
       Suche, Counts/Relative-Enclosure, NZB-addfile, Queue/failed/completed,
       History/Import/Remove/Retry gegen synthetische Sources und disposable
@@ -1623,6 +1624,19 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       `docs/proxy-retirement-parity.md` und im Review. Reale Arr-Versionen/
       Interoperabilität sind nicht attestiert und bleiben separate isolierte
       Freigabe; keine echten Auto-Grabs oder Produktion. P10.2–P10.7 bleiben offen.
+      Wieder geöffnet 01.10.2026 nach ausdrücklicher Genehmigung eigener
+      Arr-Testinstanzen: Sonarr 4.0.20.3014, Radarr 6.4.4.10685, Prowlarr
+      2.6.5.5623 über tatsächlich laufende APIs verifiziert. Sonarr-Newznab,
+      Prowlarr-Newznab sowie Sonarr-/Radarr-SAB-Verbindungstests bestanden.
+      Radarrs nativer Indexertest verlangt Ergebnisse in Filmkategorien und
+      lehnt den ehrlichen leeren Feed ohne Filmkontext mit HTTP 400 ab.
+      Owner: `fetchMovieSearchForRssSync`, Newznab-Movie-Route und tatsächlicher
+      Radarr-Setupvertrag. Vor Schließen einen unterstützten Einrichtungsweg
+      ohne erfundene Filme, obligatorische lokale Metadaten, neue Credentials
+      oder getrennte manuelle/automatische Endpunkte belegen. Keine erfolgreiche
+      Aufnahme/Weiterleitung/Importkette behauptet; diese Verbraucherprobe bleibt
+      offen. Reproduzierbarer isolierter Aufbau und Grenzen in
+      `docs/arr-test-instances.md`; keine Bibliothek, kein echter Grab, keine Produktion.
 - [ ] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
       Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/
