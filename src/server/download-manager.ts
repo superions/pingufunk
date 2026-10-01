@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { assertWritesEnabled } from "@/lib/write-gate";
-import { isMkvConversionEnabled } from "@/lib/settings";
+import { getSetting, isMkvConversionEnabled } from "@/lib/settings";
+import { readPersistedMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
+import { probeJobMedia } from "./media-probe";
 import { downloadHlsStream } from "./ytdlp";
 import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
 import {
@@ -57,6 +59,9 @@ class Semaphore {
 const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
 let processingPromise: Promise<void> | null = null;
 let rerunRequested = false;
+// A failed DB write pauses the drain. Reconcile only this worker's interrupted jobs
+// before the next explicit wakeup; cold-start recovery covers process loss.
+const pendingFailures = new Map<string, string>();
 
 /** Only the single production worker calls this once at a cold start. */
 export async function recoverInterruptedDownloads(): Promise<number> {
@@ -95,6 +100,12 @@ export async function startDownloadProcessing(): Promise<void> {
 }
 
 async function processQueue(): Promise<void> {
+  for (const [id, error] of pendingFailures) {
+    const row = await prisma.download.findUnique({ where: { id } });
+    if (row && ["queued", "downloading", "converting"].includes(row.status))
+      await markAsFailed(id, error);
+    else pendingFailures.delete(id);
+  }
   while (true) {
     // Get next queued download
     const nextDownload = await prisma.download.findFirst({
@@ -111,6 +122,42 @@ async function processQueue(): Promise<void> {
     // polling again so the same queued row cannot be scheduled repeatedly.
     await processDownload(nextDownload.id);
   }
+}
+
+/** All transfer/mux paths converge here before exposing import-ready history. */
+async function completeValidatedDownload(
+  id: string,
+  filePath: string,
+  jobDirectory: string,
+  expectations: MediaExpectations | null
+): Promise<void> {
+  const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
+  if (!Number.isSafeInteger(tolerance) || tolerance < 0 || tolerance > 25)
+    throw new Error("Invalid media validation policy");
+  const facts = await probeJobMedia(filePath, jobDirectory, expectations, tolerance);
+  const stats = await fs.lstat(filePath);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)
+    throw new Error("Invalid completed media file");
+  // A statement timeout must not leave an unacknowledged autocommit write queued
+  // on a suspended connection. Commit only after the verified write returned.
+  // A lost COMMIT acknowledgement can still be ambiguous; reconcile by reading
+  // the durable row on the next wakeup, never by redownloading or provider fallback.
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.download.update({
+        where: { id },
+        data: {
+          status: "completed",
+          progress: 100,
+          size: stats.size,
+          filePath,
+          completedAt: new Date(),
+          mediaValidation: JSON.stringify({ version: 1, ...facts }),
+        },
+      });
+    },
+    { maxWait: 5000, timeout: 5000 }
+  );
 }
 
 /**
@@ -188,6 +235,7 @@ async function processDownload(downloadId: string): Promise<void> {
     if (!download || download.status !== "queued") {
       return;
     }
+    const expectations = readPersistedMediaExpectations(download.mediaExpectations);
 
     console.log(`[Download] Starting: ${download.title}`);
 
@@ -272,19 +320,10 @@ async function processDownload(downloadId: string): Promise<void> {
       // Get file size
       const stats = await fs.stat(finalMkvPath);
 
-      // Mark as completed
+      // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await prisma.download.update({
-        where: { id: downloadId },
-        data: {
-          status: "completed",
-          progress: 100,
-          size: stats.size,
-          filePath: finalMkvPath,
-          completedAt: new Date(),
-        },
-      });
+      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
 
       console.log(
         `[Download] HLS completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
@@ -366,19 +405,10 @@ async function processDownload(downloadId: string): Promise<void> {
       // Get file size
       const stats = await fs.stat(finalMkvPath);
 
-      // Mark as completed
+      // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await prisma.download.update({
-        where: { id: downloadId },
-        data: {
-          status: "completed",
-          progress: 100,
-          size: stats.size,
-          filePath: finalMkvPath,
-          completedAt: new Date(),
-        },
-      });
+      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
@@ -397,16 +427,7 @@ async function processDownload(downloadId: string): Promise<void> {
 
       const stats = await fs.stat(finalPath);
 
-      await prisma.download.update({
-        where: { id: downloadId },
-        data: {
-          status: "completed",
-          progress: 100,
-          size: stats.size,
-          filePath: finalPath,
-          completedAt: new Date(),
-        },
-      });
+      await completeValidatedDownload(downloadId, finalPath, completeJobDir, expectations);
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB)`
@@ -431,6 +452,14 @@ async function processDownload(downloadId: string): Promise<void> {
 }
 
 async function markAsFailed(downloadId: string, error: string): Promise<void> {
+  pendingFailures.set(downloadId, error);
+  // A lost transaction acknowledgement is not proof of rollback. Preserve an
+  // already durable terminal row instead of overwriting a verified completion.
+  const row = await prisma.download.findUnique({ where: { id: downloadId } });
+  if (!row || ["completed", "failed"].includes(row.status)) {
+    pendingFailures.delete(downloadId);
+    return;
+  }
   await prisma.download.update({
     where: { id: downloadId },
     data: {
@@ -439,6 +468,7 @@ async function markAsFailed(downloadId: string, error: string): Promise<void> {
       completedAt: new Date(),
     },
   });
+  pendingFailures.delete(downloadId);
 }
 
 // CDN streams (confirmed live: a 3sat direct-download URL) can stop sending
@@ -483,7 +513,17 @@ async function downloadFile(
       return false;
     }
 
-    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
+    const lengthHeader = response.headers.get("content-length");
+    const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
+    // Fetch may decode an encoded body: its wire Content-Length is not the
+    // resulting file length. Compare only an unencoded, fully valid length.
+    const reliableLength = lengthHeader !== null && (!encoding || encoding === "identity");
+    if (
+      reliableLength &&
+      (!/^\d+$/.test(lengthHeader) || !Number.isSafeInteger(Number(lengthHeader)))
+    )
+      return false;
+    const contentLength = reliableLength ? Number(lengthHeader) : 0;
     fileStream = createWriteStream(destPath, { flags: "wx" });
     fileStream.once("open", () => {
       fileCreated = true;
@@ -504,6 +544,7 @@ async function downloadFile(
       if (done) {
         break;
       }
+      if (reliableLength && downloadedBytes + value.length > contentLength) return false;
 
       await new Promise<void>((resolve, reject) => {
         fileStream!.write(Buffer.from(value), (error) => (error ? reject(error) : resolve()));
@@ -529,6 +570,8 @@ async function downloadFile(
         }
       }
     }
+
+    if (reliableLength && downloadedBytes !== contentLength) return false;
 
     completed = await new Promise<boolean>((resolve) => {
       fileStream!.once("finish", () => resolve(true));

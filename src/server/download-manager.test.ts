@@ -23,6 +23,7 @@ const {
   ffmpegModuleLoaded,
   convertMp4ToMkv,
   downloadHlsStream,
+  probeJobMedia,
 } = vi.hoisted(() => ({
   configFindUnique: vi.fn(),
   downloadCount: vi.fn(),
@@ -33,11 +34,15 @@ const {
   ffmpegModuleLoaded: vi.fn(),
   convertMp4ToMkv: vi.fn(),
   downloadHlsStream: vi.fn(),
+  probeJobMedia: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     config: { findUnique: configFindUnique },
+    $transaction: async (
+      callback: (tx: { download: { update: typeof downloadUpdate } }) => Promise<void>
+    ) => callback({ download: { update: downloadUpdate } }),
     download: {
       count: downloadCount,
       findFirst: downloadFindFirst,
@@ -54,6 +59,56 @@ vi.mock("./ffmpeg", () => {
 });
 
 vi.mock("./ytdlp", () => ({ downloadHlsStream }));
+vi.mock("./media-probe", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./media-probe")>()),
+  probeJobMedia,
+}));
+import { unknownMediaExpectations } from "@/lib/media-expectations";
+import { validateMediaProbe } from "./media-probe";
+
+const basicFacts = {
+  durationSeconds: 120,
+  video: [{ width: 320, height: 180 }],
+  audioLanguages: [],
+  expectedChecks: { duration: "unknown", audio: "unknown", resolution: "unknown" },
+};
+
+function progressiveJob(id = "probe-job", mediaExpectations: string | null = null) {
+  configFindUnique.mockImplementation(({ where }: { where: { key: string } }) =>
+    Promise.resolve(
+      where.key === "download.path"
+        ? { value: testRoot }
+        : where.key === "download.convertToMkv"
+          ? { value: "false" }
+          : null
+    )
+  );
+  const job = {
+    id,
+    title: "Synthetic.S01E01",
+    category: "sonarr",
+    status: "queued",
+    url: "https://example.invalid/media.mp4",
+    mediaExpectations,
+  };
+  downloadFindUnique.mockResolvedValue(job);
+  downloadUpdate.mockResolvedValue({});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () => new Response(new Uint8Array([1, 2, 3, 4]), { headers: { "content-length": "4" } })
+    )
+  );
+  return job;
+}
+
+const syntheticProbe = {
+  format: { format_name: "mov,mp4", duration: "120" },
+  streams: [
+    { codec_type: "video", codec_name: "h264", width: 320, height: 180 },
+    { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 1 },
+  ],
+};
 
 import { clearSettingsCache } from "@/lib/settings";
 import {
@@ -63,6 +118,193 @@ import {
 } from "./download-manager";
 
 let testRoot: string;
+
+it("does not report legacy completion until the probe resolves and persists unknown checks", async () => {
+  const job = progressiveJob();
+  let finishProbe: (value: typeof basicFacts) => void = () => {};
+  probeJobMedia.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishProbe = resolve;
+      })
+  );
+  const work = processDownload(job.id);
+  await vi.waitFor(() => expect(probeJobMedia).toHaveBeenCalledTimes(1));
+  expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(false);
+  expect(probeJobMedia).toHaveBeenCalledWith(
+    expect.stringContaining(jobDirectoryName(job.title, job.id)),
+    expect.any(String),
+    null,
+    10
+  );
+  finishProbe(basicFacts);
+  await work;
+  const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
+    .data;
+  expect(JSON.parse(completed.mediaValidation)).toEqual({ version: 1, ...basicFacts });
+  expect(completed.filePath).toBe(
+    path.join(testRoot, job.category, jobDirectoryName(job.title, job.id), `${job.title}.mp4`)
+  );
+});
+
+it.each(["missing-audio", "html", "sample", "probe-timeout"])(
+  "rejects %s before completion and continues the next queued job",
+  async (failure) => {
+    const expectations = {
+      ...unknownMediaExpectations(),
+      duration: { seconds: 5400, provenance: "episode_metadata" as const },
+    };
+    const first = progressiveJob(
+      "bad-job",
+      failure === "sample" ? JSON.stringify(expectations) : null
+    );
+    const next = { ...first, id: "next-job", mediaExpectations: null };
+    const jobs = [first, next];
+    downloadFindFirst.mockImplementation(
+      async () => jobs.find((job) => job.status === "queued") ?? null
+    );
+    downloadFindUnique.mockImplementation(async ({ where }) =>
+      jobs.find((job) => job.id === where.id)
+    );
+    downloadUpdate.mockImplementation(async ({ where, data }) => {
+      const job = jobs.find((job) => job.id === where.id)!;
+      if (data.status) job.status = data.status;
+      return job;
+    });
+    probeJobMedia
+      .mockImplementationOnce(async (_file, _dir, expected, tolerance) => {
+        if (failure === "probe-timeout") throw new Error("Local media validation failed");
+        const probe =
+          failure === "html"
+            ? { format: { format_name: "html", duration: "120" }, streams: [] }
+            : failure === "missing-audio"
+              ? { ...syntheticProbe, streams: syntheticProbe.streams.slice(0, 1) }
+              : syntheticProbe;
+        return validateMediaProbe(probe, expected, tolerance);
+      })
+      .mockImplementationOnce(async (_file, _dir, expected, tolerance) =>
+        validateMediaProbe(syntheticProbe, expected, tolerance)
+      );
+    await startDownloadProcessing();
+    expect(jobs.map((job) => job.status)).toEqual(["failed", "completed"]);
+    expect(
+      downloadUpdate.mock.calls.some(
+        ([call]) => call.where.id === first.id && call.data.status === "completed"
+      )
+    ).toBe(false);
+  }
+);
+
+it.each(["3", "5", "4junk", "0"])(
+  "fails an incomplete or invalid reliable Content-Length %s before probing",
+  async (length) => {
+    const job = progressiveJob();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(new Uint8Array([1, 2, 3, 4]), { headers: { "content-length": length } })
+      )
+    );
+    await processDownload(job.id);
+    expect(probeJobMedia).not.toHaveBeenCalled();
+    expect(downloadUpdate).toHaveBeenCalledWith({
+      where: { id: job.id },
+      data: expect.objectContaining({ status: "failed" }),
+    });
+    expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(
+      false
+    );
+  }
+);
+
+it("does not confuse compressed wire length with the decoded local file length", async () => {
+  const job = progressiveJob();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(new Uint8Array([1, 2, 3, 4]), {
+          headers: { "content-length": "2", "content-encoding": "gzip" },
+        })
+    )
+  );
+  await processDownload(job.id);
+  expect(probeJobMedia).toHaveBeenCalledTimes(1);
+  expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(true);
+});
+
+it("pauses on a failed completion DB write, then reconciles its own job before the next wakeup", async () => {
+  const job = progressiveJob("interrupted-db-job");
+  let unavailable = false;
+  downloadUpdate.mockImplementation(async ({ data }) => {
+    if (data.status === "completed") {
+      unavailable = true;
+      throw new Error("synthetic database failure");
+    }
+    if (unavailable) throw new Error("synthetic database failure");
+    if (data.status) job.status = data.status;
+    return job;
+  });
+  downloadFindFirst.mockImplementation(async () => (job.status === "queued" ? job : null));
+  await expect(startDownloadProcessing()).rejects.toThrow("synthetic database failure");
+  expect(job.status).toBe("downloading");
+  expect(downloadFindFirst).toHaveBeenCalledTimes(1);
+  unavailable = false;
+  await startDownloadProcessing();
+  expect(job.status).toBe("failed");
+  expect(probeJobMedia).toHaveBeenCalledTimes(1);
+});
+
+it("validates stored v1 before fetching and never recovers a corrupt payload as legacy", async () => {
+  const job = progressiveJob("corrupt-expectations", "{}");
+  await processDownload(job.id);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(probeJobMedia).not.toHaveBeenCalled();
+  expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(false);
+});
+
+it("does not overwrite a verified durable completion after a lost write acknowledgement", async () => {
+  const job = progressiveJob("lost-commit-ack");
+  downloadUpdate.mockImplementation(async ({ data }) => {
+    if (data.status) job.status = data.status;
+    if (data.status === "completed") throw new Error("Synthetic lost commit acknowledgement");
+    return job;
+  });
+  await processDownload(job.id);
+  expect(job.status).toBe("completed");
+  expect(probeJobMedia).toHaveBeenCalledTimes(1);
+  expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "failed")).toBe(false);
+});
+
+it("passes the persisted v1 expectations and configured P06 tolerance to the common gate", async () => {
+  const expectations = {
+    ...unknownMediaExpectations(),
+    duration: { seconds: 120, provenance: "episode_metadata" as const },
+  };
+  const job = progressiveJob("strict-duration", JSON.stringify(expectations));
+  const lookup = configFindUnique.getMockImplementation()!;
+  configFindUnique.mockImplementation(async (args) =>
+    args.where.key === "matching.sonarr.tolerancePercent" ? { value: "0" } : lookup(args)
+  );
+  probeJobMedia.mockImplementation(async (_file, _dir, expected, tolerance) =>
+    validateMediaProbe(syntheticProbe, expected, tolerance)
+  );
+  await processDownload(job.id);
+  expect(probeJobMedia).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expectations,
+    0
+  );
+  const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
+    .data;
+  expect(JSON.parse(completed.mediaValidation).expectedChecks).toEqual({
+    duration: "passed",
+    audio: "unknown",
+    resolution: "unknown",
+  });
+});
 
 it.each(["mkv", "mp4"])(
   "resolves SRF at download time and finishes HLS as %s across mounts",
@@ -127,6 +369,7 @@ beforeEach(async () => {
   downloadUpdate.mockReset();
   downloadUpdateMany.mockReset();
   convertMp4ToMkv.mockReset();
+  probeJobMedia.mockReset().mockResolvedValue(basicFacts);
 
   testRoot = await mkdtemp(path.join(tmpdir(), "rundfunkarr-download-manager-"));
   vi.stubEnv("DOWNLOAD_TEMP_PATH", path.join(testRoot, "incomplete"));
@@ -583,7 +826,11 @@ it.each(["network", "ffmpeg", "filesystem"])(
 
     await startDownloadProcessing();
 
-    expect(downloadFindUnique.mock.calls.map(([args]) => args.where.id)).toEqual(jobs);
+    expect(downloadFindUnique.mock.calls.map(([args]) => args.where.id)).toEqual([
+      jobs[0],
+      jobs[0],
+      jobs[1],
+    ]);
     expect(downloadUpdate).toHaveBeenCalledWith({
       where: { id: jobs[0] },
       data: expect.objectContaining({ status: "failed" }),

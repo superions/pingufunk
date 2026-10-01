@@ -135,53 +135,86 @@ afterEach(() => {
   mediathekCache.clear();
 });
 
-it("supplements a local missing episode and round-trips exact, season and RSS through NZB to the queue API", async () => {
-  for (const query of [
-    "t=tvsearch&tvdbid=123&season=2&ep=3",
-    "t=tvsearch&tvdbid=123&season=2",
-    "t=tvsearch&cat=5000",
-  ]) {
-    const response = await GET(
-      new NextRequest(`http://localhost/api/newznab?${query}&limit=1&offset=0`)
+it.each([false, true])(
+  "supplements and round-trips exact, season and RSS through NZB to the queue with HLS enabled=%s",
+  async (hlsEnabled) => {
+    const expectedUrl = hlsEnabled ? "https://example.invalid/media.m3u8" : source.url_video;
+    if (hlsEnabled) {
+      state.settings.set("download.enableHLS", "true");
+      const fetchSource = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (value: string) => {
+        if (new URL(value).hostname === "mediathekviewweb.de")
+          return Response.json({
+            result: { results: [{ ...source, url_video: expectedUrl }] },
+            err: null,
+          });
+        return fetchSource(value);
+      });
+    }
+    for (const query of [
+      "t=tvsearch&tvdbid=123&season=2&ep=3",
+      "t=tvsearch&tvdbid=123&season=2",
+      "t=tvsearch&cat=5000",
+    ]) {
+      const response = await GET(
+        new NextRequest(`http://localhost/api/newznab?${query}&limit=1&offset=0`)
+      );
+      expect(response.status).toBe(200);
+      const parsed = await parseStringPromise(await response.text());
+      const channel = parsed.rss.channel[0];
+      expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: "1" });
+      const release = channel.item[0];
+      expect(release.title[0]).toContain("S02E03");
+      expect(release.title[0]).not.toContain("GERMAN");
+      expect(release.link[0]).toBe(expectedUrl);
+      const enclosure = release.enclosure[0].$.url;
+      const nzbResponse = await downloadNzb(
+        new NextRequest(new URL(enclosure, "http://localhost"))
+      );
+      expect(nzbResponse.status).toBe(200);
+      const nzb = await nzbResponse.text();
+      const mediaExpectations = {
+        version: 1,
+        duration: { seconds: 120, provenance: "episode_metadata" },
+        audio: null,
+        resolution: null,
+      };
+      expect(parseNzbContent(nzb)).toEqual({
+        title: release.title[0],
+        url: expectedUrl,
+        mediaExpectations,
+      });
+      expect(
+        (
+          await addfile(
+            new NextRequest("http://localhost/api?mode=addfile&cat=sonarr", {
+              method: "POST",
+              body: nzb,
+            })
+          )
+        ).status
+      ).toBe(200);
+      expect(state.addToQueue).toHaveBeenLastCalledWith(
+        expectedUrl,
+        release.title[0],
+        "sonarr",
+        mediaExpectations
+      );
+    }
+    const episodeCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("api/v3/episode")
     );
-    expect(response.status).toBe(200);
-    const parsed = await parseStringPromise(await response.text());
-    const channel = parsed.rss.channel[0];
-    expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: "1" });
-    const release = channel.item[0];
-    expect(release.title[0]).toContain("S02E03");
-    expect(release.title[0]).not.toContain("GERMAN");
-    expect(release.link[0]).toBe(source.url_video);
-    const enclosure = release.enclosure[0].$.url;
-    const nzbResponse = await downloadNzb(new NextRequest(new URL(enclosure, "http://localhost")));
-    expect(nzbResponse.status).toBe(200);
-    const nzb = await nzbResponse.text();
-    expect(parseNzbContent(nzb)).toEqual({ title: release.title[0], url: source.url_video });
-    expect(
-      (
-        await addfile(
-          new NextRequest("http://localhost/api?mode=addfile&cat=sonarr", {
-            method: "POST",
-            body: nzb,
-          })
-        )
-      ).status
-    ).toBe(200);
-    expect(state.addToQueue).toHaveBeenLastCalledWith(source.url_video, release.title[0], "sonarr");
+    expect(episodeCalls).toHaveLength(1);
+    const beforePage = fetchMock.mock.calls.length;
+    const page = await GET(
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&cat=5000&limit=1&offset=1")
+    );
+    const parsed = await parseStringPromise(await page.text());
+    expect(parsed.rss.channel[0]["newznab:response"][0].$).toEqual({ offset: "1", total: "1" });
+    expect(parsed.rss.channel[0].item).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(beforePage);
   }
-  const episodeCalls = fetchMock.mock.calls.filter(([url]) =>
-    String(url).includes("api/v3/episode")
-  );
-  expect(episodeCalls).toHaveLength(1);
-  const beforePage = fetchMock.mock.calls.length;
-  const page = await GET(
-    new NextRequest("http://localhost/api/newznab?t=tvsearch&cat=5000&limit=1&offset=1")
-  );
-  const parsed = await parseStringPromise(await page.text());
-  expect(parsed.rss.channel[0]["newznab:response"][0].$).toEqual({ offset: "1", total: "1" });
-  expect(parsed.rss.channel[0].item).toBeUndefined();
-  expect(fetchMock).toHaveBeenCalledTimes(beforePage);
-});
+);
 
 it("does not republish a verified Sonarr episode as an unknown candidate or requested neighbor", async () => {
   state.settings.set("matching.minDuration", "0");

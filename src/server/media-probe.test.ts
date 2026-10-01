@@ -63,6 +63,15 @@ it("uses inclusive seconds-based P06 tolerance and rejects a known sample", () =
   ).toThrow();
 });
 
+it.each(["und", "und-Latn", "mul", "zxx", "unrecognized-language"])(
+  "retains unknown audio tags %s as unknown, not a language claim",
+  (language) => {
+    const probe = media();
+    probe.streams[1] = { ...probe.streams[1], tags: { language } };
+    expect(validateMediaProbe(probe, null, 10).audioLanguages).toEqual([]);
+  }
+);
+
 it("checks only explicit audio tags and dimensions, never language/quality title labels", () => {
   const expected = {
     ...unknownMediaExpectations(),

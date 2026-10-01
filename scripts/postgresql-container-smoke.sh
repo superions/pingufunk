@@ -6,6 +6,10 @@ set -euo pipefail
 MIGRATOR_IMAGE="${PINGUFUNK_SMOKE_MIGRATOR_IMAGE:-pingufunk-p11-migrator-qa}"
 RUNNER_IMAGE="${PINGUFUNK_SMOKE_RUNNER_IMAGE:-pingufunk-p11-runtime-qa}"
 ROLLBACK_IMAGE="${PINGUFUNK_SMOKE_ROLLBACK_IMAGE:-}"
+SOURCE_VARIANT="${PINGUFUNK_SMOKE_SOURCE_VARIANT:-bootstrap}"
+[[ "$SOURCE_VARIANT" == bootstrap || "$SOURCE_VARIANT" == current ]] || {
+  echo "Unknown disposable source variant" >&2; exit 1;
+}
 if [[ -n "$ROLLBACK_IMAGE" ]]; then
   [[ "$ROLLBACK_IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]] || {
     echo "Rollback rehearsal requires an immutable local image ID" >&2; exit 1;
@@ -48,9 +52,9 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
   -keyout "$SMOKE_ROOT/server.key" -out "$SMOKE_ROOT/server.crt" >/dev/null 2>&1
 chmod 600 "$SMOKE_ROOT/server.key"
 
-SMOKE_SOURCE="$SMOKE_ROOT/source/source.sqlite" node --input-type=module -e '
+SMOKE_SOURCE="$SMOKE_ROOT/source/source.sqlite" SMOKE_VARIANT="$SOURCE_VARIANT" node --input-type=module -e '
   import { createSmokeSource } from "./scripts/postgresql-smoke-fixture.mjs";
-  createSmokeSource(process.env.SMOKE_SOURCE);
+  createSmokeSource(process.env.SMOKE_SOURCE, process.env.SMOKE_VARIANT);
 '
 
 docker network create --internal "$SMOKE_NETWORK" >/dev/null

@@ -1060,7 +1060,8 @@ export async function fetchSearchResultsById(
     results,
     minDuration,
     tolerance,
-    await getConfiguredLanguagePolicy()
+    await getConfiguredLanguagePolicy(),
+    hlsEnabled
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
     [...matchedEpisodes, ...supplementalMatches],
@@ -1070,7 +1071,7 @@ export async function fetchSearchResultsById(
   console.log(`[Mediathek] Matched desired episodes: ${matchedDesiredEpisodes.length}`);
 
   const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
-    generateRssItems(info, quality, info.episode.metadataSource === "sonarr" ? false : hlsEnabled)
+    generateRssItems(info, quality, hlsEnabled)
   );
   // The Sonarr matcher clones rows while removing ineligible URLs. Compare
   // source metadata, not object references or its sanitized rendition list.
@@ -1232,7 +1233,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   );
   if (sonarrUnavailable && matchedEpisodes.length === 0) throw new SonarrUnavailableError();
   const newznabItems: NewznabItem[] = [...matchedEpisodes, ...supplementalMatches].flatMap((info) =>
-    generateRssItems(info, quality, info.episode.metadataSource === "sonarr" ? false : hlsEnabled)
+    generateRssItems(info, quality, hlsEnabled)
   );
   const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
 

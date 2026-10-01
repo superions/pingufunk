@@ -7,6 +7,13 @@ dieselbe Fachstruktur ab; PostgreSQL und vollständig migriertes SQLite haben
 je eine neue append-only Indexmigration. Historische Migrationen bleiben
 unverändert. Normale Starts führen weiterhin weder DDL noch Import aus.
 
+P09 ergänzt nullable `Download.mediaExpectations` und `mediaValidation` mit
+einer weiteren append-only Migration. Der Übergang akzeptiert Bootstrap,
+die drei historischen Migrationen, P07-Zwischenstand und aktuelle Kette. Nur
+historisch fehlende neue Felder werden als NULL verglichen; vorhandene Strings
+bleiben bytegleich. Nichtleere Ledger müssen zur jeweiligen Kontur samt
+Originalchecksums passen. Keine bestehende Datei wird in-place erweitert.
+
 Ein historisches Container-Bootstrap hat einen inline Unique-Index und ein
 leeres Ledger. Es ist nicht zulässig, dort frühere Migrationen blind als
 ausgeführt zu markieren oder deren SQL über vorhandene Tabellen abzuspielen.

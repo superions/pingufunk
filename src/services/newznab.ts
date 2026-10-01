@@ -18,6 +18,7 @@ import {
   stableUrlIdentity,
 } from "./language-editions";
 import { createFakeNzbDownloadUrl } from "./nzb-release";
+import { releaseMediaExpectations } from "./release-media-expectations";
 
 export { generateFakeNzb } from "./nzb-release";
 
@@ -322,7 +323,11 @@ function createRssItem(
   const parsedTitle = generateTitle(info, quality, episodeType);
   const formattedTitle = formatTitle(parsedTitle);
 
-  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({
+    title: formattedTitle,
+    url,
+    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime),
+  });
   const item = info.item;
 
   return {
@@ -522,7 +527,11 @@ function createMovieRssItem(
   const parsedTitle = applyLanguageEdition(generateMovieTitle(movieData, quality), item);
   const formattedTitle = formatTitle(parsedTitle);
 
-  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({
+    title: formattedTitle,
+    url,
+    mediaExpectations: releaseMediaExpectations(item),
+  });
 
   return {
     title: formattedTitle,
@@ -843,7 +852,11 @@ function createGenericRssItem(
 
   const formattedTitle = formatTitle(applyLanguageEdition(rawTitle, item));
 
-  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({
+    title: formattedTitle,
+    url,
+    mediaExpectations: releaseMediaExpectations(item),
+  });
 
   const attributes: NewznabAttribute[] = categoryValues.map((v) => ({
     name: "category",

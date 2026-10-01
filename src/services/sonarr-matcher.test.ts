@@ -114,6 +114,23 @@ describe("identity before duration/identity stamping", () => {
     expect(matchSonarrEpisodes(show, [candidate], 300, 10)[0].item.url_video_hd).toBe("");
     expect(candidate.url_video_hd).toContain("m3u8");
   });
+  it("allows verified supplemental HLS only under the existing explicit HLS setting", () => {
+    const candidate = { ...item, url_video: "https://example.invalid/video.m3u8" };
+    expect(matchSonarrEpisodes(show, [candidate], 300, 10)).toEqual([]);
+    const matched = matchSonarrEpisodes(show, [candidate], 300, 10, undefined, true);
+    expect(matched).toHaveLength(1);
+    expect(matched[0].item.url_video).toBe(candidate.url_video);
+    expect(
+      matchSonarrEpisodes(
+        show,
+        [{ ...candidate, url_video: "https://user:secret@example.invalid/video.m3u8" }],
+        300,
+        10,
+        undefined,
+        true
+      )
+    ).toEqual([]);
+  });
 
   it("keeps accessibility variants subject to the existing language-evidence policy", () => {
     const accessible = { ...item, title: "Synthetic series: Missing episode (klare Sprache)" };

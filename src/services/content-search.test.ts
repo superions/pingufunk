@@ -92,6 +92,12 @@ describe("configured providers in normal search flows", () => {
     expect(parseNzbContent(await response.text())).toEqual({
       title: rssItem.title,
       url: result.url_video,
+      mediaExpectations: {
+        version: 1,
+        duration: { seconds: 1800, provenance: "source_catalogue" },
+        audio: null,
+        resolution: null,
+      },
     });
   });
 

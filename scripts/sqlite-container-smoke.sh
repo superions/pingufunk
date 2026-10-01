@@ -5,6 +5,13 @@ set -euo pipefail
 MIGRATOR_IMAGE="${PINGUFUNK_SMOKE_MIGRATOR_IMAGE:-pingufunk-p11-migrator-qa}"
 RUNNER_IMAGE="${PINGUFUNK_SMOKE_RUNNER_IMAGE:-pingufunk-p11-runtime-qa}"
 ROLLBACK_RUNNER_IMAGE="${PINGUFUNK_SMOKE_ROLLBACK_IMAGE:-}"
+if [[ -n "$ROLLBACK_RUNNER_IMAGE" ]]; then
+  [[ "$ROLLBACK_RUNNER_IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    echo 'SQLite rollback requires an immutable local image ID' >&2; exit 1;
+  }
+  [[ "$(docker image inspect "$ROLLBACK_RUNNER_IMAGE" --format '{{.Id}}')" == "$ROLLBACK_RUNNER_IMAGE" ]]
+  [[ "$(docker image inspect "$RUNNER_IMAGE" --format '{{.Id}}')" != "$ROLLBACK_RUNNER_IMAGE" ]]
+fi
 SMOKE_PARENT="$(pwd)/downloads"
 mkdir -p "$SMOKE_PARENT"
 SMOKE_ROOT="$(mktemp -d "${SMOKE_PARENT}/sqlite-smoke.XXXXXXXX")"
@@ -102,7 +109,7 @@ for variant in fresh bootstrap; do
     try {
       const query=db.prepare("SELECT id,size,filePath,status FROM Download");query.setReadBigInts(true);const rows=query.all();
       if(rows.length!==1||rows[0].id!=="original-id"||rows[0].size!==BigInt("9007199254741115")||rows[0].filePath!=="/synthetic/original.mkv"||rows[0].status!=="failed")throw Error("SQLite data changed");
-      if(db.prepare("SELECT count(*) AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL").get().n!==4)throw Error("Current ledger incomplete");
+      if(db.prepare("SELECT count(*) AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL").get().n!==5)throw Error("Current ledger incomplete");
     }finally{db.close();}
   '
 done

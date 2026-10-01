@@ -1518,6 +1518,17 @@ Noch keine Aktivierung in allen RSS-Producern und kein Worker-Abschlussgate;
 P09.1/P09.2 bleiben offen. Die Vollsuite bestand mit 737 regulären Tests;
 die zusätzlichen PG-Proben laufen separat, nicht als SQLite-Ersatz.
 
+P09-Abschlusscheckpoint 01.10.2026, Fork-Abnahme ausstehend: eigene Producer
+liefern immer v1; gemeinsamer Workerabschluss probt alle Transfer-/Muxzweige,
+persistiert Fakten erst danach und schützt DB-/Commitfehler. HLS-Opt-in auch
+für Sonarr-Metadatenfallback, unveränderter Default. Beide realen Backends mit
+synthetischem Medienabschluss/SAB-History, negatives Audio/HTML/Truncation/
+Sample, Queuefortsetzung, Restart und PG-Ausfall-/Weckrufrecovery geprüft.
+Zusätzlich finaler TLS-Import samt P09-Payloads und beide immutable Rückwege
+lokal grün. Details/Prüfgrenzen unter `docs/media-validation.md` und dem
+P09-Workerreview. P09.1/P09.2 sowie P11.7/P11.8 bleiben bis aktuellem Fork-CI-
+und Dockerlauf offen; kein produktiver Cutover oder SQLite-Rücktransfer.
+
 ## Phase P10 — Vollständige Parität und getrennt freigegebener Betrieb
 
 Ergebnis: nachgewiesene Gesamtkette auf dem gewählten Backend, danach kein Proxy.

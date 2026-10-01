@@ -550,3 +550,43 @@ nichtleeren neuen Payloads. Lint, Typecheck, Produktformat und Build grün;
 nach der Importtest-Erweiterung Typecheck erneut grün, unveränderte Produktgates
 wiederverwendet. Die generierten Clients wurden mit dem Repository-Generator
 erzeugt. Keine Bestands-/Produktionsdatenbank migriert; P09/P11 bleiben offen.
+
+## P09-Worker-/Medienreview (01.10.2026, Fork-Abnahme ausstehend)
+
+Alle eigenen RSS-Producer liefern nun v1, belegte Laufzeit/Audioevidenz und
+unbekannte Dimensionen. Ein gemeinsamer Abschlussowner schützt progressive,
+HLS- und Konvertierungszweige vor importbereiter Fertigmeldung ohne Probe.
+Content-Length wird nur beim nicht kodierten Body zuverlässig verglichen.
+Status/Pfad/Probefakten werden nach der Probe in einer begrenzten Transaktion
+gespeichert. Verlorene Commitbestätigung führt zu durablem Statusabgleich,
+nicht zum Überschreiben eines bereits verifizierten completed. DB-Ausfall
+pausiert ohne Spinloop; nächster expliziter Weckruf bzw. Kaltstart übernimmt
+Recovery. Kein unimplementierter automatischer Reconnecttimer behauptet.
+
+Sonarr-HLS kann jetzt über das bestehende Opt-in gewählt werden, Default aus.
+Exakte Suche, Staffel und RSS einschließlich NZB/Queue mit HLS sind synthetisch
+geprüft. Keine Kategorien-/GUID-/Pfadänderung, kein neuer Provider-/Senderparser.
+Probe-/Tracktag-/Identitätsgrenzen stehen unter `docs/media-validation.md`.
+Review aller Source-/Producer-/Parser-/Persistenz-/Retry-/Abschluss-/Fehlerowner
+einschließlich Units, Cancellation, Prozessownership und Schreibgrenzen ohne
+offenes Implementierungsfinding. Eine anfängliche PG-Ausfallassertion ließ
+fälschlich nur downloading zu; converting ist ebenfalls ein korrekter
+unterbrochener Status. Kein beobachtetes vorzeitiges completed wird behauptet.
+
+774 reguläre Tests, zwölf bedingte separate Fälle nicht im regulären Lauf;
+Lint, Typecheck, Format und Build grün. Zusätzlich 15 Ausführungen im disposable
+PG-Harness (darunter die eigene SQLite-Persistenzprobe) erfolgreich. Realer
+Container-/ffprobe-Gate auf beiden Backends mit synthetischen MP4/HLS/MKV,
+HTML/Truncation/fehlendem Audio/Sample, SAB-Importpfad, Queuefortsetzung und
+Restart grün; kontrollierter eigener PG-Ausfall plus Weckrufrecovery grün.
+Neue drei Fixturetests anschließend fokussiert grün, Typecheck nach Korrektur
+zweier testseitiger ES-Target-BigInt-Literale erneut grün.
+
+TLS-Smoke mit ursprünglichem Bootstrap und aktuellem Sourceledger samt
+nichtleeren P09-Payloads besteht jeweils Snapshot/Prepare/Import/Verify/Sequences,
+Maintenance, echten Write, privates Backuprestore und distinct immutable
+PG-kompatibles Maintenance-Rollback. Separat immutable Vor-P07-Image mit
+unveränderter SQLitequelle vor neuen Zielwrites erfolgreich. Der Forkworkflow
+baut beide gepinnten Checkpoints selbst und prüft alle Rückwege; lokale
+Image-IDs sind keine veröffentlichten Registry-Digests. P09/P11.7/P11.8 bleiben
+bis erfolgreichem aktuellen Forklauf offen. Produktion/Main/upstream unverändert.

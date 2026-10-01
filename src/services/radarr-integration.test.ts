@@ -161,7 +161,17 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
     new NextRequest(new URL(release.enclosure[0].$.url, "http://localhost"))
   );
   const content = await nzb.text();
-  expect(parseNzbContent(content)).toEqual({ title: release.title[0], url: source.url_video });
+  const mediaExpectations = {
+    version: 1,
+    duration: { seconds: 5400, provenance: "source_catalogue" },
+    audio: null,
+    resolution: null,
+  };
+  expect(parseNzbContent(content)).toEqual({
+    title: release.title[0],
+    url: source.url_video,
+    mediaExpectations,
+  });
   const queue = await addfile(
     new NextRequest("http://localhost/api?mode=addfile&cat=movies", {
       method: "POST",
@@ -169,7 +179,12 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
     })
   );
   expect(queue.status).toBe(200);
-  expect(state.addToQueue).toHaveBeenCalledWith(source.url_video, release.title[0], "movies");
+  expect(state.addToQueue).toHaveBeenCalledWith(
+    source.url_video,
+    release.title[0],
+    "movies",
+    mediaExpectations
+  );
 });
 
 it("exposes identical caps through the direct route and alias without caller/mode heuristics", async () => {
@@ -223,6 +238,12 @@ it("uses an explicit public URL including its deployment prefix without altering
   expect(parseNzbContent(await nzb.text())).toEqual({
     title: release.title[0],
     url: source.url_video,
+    mediaExpectations: {
+      version: 1,
+      duration: { seconds: 5400, provenance: "source_catalogue" },
+      audio: null,
+      resolution: null,
+    },
   });
 });
 

@@ -11,14 +11,13 @@ function normalized(value: string): string {
   return value.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleLowerCase("de-DE");
 }
 
-function progressiveUrl(value: string): string {
+function eligibleRenditionUrl(value: string, hlsEnabled: boolean): string {
   try {
     const url = new URL(value);
     return ["https:", "http:"].includes(url.protocol) &&
       !url.username &&
       !url.password &&
-      /\.(?:mp4|m4v|mkv|webm|mov)$/i.test(url.pathname) &&
-      !isStreamingUrl(value)
+      (isStreamingUrl(value) ? hlsEnabled : /\.(?:mp4|m4v|mkv|webm|mov)$/i.test(url.pathname))
       ? value
       : "";
   } catch {
@@ -34,7 +33,8 @@ export function matchSonarrEpisodes(
   candidates: ApiResultItem[],
   minimumSeconds: number,
   tolerancePercent: number,
-  languagePolicy: LanguagePolicy = DEFAULT_LANGUAGE_POLICY
+  languagePolicy: LanguagePolicy = DEFAULT_LANGUAGE_POLICY,
+  hlsEnabled = false
 ): MatchedEpisodeInfo[] {
   const names = [show.name, show.germanName, ...show.aliases.map((alias) => alias.name)]
     .filter((name): name is string => !!name)
@@ -61,9 +61,9 @@ export function matchSonarrEpisodes(
       continue;
     const item = {
       ...candidate,
-      url_video: progressiveUrl(candidate.url_video),
-      url_video_low: progressiveUrl(candidate.url_video_low),
-      url_video_hd: progressiveUrl(candidate.url_video_hd),
+      url_video: eligibleRenditionUrl(candidate.url_video, hlsEnabled),
+      url_video_low: eligibleRenditionUrl(candidate.url_video_low, hlsEnabled),
+      url_video_hd: eligibleRenditionUrl(candidate.url_video_hd, hlsEnabled),
     };
     if (![item.url_video, item.url_video_low, item.url_video_hd].some(Boolean)) continue;
     const parsed = parseEpisodeFromTitle(item.title);

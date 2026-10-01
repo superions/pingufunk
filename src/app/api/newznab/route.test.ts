@@ -186,7 +186,17 @@ describe("one movie contract for direct and forwarded indexer requests", () => {
       new NextRequest(new URL(enclosureUrl, "http://localhost"))
     );
     const content = await nzbResponse.text();
-    expect(parseNzbContent(content)).toEqual({ title: release.title, url: source.url_video });
+    const mediaExpectations = {
+      version: 1,
+      duration: { seconds: 5400, provenance: "source_catalogue" },
+      audio: null,
+      resolution: null,
+    };
+    expect(parseNzbContent(content)).toEqual({
+      title: release.title,
+      url: source.url_video,
+      mediaExpectations,
+    });
     const queued = await addToQueue(
       new NextRequest("http://localhost/api?mode=addfile&cat=radarr", {
         method: "POST",
@@ -197,7 +207,8 @@ describe("one movie contract for direct and forwarded indexer requests", () => {
     expect(downloadMocks.addToQueue).toHaveBeenCalledWith(
       source.url_video,
       release.title,
-      "radarr"
+      "radarr",
+      mediaExpectations
     );
   });
 });
@@ -337,12 +348,23 @@ describe("Newznab indexer validation", () => {
     expect(downloadResponse.status).toBe(200);
     expect(nzbContent).toContain(`<!-- ${encodedTitle} -->`);
     expect(nzbContent).toContain(Buffer.from(source.url_video).toString("base64"));
-    expect(parseNzbContent(nzbContent)).toEqual({ title: release.title, url: source.url_video });
+    const mediaExpectations = {
+      version: 1,
+      duration: { seconds: 2700, provenance: "source_catalogue" },
+      audio: null,
+      resolution: null,
+    };
+    expect(parseNzbContent(nzbContent)).toEqual({
+      title: release.title,
+      url: source.url_video,
+      mediaExpectations,
+    });
     expect(queueResponse.status).toBe(200);
     expect(downloadMocks.addToQueue).toHaveBeenCalledWith(
       source.url_video,
       release.title,
-      "sonarr"
+      "sonarr",
+      mediaExpectations
     );
   });
 
@@ -414,9 +436,20 @@ describe("Newznab indexer validation", () => {
       expect(title).toBe(releases[index].title);
       expect(encodedTitle).toBe(Buffer.from(title, "utf-8").toString("base64"));
       expect(downloadResponse.status).toBe(200);
-      expect(parsed).toEqual({ title, url: source.url_video });
+      const mediaExpectations = {
+        version: 1,
+        duration: { seconds: 1800, provenance: "episode_metadata" },
+        audio: null,
+        resolution: null,
+      };
+      expect(parsed).toEqual({ title, url: source.url_video, mediaExpectations });
       expect(queueResponse.status).toBe(200);
-      expect(downloadMocks.addToQueue).toHaveBeenLastCalledWith(source.url_video, title, "sonarr");
+      expect(downloadMocks.addToQueue).toHaveBeenLastCalledWith(
+        source.url_video,
+        title,
+        "sonarr",
+        mediaExpectations
+      );
     }
     expect(rssItems[0].title[0]).toContain("S2026E12");
     expect(rssItems[1].title[0]).toContain("2026-03-31");

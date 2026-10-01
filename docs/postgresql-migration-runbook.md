@@ -1,6 +1,6 @@
 # Pingufunk PostgreSQL: Migrations-Runbook (Entwicklungsstand)
 
-Stand: 30.09.2026. Dies ist ein **noch nicht produktiv freigegebenes** Runbook
+Stand: 01.10.2026. Dies ist ein **noch nicht produktiv freigegebenes** Runbook
 für P11.3–P11.8. Die Befehle für Snapshot, Import, Verifikation und Sequences
 entsprechen den implementierten CLI-Einstiegen im `migrator`-Image. Sie wurden
 mit synthetischen Daten gegen disposable PostgreSQL 17 erprobt, aber **nicht**
@@ -68,8 +68,38 @@ PG-Original im Wartungsmodus. Settings/History/zwei Serienregeln desselben
 Topics bleiben lesbar und alle Werte unverändert; kein SQLitefallback.
 Ein fehlender Parameter ist **keine** Rollbackabnahme. Die konkrete frühere
 Imageversion muss zur aktuellen Migration und zum Client passen; ein
-Vor-P07-Image mit globalem Topic-Unique ist kein geeigneter Rückweg. Dieser
+Vor-P09-Image ohne die Medienfelder ist kein geeigneter PG-Rückweg. Dieser
 lokale Entwicklungsnachweis ersetzt weder P10.2 noch eine Freigabe.
+
+### Finaler Schema-/Rollback-Entwicklungsgate
+
+Zwei historische Gitarchive, kein Checkoutwechsel: `e2e53b0` liest die
+ursprüngliche SQLite-Bootstrapquelle vor neuen Zielwrites; `bfa93e2` hat bereits
+das endgültige P09-Schema und liest den erhaltenen PG-Stand nach Writes
+**ausschließlich im Wartungsmodus**. Letzteres erlaubt keinen Schreibbetrieb
+mit dem älteren Downloadworker ohne den neuen Medienabschlussgate.
+
+```sh
+git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | \
+  docker build --target runner -t pingufunk-sqlite-source-rollback-qa -
+git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | \
+  docker build --target runner -t pingufunk-pg-maintenance-rollback-qa -
+PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-sqlite-source-rollback-qa --format '{{.Id}}')" \
+  bash scripts/sqlite-container-smoke.sh
+export PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-pg-maintenance-rollback-qa --format '{{.Id}}')"
+for variant in bootstrap current; do
+  PINGUFUNK_SMOKE_SOURCE_VARIANT="$variant" bash scripts/postgresql-container-smoke.sh
+done
+unset PINGUFUNK_SMOKE_ROLLBACK_IMAGE
+```
+
+Voraussetzung: zuvor gebaute Kandidaten unter den oberen `pingufunk-p11-*`-
+Testnamen. Beide Rückwege verlangen unterschiedliche immutable lokale Image-IDs.
+Der aktuelle Sourcefall führt die tatsächliche SQLite-Kette samt Checksums aus
+und enthält nichtleere P09-Payloads. Import, Backuprestore und Rollback vergleichen
+auch diese Werte, nicht nur Rowcounts. Bootstrap bleibt ein separater Fall.
+Der Fork-Dockerworkflow führt beide Varianten und Rückwege ohne Veröffentlichung
+aus. Lokale Image-ID ist weder Registry-Digest noch Releasefreigabe.
 
 Das Skript verwendet ein eigenes Docker-Netz und nur ignorierte temporäre
 Dateien unter `downloads/`; sein Exit-Trap entfernt die selbst erzeugten
@@ -188,7 +218,7 @@ Keine Truncate-/Drop-/Reset-/Upsert-Abkürzung.
 
 ## Start, Pausen und Rückwege
 
-Der ausdrücklich mit `DATABASE_PROVIDER=postgresql` gewählte App-Container startet standardmäßig mit
+Der durch PostgreSQL-URL/Secret oder den optionalen Selektor gewählte App-Container startet standardmäßig mit
 `PINGUFUNK_WRITES_ENABLED=0`; er prüft die PG-Migrationskette, führt aber
 kein DDL und keinen Import aus. Erst eine separat freigegebene
 Schreibfreigabe setzt `PINGUFUNK_WRITES_ENABLED=1` bei genau einem Worker.

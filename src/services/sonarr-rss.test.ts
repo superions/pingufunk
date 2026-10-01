@@ -109,6 +109,26 @@ it("default-off performs no inventory or content requests", async () => {
   expect(state.query).not.toHaveBeenCalled();
 });
 
+it("publishes supplemental HLS only when the existing HLS option is explicitly enabled", async () => {
+  const load = state.query.getMockImplementation()!;
+  state.query.mockImplementation(async (queries, size, options) => {
+    const rows = await load(queries, size, options);
+    return rows.map((item: ApiResultItem) => ({
+      ...item,
+      url_video: "https://example.invalid/media.m3u8",
+    }));
+  });
+  expect(await getSonarrRssMatches(base)).toEqual([]);
+  expect(state.query.mock.calls.every((call) => call[2].progressiveOnly)).toBe(true);
+  state.settings.set("download.enableHLS", "true");
+  state.epoch++;
+  state.query.mockClear();
+  const matches = await getSonarrRssMatches(base);
+  expect(matches.length).toBeGreaterThan(0);
+  expect(matches.every((match) => match.item.url_video.endsWith(".m3u8"))).toBe(true);
+  expect(state.query.mock.calls.every((call) => call[2].progressiveOnly === false)).toBe(true);
+});
+
 it("bounds cold snapshots to the shared ten attempts and rotates monitored series only", async () => {
   const first = await getSonarrRssMatches(base);
   expect(first.map((match) => match.tvdbId)).toEqual([101, 102, 103, 104]);

@@ -26,6 +26,7 @@ export async function getSonarrRssMatches(
   const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
   const minimum = await getMinDurationSeconds();
   const languagePolicy = await getConfiguredLanguagePolicy();
+  const hlsEnabled = (await getSetting("download.enableHLS")) === "true";
   if (
     !Number.isSafeInteger(window) ||
     window < 1 ||
@@ -80,10 +81,12 @@ export async function getSonarrRssMatches(
       const candidates = await queryContent(
         [{ fields: ["topic", "title"], query: show.germanName || show.name }],
         5000,
-        { requestBudget: budget, progressiveOnly: true, arteSeries: show }
+        { requestBudget: budget, progressiveOnly: !hlsEnabled, arteSeries: show }
       );
       if (candidates === null) throw new SonarrUnavailableError();
-      matches.push(...matchSonarrEpisodes(show, candidates, minimum, tolerance, languagePolicy));
+      matches.push(
+        ...matchSonarrEpisodes(show, candidates, minimum, tolerance, languagePolicy, hlsEnabled)
+      );
     }
     if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
       throw new SonarrUnavailableError();

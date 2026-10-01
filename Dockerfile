@@ -100,6 +100,7 @@ COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/check-
 # Symlink system FFmpeg and yt-dlp so the app finds them at expected locations
 RUN mkdir -p /app/prisma/data /app/downloads /app/ffmpeg /app/ytdlp \
     && ln -s /usr/bin/ffmpeg /app/ffmpeg/ffmpeg \
+    && ln -s /usr/bin/ffprobe /app/ffmpeg/ffprobe \
     && ln -s /usr/local/bin/yt-dlp /app/ytdlp/yt-dlp \
     && chown -R nextjs:nodejs /app
 

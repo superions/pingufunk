@@ -76,6 +76,12 @@ it("keeps a release GUID stable across access-token rotation but downloads the c
   expect(parseNzbContent(await response.text())).toEqual({
     title: renewedRelease.title,
     url: renewedUrl,
+    mediaExpectations: {
+      version: 1,
+      duration: { seconds: 2700, provenance: "source_catalogue" },
+      audio: null,
+      resolution: null,
+    },
   });
 });
 

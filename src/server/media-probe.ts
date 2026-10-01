@@ -33,7 +33,10 @@ function languageTag(value: string | undefined): string | null {
   if (!value || ["und", "mul", "zxx"].includes(value.toLowerCase())) return null;
   if (isGermanLanguageCode(value)) return "de";
   try {
-    return new Intl.Locale(value.replaceAll("_", "-")).language;
+    const language = new Intl.Locale(value.replaceAll("_", "-")).language;
+    return typeof language === "string" && !["und", "mul", "zxx"].includes(language)
+      ? language
+      : null;
   } catch {
     return null;
   }
