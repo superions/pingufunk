@@ -54,6 +54,18 @@ jobs:
           git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker build --target runner -t pingufunk-sqlite-source-rollback-qa -
           git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | docker build --target runner -t pingufunk-pg-maintenance-rollback-qa -
 
+      - name: Verify runtime tooling without global package manager
+        run: |
+          for image in pingufunk-p11-runtime-qa pingufunk-p11-migrator-qa; do
+            docker run --rm --entrypoint sh "$image" -ec '
+              test ! -e /usr/local/lib/node_modules/npm
+              ! command -v npm
+              ! command -v npx
+              node --version
+            '
+          done
+          docker run --rm --entrypoint node pingufunk-p11-migrator-qa /app/node_modules/prisma/build/index.js --version
+
       - name: Rehearse disposable TLS migration and post-write rollback
         run: |
           export PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-pg-maintenance-rollback-qa --format '{{.Id}}')"

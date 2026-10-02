@@ -887,3 +887,74 @@ Harness-Evidenz wiederverwendet, nicht als neue Ausführung ausgegeben.
 Historische Rollbackimages werden nur als isolierte Testinputs verwendet;
 deren alte Abhängigkeiten sind keine Sicherheitsfreigabe für einen Rollout.
 Release/Rollout und installationsbezogene OCI-/Scanpolicy bleiben gesperrt.
+
+## Lokale technische Abnahme (03.10.2026)
+
+**Entscheidung: technische lokale Testabnahme bestanden.** Geprüft wurde eine
+eigene persistente Entwicklungsinstallation aus Main `0c139f3`, getrennt von
+Produktion und anderen Checkouts. Runner-Image-ID:
+`sha256:fed7da718381877edb07d5bd9f1edcdca9a76a66270b5c41b6dcdcc5473e7b4c`.
+Die tatsächlichen APIs bestätigen Sonarr **4.0.20.3014**, Radarr **6.4.4.10685**
+und Prowlarr **2.6.5.5623**. Private Pfade, Hostadressen, Testkeys und Rohantworten
+bleiben in ignorierten lokalen Betriebsunterlagen, nicht in diesem Repository.
+
+Frisch ausgeführte Nachweise:
+
+- Alle vier eigenen synthetischen Testcontainer einzeln explizit neu gestartet;
+  begrenzte API-Readinessprüfung bestanden. Persistente Settings, jeweils zwei
+  direkte/vermittelte Indexer und der SAB-Client erhalten. Automatische
+  Beschaffung und RSS bleiben deaktiviert; Fixtures sind unüberwacht.
+- Bereits importierte synthetische Film-/Episodendateien vor/nach Restart über
+  tatsächliche Arr-Datei-IDs und physische Größe/SHA-256 identisch. Es wurden
+  dabei keine neuen Grabs ausgelöst.
+- Native direkte und über Prowlarr vermittelte Film-/Episodensuche nach Restart:
+  jeweils ein erwarteter Treffer; Fremdsuche leer, falsche Keys 401,
+  externe Fetchziele gesperrt. Kein automatischer Prowlarr-Application-Sync-Test.
+- Serviertes RSS→NZB: beide bestehenden Newznab-Aliase gleich, generische
+  Film-/Episodentreffer sprachlich neutral, aktuelle Medien-URL im NZB erhalten,
+  NZB-Titel konsistent mit RSS. Negative Suche und Folgeseite leer. Film-RSS
+  ohne optionalen Filmkontext bleibt ehrlich leer, nicht als erfolgreicher
+  nativer Radarr-Verbindungstest ausgegeben.
+- Desktop-Interaktion: positive/negative Suche, Matching-Checkbox ändern,
+  speichern, API-Readback und Reload belegen Persistenz. Ausgangswert anschließend
+  wiederhergestellt und per API bestätigt; Browserkonsole ohne Fehler.
+  Tatsächlich servierter Desktopzustand visuell geprüft, keine Mobiltests.
+- Alle vier synthetischen SQLite-DBs: `PRAGMA integrity_check` erfolgreich;
+  Pingufunk mit fünf abgeschlossenen Migrationen und ohne aktive Downloadqueue.
+- Separate schreibgesperrte Katalog-Vorschau: echte MediathekView-Suche liefert
+  fünf quellengestützte Tatort-Kandidaten. Beide Download-API-Wege und Settings-
+  Write lehnen mit 503 ab; Queue/History leer. Nach eigenem Restart SQLite
+  integer, keine Downloads und kein gespeicherter abgewiesener Settings-Key.
+  Keine echten Medien heruntergeladen oder Live-Bibliotheken angesprochen.
+- `npm audit` und `npm audit --omit=dev`: jeweils null Befunde.
+
+Wiederverwendete, unveränderte Evidenz, keine neue Vollausführung:
+
+- Vorheriger Lauf auf **demselben Main-Image**: native vermittelte synthetische
+  Film-/Episodenketten Release→NZB→SAB→Completed→Import sowie native
+  Quellhistoryentfernung bei erhaltener physischer Datei.
+- [Main-CI](https://github.com/superions/pingufunk/actions/runs/37067874775)
+  und [Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37067875012)
+  für `0c139f3` erfolgreich: 832 Tests, Lint, Typecheck, Format, Build sowie
+  native PG-, TLS-Migrations-, post-write-Rollback-, SQLite-Persistenz- und
+  Medienabschlussgates auf beiden Backends. Keine Imagepublikation.
+- Bestehende vollständige Desktop-Screenshotmatrix auf unveränderten UI-Quellen;
+  dieser Lauf ergänzt die tatsächliche Bedienung und Persistenzprüfung,
+  behauptet aber keine neu aufgenommene vollständige Screenshotmatrix.
+
+Diagnoseabgrenzung: Der frühere vorübergehend leere Radarr-Suchlauf korreliert
+mit dem tatsächlich gespeicherten nativen 60-Sekunden-Indexer-Cooldown nach
+dem ehrlich fehlgeschlagenen Empty-Feed-Verbindungstest. Kein Status wurde
+manipuliert und keine fehlgeschlagene Suchassertion heimlich wiederholt.
+Nach Restart sind die gezielten Suchen erfolgreich. Zwei erste RSS/NZB-
+Diagnoseassertionen hatten falsche Testtreiber-Annahmen (RSS-Medienlink versus
+NZB-Enclosure und NZB-Metadatenfeld `title`); sie wurden nach Prüfung des
+bestehenden Producer-/Parservertrags korrigiert, ohne Produktänderung.
+
+Diese Abnahme bestätigt den technischen Proxy-Ersatzkandidaten in der isolierten
+Installation, nicht jede reale Sendung, regionale Verfügbarkeit, automatische
+Prowlarr-Application-Synchronisierung oder produktive Betriebsparameter.
+SQLite-Laufzeitevidenz ersetzt nicht PostgreSQL-Evidenz; letztere stammt aus den
+unveränderten grünen Gates. **P10.2–P10.7 bleiben offen.** Keine Produktions-
+installation, Datenmigration, Proxy-Abschaltung, Routenumschaltung, Release-Tags
+oder öffentlichen Images wurden durch diese Testabnahme freigegeben.
