@@ -12,5 +12,12 @@
       { "name": "One Mistake", "seasonNumber": 1, "episodeNumber": 5, "aired": "2026-01-13" },
       { "name": "One Truth", "seasonNumber": 1, "episodeNumber": 6, "aired": "2026-01-13" }
     ]
+  },
+  {
+    "tvdbId": 319457,
+    "name": "Solo for Weiss",
+    "germanName": "Solo für Weiss",
+    "aliases": ["Solo für Weiss"],
+    "episodes": []
   }
 ]
