@@ -25,7 +25,7 @@ SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
    Anwendungsschemata verwenden. Tatsächliche PostgreSQL-Version, Primary,
    gewählten Endpunkt, Transport/TLS, Network und Secret-Mount read-only prüfen.
    Weder HAProxy noch ein anderer Zugriffsweg ist vorgegeben. Für die
-   eigene leere DB die gepinnte Prisma-6.19.2-Kette mit `migrate deploy`
+   eigene leere DB die gepinnte Prisma-6.19.3-Kette mit `migrate deploy`
    anwenden; Appstarts führen das nicht aus.
 4. Secretdateien und Snapshots liegen außerhalb Git mit privaten Rechten.
    `DATABASE_URL_FILE` wird vor dem Drop auf den unprivilegierten User gelesen;

@@ -4,7 +4,7 @@ SQLite und PostgreSQL sind gleichwertig unterstützt, ohne fachlich bevorzugten
 Standard. Ohne PostgreSQL-Konfiguration wird SQLite verwendet. Eine fehlerhafte
 oder unvollständige PG-Konfiguration sowie ein Verbindungsfehler wechseln niemals
 den Provider. Beide Prisma-Clients werden
-mit der gelockten Version 6.19.2 bei `npm ci` generiert. Historische SQLite-SQL
+mit der gepinnten Version 6.19.3 bei `npm ci` generiert. Historische SQLite-SQL
 bleibt unverändert unter `prisma/legacy/sqlite/migrations/`; PostgreSQL verwendet
 seine eigene Kette unter `prisma/migrations/`.
 

@@ -145,10 +145,12 @@ preflight_report="$(DATABASE_URL="$IMPORT_URL" docker run --rm --user "$(id -u):
   "$MIGRATOR_IMAGE" /app/scripts/postgresql-preflight.mjs \
   /backup/run/source.sqlite pingufunk_smoke pingufunk_smoke_import "$PG_CONTAINER")"
 printf '%s' "$preflight_report" | node -e '
+  // The candidate must match the exact project pin, never merely the same major.
+  const expectedClient=require("./package.json").dependencies["@prisma/client"];
   let input=""; process.stdin.on("data",chunk=>input+=chunk);
   process.stdin.on("end",()=>{
     const report=JSON.parse(input);
-    if(report.version!==2 || report.prismaClient!=="6.19.2" ||
+    if(report.version!==2 || !/^6\.\d+\.\d+$/.test(expectedClient) || report.prismaClient!==expectedClient ||
        Number(report.node.slice(1).split(".")[0])<24 ||
        report.target.schemaState!=="validated" || report.target.tls!==true ||
        Object.values(report.source.counts).some(value=>value!=="1")) process.exit(1);
