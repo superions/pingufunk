@@ -15,7 +15,10 @@ RUN npm ci
 # This target is never part of a normal application container startup.
 FROM deps AS migrator
 COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/database-migrate.mjs scripts/load-database-environment.mjs scripts/sqlite-schema.mjs scripts/check-sqlite-schema.mjs scripts/check-postgresql-schema.mjs scripts/sqlite-baseline.mjs scripts/migrate-entrypoint.sh scripts/postgresql-preflight.mjs scripts/postgresql-snapshot.mjs scripts/postgresql-row-transform.mjs scripts/postgresql-import.mjs scripts/postgresql-prepare.mjs scripts/postgresql-verify.mjs scripts/postgresql-run-manifest.mjs scripts/postgresql-migration-cli.mjs ./scripts/
-RUN apk add --no-cache su-exec && chmod +x ./scripts/migrate-entrypoint.sh
+RUN apk add --no-cache su-exec && chmod +x ./scripts/migrate-entrypoint.sh \
+    && rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
+# The one-shot migrator invokes the locked Prisma CLI through node, not global npm.
 ENTRYPOINT ["/app/scripts/migrate-entrypoint.sh"]
 CMD ["node", "/app/scripts/database-migrate.mjs"]
 
@@ -47,6 +50,11 @@ RUN mkdir -p /app/standalone-out && \
 # Stage 3: Runner
 FROM node:24-alpine AS runner
 WORKDIR /app
+
+# Installation belongs to the build stages; the server never invokes npm/npx.
+# Exclude the base image's independent package-manager dependency tree at runtime.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 # Install runtime dependencies for FFmpeg and user management
 # Note: yt-dlp standalone binary includes bundled Python, no separate install needed
