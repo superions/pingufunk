@@ -749,3 +749,54 @@ gespeicherter Indexer/Downloadclient, keine Weiterleitung über Prowlarr, kein
 Grab oder Import attestiert. Aufbau, Stopcommand und Grenzen unter
 `docs/arr-test-instances.md`. Produktcode, Main und Produktion unverändert;
 vorhandene synthetische Produkt-/DB-/UI-Gates bleiben gültig.
+
+## Erweiterte Verbraucherabnahme (02.10.2026)
+
+Deaktivierte Radarr-Neuanlage plus unterstütztes `forceSave`-Update belegt;
+der separate Empty-Feed-Test bleibt ehrlich HTTP 400. Keine erfundenen Filme,
+obligatorischen Metadaten-Credentials oder zusätzlichen Pingufunk-Endpunkte.
+Native direkte/vermittelte Film-/Episodensuche, echte manuelle Arr-Aufnahme
+über Release→NZB→SAB→Completed→Import und native Quellhistoryentfernung bei
+erhaltener physischer Importdatei bestanden. Die frische vermittelte Wiederholung
+lief in einem eigenen Archivcheckout auf dem bekannten Entwicklungsrechner,
+nicht in vorhandenen Checkouts. Falsche Keys ergeben 401, Fremdsuchen sind leer
+und externes Fetch bleibt gesperrt. Versionierte unüberwachte Fixtures liegen
+in vor Änderung gesicherten disposable Arr-DBs, niemals in einer realen Bibliothek.
+Prowlarrs automatische Application-Synchronisierung ist nicht attestiert.
+Dieser zusätzliche Arr-Lauf verwendet SQLite; frühere unveränderte native PG-
+und UI-Evidenz wird wiederverwendet, kein erneuter Arr-plus-PG-Lauf behauptet.
+
+Ein frischer Harnesslauf fand punktierte Scene-Suchbegriffe, die der ursprüngliche
+QA-Quellfilter nicht berücksichtigte. Der Fixtureowner normalisiert jetzt Zeichen
+und prüft alle tatsächlichen Suchterms gegen die synthetische Quellzeile;
+positive und fremde negative Anfragen schützen das Verhalten. Kein Produktmatching
+wurde gelockert. Einzelne aktivierte Transportwege verhindern eine falsche
+Zwei-Ergebnisse-Erwartung für vom Consumer deduplizierte identische GUIDs.
+Commands und Setupgrenzen stehen in `arr-test-instances.md`.
+
+### Offener Security-/Releasebefund
+
+Frisches `npm ci` des unveränderten Lockfiles und `npm audit --json` melden
+am 02.10.2026 **26 Paketbefunde: 3 critical, 17 high, 5 moderate, 1 low**.
+Transitive Metabefunde sind enthalten; kein Nachweis von 26 unabhängigen Exploits.
+Gelockt: Next 16.1.6, Vitest/Coverage 4.0.18, Prisma 6.19.2, PostCSS 8.5.6,
+AJV 8.17.1. Next betrifft Runtime/Standalone/Bildoptimierung (`next/image`
+in der Desktop-Sidebar); Vitest/Coverage und CSS-/ESLint-Tools sind Test/Build.
+Prisma CLI/Config betrifft Generatoren beider Clients und den Migrator.
+Kein Vitest-UI-Server wurde gestartet.
+
+Maintainerquellen bestätigen den
+[Next-AVIF/libheif-Befund](https://github.com/vercel/next.js/security/advisories/GHSA-2xp9-vwfh-vxw4)
+für die gelockte Version (korrigierter 16er-Stand: 16.3.3) und den
+[Vitest-UI-Befund](https://github.com/vitest-dev/vitest/security/advisories/GHSA-5xrq-8626-4rwp),
+der einen lauschenden UI-Server voraussetzt, nicht `vitest run`. Das entkräftet
+nicht sämtliche transitiven Befunde. Eine Ausnutzung der Installation ist nicht
+nachgewiesen. Der npm-Prisma-Vorschlag 6.12.0 wäre ein Downgrade, kein blind
+anwendbarer Fix. Kein `audit fix --force`, Lockfileupdate oder Majorwechsel.
+
+Owner: P10.2, Package/Lockfile, Next-Konfiguration, Vitest und Prisma-Generator-
+und Migratorpfade. Vor Release/Nutzer-Rollout ist ein separat freigegebener
+Security-/Kompatibilitätscheckpoint mit primärquellengeprüften Fixversionen,
+beiden Clients und betroffenen Produkt-/DB-/Build-/Desktop-/Arr-Gates nötig.
+Die funktionale P10.1-Abnahme schließt diesen Befund nicht. Kein Live-Zugriff
+wird vorausgesetzt oder angefragt; späterer Rollout bleibt nutzergeführt.

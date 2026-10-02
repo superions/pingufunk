@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 01.10.2026. **Erweiterte Verbraucherabnahme offen, keine Deploymentfreigabe.**
+Stand: 02.10.2026. **Verbraucherabnahme abgeschlossen; Security-/Betriebsgates offen, keine Deploymentfreigabe.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -1590,7 +1590,7 @@ Abhängigkeit P09 und alle für den gewählten Betriebsweg relevanten
 Entwicklungsabnahmen; B16/O01/O02, R6/R9/R10. P11.1 gilt für beide Betriebswege;
 P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optional.
 
-- [ ] **P10.1 — Komplette Paritätsabnahme ohne Produktion.** Beide Newznab-
+- [x] **P10.1 — Komplette Paritätsabnahme ohne Produktion.** Beide Newznab-
       Pfade einschließlich Caps/Validation/RSS, ID-/Text-/Staffel-/Episode-/Movie-
       Suche, Counts/Relative-Enclosure, NZB-addfile, Queue/failed/completed,
       History/Import/Remove/Retry gegen synthetische Sources und disposable
@@ -1637,6 +1637,18 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       Aufnahme/Weiterleitung/Importkette behauptet; diese Verbraucherprobe bleibt
       offen. Reproduzierbarer isolierter Aufbau und Grenzen in
       `docs/arr-test-instances.md`; keine Bibliothek, kein echter Grab, keine Produktion.
+      Erneut abgenommen 02.10.2026 auf unverändertem Produktstand `8de3148`:
+      deaktivierte Neuanlage plus unterstütztes `forceSave`-Update belegt,
+      Empty-Feed-Test ehrlich weiterhin HTTP 400. Native direkte/vermittelte
+      Film-/Episodensuche, echter Arr-Release→NZB→SAB→Completed→Import und
+      native Quellhistoryentfernung bei erhaltener physischer Importdatei geprüft.
+      Unüberwachte synthetische Fixtures mit privatem Backup; Fremdsuche leer,
+      falsche Keys 401, externe Fetchziele gesperrt. Frische vermittelte Kette
+      auf dem bekannten Entwicklungsrechner ohne andere Checkouts/Dienste
+      zu verändern. Keine automatische Prowlarr-Application-Sync-Abnahme;
+      zusätzlicher Arr-Lauf SQLite, bestehende native PG-/UI-Gates wiederverwendet.
+      Securitybefund gehört ausdrücklich zum weiterhin offenen P10.2 und
+      sperrt Release/Rollout; keine Produktionsabnahme behaupten.
 - [ ] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
       Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/
@@ -1655,6 +1667,16 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       PG→SQLite-Rückschaltung nur nach separater P11.9-Abnahme. Unbekannte Werte
       stoppen den PG-Cutover. Abnahme: ausführbarer
       redigierter Operationsentwurf und getestete Rückwege, keine Cleanupfreigabe.
+      Neuer offener Scanbefund 02.10.2026: unverändertes Lockfile meldet
+      26 npm-Paketbefunde (3 critical/17 high/5 moderate/1 low), darunter
+      Next 16.1.6 und Vitest/Coverage 4.0.18. Vor Release/Nutzer-Rollout einen
+      separat freigegebenen Security-/Kompatibilitätscheckpoint abnehmen:
+      Runtime und Build/Test/Migrator-Reichweite trennen, Maintainer-Advisories
+      verifizieren, kompatible Fixversionen/Lockfile mit npm erzeugen und beide
+      DB-Clients samt Produkt-, DB-, Build- und betroffenen Desktop-/Arr-Gates
+      prüfen. Kein blindes `audit fix --force`, Prisma-Downgrade auf den
+      Scanner-Vorschlag 6.12.0 oder beiläufiger Majorwechsel. Befund/Owner
+      unter `docs/proxy-retirement-review.md`; kein Release aus grünem CI ableiten.
 - [ ] **P10.3 — Optionale freigegebene PG-Übernahme, Proxy unverändert.**
       **Nur bei ausdrücklicher PostgreSQL-Wahl; hier
       anhalten bis zur ausdrücklichen Datenmigrations-/Deploymentfreigabe für

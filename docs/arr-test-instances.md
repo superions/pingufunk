@@ -61,7 +61,8 @@ Konfigurationen/DBs. Es löscht keine Dateien, Volumes oder Netzwerke.
 Bei einem fehlgeschlagenen Aufbau bleiben eigene Artefakte erhalten;
 kein globales Prune/Reset als Reparatur. Der erste Aufbau mit unnutzbaren
 Hostports wurde gezielt gestoppt und bleibt als Testartefakt erhalten.
-Die korrigierten vier Instanzen bleiben für weitere Integrationstests gestartet.
+Testinstanzen nach der Abnahme mit `stop` beenden. Artefakte bleiben erhalten;
+ein angehaltener Docker-Daemon ist kein bestätigter Container-Stopnachweis.
 
 ## Beobachtete Verbrauchergrenze
 
@@ -82,3 +83,103 @@ Versions-/Verbindungsprobe ist kein vollständiger Interoperabilitätsnachweis.
 Frühere native SQLite-/PG- und Mediengates werden unverändert wiederverwendet;
 dieser Aufbau betrifft nur disposable Arr-Konfigurationen und eine neue
 Pingufunk-SQLite-Testinstanz, keinen erneuten PostgreSQL-Cutover.
+
+## Unterstützter Setupweg ohne erfundene Filme
+
+Die vorstehende erste Beobachtung ist historisch. Der anschließende Test hat
+Radarrs tatsächlich implementierten Einrichtungsvertrag belegt: eine Newznab-
+Definition zunächst mit `enableRss`, `enableAutomaticSearch` und
+`enableInteractiveSearch` jeweils `false` anlegen. Danach die bestehende
+Definition über `PUT /api/v3/indexer/{id}?forceSave=true` gezielt für interaktive
+Suche aktivieren. Die Feldvalidierung bleibt bestehen; nur die erneute
+Remoteprobe wird beim Update ausgelassen. `forceSave` bei einer **aktivierten
+Neuanlage** umgeht den leeren Feed dagegen nicht. Der separate Test bleibt mit
+der präzisen No-Results-Ursache HTTP 400, nicht grün umetikettiert.
+Siehe den versionsgebundenen
+[Radarr-Controller](https://github.com/Radarr/Radarr/blob/v6.4.4.10685/src/Radarr.Api.V3/ProviderControllerBase.cs).
+
+Direkt: `baseUrl` bezeichnet Pingufunk, `apiPath` ist `/api/newznab`.
+Via Prowlarr: dort dieselbe Pingufunk-Adresse als Newznab-Quelle speichern;
+in Arr `baseUrl` auf Prowlarr mit der **tatsächlichen Indexer-ID** setzen,
+`apiPath` auf `/api` und den lokalen Prowlarr-Key verwenden. Dies ist
+Prowlarrs Weiterleitungsweg, kein zweiter Pingufunk-Endpunkt. Die tatsächlich
+versorgten Kategorien für Radarr/ Sonarr sind 2000/5000. Eine automatische
+Prowlarr-Application-Synchronisierung wurde nicht getestet und darf daraus
+nicht abgeleitet werden; Prowlarrs
+[Radarr-Proxy](https://github.com/Prowlarr/Prowlarr/blob/v2.6.5.5623/src/NzbDrone.Core/Applications/Radarr/RadarrV3Proxy.cs)
+unterscheidet ebenfalls Add und Update mit `forceSave`.
+
+Dies ist ein API-Einrichtungsvertrag, keine behauptete zusätzliche GUI-Schaltfläche.
+Für spätere reale Einrichtung Schemas aus der gewählten Instanz lesen und
+Credentials aus privaten Secretdateien übernehmen, keine Payloads mit Keys
+in die Shellhistory oder Dokumentation schreiben. Der QA-CLI akzeptiert
+absichtlich **keine** beliebigen produktiven Ziele.
+
+## Reproduzierbare vollständige Verbraucherprobe
+
+Zusätzlich zu den Verbindungsproben:
+
+```sh
+node scripts/arr-test-instances.mjs bootstrap "$QA_DIR"
+node scripts/arr-test-instances.mjs movie-fixture "$QA_DIR"
+node scripts/arr-test-instances.mjs series-fixture "$QA_DIR"
+node scripts/arr-test-instances.mjs movie-search "$QA_DIR"
+node scripts/arr-test-instances.mjs episode-search "$QA_DIR"
+node scripts/arr-test-instances.mjs forwarded-search "$QA_DIR"
+node scripts/arr-test-instances.mjs boundaries "$QA_DIR"
+node scripts/arr-test-instances.mjs movie-download "$QA_DIR" direct
+node scripts/arr-test-instances.mjs movie-import "$QA_DIR"
+node scripts/arr-test-instances.mjs episode-download "$QA_DIR" direct
+node scripts/arr-test-instances.mjs episode-import "$QA_DIR"
+node scripts/arr-test-instances.mjs stop "$QA_DIR"
+```
+
+Für die komplette Prowlarr-Kette mit `up` einen **frischen** Satz erzeugen,
+dort Bootstrap/Fixtures wiederholen und bei beiden Downloadcommands
+`forwarded` statt `direct` wählen. Nicht zwei identische GUIDs aus gleichzeitig
+aktiven Indexern als zwei erwartete Suchergebnisse zählen: die reale
+Verbraucherentscheidung dedupliziert sie. Die Probe aktiviert jeweils genau
+einen eigenen Suchweg und stellt die bisherigen Flags im `finally` wieder her.
+RSS-/Auto-Suche bleiben abgeschaltet, es gibt keine realen Auto-Grabs.
+
+Die Fixtures sind unüberwachte synthetische Filme/Serien/Episoden ohne echte
+externe Identität. Weil Arr beim regulären Hinzufügen externe Metadaten lädt,
+wird ausschließlich seine **gestoppte disposable Datenbank** nach API-
+Versionsprüfung, Integritycheck und privatem Backup transaktional vorbereitet.
+Die bekannten Versionen sind bewusst fest begrenzt; andere Versionen brechen
+ab. Vorhandene synthetische Zeilen bleiben bei erneuter Vorbereitung erhalten.
+Dies ist keine unterstützte Methode zur Manipulation realer Arr-Bibliotheken.
+
+`bootstrap` und Fixturevorbereitung sind wiederholbar; `up` erzeugt immer neu.
+Ein Downloadcommand erstellt absichtlich eine **neue** manuelle Testaufnahme,
+ist also keine idempotente Mutation. Vor dem eigenen Controller-Restart muss
+die Queue leer sein. FFmpeg erzeugt lokal zehn Minuten Schwarzbild mit Testton,
+keine heruntergeladenen Programme. Die Katalogfixture liefert getrennte,
+suchbegriffsabhängige Film-/Episodenkandidaten und ehrliche leere Fremdsuchen.
+
+Arr übernimmt den echten Release, lädt sein NZB und sendet selbst SAB-addfile.
+Nach Completed samt Kategorieprüfung wird ausschließlich das eigene
+Jobverzeichnis in ein privates Arr-Testvolume kopiert. Ein nur dort geltendes
+Remote-Path-Mapping ermöglicht Arrs natives Completed-Download-Handling.
+Importabnahme verlangt passende Grab-/Import-History, native Dateiidentität,
+konfinierten Bibliothekspfad und physische Dateigröße, nicht nur `hasFile`.
+Die abschließende native Historyentfernung muss den importierten Film/die
+Episode erhalten; nur eigene synthetische Quelljobs dürfen entfernt werden.
+Kein bestimmtes produktives Volume-/HAProxy-/Swarm-Szenario wird vorausgesetzt.
+
+Falsche API-Keys müssen 401 ergeben und richtige weiterhin funktionieren;
+der externe Fetch-Negativfall muss am eigenen Preload scheitern. Weder
+Testsecrets noch Backups, reale APIantworten, Medien oder lokale Hostpfade
+gehören ins Git. Alle Rohartefakte verbleiben unter dem ignorierten `downloads/`.
+
+Die ersten direkten/vermittelten Importproben liefen auf ARM64. Nach der
+Unterbrechung war die lokale Colima-Laufzeit gestoppt; ihre Zustände werden
+nicht als erneute Abnahme ausgegeben. Ein eigener Archivcheckout auf dem
+bekannten Entwicklungsrechner lieferte am 02.10.2026 die erfolgreiche frische
+Wiederholung einschließlich vermittelter Downloads, nativer Imports und
+Historyentfernung. Host-CLI: Node 26.10.0; Runner-/Migrator-Build mit Node 24
+und frischem `npm ci`. Alle vier eigenen Instanzen wurden anschließend
+gezielt gestoppt; Konfigurationen, Backups und Testdateien bleiben erhalten.
+Bestehende Checkouts und fremde Dienste blieben unverändert. Live-Zugriff
+wird nicht verlangt. Die dabei sichtbaren Securitybefunde bleiben separat
+unter P10.2 offen und verhindern eine Releasefreigabe.

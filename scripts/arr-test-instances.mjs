@@ -39,6 +39,9 @@ function load(root) {
   for (const [app, item] of Object.entries(manifest.apps)) {
     if (!(app in ports) || item.name !== `pingufunk-arr-${app}-${manifest.owner}`)
       throw new Error("Invalid QA container identity");
+    const directory = join(root, app);
+    if (lstatSync(directory).isSymbolicLink() || realpathSync(directory) !== directory)
+      throw new Error("Owned canonical non-symlink app directory required");
     const container = JSON.parse(docker(["inspect", item.name]))[0];
     if (container.Config.Labels[label] !== manifest.owner || container.Image !== item.image)
       throw new Error("QA owner/image mismatch");
@@ -67,17 +70,17 @@ function apiKey(root, app) {
   if (!key) throw new Error("Owned API key unavailable");
   return key;
 }
-async function api(root, manifest, app, path, body) {
+async function api(root, manifest, app, path, body, method, expectedStatus, credentialOverride) {
   // Internal Docker networks deliberately have no host-published reachability.
   // The owned Pingufunk container is the controller; secrets travel via stdin,
   // not docker argv, environment, URLs or diagnostic output.
   const request = {
     url: `http://${app}:${ports[app]}${path}`,
     options: {
-      method: body === undefined ? "GET" : "POST",
+      method: method ?? (body === undefined ? "GET" : "POST"),
       headers: {
         "Content-Type": "application/json",
-        ...(app === "pingufunk" ? {} : { "X-Api-Key": apiKey(root, app) }),
+        ...(app === "pingufunk" ? {} : { "X-Api-Key": credentialOverride ?? apiKey(root, app) }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     },
@@ -92,6 +95,11 @@ async function api(root, manifest, app, path, body) {
       stdio: ["pipe", "pipe", "pipe"],
     })
   );
+  if (expectedStatus !== undefined) {
+    if (result.status !== expectedStatus)
+      throw new Error(`Owned ${app} expected HTTP ${expectedStatus}, received ${result.status}`);
+    return result.data;
+  }
   if (result.status < 200 || result.status >= 300) {
     const fields = Array.isArray(result.data)
       ? result.data
@@ -339,6 +347,621 @@ async function downloadClient(root, manifest, app) {
   console.log(`${app}: native SAB connection test passed; no client saved or download submitted`);
 }
 
+async function bootstrap(root, manifest) {
+  // Radarr's create forceSave still tests enabled definitions. Bootstrap disabled,
+  // then explicitly enable interactive search via its supported update contract.
+  // This does not turn an empty-feed validation error into a passing test.
+  for (const app of ["prowlarr", "radarr", "sonarr"]) {
+    const prefix = `/api/${app === "prowlarr" ? "v1" : "v3"}`;
+    const schema = (await api(root, manifest, app, `${prefix}/indexer/schema`)).find(
+      (row) => row.implementation === "Newznab"
+    );
+    if (!schema) throw new Error(`Owned ${app} Newznab schema missing`);
+    const paths = app !== "prowlarr" ? ["direct", "forwarded"] : ["source"];
+    for (const transport of paths) {
+      const name = `Pingufunk isolated QA ${transport}`;
+      const existing = (await api(root, manifest, app, `${prefix}/indexer`)).filter(
+        (row) => row.name === name
+      );
+      if (existing.length > 1) throw new Error("Owned duplicate QA indexer");
+      const model = {
+        ...schema,
+        name,
+        enable: false,
+        enableRss: false,
+        enableAutomaticSearch: false,
+        enableInteractiveSearch: false,
+        fields: schema.fields.map((field) => ({ ...field })),
+      };
+      delete model.id;
+      const values = {
+        baseUrl: "http://pingufunk:6767",
+        apiPath: "/api/newznab",
+        apiKey: "synthetic-qa-not-a-secret",
+        categories: app === "sonarr" ? [5000] : [2000],
+        animeCategories: [],
+      };
+      if (app === "prowlarr") {
+        const profiles = await api(root, manifest, app, `${prefix}/appprofile`);
+        if (!profiles.length) throw new Error("Owned prowlarr application profile missing");
+        model.appProfileId = profiles[0].id;
+        model.enable = true;
+      } else if (transport === "forwarded") {
+        const sources = await api(root, manifest, "prowlarr", "/api/v1/indexer");
+        const source = sources.find((row) => row.name === "Pingufunk isolated QA source");
+        if (!source) throw new Error("Owned forwarded source missing");
+        values.baseUrl = `http://prowlarr:9696/${source.id}`;
+        values.apiPath = "/api";
+        values.apiKey = apiKey(root, "prowlarr");
+      }
+      for (const field of model.fields) if (field.name in values) field.value = values[field.name];
+      const record = existing[0] ?? (await api(root, manifest, app, `${prefix}/indexer`, model));
+      if (app !== "prowlarr") {
+        model.id = record.id;
+        model.enableInteractiveSearch = true;
+        await api(
+          root,
+          manifest,
+          app,
+          `${prefix}/indexer/${record.id}?forceSave=true`,
+          model,
+          "PUT"
+        );
+      }
+      const saved = await api(root, manifest, app, `${prefix}/indexer/${record.id}`);
+      for (const [key, value] of Object.entries(values)) {
+        if (!model.fields.some((field) => field.name === key)) continue;
+        // Arr intentionally redacts secret fields on GET. Their correctness is
+        // proved by consumer requests, never by logging or unmasking readback.
+        if (key === "apiKey") continue;
+        if (
+          JSON.stringify(saved.fields.find((field) => field.name === key)?.value) !==
+          JSON.stringify(value)
+        )
+          throw new Error(`Owned ${app} persisted field mismatch: ${key}`);
+      }
+      if (app === "radarr") {
+        if (!saved.enableInteractiveSearch || saved.enableRss || saved.enableAutomaticSearch)
+          throw new Error("Owned radarr search flags mismatch");
+        const errors = await api(root, manifest, app, `${prefix}/indexer/test`, saved, "POST", 400);
+        if (
+          !Array.isArray(errors) ||
+          !errors.some((error) =>
+            String(error.errorMessage).includes(
+              "Query successful, but no results in the configured categories"
+            )
+          )
+        )
+          throw new Error("Owned radarr unexpected validation error; not the empty-feed contract");
+      }
+      if (app === "sonarr") {
+        if (!saved.enableInteractiveSearch || saved.enableRss || saved.enableAutomaticSearch)
+          throw new Error("Owned sonarr search flags mismatch");
+        await api(root, manifest, app, `${prefix}/indexer/test`, saved);
+      }
+      console.log(
+        `${app}: ${transport} persisted/read back; ${app === "prowlarr" ? "no application sync configured" : "automatic searches disabled"}${app === "radarr" ? "; empty-feed test remains HTTP 400 (not a pass)" : ""}`
+      );
+    }
+  }
+}
+
+async function movieFixture(root, manifest) {
+  if ((await api(root, manifest, "radarr", "/api/v3/system/status")).version !== "6.4.4.10685")
+    throw new Error("Owned Radarr fixture requires its inspected schema/version");
+  if (lstatSync(join(root, "radarr", "radarr.db")).isSymbolicLink())
+    throw new Error("Owned non-symlink fixture database required");
+  // Official AddMovie always calls external Skyhook. This offline fixture seeds
+  // only the stopped disposable DB, not a product validation feed or live movie.
+  const { DatabaseSync } = await import("node:sqlite");
+  const name = manifest.apps.radarr.name;
+  docker(["stop", name]);
+  const db = new DatabaseSync(join(root, "radarr", "radarr.db"));
+  try {
+    if (db.prepare("PRAGMA integrity_check").get().integrity_check !== "ok")
+      throw new Error("Owned Radarr fixture source integrity failed");
+    const columns = (table) =>
+      new Set(
+        db
+          .prepare(`PRAGMA table_info("${table}")`)
+          .all()
+          .map((row) => row.name)
+      );
+    if (!columns("MovieMetadata").has("TmdbId") || !columns("Movies").has("MovieMetadataId"))
+      throw new Error("Owned Radarr fixture schema mismatch");
+    const backup = join(root, "radarr", `before-fixture-${Date.now()}.sqlite`);
+    db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const id = 2147483001;
+      const previous = db.prepare("SELECT * FROM MovieMetadata WHERE TmdbId=?").get(id);
+      if (previous && previous.Title !== "Synthetic Media")
+        throw new Error("Owned synthetic fixture identity conflict");
+      if (!previous)
+        db.prepare(
+          `INSERT INTO MovieMetadata
+        (TmdbId,Images,Title,SortTitle,CleanTitle,OriginalTitle,CleanOriginalTitle,OriginalLanguage,Status,Runtime,Year,Recommendations,Genres,Keywords,Ratings)
+        VALUES (?, '[]', 'Synthetic Media', 'syntheticmedia', 'syntheticmedia', 'Synthetic Media', 'syntheticmedia', 1, 3, 0, 2024, '[]', '[]', '[]', '{}')`
+        ).run(id);
+      const metadata = db.prepare("SELECT Id FROM MovieMetadata WHERE TmdbId=?").get(id);
+      const profile = db.prepare("SELECT Id FROM QualityProfiles ORDER BY Id LIMIT 1").get();
+      if (!profile) throw new Error("Owned Radarr fixture profile missing");
+      if (!db.prepare("SELECT Id FROM Movies WHERE MovieMetadataId=?").get(metadata.Id))
+        db.prepare(
+          `INSERT INTO Movies (Path,Monitored,QualityProfileId,Added,Tags,AddOptions,MovieFileId,MinimumAvailability,MovieMetadataId)
+          VALUES ('/config/synthetic-library/Synthetic Media (2024)', 0, ?, datetime('now'), '[]', '{}', 0, 0, ?)`
+        ).run(profile.Id, metadata.Id);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  } finally {
+    db.close();
+    docker(["start", name]);
+  }
+  console.log(
+    "radarr: unmonitored offline synthetic movie fixture seeded; backup retained; no Skyhook request or automatic grab"
+  );
+}
+
+async function seriesFixture(root, manifest) {
+  if ((await api(root, manifest, "sonarr", "/api/v3/system/status")).version !== "4.0.20.3014")
+    throw new Error("Owned Sonarr fixture requires its inspected schema/version");
+  if (lstatSync(join(root, "sonarr", "sonarr.db")).isSymbolicLink())
+    throw new Error("Owned non-symlink fixture database required");
+  const { DatabaseSync } = await import("node:sqlite");
+  const name = manifest.apps.sonarr.name;
+  docker(["stop", name]);
+  const db = new DatabaseSync(join(root, "sonarr", "sonarr.db"));
+  try {
+    if (db.prepare("PRAGMA integrity_check").get().integrity_check !== "ok")
+      throw new Error("Owned Sonarr fixture source integrity failed");
+    const backup = join(root, "sonarr", `before-fixture-${Date.now()}.sqlite`);
+    db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const previous = db.prepare("SELECT Id,Title FROM Series WHERE TvdbId=?").get(2147483002);
+      if (previous && previous.Title !== "Synthetic Series")
+        throw new Error("Owned synthetic series identity conflict");
+      const profile = db.prepare("SELECT Id FROM QualityProfiles ORDER BY Id LIMIT 1").get();
+      if (!profile) throw new Error("Owned Sonarr fixture profile missing");
+      if (!previous)
+        db.prepare(
+          `INSERT INTO Series (TvdbId,TvRageId,TvMazeId,Title,TitleSlug,CleanTitle,Status,Images,Path,Monitored,SeasonFolder,Runtime,SeriesType,UseSceneNumbering,OriginalLanguage,QualityProfileId,Seasons,Actors,Ratings,Genres,Tags,Added,Year,SortTitle)
+        VALUES (?,0,0,'Synthetic Series','synthetic-series-qa','syntheticseries',1,'[]','/config/synthetic-library/Synthetic Series',0,1,10,0,0,1,?,'[{"seasonNumber":1,"monitored":false}]','[]','{}','[]','[]',datetime('now'),2024,'syntheticseries')`
+        ).run(2147483002, profile.Id);
+      const series = db.prepare("SELECT Id FROM Series WHERE TvdbId=?").get(2147483002);
+      if (!db.prepare("SELECT Id FROM Episodes WHERE TvdbId=?").get(2147483003))
+        db.prepare(
+          `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
+        VALUES (?,1,1,'Synthetic Episode',0,0,'2024-01-01 20:00:00','2024-01-01',0,?,10,'[]')`
+        ).run(series.Id, 2147483003);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  } finally {
+    db.close();
+    docker(["start", name]);
+  }
+  console.log(
+    "sonarr: unmonitored offline synthetic series/episode seeded; backup retained; no external metadata or automatic grab"
+  );
+}
+
+async function fixtureTarget(root, manifest, app) {
+  if (app === "radarr") {
+    const movies = await api(root, manifest, app, "/api/v3/movie");
+    return movies.find(
+      (row) => row.tmdbId === 2147483001 && row.title === "Synthetic Media" && !row.monitored
+    );
+  }
+  const series = (await api(root, manifest, app, "/api/v3/series")).find(
+    (row) => row.tvdbId === 2147483002 && row.title === "Synthetic Series" && !row.monitored
+  );
+  if (!series) throw new Error("Owned unmonitored series fixture required");
+  return (await api(root, manifest, app, `/api/v3/episode?seriesId=${series.id}`)).find(
+    (row) => row.tvdbId === 2147483003 && row.title === "Synthetic Episode" && !row.monitored
+  );
+}
+
+async function movieSearch(root, manifest, app = "radarr") {
+  await api(root, manifest, "pingufunk", "/api/settings", {
+    "matching.minDuration": "0",
+    "download.quality": "all",
+  });
+  const movie = await fixtureTarget(root, manifest, app);
+  if (!movie || movie.monitored) throw new Error("Owned unmonitored synthetic movie required");
+  const indexers = await api(root, manifest, app, "/api/v3/indexer");
+  const owned = indexers.filter((row) =>
+    ["direct", "forwarded"].some((transport) => row.name === `Pingufunk isolated QA ${transport}`)
+  );
+  if (
+    owned.length !== 2 ||
+    indexers.some((row) => !owned.includes(row) && row.enableInteractiveSearch)
+  )
+    throw new Error("Owned two-indexer isolated search scope required");
+  try {
+    for (const transport of ["direct", "forwarded"]) {
+      const indexer = owned.find((row) => row.name === `Pingufunk isolated QA ${transport}`);
+      // Run each real consumer path alone: native decision ranking may deduplicate
+      // identical GUIDs from two indexers and is not a transport-failure proof.
+      for (const row of owned)
+        await api(
+          root,
+          manifest,
+          app,
+          `/api/v3/indexer/${row.id}?forceSave=true`,
+          { ...row, enableInteractiveSearch: row.id === indexer.id },
+          "PUT"
+        );
+      const releases = await api(
+        root,
+        manifest,
+        app,
+        `/api/v3/release?${app === "radarr" ? "movieId" : "episodeId"}=${movie.id}`
+      );
+      const candidates = releases.filter(
+        (row) =>
+          row.indexerId === indexer?.id &&
+          row.title.includes(app === "radarr" ? "Synthetic.Media" : "Synthetic.Series")
+      );
+      if (candidates.length !== 1)
+        throw new Error(
+          `Owned ${app} ${transport} expected one native parsed candidate, received ${candidates.length}`
+        );
+      if (!candidates[0].guid || !candidates[0].downloadUrl)
+        throw new Error("Owned Radarr candidate transport identity missing");
+      console.log(
+        `${app}: ${transport} native search parsed one synthetic candidate; no grab submitted`
+      );
+    }
+  } finally {
+    for (const row of owned)
+      await api(root, manifest, app, `/api/v3/indexer/${row.id}?forceSave=true`, row, "PUT");
+  }
+}
+
+async function forwardedSearch(root, manifest) {
+  const sources = await api(root, manifest, "prowlarr", "/api/v1/indexer");
+  const source = sources.find((row) => row.name === "Pingufunk isolated QA source");
+  if (!source) throw new Error("Owned forwarded source required");
+  const rows = await api(
+    root,
+    manifest,
+    "prowlarr",
+    `/api/v1/search?query=Synthetic%20Media%202024&type=search&categories=2000&indexerIds=${source.id}`
+  );
+  console.log(`prowlarr: native text search returned ${rows.length} candidates`);
+  if (
+    rows.length !== 1 ||
+    !rows[0].title.includes("Synthetic.Media") ||
+    rows[0].indexerId !== source.id
+  )
+    throw new Error("Owned Prowlarr native text search expected one synthetic result");
+  const absent = await api(
+    root,
+    manifest,
+    "prowlarr",
+    `/api/v1/search?query=Nonexistent%20Foreign%20Film&type=search&categories=2000&indexerIds=${source.id}`
+  );
+  if (absent.length !== 0)
+    throw new Error("Owned foreign-title negative search returned a candidate");
+  console.log("prowlarr: unrelated-title negative search correctly empty");
+}
+
+async function boundaries(root, manifest) {
+  for (const app of ["sonarr", "radarr", "prowlarr"]) {
+    const path = `/api/${app === "prowlarr" ? "v1" : "v3"}/system/status`;
+    await api(root, manifest, app, path, undefined, "GET", 401, "synthetic-invalid-not-a-secret");
+    const status = await api(root, manifest, app, path);
+    if (status.version !== manifest.apps[app].version)
+      throw new Error("Owned native version changed");
+    console.log(
+      `${app}: invalid credential rejected; actual credential still works; no secret disclosed`
+    );
+  }
+  const code =
+    "fetch('https://example.invalid/qa').then(()=>process.exit(1)).catch(()=>console.log('External fetch blocked by owned preload'))";
+  console.log(docker(["exec", manifest.apps.pingufunk.name, "node", "-e", code]));
+}
+
+async function movieDownload(root, manifest, app = "radarr", transport = "direct") {
+  if (!["direct", "forwarded"].includes(transport))
+    throw new Error("Owned download transport must be direct or forwarded");
+  if (!(await fixtureTarget(root, manifest, app)))
+    throw new Error("Owned unmonitored download fixture required");
+  const queueBefore = await api(root, manifest, "pingufunk", "/api/download?mode=queue");
+  if (queueBefore.queue.slots.length)
+    throw new Error("Owned empty queue required before media restart");
+  const container = manifest.apps.pingufunk.name;
+  docker([
+    "exec",
+    container,
+    "node",
+    "-e",
+    "require('node:fs').mkdirSync('/app/public/pingufunk-media-qa',{recursive:true})",
+  ]);
+  docker([
+    "exec",
+    container,
+    "ffmpeg",
+    "-v",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=black:s=640x360:r=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "sine=frequency=440:sample_rate=44100",
+    "-t",
+    "600",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-c:a",
+    "aac",
+    "-movflags",
+    "+faststart",
+    "/app/public/pingufunk-media-qa/valid.mp4",
+  ]);
+  docker(["restart", container]);
+  let ready = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      await api(root, manifest, "pingufunk", "/api/download?mode=queue");
+      ready = true;
+      break;
+    } catch {
+      await delay(500);
+    }
+  }
+  if (!ready) throw new Error("Owned media controller readiness failed");
+  await api(root, manifest, "pingufunk", "/api/settings", {
+    "matching.minDuration": "0",
+    "download.quality": "all",
+    "download.convertToMkv": "false",
+  });
+  const models = await api(root, manifest, app, "/api/v3/downloadclient/schema");
+  const client = models.find((row) => row.implementation === "Sabnzbd");
+  if (!client) throw new Error("Owned SAB schema missing");
+  client.name = "Pingufunk isolated SAB QA";
+  client.enable = true;
+  delete client.id;
+  const values = {
+    host: "pingufunk",
+    port: 6767,
+    useSsl: false,
+    urlBase: "",
+    apiKey: "synthetic-qa-not-a-secret",
+    movieCategory: "radarr",
+    tvCategory: "sonarr",
+    category: app,
+  };
+  for (const field of client.fields) if (field.name in values) field.value = values[field.name];
+  const existing = (await api(root, manifest, app, "/api/v3/downloadclient")).filter(
+    (row) => row.name === client.name
+  );
+  if (existing.length > 1) throw new Error("Owned duplicate SAB client");
+  if (existing.length)
+    await api(
+      root,
+      manifest,
+      app,
+      `/api/v3/downloadclient/${existing[0].id}`,
+      { ...client, id: existing[0].id },
+      "PUT"
+    );
+  const saved = existing[0] ?? (await api(root, manifest, app, "/api/v3/downloadclient", client));
+  const movie = await fixtureTarget(root, manifest, app);
+  if (!movie) throw new Error("Owned unmonitored movie fixture required");
+  const indexers = await api(root, manifest, app, "/api/v3/indexer");
+  const owned = indexers.filter((row) =>
+    ["direct", "forwarded"].some((path) => row.name === `Pingufunk isolated QA ${path}`)
+  );
+  const selected = owned.find((row) => row.name === `Pingufunk isolated QA ${transport}`);
+  if (
+    owned.length !== 2 ||
+    !selected ||
+    indexers.some((row) => !owned.includes(row) && row.enableInteractiveSearch)
+  )
+    throw new Error("Owned isolated download indexer scope required");
+  const before = (
+    await api(root, manifest, "pingufunk", "/api/download?mode=history")
+  ).history.slots.map((row) => row.nzo_id);
+  try {
+    for (const row of owned)
+      await api(
+        root,
+        manifest,
+        app,
+        `/api/v3/indexer/${row.id}?forceSave=true`,
+        { ...row, enableInteractiveSearch: row.id === selected.id },
+        "PUT"
+      );
+    const releases = await api(
+      root,
+      manifest,
+      app,
+      `/api/v3/release?${app === "radarr" ? "movieId" : "episodeId"}=${movie.id}`
+    );
+    const candidate = releases.find(
+      (row) =>
+        row.title.includes(app === "radarr" ? "Synthetic.Media" : "Synthetic.Series") &&
+        row.indexerId === selected.id
+    );
+    if (!candidate) throw new Error("Owned movie download candidate missing");
+    await api(root, manifest, app, "/api/v3/release", {
+      ...candidate,
+      ...(app === "radarr"
+        ? { movieId: movie.id }
+        : { episodeIds: [movie.id], seriesId: movie.seriesId }),
+      downloadClientId: saved.id,
+      shouldOverride: true,
+    });
+  } finally {
+    for (const row of owned)
+      await api(root, manifest, app, `/api/v3/indexer/${row.id}?forceSave=true`, row, "PUT");
+  }
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const slots = (await api(root, manifest, "pingufunk", "/api/download?mode=history")).history
+      .slots;
+    const completed = slots.find((row) => !before.includes(row.nzo_id));
+    if (completed) {
+      if (completed.status !== "Completed" || completed.category !== app)
+        throw new Error("Owned Radarr synthetic download failed or category mismatched");
+      console.log(
+        `${app}: ${transport} real release submission -> NZB -> SAB addfile -> completed synthetic media/history passed; import not yet attested`
+      );
+      return;
+    }
+    await delay(500);
+  }
+  throw new Error("Owned Radarr synthetic download completion timeout");
+}
+
+async function movieImport(root, manifest, app = "radarr") {
+  const movie = await fixtureTarget(root, manifest, app);
+  if (!movie) throw new Error("Owned unmonitored movie fixture required");
+  const history = (await api(root, manifest, app, "/api/v3/history?page=1&pageSize=100")).records;
+  const job = (
+    await api(root, manifest, "pingufunk", "/api/download?mode=history")
+  ).history.slots.find(
+    (row) =>
+      row.status === "Completed" &&
+      row.category === app &&
+      history.some(
+        (record) =>
+          record[app === "radarr" ? "movieId" : "episodeId"] === movie.id &&
+          record.eventType === "grabbed" &&
+          record.downloadId?.toLowerCase() === row.nzo_id.toLowerCase()
+      )
+  );
+  const remoteRoot = job?.storage.startsWith("/app/downloads/") ? "/app/downloads/" : "/downloads/";
+  if (!job || !job.storage.startsWith(remoteRoot) || resolve(job.storage) !== job.storage)
+    throw new Error("Owned native grabbed/completed job and confined storage required");
+  const relative = job.storage.slice(remoteRoot.length);
+  const destination = join(root, app, "qa-completed", relative);
+  mkdirSync(destination, { recursive: true, mode: 0o700 });
+  mkdirSync(join(root, app, "synthetic-library"), { recursive: true, mode: 0o700 });
+  // A private copied test volume models a user-selected shared/path-mapped
+  // installation. Never expose a real library or prescribe a production route.
+  docker(["cp", `${manifest.apps.pingufunk.name}:${job.storage}/.`, destination]);
+  const mappings = await api(root, manifest, app, "/api/v3/remotepathmapping");
+  const mapping = {
+    host: "pingufunk",
+    remotePath: remoteRoot,
+    localPath: "/config/qa-completed/",
+  };
+  const existing = mappings.filter(
+    (row) => row.host === mapping.host && row.remotePath === mapping.remotePath
+  );
+  if (existing.length > 1 || existing.some((row) => row.localPath !== mapping.localPath))
+    throw new Error("Owned remote path mapping conflict");
+  if (!existing.length) await api(root, manifest, app, "/api/v3/remotepathmapping", mapping);
+  await api(root, manifest, app, "/api/v3/command", { name: "CheckForFinishedDownload" });
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const current = await api(
+      root,
+      manifest,
+      app,
+      `/api/v3/${app === "radarr" ? "movie" : "episode"}/${movie.id}`
+    );
+    if (current.hasFile) {
+      const file = await api(
+        root,
+        manifest,
+        app,
+        `/api/v3/${app === "radarr" ? "moviefile" : "episodefile"}/${app === "radarr" ? current.movieFile.id : current.episodeFileId}`
+      );
+      if (
+        (app === "radarr" ? file.movieId !== movie.id : file.seriesId !== movie.seriesId) ||
+        !file.path.startsWith("/config/synthetic-library/") ||
+        resolve(file.path) !== file.path ||
+        !(file.size > 0)
+      )
+        throw new Error("Owned imported movie file contract mismatch");
+      const size = Number(docker(["exec", manifest.apps[app].name, "stat", "-c", "%s", file.path]));
+      if (size !== file.size)
+        throw new Error("Owned imported physical file size differs from native API");
+      const imported = (
+        await api(root, manifest, app, "/api/v3/history?page=1&pageSize=100")
+      ).records.some(
+        (row) =>
+          row[app === "radarr" ? "movieId" : "episodeId"] === movie.id &&
+          row.eventType === "downloadFolderImported" &&
+          row.downloadId?.toLowerCase() === job.nzo_id.toLowerCase()
+      );
+      if (!imported) throw new Error("Owned native import history missing");
+      await consumerRemove(root, manifest, app, job, file);
+      console.log(
+        `${app}: native completed-download handling imported synthetic media; file identity/size/path and matching download history verified`
+      );
+      return;
+    }
+    await delay(500);
+  }
+  const queue = (await api(root, manifest, app, "/api/v3/queue?page=1&pageSize=100")).records;
+  const tracked = queue.filter((row) => row.downloadId === job.nzo_id);
+  console.log(
+    `radarr: import pending; tracked=${tracked.length}; status=${tracked[0]?.trackedDownloadStatus ?? "absent"}`
+  );
+  throw new Error("Owned native movie import timeout; retained fixture and completed media");
+}
+
+async function consumerRemove(root, manifest, app, job, file) {
+  if (!["sonarr", "radarr"].includes(app))
+    throw new Error("Owned consumer removal selection required");
+  const slots = (await api(root, manifest, "pingufunk", "/api/download?mode=history")).history
+    .slots;
+  if (!file.path.startsWith("/config/synthetic-library/") || resolve(file.path) !== file.path)
+    throw new Error("Owned imported library path required");
+  const clients = (await api(root, manifest, app, "/api/v3/downloadclient")).filter(
+    (row) => row.name === "Pingufunk isolated SAB QA"
+  );
+  if (clients.length !== 1) throw new Error("Owned unique consumer client required");
+  const client = clients[0];
+  await api(
+    root,
+    manifest,
+    app,
+    `/api/v3/downloadclient/${client.id}`,
+    { ...client, removeCompletedDownloads: true },
+    "PUT"
+  );
+  try {
+    await api(root, manifest, app, "/api/v3/command", { name: "CheckForFinishedDownload" });
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const current = (await api(root, manifest, "pingufunk", "/api/download?mode=history")).history
+        .slots;
+      if (!current.some((row) => row.nzo_id === job.nzo_id)) {
+        if (
+          Number(docker(["exec", manifest.apps[app].name, "stat", "-c", "%s", file.path])) !==
+          file.size
+        )
+          throw new Error("Owned native removal damaged the imported library file");
+        const others = slots.filter((row) => row.category !== app);
+        if (others.some((row) => !current.some((present) => present.nzo_id === row.nzo_id)))
+          throw new Error("Owned native removal affected a different consumer's job");
+        console.log(
+          `${app}: native completed-history removal passed; imported file and other consumer jobs preserved; only own synthetic source removed`
+        );
+        return;
+      }
+      await delay(500);
+    }
+    throw new Error("Owned native consumer history removal timeout");
+  } finally {
+    await api(root, manifest, app, `/api/v3/downloadclient/${client.id}`, client, "PUT");
+  }
+}
+
 try {
   const command = process.argv[2];
   if (command === "up") await up();
@@ -349,13 +972,23 @@ try {
     else if (command === "schemas") await schemas(root, manifest);
     else if (command === "connections") await connections(root, manifest, process.argv[4]);
     else if (command === "client") await downloadClient(root, manifest, process.argv[4]);
+    else if (command === "bootstrap") await bootstrap(root, manifest);
+    else if (command === "movie-fixture") await movieFixture(root, manifest);
+    else if (command === "series-fixture") await seriesFixture(root, manifest);
+    else if (command === "movie-search") await movieSearch(root, manifest);
+    else if (command === "episode-search") await movieSearch(root, manifest, "sonarr");
+    else if (command === "forwarded-search") await forwardedSearch(root, manifest);
+    else if (command === "boundaries") await boundaries(root, manifest);
+    else if (command === "movie-download")
+      await movieDownload(root, manifest, "radarr", process.argv[4] ?? "direct");
+    else if (command === "episode-download")
+      await movieDownload(root, manifest, "sonarr", process.argv[4] ?? "direct");
+    else if (command === "movie-import") await movieImport(root, manifest);
+    else if (command === "episode-import") await movieImport(root, manifest, "sonarr");
     else if (command === "stop") {
       for (const item of Object.values(manifest.apps)) docker(["stop", item.name]);
       console.log("Owned QA instances stopped; configuration retained, no deletion");
-    } else
-      throw new Error(
-        "Use up, status, schemas, connections, client or stop with exact QA directory"
-      );
+    } else throw new Error("Use up or a documented QA command with the exact QA directory");
   }
 } catch (error) {
   // No fetch/Prisma/Docker payload or config values in errors.

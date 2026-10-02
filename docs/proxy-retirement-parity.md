@@ -65,6 +65,13 @@ Die oben beschriebene synthetische Paritätsprobe kontaktierte keine echte
 Arr-Instanz. Die anschließend genehmigten isolierten Instanzen sind in
 `arr-test-instances.md` dokumentiert: tatsächliche Versionen und grundlegende
 Verbindungstests belegt, jedoch ein neuer Radarr-Setupbefund bei leerem Filmfeed.
-P10.1 ist deshalb wieder offen; vollständige direkte/vermittelte
-Interoperabilität ist noch nicht attestiert. Produktionsparameter,
+Dieser Setupbefund wurde anschließend auf den dokumentierten Versionen
+geschlossen: deaktiviert anlegen, unterstützt per `forceSave` aktivieren;
+den leeren Verbindungstest nicht als bestanden darstellen. Native direkte/
+vermittelte Suche und manuelle synthetische Release→NZB→SAB→Completed→Import-
+Ketten wurden belegt, einschließlich physischer Datei-/Historyidentität und
+nativer Quellhistoryentfernung. P10.1 ist erneut abgenommen; automatische
+Prowlarr-Application-Synchronisierung ist nicht attestiert. Neuer Dependency-
+Scanbefund steht im Review/P10.2 und verhindert eine Releasefreigabe.
+Produktionsparameter,
 Backup-/Mountrechte und Cutover bleiben P10.2–P10.7, nicht implizit freigegeben.
