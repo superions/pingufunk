@@ -1,6 +1,6 @@
 # Native Parität: Owner und Nachweise
 
-Stand: 01.10.2026. Diese Zuordnung ergänzt die Abnahme in
+Stand: 03.10.2026. Diese Zuordnung ergänzt die Abnahme in
 `todo/proxy-retirement.md`; sie ist kein weiterer TODO-Index und keine
 Deploymentfreigabe. Die B/O-Nummern bezeichnen das historische Proxyinventar,
 nicht den Auftrag, jeden alten Mechanismus unverändert nachzubauen.
@@ -71,7 +71,8 @@ den leeren Verbindungstest nicht als bestanden darstellen. Native direkte/
 vermittelte Suche und manuelle synthetische Release→NZB→SAB→Completed→Import-
 Ketten wurden belegt, einschließlich physischer Datei-/Historyidentität und
 nativer Quellhistoryentfernung. P10.1 ist erneut abgenommen; automatische
-Prowlarr-Application-Synchronisierung ist nicht attestiert. Neuer Dependency-
-Scanbefund steht im Review/P10.2 und verhindert eine Releasefreigabe.
+Prowlarr-Application-Synchronisierung ist nicht attestiert. Der anschließende
+npm-Sicherheitscheckpoint ist abgeschlossen; beide npm-Audits melden am
+03.10.2026 null Befunde. Das ersetzt nicht die installationsbezogene OCI-/Scanpolicy.
 Produktionsparameter,
 Backup-/Mountrechte und Cutover bleiben P10.2–P10.7, nicht implizit freigegeben.

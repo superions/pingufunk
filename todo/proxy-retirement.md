@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 02.10.2026. **Verbraucherabnahme und npm-Sicherheitscheckpoint abgeschlossen; Betriebsgates offen, keine Deploymentfreigabe.**
+Stand: 03.10.2026. **Lokale technische Abnahme und npm-Sicherheitscheckpoint abgeschlossen; produktive Betriebsgates offen, keine Deploymentfreigabe.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -1650,6 +1650,25 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       Securitybefund gehört ausdrücklich zum weiterhin offenen P10.2;
       dessen npm-Checkpoint wurde anschließend abgenommen (siehe unten).
       Keine Produktionsabnahme behaupten.
+      Lokale technische Abnahme 03.10.2026 am tatsächlich servierten Main
+      `0c139f3`: dieselben verifizierten Arr-Versionen, direkte/vermittelte
+      Suche und negative Auth-/Fremdsuch-/Netzwerkfälle nach explizitem Restart
+      bestanden. Gespeicherte Settings, Indexer/SAB-Konfiguration und Hashes
+      der bereits importierten synthetischen Film-/Episodendateien erhalten;
+      automatische Suche/RSS weiterhin deaktiviert. Alle vier SQLite-DBs
+      mit `integrity_check` geprüft, fünf abgeschlossene Pingufunk-Migrationen,
+      keine aktive Downloadqueue. RSS→NZB-Vertrag, neutrale Sprache,
+      Aliasgleichheit und leere Folgeseite am servierten Bundle geprüft.
+      Desktop: positive/negative Suche sowie Settings-Save/Reload/API-Readback
+      und Wiederherstellung des Ausgangswerts; keine Konsolenfehler.
+      Separater echter MediathekView-Katalog liefert Treffer, blockiert alle
+      geprüften Download-/Settings-Writes mit 503 und bleibt nach Restart
+      integer und downloadfrei. Keine echten Mediendownloads.
+      Die vorherige synthetische native Importkette auf demselben Main-Image,
+      unveränderte Main-CI/PG-/Mediengates und vollständige Screenshotmatrix
+      werden ausdrücklich wiederverwendet, nicht als frische Ausführung
+      ausgegeben. Details und Abnahmegrenzen im Review. Kein automatischer
+      Prowlarr-Application-Sync-Nachweis; P10.2–P10.7 bleiben offen.
 - [ ] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
       Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/
