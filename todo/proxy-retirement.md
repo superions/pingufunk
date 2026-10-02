@@ -1712,6 +1712,14 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       sind isolierte Testinputs, keine freigegebenen Sicherheitscheckpoints.
       P10.2 bleibt wegen dieser Betriebsanforderungen offen; kein Deployment.
 - [ ] **P10.3 — Optionale freigegebene PG-Übernahme, Proxy unverändert.**
+      Betriebsnachtrag 03.10.2026: Nutzerfreigabe für Proxy-Ausstieg zuerst auf
+      SQLite, anschließend PostgreSQL liegt vor. Native Installation produktiv
+      umgestellt; PG-Preflight identifizierte einen gesunden unterstützten
+      Primary, aber deaktiviertes TLS. Die freigegebene CLI fordert TLS;
+      deshalb keine Rollen-/DB-Anlage, DDL oder Datenübernahme ausgeführt.
+      TLS-Infrastrukturänderung ist separat zu reviewen/freizugeben, kein
+      stiller TLS-Bypass. Private Betriebswerte und Nachweise nur im privaten
+      Runbook; PG-Gates bleiben offen.
       **Nur bei ausdrücklicher PostgreSQL-Wahl; hier
       anhalten bis zur ausdrücklichen Datenmigrations-/Deploymentfreigabe für
       genau diese Installation.** P11-Runbook ausführen: read-only Preflight,
@@ -1740,6 +1748,20 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       PG-Backup+geprüftes PG-kompatibles Rollbackimage; Rückschaltung zu SQLite
       nur nach P11.9, niemals still auf alten Snapshot.
 - [ ] **P10.6 — Indexer und SAB gleichzeitig auf native Wege umstellen.**
+      Betriebsnachtrag 03.10.2026: Freigegebener nativer SQLite-Proxy-Ausstieg
+      ausgeführt, lokal übertragenes App-Image ohne Registrypublikation.
+      Separate geprüfte Bootstrap-Baseline statt Änderung der Originaldatei;
+      sechs Modelle erhalten, Queue leer und zwei abgeschlossene Historyeinträge
+      abgeglichen. Native Prowlarr-Indexerprüfung und drei SAB-Clientprüfungen
+      bestanden; bestehende Consumer/Mapping-IDs, Keys und öffentliche Kategorien
+      beibehalten. Originale Automatikflags nach Umschaltung per API bestätigt.
+      Sonarr verarbeitet den echten TVDB-/S02E01-Treffer korrekt und verweigert
+      den Doppelgrab wegen vorhandener Datei; negative Textsuche leer.
+      Keine produktiven Testgrabs. Proxy bleibt bei null Replikaten erhalten.
+      Weitere stabile Betriebs-/Jobbeobachtung und private Rückwegabnahme nicht
+      allein aus Verbindungstests behaupten; Punkt daher noch nicht vollständig
+      geschlossen. Täglicher Registry-Scanner deckt lokale Image-Tags nicht ab;
+      frische genaue Archivscans sind bestanden, kein neuer Zeitplan angelegt.
       **Erst nach stabiler Abnahme des gewählten Backends und ausdrücklicher
       Routing-/Deploymentfreigabe** geprüfte native Funktionsversion samt
       separat geprüften append-only Schemaerweiterungen des ausgewählten
