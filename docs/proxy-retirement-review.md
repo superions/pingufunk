@@ -800,6 +800,7 @@ Security-/Kompatibilitätscheckpoint mit primärquellengeprüften Fixversionen,
 beiden Clients und betroffenen Produkt-/DB-/Build-/Desktop-/Arr-Gates nötig.
 Die funktionale P10.1-Abnahme schließt diesen Befund nicht. Kein Live-Zugriff
 wird vorausgesetzt oder angefragt; späterer Rollout bleibt nutzergeführt.
+
 ### CI-Nachprüfung der Verbraucherabnahme (02.10.2026)
 
 Der erste Fork-CI-Lauf für `b4655e4` scheiterte nicht an einer fachlichen
