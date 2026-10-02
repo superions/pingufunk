@@ -845,5 +845,45 @@ Vite weist auf einen künftig anderen Configloader hin; Next meldet dynamische
 Dateitracingstellen in generiertem Prisma-Code und Medienprozessen. Diese
 Warnungen werden nicht unterdrückt oder durch Editieren generierter Clients
 kaschiert. Der Docker-Buildkontext schließt private Daten/Environmentfiles aus.
-Native DB-/Container-/Arr- und Desktopnachprüfung sowie Fork-CI bleiben bis
-zur tatsächlichen neuen Ausführung offen. Release/Rollout weiterhin gesperrt.
+Native PostgreSQL-Nachprüfung auf einem isolierten Entwicklungsrechner:
+15 Ausführungen einschließlich Runtime, Reconnect, verweigerter Writes,
+Medienabschluss und Import bestanden. Neue Node-24-Runner-/Migratorimages
+wurden gebaut, nicht veröffentlicht. Mit diesem Runner bestanden direkte
+und vermittelte Sonarr-/Radarr-Suchen, Prowlarr-Positiv-/Fremdfälle sowie die
+vermittelten Film- und Episodenketten bis zum nativen Import und zur
+Quellhistoryentfernung bei erhaltener physischer Importdatei. Diese Arr-Probe
+verwendet SQLite; sie ist kein Arr-plus-PostgreSQL-Nachweis. Alle vier eigenen
+Testcontainer wurden anschließend gestoppt, Fixtures und Backups erhalten.
+
+Eine erste Radarr-Suche direkt nach Fixturestart lieferte null Ergebnisse;
+die spätere identische Suche bestand ohne Produktänderung. Eine Startphase
+ist als Ursache nicht bewiesen. Kein Retry oder abgeschwächter Test kaschiert
+diesen Harness-/Timingbefund; vor einer künftigen Arr-Probe Startbereitschaft
+erneut untersuchen. Der leere Radarr-Indexertest bleibt ehrlich HTTP 400.
+
+Desktopnachprüfung am tatsächlich servierten Next-16.3.8-Bundle: acht Routen
+(Settings, Suche, Filme, Shows, Downloads, Rulesets, Setup, Logs) in Light,
+1440×1000, mit 16 selbst geprüften passenden Vorher-/Nachher-Screenshots.
+Die Vergleichsbasis wurde aus dem exakten Vorcheckpoint `fad9311` gebaut;
+ein älteres QA-Archiv wurde als unpassende Basis verworfen. Keine beobachtete
+Layoutregression. Matching-Präferenz geändert, gespeichert, nach Reload und
+echtem API-Readback erhalten; beide Browserkonsolen ohne Fehler. Ausschließlich
+synthetische disposable SQLite-Daten, externe Serverfetches gesperrt, keine
+Mobilprüfung oder echten Suchen/Downloads. Eigene Browser und Server beendet.
+
+[Fork-CI 37061130068](https://github.com/superions/pingufunk/actions/runs/37061130068)
+für `04d6b95` erfolgreich, einschließlich nativer PostgreSQL-Gates.
+Die erste Dockerprobe deckte einen veralteten Harnessvertrag auf: der Preflight
+erwartete fest 6.19.2. Er verlangt jetzt weiterhin den exakten Client, liest
+aber dessen geprüften exakten Prisma-6-Pin aus dem Projektmanifest. Kein
+Major-only-Vergleich und keine Abschwächung anderer TLS-/Datenassertions.
+[Dockerprobe 37061129957](https://github.com/superions/pingufunk/actions/runs/37061129957)
+für `04d6b95` erfolgreich: Runner, Migrator und isolierte historische
+Rollbackcheckpoints gebaut; TLS-Migration, post-write Rollback,
+SQLite-Persistenz und tatsächlicher Medienabschluss auf beiden Backends
+bestanden, ohne Imagepublikation. Für den abschließenden reinen
+Dokumentationscheckpoint wird diese unveränderte Produkt-/Dependency-/
+Harness-Evidenz wiederverwendet, nicht als neue Ausführung ausgegeben.
+Historische Rollbackimages werden nur als isolierte Testinputs verwendet;
+deren alte Abhängigkeiten sind keine Sicherheitsfreigabe für einen Rollout.
+Release/Rollout und installationsbezogene OCI-/Scanpolicy bleiben gesperrt.

@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 02.10.2026. **Verbraucherabnahme abgeschlossen; Security-/Betriebsgates offen, keine Deploymentfreigabe.**
+Stand: 02.10.2026. **Verbraucherabnahme und npm-Sicherheitscheckpoint abgeschlossen; Betriebsgates offen, keine Deploymentfreigabe.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -26,9 +26,9 @@ erledigte Implementierung.
 - P00–P09 und P11.1–P11.8 sind
   technisch abgenommen. Beide Backend-Laufzeitketten und
   die URL-/Secret-basierte Auswahl aus **P11.1** sind geprüft.
-  P10.1 ist nach der genehmigten isolierten Arr-Probe wieder offen: Radarr
-  lehnt den leeren Filmfeed beim Indexertest ab. Die bisherigen synthetischen
-  Gates bleiben gültig, ersetzen diesen Verbraucherbefund jedoch nicht.
+  P10.1 ist nach der genehmigten isolierten Arr-Probe erneut abgenommen:
+  der dokumentierte Radarr-Einrichtungsweg und native Verbraucherketten sind
+  geprüft; der leere Filmfeed bleibt beim Indexertest ehrlich HTTP 400.
   P10.2 erfordert weiterhin private Installationswerte und separate
   Betriebsfreigaben. P11.9 ist optional zurückgestellt.
   P11.2–P11.8 sichern die PostgreSQL-Option und müssen vor deren Betriebsfreigabe
@@ -1647,8 +1647,9 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       auf dem bekannten Entwicklungsrechner ohne andere Checkouts/Dienste
       zu verändern. Keine automatische Prowlarr-Application-Sync-Abnahme;
       zusätzlicher Arr-Lauf SQLite, bestehende native PG-/UI-Gates wiederverwendet.
-      Securitybefund gehört ausdrücklich zum weiterhin offenen P10.2 und
-      sperrt Release/Rollout; keine Produktionsabnahme behaupten.
+      Securitybefund gehört ausdrücklich zum weiterhin offenen P10.2;
+      dessen npm-Checkpoint wurde anschließend abgenommen (siehe unten).
+      Keine Produktionsabnahme behaupten.
 - [ ] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
       Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/
@@ -1677,6 +1678,20 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       prüfen. Kein blindes `audit fix --force`, Prisma-Downgrade auf den
       Scanner-Vorschlag 6.12.0 oder beiläufiger Majorwechsel. Befund/Owner
       unter `docs/proxy-retirement-review.md`; kein Release aus grünem CI ableiten.
+      Sicherheitscheckpoint nach ausdrücklicher Nutzerfreigabe abgeschlossen
+      02.10.2026 auf `04d6b95`: Next/Env/ESLint 16.3.8, Vitest/Coverage 4.1.11,
+      Prisma CLI/Client 6.19.3 und geprüfte transitive Updates. Eng begrenzter
+      Deepmerge-Override mit echtem Prisma-Konfigurationsload und rekursiver
+      Regression. Frisches npm ci, beide Clients, vollständiger und Production-
+      Audit null; 832 Tests, Lint, Types, Format und Build grün. Neue native
+      PG-, isolierte Arr- und Desktopnachprüfung; Fork-CI 37061130068 und
+      Dockerprobe 37061129957 erfolgreich, einschließlich TLS, post-write
+      Rollback, SQLite-Persistenz und Medienabschluss auf beiden Backends.
+      Einmaligen Radarr-Startphasenbefund nicht als behoben behaupten;
+      Details und Grenzen im Review. Npm-Audit ersetzt weder OCI-/Scanpolicy
+      noch installationsbezogene Betriebsabnahme. Historische Rollbackimages
+      sind isolierte Testinputs, keine freigegebenen Sicherheitscheckpoints.
+      P10.2 bleibt wegen dieser Betriebsanforderungen offen; kein Deployment.
 - [ ] **P10.3 — Optionale freigegebene PG-Übernahme, Proxy unverändert.**
       **Nur bei ausdrücklicher PostgreSQL-Wahl; hier
       anhalten bis zur ausdrücklichen Datenmigrations-/Deploymentfreigabe für
