@@ -45,6 +45,7 @@ export default function RulesetsPage() {
   const [filteredRulesets, setFilteredRulesets] = useState<Ruleset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; ruleset: Ruleset | null }>({
     show: false,
     ruleset: null,
@@ -52,6 +53,7 @@ export default function RulesetsPage() {
 
   const fetchRulesets = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/rulesets");
       if (!res.ok) {
@@ -60,10 +62,8 @@ export default function RulesetsPage() {
       const data = await res.json();
       setRulesets(Array.isArray(data) ? data : []);
       setFilteredRulesets(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Failed to fetch rulesets:", error);
-      setRulesets([]);
-      setFilteredRulesets([]);
+    } catch {
+      setError("Die Rulesets konnten nicht geladen werden. Bitte erneut versuchen.");
     } finally {
       setIsLoading(false);
     }
@@ -91,14 +91,18 @@ export default function RulesetsPage() {
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirm.ruleset) return;
+    setError(null);
 
     try {
-      const res = await fetch(`/api/rulesets?id=${deleteConfirm.ruleset.id}`, { method: "DELETE" });
-      if (res.ok) {
-        fetchRulesets();
-      }
-    } catch (error) {
-      console.error("Failed to delete ruleset:", error);
+      const res = await fetch(`/api/rulesets?id=${encodeURIComponent(deleteConfirm.ruleset.id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Delete rejected");
+      await fetchRulesets();
+    } catch {
+      setError(
+        "Das Ruleset konnte nicht gelöscht werden. Der gespeicherte Stand wurde nicht bestätigt."
+      );
     } finally {
       setDeleteConfirm({ show: false, ruleset: null });
     }
@@ -125,11 +129,17 @@ export default function RulesetsPage() {
           <h1 className="text-2xl font-bold">Rulesets</h1>
           <p className="text-muted-foreground text-sm">Matching-Regeln für Shows</p>
         </div>
-        <Button variant="outline" onClick={fetchRulesets}>
+        <Button variant="outline" onClick={fetchRulesets} disabled={isLoading}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Aktualisieren
         </Button>
       </div>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Search */}
       <Card>
@@ -157,7 +167,7 @@ export default function RulesetsPage() {
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground text-center py-8">Laden...</p>
-          ) : filteredRulesets.length === 0 ? (
+          ) : !error && filteredRulesets.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
               {rulesets.length === 0
                 ? "Keine Rulesets vorhanden. Rulesets werden automatisch generiert wenn Sonarr nach Shows sucht."

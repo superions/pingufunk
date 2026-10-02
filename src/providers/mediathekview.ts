@@ -81,9 +81,9 @@ export class MediathekViewProvider extends BaseProvider {
       console.log(`[${this.id}] Found ${items.length} items after filtering`);
 
       return items.slice(0, limit);
-    } catch (error) {
-      console.error(`[${this.id}] Search error:`, error);
-      throw error;
+    } catch {
+      console.error(`[${this.id}] Search failed`);
+      throw new Error("Provider search failed");
     }
   }
 
@@ -108,11 +108,11 @@ export class MediathekViewProvider extends BaseProvider {
         lastCheck: Date.now(),
         error: response.ok ? undefined : `HTTP ${response.status}`,
       };
-    } catch (error) {
+    } catch {
       return {
         available: false,
         lastCheck: Date.now(),
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Provider status check failed",
       };
     }
   }

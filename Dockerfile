@@ -8,7 +8,16 @@ RUN apk add --no-cache libc6-compat
 # Copy package files and prisma schema (needed for postinstall)
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
+COPY scripts/generate-database-clients.mjs ./scripts/
 RUN npm ci
+
+# Explicit one-shot migration runner, built from the same schema and pinned CLI.
+# This target is never part of a normal application container startup.
+FROM deps AS migrator
+COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/database-migrate.mjs scripts/load-database-environment.mjs scripts/sqlite-schema.mjs scripts/check-sqlite-schema.mjs scripts/check-postgresql-schema.mjs scripts/sqlite-baseline.mjs scripts/migrate-entrypoint.sh scripts/postgresql-preflight.mjs scripts/postgresql-snapshot.mjs scripts/postgresql-row-transform.mjs scripts/postgresql-import.mjs scripts/postgresql-prepare.mjs scripts/postgresql-verify.mjs scripts/postgresql-run-manifest.mjs scripts/postgresql-migration-cli.mjs ./scripts/
+RUN apk add --no-cache su-exec && chmod +x ./scripts/migrate-entrypoint.sh
+ENTRYPOINT ["/app/scripts/migrate-entrypoint.sh"]
+CMD ["node", "/app/scripts/database-migrate.mjs"]
 
 # Stage 2: Builder
 FROM node:24-alpine AS builder
@@ -16,6 +25,7 @@ WORKDIR /app
 
 # Copy dependencies
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/generated ./generated
 COPY . .
 
 # Build the application
@@ -38,7 +48,7 @@ RUN mkdir -p /app/standalone-out && \
 FROM node:24-alpine AS runner
 WORKDIR /app
 
-# Install runtime dependencies for FFmpeg, user management, and DB init
+# Install runtime dependencies for FFmpeg and user management
 # Note: yt-dlp standalone binary includes bundled Python, no separate install needed
 RUN apk add --no-cache \
     tar \
@@ -47,7 +57,6 @@ RUN apk add --no-cache \
     curl \
     su-exec \
     shadow \
-    sqlite \
     ffmpeg \
     && rm -rf /var/cache/apk/*
 
@@ -79,18 +88,19 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/standalone-out/ ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy Prisma files (client only, no CLI)
-COPY --from=builder /app/prisma ./prisma
+# Copy generated Prisma client. Migrations run only in the migrator target.
+COPY --from=builder /app/prisma/migrations ./prisma/migrations
+COPY --from=builder /app/prisma/legacy/sqlite ./prisma/legacy/sqlite
+COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-
-# Copy database init script
-COPY init-db.sql /app/init-db.sql
+COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/check-database-schema.mjs scripts/check-sqlite-schema.mjs scripts/sqlite-schema.mjs scripts/check-postgresql-schema.mjs ./scripts/
 
 # Create directories for data and downloads
 # Symlink system FFmpeg and yt-dlp so the app finds them at expected locations
 RUN mkdir -p /app/prisma/data /app/downloads /app/ffmpeg /app/ytdlp \
     && ln -s /usr/bin/ffmpeg /app/ffmpeg/ffmpeg \
+    && ln -s /usr/bin/ffprobe /app/ffmpeg/ffprobe \
     && ln -s /usr/local/bin/yt-dlp /app/ytdlp/yt-dlp \
     && chown -R nextjs:nodejs /app
 
@@ -104,11 +114,10 @@ EXPOSE 6767
 # Environment variables
 ENV PORT=6767
 ENV HOSTNAME="0.0.0.0"
-ENV DATABASE_URL="file:/app/prisma/data/rundfunkarr.db"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:6767/api/download?mode=version || exit 1
+    CMD wget -q --spider http://localhost:6767/api/download?mode=queue || exit 1
 
 # Start the application with entrypoint for PUID/PGID support
 ENTRYPOINT ["/entrypoint.sh"]

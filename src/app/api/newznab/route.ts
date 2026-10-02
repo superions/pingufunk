@@ -5,6 +5,7 @@ import {
   fetchSearchResultsForRssSync,
   fetchMovieSearchResults,
   fetchMovieSearchByQuery,
+  fetchMovieSearchForRssSync,
 } from "@/services/mediathek";
 import { getShowInfoByTvdbId } from "@/services/shows";
 import { getMovieInfoByTmdbId, getMovieInfoByImdbId } from "@/services/tmdb";
@@ -15,7 +16,15 @@ import {
   isMovieCategoryRequest,
   parseNewznabCategoryIds,
 } from "@/services/newznab";
-import type { TvSearchContext } from "@/types";
+import type { TmdbMovieData, TvSearchContext } from "@/types";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { getRadarrMovie } from "@/services/radarr-provider";
+import { withIndexerUrl } from "@/lib/indexer-url";
+import {
+  parseMovieSearchContext,
+  assertMovieSearchGoal,
+  MovieSearchContextError,
+} from "@/services/movie-search-context";
 
 function normalizeEpisodeParameter(value: string | null): string | null {
   const trimmed = value?.trim() || null;
@@ -67,12 +76,19 @@ function parseTvSearchContext(searchParams: URLSearchParams): {
 }
 
 export async function GET(request: NextRequest) {
+  try {
+    return await withIndexerUrl(request.url, () => handleGet(request));
+  } catch {
+    return NextResponse.json({ error: "Indexer configuration unavailable" }, { status: 503 });
+  }
+}
+
+async function handleGet(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
 
   const t = searchParams.get("t");
-  const limit = parseInt(searchParams.get("limit") || "100", 10);
-  const offset = parseInt(searchParams.get("offset") || "0", 10);
-  const q = searchParams.get("q");
+  const limit = parsePaginationParameter(searchParams, "limit", 100, 1, 5000);
+  const offset = parsePaginationParameter(searchParams, "offset", 0, 0, 2_147_483_647);
   const imdbid = searchParams.get("imdbid");
   const tmdbid = searchParams.get("tmdbid");
   const categoryIds = parseNewznabCategoryIds(searchParams.get("cat"));
@@ -81,12 +97,12 @@ export async function GET(request: NextRequest) {
   if (t === "caps") {
     const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <caps>
-    <limits max="5000" default="5000"/>
+    <limits max="5000" default="100"/>
     <registration available="no" open="no"/>
     <searching>
         <search available="yes" supportedParams="q"/>
         <tv-search available="yes" supportedParams="q,season,ep,tvdbid"/>
-        <movie-search available="yes" supportedParams="q,tmdbid,imdbid"/>
+        <movie-search available="yes" supportedParams="q,tmdbid,imdbid,year"/>
         <audio-search available="no" supportedParams="" />
     </searching>
     <categories>
@@ -107,110 +123,57 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Handle movie search requests
-  if (t === "movie") {
-    console.log(
-      `[Newznab] Movie search request: t=${t}, q=${q}, tmdbid=${tmdbid}, imdbid=${imdbid}`
-    );
+  if (limit === null || offset === null || searchParams.getAll("t").length > 1)
+    return NextResponse.json({ error: "Invalid search pagination or type" }, { status: 400 });
 
+  // One contract for direct and Prowlarr-forwarded requests. No invented
+  // manual/automatic detection; RSS has no concrete search goal.
+  if (t === "movie" || (t === "search" && isMovieCategoryRequest(categoryIds))) {
     try {
-      // Search by TMDB ID
-      if (tmdbid) {
-        const parsedTmdbId = parseInt(tmdbid, 10);
-        console.log(`[Newznab] Searching movie by TMDB ID: ${parsedTmdbId}`);
-        if (!isNaN(parsedTmdbId)) {
-          const movieData = await getMovieInfoByTmdbId(parsedTmdbId);
-          console.log(
-            `[Newznab] TMDB lookup result: ${movieData ? `Found "${movieData.germanTitle}" (Original: "${movieData.title}")` : "Not found"}`
-          );
-
-          if (!movieData) {
-            return new NextResponse(serializeRss(getEmptyRssResult(offset)), {
-              status: 200,
-              headers: { "Content-Type": "application/xml; charset=utf-8" },
-            });
-          }
-
-          const searchResults = await fetchMovieSearchResults(movieData, limit, offset);
-
-          return new NextResponse(searchResults, {
-            status: 200,
-            headers: { "Content-Type": "application/xml; charset=utf-8" },
-          });
-        }
-      }
-
-      // Search by IMDB ID
-      if (imdbid) {
-        console.log(`[Newznab] Searching movie by IMDB ID: ${imdbid}`);
-        const movieData = await getMovieInfoByImdbId(imdbid);
-        console.log(
-          `[Newznab] IMDB lookup result: ${movieData ? `Found "${movieData.germanTitle}" (Original: "${movieData.title}")` : "Not found"}`
-        );
-
-        if (!movieData) {
-          return new NextResponse(serializeRss(getEmptyRssResult(offset)), {
-            status: 200,
-            headers: { "Content-Type": "application/xml; charset=utf-8" },
-          });
-        }
-
-        const searchResults = await fetchMovieSearchResults(movieData, limit, offset);
-
-        return new NextResponse(searchResults, {
-          status: 200,
+      const context = parseMovieSearchContext(searchParams);
+      if (!context.query && context.tmdbId === null && context.imdbId === null) {
+        return new NextResponse(await fetchMovieSearchForRssSync(limit, offset), {
           headers: { "Content-Type": "application/xml; charset=utf-8" },
         });
       }
-
-      // Search by query string for movies
-      if (q) {
-        const searchResults = await fetchMovieSearchByQuery(q, limit, offset);
-        return new NextResponse(searchResults, {
-          status: 200,
-          headers: { "Content-Type": "application/xml; charset=utf-8" },
-        });
+      const budget = new HttpRequestBudget();
+      let movie: TmdbMovieData | null = null;
+      try {
+        if (context.tmdbId !== null || context.imdbId !== null)
+          movie = await getRadarrMovie(context.tmdbId, context.imdbId, budget);
+        if (!movie && context.tmdbId !== null)
+          movie = await getMovieInfoByTmdbId(context.tmdbId, budget);
+        if (!movie && context.imdbId !== null)
+          movie = await getMovieInfoByImdbId(context.imdbId, budget);
+      } catch {
+        // An independent text search needs no successful ID lookup. Never
+        // reset its budget or stamp the failed lookup's IDs onto candidates.
+        if (!context.query) throw new Error("Movie metadata unavailable");
+        budget.assertAvailable();
       }
-
-      // No search criteria provided - return a category-compatible validation item
-      return new NextResponse(getValidationRss(["2000", "2040"]), {
-        status: 200,
+      if (movie) assertMovieSearchGoal(context, movie);
+      const body = movie
+        ? await fetchMovieSearchResults(movie, limit, offset, budget)
+        : context.query
+          ? await fetchMovieSearchByQuery(
+              context.year === null ? context.query : `${context.query} ${context.year}`,
+              limit,
+              offset,
+              budget
+            )
+          : serializeRss(getEmptyRssResult(offset));
+      return new NextResponse(body, {
         headers: { "Content-Type": "application/xml; charset=utf-8" },
       });
     } catch (error) {
-      console.error("Movie search error:", error);
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Unknown error" },
-        { status: 400 }
-      );
+      if (error instanceof MovieSearchContextError)
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: "Search temporarily unavailable" }, { status: 503 });
     }
   }
 
   // Handle TV search requests
   if (t === "tvsearch" || t === "search") {
-    // Check if this is a movie search (by category)
-    const isMovieSearch = isMovieCategoryRequest(categoryIds);
-
-    if (isMovieSearch && q) {
-      console.log(
-        `[Newznab] Movie search via t=search detected: q=${q}, cat=${categoryIds.join(",")}`
-      );
-
-      try {
-        const searchResults = await fetchMovieSearchByQuery(q, limit, offset);
-        return new NextResponse(searchResults, {
-          status: 200,
-          headers: { "Content-Type": "application/xml; charset=utf-8" },
-        });
-      } catch (error) {
-        console.error("Movie search by query error:", error);
-        return NextResponse.json(
-          { error: error instanceof Error ? error.message : "Unknown error" },
-          { status: 400 }
-        );
-      }
-    }
-
     const { context, error: contextError } = parseTvSearchContext(searchParams);
     if (!context) {
       return NextResponse.json(
@@ -227,14 +190,20 @@ export async function GET(request: NextRequest) {
       // Search by TVDB ID
       if (context.tvdbId !== null) {
         console.log(`[Newznab] Searching by TVDB ID: ${context.tvdbId}`);
-        const tvdbData = await getShowInfoByTvdbId(context.tvdbId);
+        const requestBudget = new HttpRequestBudget();
+        const tvdbData = await getShowInfoByTvdbId(context.tvdbId, requestBudget);
         console.log(
           `[Newznab] TVDB lookup result: ${tvdbData ? `Found "${tvdbData.name}" (German: "${tvdbData.germanName}")` : "Not found"}`
         );
 
         if (!tvdbData) {
           if (context.query || context.season || context.episode) {
-            const fallbackResults = await fetchSearchResultsByString(context, limit, offset);
+            const fallbackResults = await fetchSearchResultsByString(
+              context,
+              limit,
+              offset,
+              requestBudget
+            );
             return new NextResponse(fallbackResults, {
               status: 200,
               headers: { "Content-Type": "application/xml; charset=utf-8" },
@@ -246,7 +215,13 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        const searchResults = await fetchSearchResultsById(tvdbData, context, limit, offset);
+        const searchResults = await fetchSearchResultsById(
+          tvdbData,
+          context,
+          limit,
+          offset,
+          requestBudget
+        );
         return new NextResponse(searchResults, {
           status: 200,
           headers: { "Content-Type": "application/xml; charset=utf-8" },
@@ -277,14 +252,25 @@ export async function GET(request: NextRequest) {
         status: 200,
         headers: { "Content-Type": "application/xml; charset=utf-8" },
       });
-    } catch (error) {
-      console.error("Search error:", error);
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Unknown error" },
-        { status: 400 }
-      );
+    } catch {
+      console.error("[Newznab] TV search failed");
+      return NextResponse.json({ error: "Search temporarily unavailable" }, { status: 503 });
     }
   }
 
   return NextResponse.json({ error: "Not found" }, { status: 404 });
+}
+
+function parsePaginationParameter(
+  params: URLSearchParams,
+  key: string,
+  fallback: number,
+  minimum: number,
+  maximum: number
+): number | null {
+  const values = params.getAll(key);
+  if (values.length === 0) return fallback;
+  if (values.length !== 1 || !/^\d+$/.test(values[0])) return null;
+  const value = Number(values[0]);
+  return Number.isSafeInteger(value) && value >= minimum && value <= maximum ? value : null;
 }

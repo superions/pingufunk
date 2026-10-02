@@ -1,0 +1,14 @@
+services:
+  rundfunkarr:
+    environment:
+      DATABASE_PROVIDER: postgresql
+      DATABASE_URL: !reset null
+      DATABASE_URL_FILE: /run/secrets/pingufunk_database_url
+      PINGUFUNK_WRITES_ENABLED: "0"
+    secrets:
+      - pingufunk_database_url
+
+# Local input path only; connection URLs and credentials never belong here.
+secrets:
+  pingufunk_database_url:
+    file: ${PINGUFUNK_DATABASE_URL_SECRET_FILE:?Set a private secret-file path}

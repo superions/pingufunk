@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Builder } from "xml2js";
 import { isRenditionAllowed } from "@/lib/stream-url";
 import type {
@@ -11,7 +12,13 @@ import type {
   ApiResultItem,
 } from "@/types";
 import type { MovieMatchResult } from "./movie-matcher";
+import {
+  classifyLanguageEdition,
+  getLanguageSourceIdentity,
+  stableUrlIdentity,
+} from "./language-editions";
 import { createFakeNzbDownloadUrl } from "./nzb-release";
+import { releaseMediaExpectations } from "./release-media-expectations";
 
 export { generateFakeNzb } from "./nzb-release";
 
@@ -176,8 +183,8 @@ export function getValidationRss(requestedCategoryIds: string[], now: Date = new
     categoryIds.some((categoryId) => MOVIE_CATEGORY_IDS.has(categoryId)) &&
     !categoryIds.some((categoryId) => TV_CATEGORY_IDS.has(categoryId));
   const title = movieOnly
-    ? "RundfunkArr.Validation.2024.GERMAN.1080p.WEB.h264-TEST"
-    : "RundfunkArr.Validation.S01E01.GERMAN.1080p.WEB.h264-TEST";
+    ? "RundfunkArr.Validation.2024.1080p.WEB.h264-TEST"
+    : "RundfunkArr.Validation.S01E01.1080p.WEB.h264-TEST";
 
   const validationItem: NewznabItem = {
     title,
@@ -236,6 +243,51 @@ function getPaddedEpisode(episode: TvdbEpisode): string {
   return episode.episodeNumber.toString().padStart(2, "0");
 }
 
+/** Add edition claims only after source evidence was classified, before RSS/NZB titles share it. */
+export function applyLanguageEdition(title: string, item: ApiResultItem): string {
+  // Replace source markers with the normalized label set instead of carrying claims
+  // through title cleanup where they could be duplicated or contradict the evidence.
+  const withoutSourceClaims = title
+    .replace(/(^|[.\s_-])GERMAN(?=$|[.\s_-])/g, "$1")
+    .replace(/\b(?:originalversion|originalfassung|originalton|ov|omu|omdu)\b/gi, "")
+    .replace(/\b(?:deutsche[nrs]?|german)\s+untertitel\b|\buntertitel\s+(?:auf\s+)?deutsch\b/gi, "")
+    .replace(
+      /\b(?:audiodeskription|hörfassung|hoerfassung|gebärdensprache|klare\s+sprache)\b/gi,
+      ""
+    )
+    .replace(/\.{2,}/g, ".")
+    .replace(/(^[.\s]+|[.\s]+$)/g, "");
+  const tokens = classifyLanguageEdition(item).titleTokens;
+  if (tokens.length === 0) return withoutSourceClaims;
+
+  const editionSuffix = `.${tokens.join(".")}`;
+  const withEdition = withoutSourceClaims.replace(
+    /\.(?=(?:480p|720p|1080p)\.)/i,
+    `${editionSuffix}.`
+  );
+  return withEdition.replace(/\.{2,}/g, ".");
+}
+
+/** Keep GUID identity stable while separating quality, actual edition, and source rendition. */
+export function buildReleaseGuid(
+  item: ApiResultItem,
+  quality: string,
+  renditionUrl: string,
+  releaseIdentity: string
+): string {
+  const edition = classifyLanguageEdition(item);
+  const identity = JSON.stringify([
+    getLanguageSourceIdentity(item),
+    edition.variantKey,
+    quality,
+    stableUrlIdentity(renditionUrl),
+    releaseIdentity,
+  ]);
+  const fingerprint = createHash("sha256").update(identity).digest("hex").slice(0, 20);
+  const permalink = stableUrlIdentity(item.url_website || item.url_video);
+  return `${permalink}#${quality}-${fingerprint}`;
+}
+
 function generateTitle(
   info: MatchedEpisodeInfo,
   quality: string,
@@ -246,16 +298,16 @@ function generateTitle(
   if (episodeType === "daily") {
     const aired = episode.aired ? new Date(episode.aired) : new Date();
     const dateStr = aired.toISOString().split("T")[0]; // yyyy-MM-dd
-    return `${info.showName}.${dateStr}.${episode.name}.GERMAN.${quality}.WEB.h264-MEDiATHEK`.replace(
-      / /g,
-      "."
-    );
+    return applyLanguageEdition(
+      `${info.showName}.${dateStr}.${episode.name}.${quality}.WEB.h264-MEDiATHEK`,
+      info.item
+    ).replace(/ /g, ".");
   }
 
-  return `${info.showName}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${episode.name}.GERMAN.${quality}.WEB.h264-MEDiATHEK`.replace(
-    / /g,
-    "."
-  );
+  return applyLanguageEdition(
+    `${info.showName}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${episode.name}.${quality}.WEB.h264-MEDiATHEK`,
+    info.item
+  ).replace(/ /g, ".");
 }
 
 function createRssItem(
@@ -271,14 +323,23 @@ function createRssItem(
   const parsedTitle = generateTitle(info, quality, episodeType);
   const formattedTitle = formatTitle(parsedTitle);
 
-  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({
+    title: formattedTitle,
+    url,
+    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime),
+  });
   const item = info.item;
 
   return {
     title: formattedTitle,
     guid: {
-      isPermaLink: true,
-      value: `${item.url_website}#${quality}${episodeType === "daily" ? "" : "-d"}`,
+      isPermaLink: false,
+      value: buildReleaseGuid(
+        item,
+        quality,
+        url,
+        `tvdb:${info.tvdbId}:S${info.episode.seasonNumber}E${info.episode.episodeNumber}:${episodeType}`
+      ),
     },
     link: url,
     comments: item.url_website,
@@ -445,11 +506,12 @@ function generateMovieAttributes(
 }
 
 function generateMovieTitle(movieData: TmdbMovieData, quality: string): string {
-  const year = movieData.releaseDate ? movieData.releaseDate.split("-")[0] : "";
+  const year =
+    movieData.productionYear ?? (movieData.releaseDate ? movieData.releaseDate.split("-")[0] : "");
   const title = movieData.germanTitle || movieData.title;
   const yearPart = year ? `.${year}` : "";
 
-  return `${title}${yearPart}.GERMAN.${quality}.WEB.h264-MEDiATHEK`.replace(/ /g, ".");
+  return `${title}${yearPart}.${quality}.WEB.h264-MEDiATHEK`.replace(/ /g, ".");
 }
 
 function createMovieRssItem(
@@ -462,16 +524,20 @@ function createMovieRssItem(
   url: string
 ): NewznabItem {
   const adjustedSize = Math.floor(item.size * sizeMultiplier);
-  const parsedTitle = generateMovieTitle(movieData, quality);
+  const parsedTitle = applyLanguageEdition(generateMovieTitle(movieData, quality), item);
   const formattedTitle = formatTitle(parsedTitle);
 
-  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({
+    title: formattedTitle,
+    url,
+    mediaExpectations: releaseMediaExpectations(item),
+  });
 
   return {
     title: formattedTitle,
     guid: {
-      isPermaLink: true,
-      value: `${item.url_website}#movie-${quality}`,
+      isPermaLink: false,
+      value: buildReleaseGuid(item, quality, url, `tmdb:${movieData.tmdbId}:movie`),
     },
     link: url,
     comments: item.url_website,
@@ -588,10 +654,12 @@ export function generateMovieRssItems(
 export function generateGenericRssItems(
   item: ApiResultItem,
   qualityPreference: QualityPreference = "all",
-  hlsEnabled: boolean = false
+  hlsEnabled: boolean = false,
+  candidateKind?: "movie" | "tv"
 ): NewznabItem[] {
   const items: NewznabItem[] = [];
-  const baseCategories = ["5000"];
+  const movie = candidateKind === "movie";
+  const baseCategories = [movie ? "2000" : "5000"];
 
   const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
   const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
@@ -633,9 +701,10 @@ export function generateGenericRssItems(
         item,
         "1080p",
         1.6,
-        "TV > HD",
-        [...baseCategories, "5040"],
-        item.url_video_hd
+        movie ? "Movies > HD" : "TV > HD",
+        [...baseCategories, movie ? "2040" : "5040"],
+        item.url_video_hd,
+        candidateKind
       )
     );
   }
@@ -646,9 +715,10 @@ export function generateGenericRssItems(
         item,
         "720p",
         1.0,
-        "TV > HD",
-        [...baseCategories, "5040"],
-        item.url_video
+        movie ? "Movies > HD" : "TV > HD",
+        [...baseCategories, movie ? "2040" : "5040"],
+        item.url_video,
+        candidateKind
       )
     );
   }
@@ -659,9 +729,10 @@ export function generateGenericRssItems(
         item,
         "480p",
         0.4,
-        "TV > SD",
-        [...baseCategories, "5030"],
-        item.url_video_low
+        movie ? "Movies > SD" : "TV > SD",
+        [...baseCategories, movie ? "2030" : "5030"],
+        item.url_video_low,
+        candidateKind
       )
     );
   }
@@ -684,7 +755,7 @@ export function parseEpisodeFromTitle(title: string): {
   let episodeName = title;
 
   // Keep the whole E12E13 sequence; truncating it changes the release identity.
-  const sPattern = title.match(/\(?\bS(\d+)\/E(\d+(?:E\d+)*)\)?/i);
+  const sPattern = title.match(/\(?\bS(\d+)\/?E(\d+(?:E\d+)*)\)?/i);
   if (sPattern) {
     season = parseInt(sPattern[1], 10);
     episodes = sPattern[2].split(/E/i).map((value) => parseInt(value, 10));
@@ -749,14 +820,22 @@ function createGenericRssItem(
   sizeMultiplier: number,
   category: string,
   categoryValues: string[],
-  url: string
+  url: string,
+  candidateKind?: "movie" | "tv"
 ): NewznabItem {
   const adjustedSize = Math.floor(item.size * sizeMultiplier);
 
   const parsed = parseEpisodeFromTitle(item.title);
   let rawTitle: string;
 
-  if (parsed.episodes.length > 0) {
+  if (candidateKind) {
+    // Search goals are not evidence. Keep source title/topic even when Arr
+    // can only assign this candidate through its existing override dialog.
+    rawTitle =
+      item.topic === item.title
+        ? `${item.title}.${quality}.WEB.h264-MEDiATHEK`
+        : `${item.topic}.${item.title}.${quality}.WEB.h264-MEDiATHEK`;
+  } else if (parsed.episodes.length > 0) {
     const seasonPart =
       parsed.season === null ? "" : `S${parsed.season.toString().padStart(2, "0")}`;
     const episodePart = parsed.episodes
@@ -765,15 +844,19 @@ function createGenericRssItem(
     // Omit the episode-name segment when the pattern consumed the whole title;
     // otherwise the source coordinate is repeated in the generated release.
     rawTitle = parsed.episodeName
-      ? `${item.topic}.${seasonPart}${episodePart}.${parsed.episodeName}.GERMAN.${quality}.WEB.h264-MEDiATHEK`
-      : `${item.topic}.${seasonPart}${episodePart}.GERMAN.${quality}.WEB.h264-MEDiATHEK`;
+      ? `${item.topic}.${seasonPart}${episodePart}.${parsed.episodeName}.${quality}.WEB.h264-MEDiATHEK`
+      : `${item.topic}.${seasonPart}${episodePart}.${quality}.WEB.h264-MEDiATHEK`;
   } else {
-    rawTitle = `${item.topic}.${item.title}.GERMAN.${quality}.WEB.h264-MEDiATHEK`;
+    rawTitle = `${item.topic}.${item.title}.${quality}.WEB.h264-MEDiATHEK`;
   }
 
-  const formattedTitle = formatTitle(rawTitle);
+  const formattedTitle = formatTitle(applyLanguageEdition(rawTitle, item));
 
-  const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: formattedTitle, url });
+  const fakeDownloadUrl = createFakeNzbDownloadUrl({
+    title: formattedTitle,
+    url,
+    mediaExpectations: releaseMediaExpectations(item),
+  });
 
   const attributes: NewznabAttribute[] = categoryValues.map((v) => ({
     name: "category",
@@ -781,7 +864,7 @@ function createGenericRssItem(
   }));
 
   // Add season/episode attributes if parsed
-  if (parsed.episodes.length > 0) {
+  if (!candidateKind && parsed.episodes.length > 0) {
     if (parsed.season !== null) {
       attributes.push({
         name: "season",
@@ -798,8 +881,15 @@ function createGenericRssItem(
   return {
     title: formattedTitle,
     guid: {
-      isPermaLink: true,
-      value: `${item.url_website}#${quality}`,
+      isPermaLink: false,
+      value: buildReleaseGuid(
+        item,
+        quality,
+        url,
+        candidateKind
+          ? `candidate:${candidateKind}`
+          : `generic:${parsed.season ?? ""}:${parsed.episodes.join("-")}`
+      ),
     },
     link: url,
     comments: item.url_website,
@@ -843,7 +933,7 @@ export function getCapabilitiesXml(): string {
       searching: {
         search: { $: { available: "yes", supportedParams: "q" } },
         "tv-search": { $: { available: "yes", supportedParams: "q,tvdbid,season,ep" } },
-        "movie-search": { $: { available: "yes", supportedParams: "q,tmdbid,imdbid" } },
+        "movie-search": { $: { available: "yes", supportedParams: "q,tmdbid,imdbid,year" } },
       },
       categories: {
         category: [

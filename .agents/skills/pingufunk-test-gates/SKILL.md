@@ -23,8 +23,9 @@ Wrapper. Befehle und verfügbare Gate-Scripts aus diesem Checkout nehmen.
    total/Pagination und RSS→NZB→Download-Vertrag. Importtests prüfen Jobpfade
    und tatsächlichen Consumer; eine erfolgreiche HTTP-Antwort reicht nicht.
 4. Provider/Servarr/Downloadnetzwerk mocken. Datenbankvertragsänderungen gegen
-   disposable PostgreSQL testen; nach P11 kein SQLite-Ersatz für den PG-Gate.
-   Migrationfixtures dürfen synthetisches SQLite als Quellformat verwenden.
+   disposable SQLite **und** PostgreSQL testen, soweit beide Provider betroffen
+   sind. Kein SQLite-Ersatz für den PG-Gate und kein PG-Ersatz für den SQLite-
+   Runtimegate. Migrationsfixtures verwenden ausschließlich synthetische Daten.
 5. Testressourcen durch den Test selbst begrenzt anlegen und in finally/teardown
    schließen. Cleanupfehler nicht verstecken; keine gemeinsamen DBs/Volumes
    löschen. Langläufer mit Timeout und owned process-tree cleanup versehen.

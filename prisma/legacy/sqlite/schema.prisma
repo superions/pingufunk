@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../generated/sqlite"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model TvdbSeries {
+  id         Int           @id
+  name       String
+  germanName String?
+  slug       String?
+  overview   String?
+  aliases    String? // JSON array stored as string
+  firstAired DateTime?
+  cachedAt   DateTime      @default(now())
+  expiresAt  DateTime
+  episodes   TvdbEpisode[]
+}
+
+model TvdbEpisode {
+  id            Int        @id @default(autoincrement())
+  seriesId      Int
+  seasonNumber  Int
+  episodeNumber Int
+  name          String?
+  aired         DateTime?
+  runtime       Int?
+  series        TvdbSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@index([seriesId, seasonNumber, episodeNumber])
+}
+
+model Download {
+  id                String    @id @default(uuid())
+  title             String
+  url               String
+  category          String
+  status            String    @default("queued")
+  progress          Int       @default(0)
+  size              BigInt    @default(0)
+  totalSize         BigInt    @default(0)
+  downloadedBytes   BigInt    @default(0)
+  speed             BigInt    @default(0)
+  filePath          String?
+  error             String?
+  mediaExpectations String? // Versioned JSON; NULL denotes legacy unknown expectations.
+  mediaValidation   String? // Facts from the bounded local probe, never identity proof.
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
+
+  @@index([status])
+}
+
+model Config {
+  key   String @id
+  value String
+}
+
+model GeneratedRuleset {
+  id               String   @id @default(uuid())
+  topic            String // A catalogue topic can contain more than one series.
+  tvdbId           Int
+  showName         String
+  germanName       String?
+  matchingStrategy String   @default("SeasonAndEpisodeNumber")
+  filters          String   @default("[{\"attribute\":\"duration\",\"type\":\"GreaterThan\",\"value\":\"15\"}]")
+  episodeRegex     String   @default("(?<=[E/])(\\d{2})(?=\\))")
+  seasonRegex      String   @default("(?<=[S(])(\\d{2})(?=[/E])")
+  titleRegexRules  String   @default("[]")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tvdbId, topic])
+  @@index([tvdbId])
+}
+
+model TopicCategory {
+  id       String   @id @default(cuid())
+  topic    String   @unique
+  category String // "movie" | "tv" | "unknown"
+  tmdbId   Int?
+  cachedAt DateTime @default(now())
+
+  @@index([topic])
+}

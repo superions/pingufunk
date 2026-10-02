@@ -14,8 +14,8 @@ export async function GET() {
     });
 
     return NextResponse.json(shows);
-  } catch (error) {
-    console.error("Failed to fetch shows:", error);
+  } catch {
+    console.error("Failed to fetch shows");
     return NextResponse.json({ error: "Failed to fetch shows" }, { status: 500 });
   }
 }

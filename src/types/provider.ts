@@ -31,6 +31,8 @@ export interface ProviderContentItem {
   duration: number;
   /** File size in bytes (0 if unknown) */
   size: number;
+  /** Only set from provider metadata that explicitly identifies the audio track language. */
+  audioLanguage?: string | null;
   /** URL to the website page for this content */
   websiteUrl: string;
   /** Available video URLs by quality */
@@ -53,6 +55,8 @@ export interface ProviderVideoUrls {
  * Search query parameters for providers
  */
 export interface ProviderSearchQuery {
+  requestBudget?: import("@/lib/fetch-retry").HttpRequestBudget;
+  deadlineAt?: number;
   /** Search text */
   query: string;
   /** Maximum number of results to return */

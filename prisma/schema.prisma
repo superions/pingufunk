@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -13,41 +13,43 @@ model TvdbSeries {
   germanName String?
   slug       String?
   overview   String?
-  aliases    String?       // JSON array stored as string
-  firstAired DateTime?
-  cachedAt   DateTime      @default(now())
-  expiresAt  DateTime
+  aliases    String? // JSON array stored as string
+  firstAired DateTime?     @db.Timestamptz(3)
+  cachedAt   DateTime      @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime      @db.Timestamptz(3)
   episodes   TvdbEpisode[]
 }
 
 model TvdbEpisode {
-  id            Int         @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   seriesId      Int
   seasonNumber  Int
   episodeNumber Int
   name          String?
-  aired         DateTime?
+  aired         DateTime?  @db.Timestamptz(3)
   runtime       Int?
-  series        TvdbSeries  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  series        TvdbSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
 
   @@index([seriesId, seasonNumber, episodeNumber])
 }
 
 model Download {
-  id              String    @id @default(uuid())
-  title           String
-  url             String
-  category        String
-  status          String    @default("queued")
-  progress        Int       @default(0)
-  size            BigInt    @default(0)
-  totalSize       BigInt    @default(0)
-  downloadedBytes BigInt    @default(0)
-  speed           BigInt    @default(0)
-  filePath        String?
-  error           String?
-  createdAt       DateTime  @default(now())
-  completedAt     DateTime?
+  id                String    @id @default(uuid())
+  title             String
+  url               String
+  category          String
+  status            String    @default("queued")
+  progress          Int       @default(0)
+  size              BigInt    @default(0)
+  totalSize         BigInt    @default(0)
+  downloadedBytes   BigInt    @default(0)
+  speed             BigInt    @default(0)
+  filePath          String?
+  error             String?
+  mediaExpectations String? // Versioned JSON; NULL denotes legacy unknown expectations.
+  mediaValidation   String? // Facts from the bounded local probe, never identity proof.
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  completedAt       DateTime? @db.Timestamptz(3)
 
   @@index([status])
 }
@@ -59,7 +61,7 @@ model Config {
 
 model GeneratedRuleset {
   id               String   @id @default(uuid())
-  topic            String   @unique  // MediathekView topic
+  topic            String // A catalogue topic can contain more than one series.
   tvdbId           Int
   showName         String
   germanName       String?
@@ -68,18 +70,25 @@ model GeneratedRuleset {
   episodeRegex     String   @default("(?<=[E/])(\\d{2})(?=\\))")
   seasonRegex      String   @default("(?<=[S(])(\\d{2})(?=[/E])")
   titleRegexRules  String   @default("[]")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
 
+  @@unique([tvdbId, topic])
   @@index([tvdbId])
 }
 
 model TopicCategory {
-  id        String   @id @default(cuid())
-  topic     String   @unique
-  category  String   // "movie" | "tv" | "unknown"
-  tmdbId    Int?
-  cachedAt  DateTime @default(now())
+  id       String   @id @default(cuid())
+  topic    String   @unique
+  category String // "movie" | "tv" | "unknown"
+  tmdbId   Int?
+  cachedAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([topic])
+}
+
+// PostgreSQL-only operational state; never imported from the legacy SQLite source.
+model MigrationCheckpoint {
+  key       String   @id
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 }

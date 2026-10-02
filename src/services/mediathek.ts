@@ -1,18 +1,26 @@
 import { isRenditionAllowed } from "@/lib/stream-url";
-import { mediathekCache } from "@/lib/cache";
+import { cacheContextEpoch, mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
-import { queryContent } from "./content-search";
-import { getShowInfoByTvdbId } from "./shows";
+import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
+import { selectLanguageVariants } from "./language-editions";
+import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss } from "./shows";
+import { getSonarrRssMatches } from "./sonarr-rss";
+import { matchSonarrEpisodes } from "./sonarr-matcher";
+import { SonarrUnavailableError } from "./sonarr-provider";
+import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { arteVideoId, resolveArteSeriesEditions } from "./arte-editions";
+import { createHash } from "node:crypto";
 import {
   ensureRulesetsLoaded,
   getRulesetsForTopic,
   getRulesetsForTopicAndTvdbId,
   getAllTopics,
   getOrGenerateRulesetForShow,
+  getRulesetContext,
 } from "./rulesets";
 import {
   generateRssItems,
-  generateMovieRssItems,
   generateGenericRssItems,
   convertItemsToRss,
   serializeRss,
@@ -21,8 +29,9 @@ import {
   parseEpisodeFromTitle,
 } from "./newznab";
 import { matchMovieItems } from "./movie-matcher";
-import { createFakeNzbDownloadUrl } from "./nzb-release";
-import { searchMovieByTitle } from "./tmdb";
+import { movieSearchTerms } from "./movie-search-terms";
+import { titleSearchTerms } from "@/lib/title-search-terms";
+import { getRadarrMonitoredMovies } from "./radarr-provider";
 import type {
   ApiResultItem,
   TvdbData,
@@ -44,7 +53,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const TV_SEARCH_CACHE_VERSION = "v2";
+const CONTENT_SEARCH_CACHE_VERSION = "v8-shared-search-budget";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -71,6 +80,36 @@ function hasEpisodeCoordinates(context: TvSearchContext): boolean {
 function matchesGenericSearchContext(item: ApiResultItem, context: TvSearchContext): boolean {
   if (context.tvdbId !== null) return false;
   return !hasEpisodeCoordinates(context) || matchesSourceCoordinates(item, context);
+}
+
+/** Missing source coordinates permit a neutral candidate, never request-coordinate adoption. */
+function matchesUnknownTvCandidate(
+  item: ApiResultItem,
+  context: TvSearchContext,
+  show?: TvdbData
+): boolean {
+  // Date-scoped searches retain their exact aired-day gate; a malformed or
+  // neighboring date cannot re-enter as "unknown coordinates".
+  if (getDailyDateKey(context) !== undefined) return false;
+  const parsed = parseEpisodeFromTitle(item.title);
+  if (parsed.episodes.length > 0) return false;
+  const names = show
+    ? [show.name, show.germanName, ...show.aliases.map((alias) => alias.name)]
+    : [context.query];
+  const normalize = (value: string) =>
+    value.normalize("NFKC").toLocaleLowerCase("de-DE").replace(/\s+/g, " ").trim();
+  return names
+    .filter((name): name is string => !!name)
+    .some((name) => {
+      const goal = normalize(name);
+      const title = normalize(item.title);
+      return (
+        goal.length >= 3 &&
+        ((!isSharedSeriesTopic(item.topic) && normalize(item.topic) === goal) ||
+          title === goal ||
+          (title.startsWith(goal) && /^[\s:(\-–]/.test(title.slice(goal.length))))
+      );
+    });
 }
 
 async function isHlsEnabled(): Promise<boolean> {
@@ -343,11 +382,26 @@ function tryParseDate(dateString: string): Date | null {
   return null;
 }
 
+async function getRulesetShow(
+  tvdbId: number | null,
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
+): Promise<TvdbData | null> {
+  if (tvdbId === null || !Number.isSafeInteger(tvdbId) || tvdbId < 1) return null;
+  const show = provided?.id === tvdbId ? provided : await getBaseShowInfoByTvdbId(tvdbId, budget);
+  // Supplementary metadata never enters permissive/fuzzy legacy ruleset matching.
+  return show?.id === tvdbId
+    ? { ...show, episodes: show.episodes.filter((episode) => episode.metadataSource !== "sonarr") }
+    : null;
+}
+
 async function matchesSeasonAndEpisode(
   item: ApiResultItem,
-  ruleset: Ruleset
+  ruleset: Ruleset,
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getShowInfoByTvdbId(ruleset.media.media_tvdbId);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const season = extractValueUsingRegex(item, ruleset.seasonRegex);
@@ -367,16 +421,18 @@ async function matchesSeasonAndEpisode(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: `S${season}E${episode}`,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
 async function matchesItemTitleIncludes(
   item: ApiResultItem,
   ruleset: Ruleset,
-  threshold: number = 0.7
+  threshold: number = 0.7,
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getShowInfoByTvdbId(ruleset.media.media_tvdbId);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const constructedTitle = buildTitleFromRegexRules(item, ruleset.titleRegexRules);
@@ -408,16 +464,18 @@ async function matchesItemTitleIncludes(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: constructedTitle,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
 async function matchesItemTitleExact(
   item: ApiResultItem,
   ruleset: Ruleset,
-  threshold: number = 0.95
+  threshold: number = 0.95,
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getShowInfoByTvdbId(ruleset.media.media_tvdbId);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const constructedTitle = buildTitleFromRegexRules(item, ruleset.titleRegexRules);
@@ -467,15 +525,17 @@ async function matchesItemTitleExact(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: constructedTitle,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
 async function matchesItemTitleEqualsAirdate(
   item: ApiResultItem,
-  ruleset: Ruleset
+  ruleset: Ruleset,
+  provided?: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<MatchedEpisodeInfo | null> {
-  const tvdbData = await getShowInfoByTvdbId(ruleset.media.media_tvdbId);
+  const tvdbData = await getRulesetShow(ruleset.media.media_tvdbId, provided, budget);
   if (!tvdbData?.episodes?.length) return null;
 
   const constructedTitle = buildTitleFromRegexRules(item, ruleset.titleRegexRules);
@@ -492,7 +552,7 @@ async function matchesItemTitleEqualsAirdate(
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
     matchedTitle: constructedTitle,
-    tvdbId: ruleset.media.media_tvdbId,
+    tvdbId: tvdbData.id,
   };
 }
 
@@ -500,9 +560,10 @@ async function applyRulesetFilters(
   results: ApiResultItem[],
   tvdbData: TvdbData | undefined,
   hlsEnabled: boolean,
-  tvdbId: number | null = tvdbData?.id ?? null
+  tvdbId: number | null = tvdbData?.id ?? null,
+  budget?: HttpRequestBudget
 ): Promise<{ matchedEpisodes: MatchedEpisodeInfo[]; unmatchedItems: ApiResultItem[] }> {
-  await ensureRulesetsLoaded();
+  await ensureRulesetsLoaded(budget);
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   console.log(
@@ -528,13 +589,16 @@ async function applyRulesetFilters(
         foundRulesetForTvdbId = true;
       }
     }
-    if (!foundRulesetForTvdbId) {
+    if (
+      !foundRulesetForTvdbId &&
+      !tvdbData.episodes.some((episode) => episode.metadataSource === "sonarr")
+    ) {
       console.log(
         `[Mediathek] No rulesets found for tvdbId ${tvdbData.id} (${tvdbData.name}), attempting auto-generation...`
       );
 
       // Try to auto-generate a ruleset
-      const generatedRuleset = await getOrGenerateRulesetForShow(tvdbData.id, tvdbData);
+      const generatedRuleset = await getOrGenerateRulesetForShow(tvdbData.id, tvdbData, budget);
       if (generatedRuleset) {
         console.log(
           `[Mediathek] Auto-generated ruleset for topic "${generatedRuleset.topic}" -> TVDB ${tvdbData.id}`
@@ -569,17 +633,20 @@ async function applyRulesetFilters(
     }
 
     for (const ruleset of rulesets) {
+      // Coordinates in a shared catalogue topic do not identify its series.
+      if (isSharedSeriesTopic(item.topic)) {
+        const show = await getRulesetShow(ruleset.media.media_tvdbId, tvdbData, budget);
+        if (!show || !hasSharedTopicSeriesEvidence(item, show)) continue;
+      }
       // Parse filters from JSON string
       let filters: Filter[];
       try {
         filters = JSON.parse(ruleset.filters);
       } catch {
-        filters = [];
+        continue;
       }
 
       if (!filters.every((filter) => filterMatches(item, filter))) {
-        const idx = unmatchedItems.indexOf(item);
-        if (idx > -1) unmatchedItems.splice(idx, 1);
         continue;
       }
 
@@ -590,19 +657,19 @@ async function applyRulesetFilters(
 
       switch (ruleset.matchingStrategy) {
         case "SeasonAndEpisodeNumber" as MatchingStrategy:
-          matchInfo = await matchesSeasonAndEpisode(item, ruleset);
+          matchInfo = await matchesSeasonAndEpisode(item, ruleset, tvdbData, budget);
           break;
         case "ItemTitleIncludes" as MatchingStrategy:
-          matchInfo = await matchesItemTitleIncludes(item, ruleset, threshold);
+          matchInfo = await matchesItemTitleIncludes(item, ruleset, threshold, tvdbData, budget);
           break;
         case "ItemTitleExact" as MatchingStrategy:
           // For strict strategy, require higher threshold
           const exactThreshold =
             matchingSettings.strategy === "strict" ? Math.max(threshold, 0.95) : threshold;
-          matchInfo = await matchesItemTitleExact(item, ruleset, exactThreshold);
+          matchInfo = await matchesItemTitleExact(item, ruleset, exactThreshold, tvdbData, budget);
           break;
         case "ItemTitleEqualsAirdate" as MatchingStrategy:
-          matchInfo = await matchesItemTitleEqualsAirdate(item, ruleset);
+          matchInfo = await matchesItemTitleEqualsAirdate(item, ruleset, tvdbData, budget);
           break;
       }
 
@@ -611,9 +678,6 @@ async function applyRulesetFilters(
         const idx = unmatchedItems.indexOf(item);
         if (idx > -1) unmatchedItems.splice(idx, 1);
         break;
-      } else {
-        const idx = unmatchedItems.indexOf(item);
-        if (idx > -1) unmatchedItems.splice(idx, 1);
       }
     }
   }
@@ -707,7 +771,8 @@ function getTvSearchCandidateQueries(
   context: TvSearchContext
 ): Array<{ fields: string[]; query: string }> {
   // Query alternatives separately: the provider combines clauses with AND.
-  if (context.query) return [{ fields: QUERY_FIELDS, query: context.query }];
+  if (context.query)
+    return titleSearchTerms([context.query]).map((query) => ({ fields: QUERY_FIELDS, query }));
 
   const dailyDate = getDailyDateKey(context);
   if (dailyDate === null) return [];
@@ -755,14 +820,65 @@ function getTvSearchCandidateQueries(
   return [];
 }
 
-async function queryTvSearchCandidates(context: TvSearchContext): Promise<ApiResultItem[] | null> {
+/** Rules identify possible owners; verified metadata and title decide ownership. */
+async function resolveArteCatalogueCandidates(
+  items: ApiResultItem[],
+  budget: HttpRequestBudget
+): Promise<ApiResultItem[] | null> {
+  const ordinary: ApiResultItem[] = [];
+  const owned = new Map<number, { show: TvdbData; items: ApiResultItem[] }>();
+  const metadata = new Map<number, Promise<TvdbData | null>>();
+  for (const item of items) {
+    if (Date.now() >= budget.deadlineAt) return null;
+    if (!arteVideoId(item.url_website) || !isSharedSeriesTopic(item.topic)) {
+      ordinary.push(item);
+      continue;
+    }
+    const shows = new Map<number, TvdbData>();
+    for (const rule of getRulesetsForTopic(item.topic)) {
+      const id = rule.media.media_tvdbId;
+      if (id === null || !Number.isSafeInteger(id) || id <= 0) continue;
+      // Discovery must not trigger a fresh external metadata cascade. Reuse
+      // verified base cache/bundled identities, not names invented from a rule.
+      if (!metadata.has(id)) metadata.set(id, getBaseShowForSonarrRss(id));
+      const show = await metadata.get(id);
+      if (show?.id !== id) continue;
+      if (show && hasSharedTopicSeriesEvidence(item, show)) shows.set(show.id, show);
+    }
+    if (shows.size === 0) {
+      ordinary.push(item);
+      continue;
+    }
+    if (shows.size !== 1) continue;
+    const show = [...shows.values()][0];
+    const group = owned.get(show.id) ?? { show, items: [] };
+    group.items.push(item);
+    owned.set(show.id, group);
+  }
+  for (const [, { show, items }] of [...owned].sort(([a], [b]) => a - b)) {
+    const resolved = await resolveArteSeriesEditions(items, show, budget);
+    if (resolved === null) return null;
+    ordinary.push(...resolved);
+  }
+  return selectLanguageVariants(ordinary, await getConfiguredLanguagePolicy());
+}
+
+async function queryTvSearchCandidates(
+  context: TvSearchContext,
+  budget: HttpRequestBudget
+): Promise<ApiResultItem[] | null> {
   const candidateQueries = getTvSearchCandidateQueries(context);
   if (candidateQueries.length === 0) return [];
 
   // Each provider query has its own source cap. Newznab total below describes
   // the filtered union, not the source's full catalog.
   const candidates = await Promise.all(
-    candidateQueries.map((query) => queryContent([query], TV_SEARCH_CANDIDATE_LIMIT))
+    candidateQueries.map((query) =>
+      queryContent([query], TV_SEARCH_CANDIDATE_LIMIT, {
+        requestBudget: budget,
+        deferLanguageSelection: true,
+      })
+    )
   );
   if (candidates.some((results) => results === null)) return null;
 
@@ -772,9 +888,8 @@ async function queryTvSearchCandidates(context: TvSearchContext): Promise<ApiRes
     if (!uniqueCandidates.has(identity)) uniqueCandidates.set(identity, item);
   }
 
-  return [...uniqueCandidates.values()].sort(
-    (first, second) => second.filmlisteTimestamp - first.filmlisteTimestamp
-  );
+  // Cache only source rows: ARTE ownership depends on the current rule catalogue.
+  return [...uniqueCandidates.values()];
 }
 
 function dedupeNewznabItems(items: NewznabItem[]): NewznabItem[] {
@@ -825,7 +940,8 @@ export async function fetchSearchResultsById(
   tvdbData: TvdbData,
   searchContext: TvSearchContext,
   limit: number,
-  offset: number
+  offset: number,
+  requestBudget = new HttpRequestBudget()
 ): Promise<string> {
   const context: TvSearchContext = {
     ...searchContext,
@@ -844,7 +960,11 @@ export async function fetchSearchResultsById(
   );
 
   const contextKey = tvSearchContextKey(context);
-  const cacheKey = `tvdb_${TV_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  await ensureRulesetsLoaded(requestBudget);
+  const rulesetContext = getRulesetContext();
+  const sourceContext = await searchCacheContext();
+  const metadataContext = createHash("sha256").update(JSON.stringify(tvdbData)).digest("hex");
+  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${metadataContext}_${rulesetContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -855,6 +975,7 @@ export async function fetchSearchResultsById(
   const desiredEpisodes = getDesiredEpisodes(tvdbData, context);
   console.log(`[Mediathek] Desired episodes: ${desiredEpisodes?.length ?? 0}`);
   if (hasEpisodeCoordinates(context) && desiredEpisodes?.length === 0) {
+    if (tvdbData.sonarrUnavailable) throw new SonarrUnavailableError();
     console.log(
       `[Mediathek] No desired episodes found for season=${context.season}, episode=${context.episode}, returning empty`
     );
@@ -864,7 +985,7 @@ export async function fetchSearchResultsById(
   }
 
   // Check for cached API response
-  const apiCacheKey = `mediathekapi_tvdb_${TV_SEARCH_CACHE_VERSION}_${contextKey}`;
+  const apiCacheKey = `mediathekapi_tvdb_arte-v1_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}_${metadataContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -873,9 +994,42 @@ export async function fetchSearchResultsById(
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     console.log(`[Mediathek] Searching MediathekView API with query: "${searchQuery}"`);
-    results = await queryContent([{ fields: QUERY_FIELDS, query: searchQuery }], 10000);
+    const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
+      (episode) => episode.metadataSource === "sonarr"
+    );
+    const searchTerms = titleSearchTerms([
+      searchQuery,
+      ...(desiredEpisodes?.length === 1 ? [desiredEpisodes[0].name] : []),
+      tvdbData.germanName || tvdbData.name,
+      tvdbData.name,
+      ...tvdbData.aliases.map((alias) => alias.name),
+    ]);
+    const windows = await Promise.all(
+      searchTerms.map((query) =>
+        queryContent([{ fields: QUERY_FIELDS, query }], TV_SEARCH_CANDIDATE_LIMIT, {
+          arteSeries: tvdbData,
+          deferLanguageSelection: true,
+          ...(supplemented
+            ? {
+                requestBudget,
+                progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
+                  (episode) => episode.metadataSource === "sonarr"
+                ),
+              }
+            : { requestBudget }),
+        })
+      )
+    );
+    results = windows.some((window) => window === null)
+      ? null
+      : [
+          ...new Map(
+            windows.flatMap((window) => window ?? []).map((item) => [JSON.stringify(item), item])
+          ).values(),
+        ];
 
-    if (results === null || results.length === 0) {
+    if (results === null) throw new Error("Search provider unavailable");
+    if (results.length === 0) {
       return serializeRss(getEmptyRssResult(offset));
     }
 
@@ -890,16 +1044,27 @@ export async function fetchSearchResultsById(
     );
   }
 
-  const { matchedEpisodes } = await applyRulesetFilters(
+  const { matchedEpisodes, unmatchedItems } = await applyRulesetFilters(
     results,
     tvdbData,
     hlsEnabled,
-    context.tvdbId
+    context.tvdbId,
+    requestBudget
   );
   console.log(`[Mediathek] Matched episodes after ruleset filtering: ${matchedEpisodes.length}`);
 
+  const toleranceSetting = await getSetting("matching.sonarr.tolerancePercent");
+  const tolerance = toleranceSetting === null ? 10 : Number(toleranceSetting);
+  const supplementalMatches = matchSonarrEpisodes(
+    tvdbData,
+    results,
+    minDuration,
+    tolerance,
+    await getConfiguredLanguagePolicy(),
+    hlsEnabled
+  );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
-    matchedEpisodes,
+    [...matchedEpisodes, ...supplementalMatches],
     desiredEpisodes,
     context
   );
@@ -908,9 +1073,28 @@ export async function fetchSearchResultsById(
   const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
     generateRssItems(info, quality, hlsEnabled)
   );
+  // The Sonarr matcher clones rows while removing ineligible URLs. Compare
+  // source metadata, not object references or its sanitized rendition list.
+  const supplementalSourceKey = (item: ApiResultItem) =>
+    JSON.stringify({ ...item, url_video: "", url_video_low: "", url_video_hd: "" });
+  const supplementalSources = new Set(
+    supplementalMatches.map(({ item }) => supplementalSourceKey(item))
+  );
+  const sourceCandidates = selectLanguageVariants(
+    unmatchedItems.filter(
+      (item) =>
+        !supplementalSources.has(supplementalSourceKey(item)) &&
+        matchesUnknownTvCandidate(item, context, tvdbData)
+    ),
+    await getConfiguredLanguagePolicy()
+  ).flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "tv"));
   console.log(`[Mediathek] Generated ${newznabItems.length} Newznab items (quality: ${quality})`);
 
-  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
+  const response = convertItemsToRss(
+    dedupeNewznabItems([...newznabItems, ...sourceCandidates]),
+    limit,
+    offset
+  );
 
   mediathekCache.set(cacheKey, { response });
   return response;
@@ -919,44 +1103,51 @@ export async function fetchSearchResultsById(
 export async function fetchSearchResultsByString(
   searchContext: TvSearchContext,
   limit: number,
-  offset: number
+  offset: number,
+  budget = new HttpRequestBudget()
 ): Promise<string> {
   const context: TvSearchContext = {
     ...searchContext,
     query: searchContext.query?.trim() || null,
   };
   const trimmedQ = context.query;
+  await ensureRulesetsLoaded(budget);
+  const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const contextKey = tvSearchContextKey(context);
-  const cacheKey = `q_${TV_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${rulesetContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
     return (cached as { response: string }).response;
   }
 
-  const apiCacheKey = `mediathekapi_q_${TV_SEARCH_CACHE_VERSION}_${contextKey}`;
+  const apiCacheKey = `mediathekapi_q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
   if (cachedApi) {
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
-    results = await queryTvSearchCandidates(context);
+    results = await queryTvSearchCandidates(context, budget);
     if (results === null) {
-      return serializeRss(getEmptyRssResult(offset));
+      throw new Error("Search provider unavailable");
     }
     mediathekCache.set(apiCacheKey, { results });
   }
 
+  results = await resolveArteCatalogueCandidates(results, budget);
+  if (results === null) throw new Error("Search provider unavailable");
   const { matchedEpisodes, unmatchedItems } = await applyRulesetFilters(
     results,
     undefined,
     hlsEnabled,
-    context.tvdbId
+    context.tvdbId,
+    budget
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(matchedEpisodes, null, context);
   const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
@@ -971,8 +1162,14 @@ export async function fetchSearchResultsByString(
         .filter((item) => matchesGenericSearchContext(item, context))
         .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled))
     : [];
+  const unknownCandidates =
+    hasTextQuery && (hasEpisodeCoordinates(context) || context.tvdbId !== null)
+      ? unmatchedItems
+          .filter((item) => matchesUnknownTvCandidate(item, context))
+          .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "tv"))
+      : [];
 
-  const allItems = dedupeNewznabItems([...newznabItems, ...genericItems]);
+  const allItems = dedupeNewznabItems([...newznabItems, ...genericItems, ...unknownCandidates]);
   const response = convertItemsToRss(allItems, limit, offset);
 
   mediathekCache.set(cacheKey, { response });
@@ -980,18 +1177,34 @@ export async function fetchSearchResultsByString(
 }
 
 export async function fetchSearchResultsForRssSync(limit: number, offset: number): Promise<string> {
+  const budget = new HttpRequestBudget();
+  await ensureRulesetsLoaded(budget);
+  const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
-  const cacheKey = `rss_${TV_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  // Build before consulting the normal RSS response cache: otherwise its hour
+  // TTL would prevent the 60s Sonarr snapshot/cursor from ever refreshing.
+  let supplementalMatches: MatchedEpisodeInfo[] = [];
+  let sonarrUnavailable = false;
+  try {
+    supplementalMatches = await getSonarrRssMatches(getBaseShowForSonarrRss, budget);
+  } catch {
+    sonarrUnavailable = true;
+  }
+  const supplementalContext = createHash("sha256")
+    .update(JSON.stringify(supplementalMatches))
+    .digest("hex");
+  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${supplementalContext}_${rulesetContext}`;
 
   const cached = mediathekCache.get(cacheKey);
-  if (cached) {
+  if (cached && !sonarrUnavailable) {
     return (cached as { response: string }).response;
   }
 
-  const apiCacheKey = "rss_mediathekview_results";
+  const apiCacheKey = `rss_mediathekview_results_${CONTENT_SEARCH_CACHE_VERSION}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -999,24 +1212,101 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     // total below counts verified matches in this bounded source window only.
-    results = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT);
+    results = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT, {
+      requestBudget: budget,
+      deferLanguageSelection: true,
+    });
     if (results === null) {
-      return serializeRss(getEmptyRssResult(offset));
+      throw new Error("Search provider unavailable");
     }
     mediathekCache.set(apiCacheKey, { results });
   }
 
-  const { matchedEpisodes } = await applyRulesetFilters(results, undefined, hlsEnabled);
-  const newznabItems: NewznabItem[] = matchedEpisodes.flatMap((info) =>
+  results = await resolveArteCatalogueCandidates(results, budget);
+  if (results === null) throw new Error("Search provider unavailable");
+  const { matchedEpisodes } = await applyRulesetFilters(
+    results,
+    undefined,
+    hlsEnabled,
+    null,
+    budget
+  );
+  if (sonarrUnavailable && matchedEpisodes.length === 0) throw new SonarrUnavailableError();
+  const newznabItems: NewznabItem[] = [...matchedEpisodes, ...supplementalMatches].flatMap((info) =>
     generateRssItems(info, quality, hlsEnabled)
   );
   const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
 
-  mediathekCache.set(cacheKey, { response });
+  if (!sonarrUnavailable) mediathekCache.set(cacheKey, { response });
   return response;
 }
 
 // ============== MOVIE SEARCH FUNCTIONS ==============
+
+/**
+ * Recent film candidates need actual film goals. Without optional Radarr context
+ * an empty feed is honest; broadcasting all unrelated long videos is not.
+ */
+export async function fetchMovieSearchForRssSync(
+  limit: number,
+  offset: number,
+  budget = new HttpRequestBudget()
+): Promise<string> {
+  const epoch = cacheContextEpoch();
+  const movies = await getRadarrMonitoredMovies(budget);
+  if (movies.length === 0) return serializeRss(getEmptyRssResult(offset));
+  const quality = await getQualityPreference();
+  const minimum = await getMinDurationSeconds();
+  const hlsEnabled = await isHlsEnabled();
+  const sourceContext = await searchCacheContext();
+  const inventory = createHash("sha256").update(JSON.stringify(movies)).digest("hex");
+  // A minute-scoped source window cannot be kept stale by the usual hour TTL.
+  const window = Math.floor(Date.now() / 60_000);
+  const key = JSON.stringify(["movie-recent", CONTENT_SEARCH_CACHE_VERSION, window, sourceContext]);
+  const cached = mediathekCache.get(key);
+  let sources: ApiResultItem[];
+  if (cached && "results" in cached) sources = cached.results as ApiResultItem[];
+  else {
+    const fetched = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT, {
+      requestBudget: budget,
+      deferLanguageSelection: true,
+    });
+    if (fetched === null) throw new Error("Search provider unavailable");
+    sources = fetched;
+  }
+  const responseKey = JSON.stringify([key, inventory, limit, offset, quality, minimum, hlsEnabled]);
+  const response = mediathekCache.get(responseKey);
+  if (response && "response" in response) return response.response as string;
+  const eligible = sources.filter(
+    (item) => !SKIP_KEYWORDS.some((word) => item.title.includes(word))
+  );
+  const matches: ApiResultItem[] = [];
+  for (const movie of movies) {
+    if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
+      throw new Error("Search provider unavailable");
+    // RSS has no search target available to the consumer. Do not turn broad
+    // partial-title ranking into automatic recent-release announcements.
+    matches.push(
+      ...(await matchMovieItems(eligible, movie, minimum, hlsEnabled))
+        .filter(({ titleMatch }) => titleMatch === "exact")
+        .map(({ item }) => item)
+    );
+  }
+  const selected = selectLanguageVariants(matches, await getConfiguredLanguagePolicy());
+  const rss = convertItemsToRss(
+    dedupeNewznabItems(
+      selected.flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "movie"))
+    ),
+    limit,
+    offset
+  );
+  if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
+    throw new Error("Search provider unavailable");
+  // Publish neither source nor response cache after an incomplete snapshot.
+  mediathekCache.set(key, { results: sources });
+  mediathekCache.set(responseKey, { response: rss });
+  return rss;
+}
 
 /**
  * Search for a movie in the Mediathek by TMDB data
@@ -1024,7 +1314,8 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
 export async function fetchMovieSearchResults(
   movieData: TmdbMovieData,
   limit: number,
-  offset: number
+  offset: number,
+  requestBudget = new HttpRequestBudget()
 ): Promise<string> {
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
@@ -1033,7 +1324,9 @@ export async function fetchMovieSearchResults(
     `[Mediathek] fetchMovieSearchResults: tmdbId=${movieData.tmdbId}, title="${movieData.title}", germanTitle="${movieData.germanTitle}", runtime=${movieData.runtime} min, quality=${quality}, minDuration=${minDuration}s`
   );
 
-  const cacheKey = `movie_${movieData.tmdbId}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const movieIdentity = createHash("sha256").update(JSON.stringify(movieData)).digest("hex");
+  const cacheKey = `movie_${CONTENT_SEARCH_CACHE_VERSION}_${movieIdentity}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -1042,14 +1335,15 @@ export async function fetchMovieSearchResults(
   }
 
   // Search by German title and original title in parallel
-  const searchTerms = [movieData.germanTitle];
-  if (movieData.title !== movieData.germanTitle) {
-    searchTerms.push(movieData.title);
-  }
+  const searchTerms = movieSearchTerms([
+    movieData.germanTitle,
+    movieData.title,
+    ...(movieData.aliases ?? []),
+  ]);
 
   // Helper function to fetch results for a single search term
   async function fetchForTerm(searchTerm: string): Promise<ApiResultItem[] | null> {
-    const apiCacheKey = `mediathekapi_movie_${searchTerm}`;
+    const apiCacheKey = `mediathekapi_movie_${CONTENT_SEARCH_CACHE_VERSION}_${searchTerm}_${sourceContext}`;
     const cachedApi = mediathekCache.get(apiCacheKey);
 
     if (cachedApi) {
@@ -1058,7 +1352,10 @@ export async function fetchMovieSearchResults(
     }
 
     console.log(`[Mediathek] Searching MediathekView API for movie: "${searchTerm}"`);
-    const results = await queryContent([{ fields: QUERY_FIELDS, query: searchTerm }], 500);
+    const results = await queryContent([{ fields: QUERY_FIELDS, query: searchTerm }], 500, {
+      requestBudget,
+      deferLanguageSelection: true,
+    });
     if (results === null) return null;
     console.log(`[Mediathek] API returned ${results.length} results for "${searchTerm}"`);
     mediathekCache.set(apiCacheKey, { results });
@@ -1067,25 +1364,22 @@ export async function fetchMovieSearchResults(
 
   // Fetch all search terms in parallel
   const resultsPerTerm = await Promise.all(searchTerms.map(fetchForTerm));
-  const hasFailedTerm = resultsPerTerm.some((results) => results === null);
+  if (resultsPerTerm.some((results) => results === null)) {
+    throw new Error("Search provider unavailable");
+  }
 
-  // Merge results, avoiding duplicates by URL
-  const allResults: ApiResultItem[] = [];
-  const existingUrls = new Set<string>();
+  // Merge search terms before choosing the best edition and deduplicating media URLs.
+  const collectedResults: ApiResultItem[] = [];
   for (const results of resultsPerTerm) {
     if (results === null) continue;
-    for (const result of results) {
-      if (!existingUrls.has(result.url_video)) {
-        existingUrls.add(result.url_video);
-        allResults.push(result);
-      }
-    }
+    collectedResults.push(...results);
   }
+  const allResults = collectedResults;
 
   if (allResults.length === 0) {
     console.log(`[Mediathek] No results found for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1100,7 +1394,7 @@ export async function fetchMovieSearchResults(
   if (filteredResults.length === 0) {
     console.log(`[Mediathek] No results after filtering for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1110,32 +1404,37 @@ export async function fetchMovieSearchResults(
   if (matchResults.length === 0) {
     console.log(`[Mediathek] No matches found for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
   // Generate RSS items using the same rendition setting used for matching.
-  const newznabItems: NewznabItem[] = matchResults.flatMap((match) =>
-    generateMovieRssItems(match, movieData, quality, hlsEnabled)
+  const selected = selectLanguageVariants(
+    matchResults.map((match) => match.item),
+    await getConfiguredLanguagePolicy()
+  );
+  const newznabItems: NewznabItem[] = selected.flatMap((item) =>
+    generateGenericRssItems(item, quality, hlsEnabled, "movie")
   );
 
   console.log(
     `[Mediathek] Generated ${newznabItems.length} Newznab items for movie (quality: ${quality})`
   );
 
-  const response = convertItemsToRss(newznabItems, limit, offset);
-  if (!hasFailedTerm) mediathekCache.set(cacheKey, { response });
+  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
+  mediathekCache.set(cacheKey, { response });
   return response;
 }
 
 /**
  * Search for movies in the Mediathek by query string (for Radarr text search)
- * Filters by minimum duration to identify feature films
+ * A duration policy limits candidates; it does not prove their genre or identity.
  */
 export async function fetchMovieSearchByQuery(
   query: string,
   limit: number,
-  offset: number
+  offset: number,
+  requestBudget = new HttpRequestBudget()
 ): Promise<string> {
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
@@ -1150,15 +1449,8 @@ export async function fetchMovieSearchByQuery(
     `[Mediathek] fetchMovieSearchByQuery: query="${query}", cleanedQuery="${cleanedQuery}", year=${searchYear}, quality=${quality}, minDuration=${minDuration}s`
   );
 
-  // Try to find the movie on TMDB to get IDs for Radarr matching
-  const tmdbMovie = await searchMovieByTitle(cleanedQuery, searchYear);
-  if (tmdbMovie) {
-    console.log(
-      `[Mediathek] Found TMDB match: "${tmdbMovie.germanTitle}" (TMDB: ${tmdbMovie.tmdbId}, IMDB: ${tmdbMovie.imdbId})`
-    );
-  }
-
-  const cacheKey = `movie_query_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}`;
+  const sourceContext = await searchCacheContext();
+  const cacheKey = `movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -1167,7 +1459,7 @@ export async function fetchMovieSearchByQuery(
   }
 
   // Search Mediathek by query (without year)
-  const apiCacheKey = `mediathekapi_movie_query_${cleanedQuery}`;
+  const apiCacheKey = `mediathekapi_movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
@@ -1176,10 +1468,18 @@ export async function fetchMovieSearchByQuery(
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     console.log(`[Mediathek] Searching MediathekView API for movie query: "${cleanedQuery}"`);
-    results = await queryContent([{ fields: QUERY_FIELDS, query: cleanedQuery }], 500);
-    if (results === null) {
-      return serializeRss(getEmptyRssResult(offset));
+    const pages = await Promise.all(
+      movieSearchTerms([cleanedQuery]).map((term) =>
+        queryContent([{ fields: QUERY_FIELDS, query: term }], 500, {
+          requestBudget,
+          deferLanguageSelection: true,
+        })
+      )
+    );
+    if (pages.some((page) => page === null)) {
+      throw new Error("Search provider unavailable");
     }
+    results = pages.flatMap((page) => page ?? []);
     console.log(
       `[Mediathek] API returned ${results.length} results for movie query "${cleanedQuery}"`
     );
@@ -1212,94 +1512,18 @@ export async function fetchMovieSearchByQuery(
     return response;
   }
 
-  // Generate RSS items directly for the filtered results (as movies)
-  const newznabItems: NewznabItem[] = [];
-
-  for (const item of filteredResults) {
-    // Format the release title
-    const baseTitle = formatTitle(item.topic || item.title);
-    const year = new Date(item.filmlisteTimestamp * 1000).getFullYear();
-
-    // Calculate size
-    const size = item.size > 0 ? item.size : item.duration * 500000;
-
-    // Create item for each available quality
-    const qualities: Array<{
-      url: string;
-      qualityName: string;
-      category: string;
-      sizeMultiplier: number;
-    }> = [];
-
-    const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
-    const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
-    const has480p = isRenditionAllowed(item.url_video_low, hlsEnabled);
-
-    if (has1080p && (quality === "all" || quality === "best" || quality === "1080p")) {
-      qualities.push({
-        url: item.url_video_hd,
-        qualityName: "1080p",
-        category: "2040",
-        sizeMultiplier: 1.6,
-      });
-    }
-    if (has720p && (quality === "all" || quality === "720p" || (quality === "best" && !has1080p))) {
-      qualities.push({
-        url: item.url_video,
-        qualityName: "720p",
-        category: "2040",
-        sizeMultiplier: 1.0,
-      });
-    }
-    if (
-      has480p &&
-      (quality === "all" || quality === "480p" || (quality === "best" && !has1080p && !has720p))
-    ) {
-      qualities.push({
-        url: item.url_video_low,
-        qualityName: "480p",
-        category: "2030",
-        sizeMultiplier: 0.5,
-      });
-    }
-
-    for (const q of qualities) {
-      const releaseTitle = `${baseTitle}.${year}.GERMAN.${q.qualityName}.WEB.h264-MEDiATHEK`;
-      const adjustedSize = Math.floor(size * q.sizeMultiplier);
-
-      const fakeDownloadUrl = createFakeNzbDownloadUrl({ title: releaseTitle, url: q.url });
-
-      newznabItems.push({
-        title: releaseTitle,
-        guid: {
-          isPermaLink: true,
-          value: `${item.url_website || q.url}#movie-${q.qualityName}`,
-        },
-        link: q.url,
-        comments: item.url_website || "",
-        pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
-        category: q.category === "2030" ? "Movies > SD" : "Movies > HD",
-        description: item.description || "",
-        enclosure: {
-          url: fakeDownloadUrl,
-          length: adjustedSize,
-          type: "application/x-nzb",
-        },
-        attributes: [
-          { name: "category", value: "2000" },
-          { name: "category", value: q.category },
-          ...(tmdbMovie?.tmdbId ? [{ name: "tmdbid", value: tmdbMovie.tmdbId.toString() }] : []),
-          ...(tmdbMovie?.imdbId ? [{ name: "imdbid", value: tmdbMovie.imdbId }] : []),
-        ],
-      });
-    }
-  }
+  // The query year and optional metadata describe the search goal, not these
+  // source videos. Do not stamp IDs or turn the broadcast timestamp into a year.
+  const selected = selectLanguageVariants(filteredResults, await getConfiguredLanguagePolicy());
+  const newznabItems = selected.flatMap((item) =>
+    generateGenericRssItems(item, quality, hlsEnabled, "movie")
+  );
 
   console.log(
     `[Mediathek] Generated ${newznabItems.length} Newznab items for movie query (quality: ${quality})`
   );
 
-  const response = convertItemsToRss(newznabItems, limit, offset);
+  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
   mediathekCache.set(cacheKey, { response });
   return response;
 }

@@ -1,4 +1,7 @@
 // Mediathek API Types
+/** Server-authored NZBs selected by rendition; clients treat the payload as opaque. */
+export type UiNzbDownloads = Partial<Record<"hd" | "sd" | "low", string>>;
+
 export interface MediathekApiResponse {
   result: MediathekApiResult;
   err: unknown | null;
@@ -17,6 +20,7 @@ export interface QueryInfo {
 }
 
 export interface ApiResultItem {
+  id?: string;
   channel: string;
   topic: string;
   title: string;
@@ -28,6 +32,15 @@ export interface ApiResultItem {
   url_video: string;
   url_video_low: string;
   url_video_hd: string;
+  /** Set only by an adapter with a verified provider audio-language contract. */
+  audioLanguage?: string | null;
+  subtitleLanguage?: string | null;
+  originalVersion?: boolean;
+  audioDescription?: boolean;
+  signLanguage?: boolean;
+  clearSpeech?: boolean;
+  /** Transient adapter proof, never accepted from raw MediathekView fields. */
+  arteVerifiedVideoId?: string;
 }
 
 // TVDB Types
@@ -37,6 +50,9 @@ export interface TvdbData {
   germanName: string | null;
   aliases: TvdbAlias[];
   episodes: TvdbEpisode[];
+  /** Transient provenance only; never persisted as authoritative base metadata. */
+  sonarrBlockedCoordinates?: string[];
+  sonarrUnavailable?: boolean;
 }
 
 // TMDB Movie Types
@@ -44,9 +60,12 @@ export interface TmdbMovieData {
   tmdbId: number;
   imdbId: string | null;
   title: string; // Original title
-  germanTitle: string; // German title
+  germanTitle: string; // Localized display title; never audio-language evidence
   runtime: number | null; // Runtime in minutes
   releaseDate: string | null;
+  /** Explicit source year; do not manufacture a release date from it. */
+  productionYear?: number;
+  aliases?: string[];
 }
 
 export interface TvdbAlias {
@@ -60,6 +79,7 @@ export interface TvdbEpisode {
   runtime: number | null;
   seasonNumber: number;
   episodeNumber: number;
+  metadataSource?: "sonarr";
 }
 
 /** TV search identity shared by Newznab routing and the episode-result owner. */
@@ -100,12 +120,13 @@ export interface Media {
   media_id: number;
   media_name: string;
   media_type: string;
-  media_tvdbId: number;
+  media_tvdbId: number | null;
   media_tmdbId: number | null;
   media_imdbId: string | null;
 }
 
 export enum MatchingStrategy {
+  ByAbsoluteEpisodeNumber = "ByAbsoluteEpisodeNumber",
   SeasonAndEpisodeNumber = "SeasonAndEpisodeNumber",
   ItemTitleIncludes = "ItemTitleIncludes",
   ItemTitleExact = "ItemTitleExact",

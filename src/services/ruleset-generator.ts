@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/db";
+import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
 import { queryContent } from "./content-search";
+import type { HttpRequestBudget } from "@/lib/fetch-retry";
 import type { Ruleset, TvdbData, ApiResultItem } from "@/types";
+import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
 
 // Common German show name patterns in MediathekView
 const SEASON_EPISODE_PATTERNS = [
@@ -27,19 +30,23 @@ const ABSOLUTE_EPISODE_PATTERNS = [
  * Search MediathekView API directly (shared client - see its own doc
  * comment for why this used to be a separate, buggy reimplementation).
  */
-async function searchMediathekApi(query: string): Promise<ApiResultItem[]> {
-  return (
-    (await queryContent([{ fields: ["topic"], query }], 50, {
-      sortBy: "timestamp",
-      future: false,
-    })) ?? []
-  );
+async function searchMediathekApi(
+  query: string,
+  budget?: HttpRequestBudget
+): Promise<ApiResultItem[]> {
+  const results = await queryContent([{ fields: ["topic"], query }], 50, {
+    sortBy: "timestamp",
+    future: false,
+    requestBudget: budget,
+  });
+  if (results === null) throw new Error("Search provider unavailable");
+  return results;
 }
 
 /**
  * Find the best matching topic from MediathekView results
  */
-function findBestMatchingTopic(results: ApiResultItem[], showInfo: TvdbData): string | null {
+export function findBestMatchingTopic(results: ApiResultItem[], showInfo: TvdbData): string | null {
   if (results.length === 0) return null;
 
   // Get unique topics
@@ -63,22 +70,26 @@ function findBestMatchingTopic(results: ApiResultItem[], showInfo: TvdbData): st
     }
   }
 
-  // Contains match
+  // Only a season-decorated verified name is a safe non-exact owned topic.
   for (const topic of topics) {
     const topicLower = topic.toLowerCase();
     for (const name of searchNames) {
-      if (topicLower.includes(name) || name.includes(topicLower)) {
+      if (
+        topicLower.startsWith(`${name} staffel `) &&
+        /^\d+$/.test(topicLower.slice(name.length + 9))
+      ) {
         console.log(`[RulesetGenerator] Partial topic match: "${topic}"`);
         return topic;
       }
     }
   }
 
-  // If only one topic in results, use it
-  if (topics.length === 1) {
-    console.log(`[RulesetGenerator] Using single topic: "${topics[0]}"`);
-    return topics[0];
-  }
+  const sharedTopics = topics.filter(
+    (topic) =>
+      isSharedSeriesTopic(topic) &&
+      results.some((item) => item.topic === topic && hasSharedTopicSeriesEvidence(item, showInfo))
+  );
+  if (sharedTopics.length === 1) return sharedTopics[0];
 
   console.log(`[RulesetGenerator] No matching topic found. Available: ${topics.join(", ")}`);
   return null;
@@ -443,8 +454,10 @@ function convertToRuleset(dbRuleset: {
  */
 export async function generateRulesetForShow(
   tvdbId: number,
-  showInfo: TvdbData
+  showInfo: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<Ruleset | null> {
+  if (!Number.isSafeInteger(tvdbId) || tvdbId < 1 || showInfo.id !== tvdbId) return null;
   console.log(
     `[RulesetGenerator] Attempting to generate ruleset for "${showInfo.germanName || showInfo.name}" (TVDB: ${tvdbId})`
   );
@@ -452,6 +465,7 @@ export async function generateRulesetForShow(
   // Check if we already have a generated ruleset for this TVDB ID
   const existingByTvdbId = await prisma.generatedRuleset.findFirst({
     where: { tvdbId },
+    orderBy: [{ topic: "asc" }, { id: "asc" }],
   });
 
   if (existingByTvdbId) {
@@ -461,18 +475,20 @@ export async function generateRulesetForShow(
     return convertToRuleset(existingByTvdbId);
   }
 
+  if (!writesEnabled()) return null;
+
   // Search MediathekView for the show
   const searchQuery = showInfo.germanName || showInfo.name;
   console.log(`[RulesetGenerator] Searching MediathekView for: "${searchQuery}"`);
 
-  const results = await searchMediathekApi(searchQuery);
+  const results = await searchMediathekApi(searchQuery, budget);
   console.log(`[RulesetGenerator] MediathekView returned ${results.length} results`);
 
   if (results.length === 0) {
     // Try English name if German search failed
     if (showInfo.germanName && showInfo.name !== showInfo.germanName) {
       console.log(`[RulesetGenerator] Trying English name: "${showInfo.name}"`);
-      const englishResults = await searchMediathekApi(showInfo.name);
+      const englishResults = await searchMediathekApi(showInfo.name, budget);
       if (englishResults.length > 0) {
         return generateRulesetFromResults(tvdbId, showInfo, englishResults);
       }
@@ -496,44 +512,57 @@ async function generateRulesetFromResults(
     return null;
   }
 
-  // Check if ruleset for this topic already exists
+  // The shared topic belongs to this series only in combination with its ID.
   const existingByTopic = await prisma.generatedRuleset.findUnique({
-    where: { topic: matchingTopic },
+    where: { tvdbId_topic: { tvdbId, topic: matchingTopic } },
   });
 
   if (existingByTopic) {
-    // Update TVDB ID if different
-    if (existingByTopic.tvdbId !== tvdbId) {
-      console.log(
-        `[RulesetGenerator] Topic "${matchingTopic}" exists with different TVDB ID (${existingByTopic.tvdbId} vs ${tvdbId})`
-      );
-    }
     return convertToRuleset(existingByTopic);
   }
 
   // Detect matching strategy
-  const topicResults = results.filter((r) => r.topic === matchingTopic);
+  const topicResults = results.filter(
+    (r) => r.topic === matchingTopic && hasSharedTopicSeriesEvidence(r, showInfo)
+  );
   const strategy = detectMatchingStrategy(topicResults, matchingTopic);
   const patterns = generateRegexPatterns(topicResults, strategy, matchingTopic);
 
   // Create new ruleset
+  assertWritesEnabled();
   console.log(
     `[RulesetGenerator] Creating new ruleset: topic="${matchingTopic}", strategy="${strategy}"`
   );
 
-  const newRuleset = await prisma.generatedRuleset.create({
-    data: {
-      topic: matchingTopic,
-      tvdbId,
-      showName: showInfo.name,
-      germanName: showInfo.germanName,
-      matchingStrategy: strategy,
-      filters: '[{"attribute":"duration","type":"GreaterThan","value":"15"}]',
-      episodeRegex: patterns.episodeRegex,
-      seasonRegex: patterns.seasonRegex,
-      titleRegexRules: patterns.titleRegexRules,
-    },
-  });
+  const newRuleset = await prisma.generatedRuleset
+    .create({
+      data: {
+        topic: matchingTopic,
+        tvdbId,
+        showName: showInfo.name,
+        germanName: showInfo.germanName,
+        matchingStrategy: strategy,
+        filters: '[{"attribute":"duration","type":"GreaterThan","value":"15"}]',
+        episodeRegex: patterns.episodeRegex,
+        seasonRegex: patterns.seasonRegex,
+        titleRegexRules: patterns.titleRegexRules,
+      },
+    })
+    .catch(async (error: unknown) => {
+      // Concurrent generation may win this pair, never another series in its topic.
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P2002"
+      ) {
+        const winner = await prisma.generatedRuleset.findUnique({
+          where: { tvdbId_topic: { tvdbId, topic: matchingTopic } },
+        });
+        if (winner) return winner;
+      }
+      throw new Error("Rule generation failed");
+    });
 
   console.log(`[RulesetGenerator] Created ruleset with ID: ${newRuleset.id}`);
   return convertToRuleset(newRuleset);
@@ -550,9 +579,12 @@ export async function getGeneratedRulesets(): Promise<Ruleset[]> {
 /**
  * Get generated ruleset for a specific topic
  */
-export async function getGeneratedRulesetByTopic(topic: string): Promise<Ruleset | null> {
+export async function getGeneratedRulesetByTopic(
+  topic: string,
+  tvdbId: number
+): Promise<Ruleset | null> {
   const dbRuleset = await prisma.generatedRuleset.findUnique({
-    where: { topic },
+    where: { tvdbId_topic: { tvdbId, topic } },
   });
   return dbRuleset ? convertToRuleset(dbRuleset) : null;
 }
@@ -563,6 +595,7 @@ export async function getGeneratedRulesetByTopic(topic: string): Promise<Ruleset
 export async function getGeneratedRulesetByTvdbId(tvdbId: number): Promise<Ruleset | null> {
   const dbRuleset = await prisma.generatedRuleset.findFirst({
     where: { tvdbId },
+    orderBy: [{ topic: "asc" }, { id: "asc" }],
   });
   return dbRuleset ? convertToRuleset(dbRuleset) : null;
 }

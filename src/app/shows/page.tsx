@@ -34,9 +34,11 @@ export default function ShowsPage() {
   const [filteredShows, setFilteredShows] = useState<Show[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const fetchShows = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/shows");
       if (!res.ok) {
@@ -45,10 +47,8 @@ export default function ShowsPage() {
       const data = await res.json();
       setShows(Array.isArray(data) ? data : []);
       setFilteredShows(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Failed to fetch shows:", error);
-      setShows([]);
-      setFilteredShows([]);
+    } catch {
+      setError("Die gespeicherten Shows konnten nicht geladen werden. Bitte erneut versuchen.");
     } finally {
       setIsLoading(false);
     }
@@ -79,13 +79,19 @@ export default function ShowsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Shows</h1>
-          <p className="text-muted-foreground text-sm">Gecachte TV-Serien aus TVDB</p>
+          <p className="text-muted-foreground text-sm">Historisch gespeicherte TVDB-Serien</p>
         </div>
-        <Button variant="outline" onClick={fetchShows}>
+        <Button variant="outline" onClick={fetchShows} disabled={isLoading}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Aktualisieren
         </Button>
       </div>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Search */}
       <Card>
@@ -113,10 +119,10 @@ export default function ShowsPage() {
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground text-center py-8">Laden...</p>
-          ) : filteredShows.length === 0 ? (
+          ) : !error && filteredShows.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
               {shows.length === 0
-                ? "Keine Shows im Cache. Shows werden automatisch gecacht wenn Sonarr nach ihnen sucht."
+                ? "Keine historischen Shows gespeichert. Neue Metadaten werden nicht in dieser Liste persistiert."
                 : "Keine Shows gefunden für diese Suche."}
             </p>
           ) : (

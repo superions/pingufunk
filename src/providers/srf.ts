@@ -106,8 +106,14 @@ export class SrfProvider extends BaseProvider {
       // Search SRF videos
       this.minDuration = (await getMinDurationSeconds()) * 1000;
       const results = searchQuery
-        ? await searchVideos(searchQuery, "SRF", Math.min(limit * 2, 100))
-        : await getLatestVideos("SRF", Math.min(limit, 100));
+        ? await searchVideos(searchQuery, "SRF", Math.min(limit * 2, 100), {
+            requestBudget: query.requestBudget,
+            deadlineAt: query.deadlineAt,
+          })
+        : await getLatestVideos("SRF", Math.min(limit, 100), {
+            requestBudget: query.requestBudget,
+            deadlineAt: query.deadlineAt,
+          });
 
       if (!results || results.length === 0) {
         console.log(`[${this.id}] No results found`);
@@ -122,9 +128,9 @@ export class SrfProvider extends BaseProvider {
       console.log(`[${this.id}] Found ${items.length} items after filtering`);
 
       return items.slice(0, limit);
-    } catch (error) {
-      console.error(`[${this.id}] Search error:`, error);
-      throw error;
+    } catch {
+      console.error(`[${this.id}] Search failed`);
+      throw new Error("Provider search failed");
     }
   }
 
@@ -180,8 +186,8 @@ export class SrfProvider extends BaseProvider {
             };
           }
         }
-      } catch (error) {
-        console.error(`[${this.id}] Failed to get media composition for ${urn}:`, error);
+      } catch {
+        console.error(`[${this.id}] Failed to get media composition`);
       }
     }
 

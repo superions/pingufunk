@@ -1,21 +1,25 @@
 import { prisma } from "@/lib/db";
-import { isMkvConversionEnabled } from "@/lib/settings";
+import { assertWritesEnabled } from "@/lib/write-gate";
+import { getSetting, isMkvConversionEnabled } from "@/lib/settings";
+import { readPersistedMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
+import { probeJobMedia } from "./media-probe";
 import { downloadHlsStream } from "./ytdlp";
 import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
+import {
+  assertNewOutputPath,
+  categoryDirectory,
+  ensureOwnedDirectory,
+  getDownloadBasePath,
+  jobDirectoryName,
+  publicDownloadCategory,
+  safeFileExtension,
+  safeReleaseName,
+} from "@/lib/download-paths";
 import * as fs from "fs/promises";
-import { createWriteStream } from "fs";
+import { constants, createWriteStream } from "fs";
 import * as path from "path";
 
 const MAX_CONCURRENT_DOWNLOADS = 1;
-
-async function getDownloadBasePath(): Promise<string> {
-  const { getSetting } = await import("@/lib/settings");
-  return (
-    (await getSetting("download.path")) ||
-    process.env.DOWNLOAD_FOLDER_PATH ||
-    path.join(process.cwd(), "downloads")
-  );
-}
 
 async function getDownloadTempPath(): Promise<string> {
   const basePath = await getDownloadBasePath();
@@ -53,22 +57,55 @@ class Semaphore {
 }
 
 const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
-let isProcessing = false;
 let processingPromise: Promise<void> | null = null;
+let rerunRequested = false;
+// A failed DB write pauses the drain. Reconcile only this worker's interrupted jobs
+// before the next explicit wakeup; cold-start recovery covers process loss.
+const pendingFailures = new Map<string, string>();
+
+/** Only the single production worker calls this once at a cold start. */
+export async function recoverInterruptedDownloads(): Promise<number> {
+  assertWritesEnabled();
+  const result = await prisma.download.updateMany({
+    where: { status: { in: ["downloading", "converting"] } },
+    data: {
+      status: "failed",
+      error: "Interrupted by server restart; retry this job",
+      completedAt: new Date(),
+    },
+  });
+  return result.count;
+}
 
 export async function startDownloadProcessing(): Promise<void> {
-  if (isProcessing) {
-    return processingPromise || Promise.resolve();
+  assertWritesEnabled();
+  if (processingPromise) {
+    // A new queue row can arrive just after the last empty poll. Run one
+    // additional pass after the current drain rather than losing that wakeup.
+    rerunRequested = true;
+    return processingPromise;
   }
 
-  isProcessing = true;
-  processingPromise = processQueue();
-  await processingPromise;
-  isProcessing = false;
-  processingPromise = null;
+  processingPromise = (async () => {
+    try {
+      do {
+        rerunRequested = false;
+        await processQueue();
+      } while (rerunRequested);
+    } finally {
+      processingPromise = null;
+    }
+  })();
+  return processingPromise;
 }
 
 async function processQueue(): Promise<void> {
+  for (const [id, error] of pendingFailures) {
+    const row = await prisma.download.findUnique({ where: { id } });
+    if (row && ["queued", "downloading", "converting"].includes(row.status))
+      await markAsFailed(id, error);
+    else pendingFailures.delete(id);
+  }
   while (true) {
     // Get next queued download
     const nextDownload = await prisma.download.findFirst({
@@ -81,53 +118,113 @@ async function processQueue(): Promise<void> {
       break;
     }
 
-    // Start download in background (respecting semaphore)
-    processDownload(nextDownload.id).catch(console.error);
-
-    // Small delay to prevent tight loop
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The configured concurrency is one; await status persistence before
+    // polling again so the same queued row cannot be scheduled repeatedly.
+    await processDownload(nextDownload.id);
   }
 }
 
+/** All transfer/mux paths converge here before exposing import-ready history. */
+async function completeValidatedDownload(
+  id: string,
+  filePath: string,
+  jobDirectory: string,
+  expectations: MediaExpectations | null
+): Promise<void> {
+  const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
+  if (!Number.isSafeInteger(tolerance) || tolerance < 0 || tolerance > 25)
+    throw new Error("Invalid media validation policy");
+  const facts = await probeJobMedia(filePath, jobDirectory, expectations, tolerance);
+  const stats = await fs.lstat(filePath);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)
+    throw new Error("Invalid completed media file");
+  // A statement timeout must not leave an unacknowledged autocommit write queued
+  // on a suspended connection. Commit only after the verified write returned.
+  // A lost COMMIT acknowledgement can still be ambiguous; reconcile by reading
+  // the durable row on the next wakeup, never by redownloading or provider fallback.
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.download.update({
+        where: { id },
+        data: {
+          status: "completed",
+          progress: 100,
+          size: stats.size,
+          filePath,
+          completedAt: new Date(),
+          mediaValidation: JSON.stringify({ version: 1, ...facts }),
+        },
+      });
+    },
+    { maxWait: 5000, timeout: 5000 }
+  );
+}
+
 /**
- * Move a finished file into the category folder.
+ * Move a finished file into its private job folder.
  *
  * The folder was created when the download started, but *arr apps remove the
  * imported file from the category folder while later downloads are still
  * running, and delete the folder once it is empty -- so it is re-created
- * right before the move. That still leaves a moment between mkdir and rename;
+ * right before the move. That still leaves a moment between mkdir and link;
  * if an import deletes the folder in exactly that instant, the ENOENT is
  * answered with one more re-create and retry. A missing SOURCE file also
  * surfaces as ENOENT and fails the retry identically, which is correct.
  */
-async function moveIntoCategoryDir(
+async function moveIntoJobDir(
   sourcePath: string,
   targetPath: string,
-  categoryDir: string
+  tempJobDir: string,
+  basePath: string,
+  categoryDir: string,
+  jobDir: string
 ): Promise<void> {
-  await fs.mkdir(categoryDir, { recursive: true });
+  if (path.dirname(path.resolve(sourcePath)) !== path.resolve(tempJobDir)) {
+    throw new Error("Download result is outside its temporary job directory");
+  }
+  const sourceStat = await fs.lstat(sourcePath);
+  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+    throw new Error("Download result is not a regular job file");
+  }
+  const ensureTarget = async () => {
+    await ensureOwnedDirectory(basePath, categoryDir);
+    await ensureOwnedDirectory(categoryDir, jobDir);
+  };
+  await ensureTarget();
   const move = async () => {
     try {
-      await fs.rename(sourcePath, targetPath);
+      // link creates the target without replacing an existing file or symlink.
+      await fs.link(sourcePath, targetPath);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
-      await fs.copyFile(sourcePath, targetPath);
-      await fs.unlink(sourcePath);
+      // Cross-device moves and filesystems without hard-link support still
+      // create a fresh target exclusively before removing the source.
+      if (
+        !["EXDEV", "EPERM", "EOPNOTSUPP", "ENOTSUP"].includes(
+          (error as NodeJS.ErrnoException).code ?? ""
+        )
+      ) {
+        throw error;
+      }
+      await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
     }
+    await fs.unlink(sourcePath);
   };
   try {
     await move();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await fs.mkdir(categoryDir, { recursive: true });
+    await ensureTarget();
     await move();
   }
 }
 
 async function processDownload(downloadId: string): Promise<void> {
+  assertWritesEnabled();
   await downloadSemaphore.acquire();
 
   const startTime = Date.now();
+  let tempJobDir: string | null = null;
+  let completeJobDir: string | null = null;
 
   try {
     // Get download info
@@ -138,9 +235,9 @@ async function processDownload(downloadId: string): Promise<void> {
     if (!download || download.status !== "queued") {
       return;
     }
+    const expectations = readPersistedMediaExpectations(download.mediaExpectations);
 
     console.log(`[Download] Starting: ${download.title}`);
-    console.log(`[Download] URL: ${download.url}`);
 
     // Mark as downloading
     await prisma.download.update({
@@ -148,12 +245,21 @@ async function processDownload(downloadId: string): Promise<void> {
       data: { status: "downloading" },
     });
 
-    // Create temp and category directories
+    // A job owns both staging and completed output, even if another job has
+    // the same public release title or a consumer removes an imported folder.
     const downloadBasePath = await getDownloadBasePath();
     const downloadTempPath = await getDownloadTempPath();
-    const categoryDir = path.join(downloadBasePath, download.category);
-    await fs.mkdir(downloadTempPath, { recursive: true });
-    await fs.mkdir(categoryDir, { recursive: true });
+    const categoryDir = categoryDirectory(
+      downloadBasePath,
+      publicDownloadCategory(download.category)
+    );
+    const jobDirName = jobDirectoryName(download.title, download.id);
+    tempJobDir = path.join(downloadTempPath, jobDirName);
+    completeJobDir = path.join(categoryDir, jobDirName);
+    const filename = safeReleaseName(download.title);
+    await ensureOwnedDirectory(downloadTempPath, tempJobDir);
+    await ensureOwnedDirectory(downloadBasePath, categoryDir);
+    await ensureOwnedDirectory(categoryDir, completeJobDir);
 
     // Check if this is an HLS stream
     const isHls = isStreamingUrl(download.url);
@@ -172,8 +278,9 @@ async function processDownload(downloadId: string): Promise<void> {
           ? download.url.split("#")[0]
           : download.url;
       const container = (await isMkvConversionEnabled()) ? "mkv" : "mp4";
-      const tempMkvPath = path.join(downloadTempPath, `${download.title}.${container}`);
-      const finalMkvPath = path.join(categoryDir, `${download.title}.${container}`);
+      const tempMkvPath = path.join(tempJobDir, `${filename}.${container}`);
+      const finalMkvPath = path.join(completeJobDir, `${filename}.${container}`);
+      await assertNewOutputPath(tempMkvPath);
 
       const hlsResult = await downloadHlsStream(
         streamUrl,
@@ -201,30 +308,22 @@ async function processDownload(downloadId: string): Promise<void> {
       // Move to final location
       const outputPath = hlsResult.outputPath || tempMkvPath;
       console.log(`[Download] Moving HLS result to final location: ${finalMkvPath}`);
-      await moveIntoCategoryDir(outputPath, finalMkvPath, categoryDir);
+      await moveIntoJobDir(
+        outputPath,
+        finalMkvPath,
+        tempJobDir,
+        downloadBasePath,
+        categoryDir,
+        completeJobDir
+      );
 
       // Get file size
       const stats = await fs.stat(finalMkvPath);
 
-      // Calculate storage path (may be mapped differently)
-      const downloadFolderMapping = process.env.DOWNLOAD_FOLDER_PATH_MAPPING;
-      const storagePath = downloadFolderMapping
-        ? path.join(downloadFolderMapping, download.category, `${download.title}.${container}`)
-        : finalMkvPath;
-
-      // Mark as completed
+      // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await prisma.download.update({
-        where: { id: downloadId },
-        data: {
-          status: "completed",
-          progress: 100,
-          size: stats.size,
-          filePath: storagePath,
-          completedAt: new Date(),
-        },
-      });
+      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
 
       console.log(
         `[Download] HLS completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
@@ -235,9 +334,9 @@ async function processDownload(downloadId: string): Promise<void> {
     // Standard direct download path
     // Determine file extension from URL
     const urlPath = new URL(download.url).pathname;
-    const fileExtension = path.extname(urlPath) || ".mp4";
+    const fileExtension = safeFileExtension(urlPath);
     // Download to temp folder first
-    const tempMp4Path = path.join(downloadTempPath, `${download.title}${fileExtension}`);
+    const tempMp4Path = path.join(tempJobDir, `${filename}${fileExtension}`);
     const mp4Path = tempMp4Path;
 
     // Download the file
@@ -267,8 +366,9 @@ async function processDownload(downloadId: string): Promise<void> {
     // Convert MP4 files to MKV unless the user disabled this step.
     if (fileExtension.toLowerCase() === ".mp4" && (await isMkvConversionEnabled())) {
       // Convert in temp folder first
-      const tempMkvPath = path.join(downloadTempPath, `${download.title}.mkv`);
-      const finalMkvPath = path.join(categoryDir, `${download.title}.mkv`);
+      const tempMkvPath = path.join(tempJobDir, `${filename}.mkv`);
+      const finalMkvPath = path.join(completeJobDir, `${filename}.mkv`);
+      await assertNewOutputPath(tempMkvPath);
 
       console.log(`[Download] Converting to MKV: ${tempMkvPath}`);
 
@@ -287,10 +387,17 @@ async function processDownload(downloadId: string): Promise<void> {
         return;
       }
 
-      // Move completed MKV to final location; see moveIntoCategoryDir for why
+      // Move completed MKV to final location; see moveIntoJobDir for why
       // the category directory is re-created here.
       console.log(`[Download] Moving to final location: ${finalMkvPath}`);
-      await moveIntoCategoryDir(tempMkvPath, finalMkvPath, categoryDir);
+      await moveIntoJobDir(
+        tempMkvPath,
+        finalMkvPath,
+        tempJobDir,
+        downloadBasePath,
+        categoryDir,
+        completeJobDir
+      );
 
       // Clean up temp MP4 file
       await fs.unlink(mp4Path).catch(() => {});
@@ -298,74 +405,61 @@ async function processDownload(downloadId: string): Promise<void> {
       // Get file size
       const stats = await fs.stat(finalMkvPath);
 
-      // Calculate storage path (may be mapped differently)
-      const downloadFolderMapping = process.env.DOWNLOAD_FOLDER_PATH_MAPPING;
-      const storagePath = downloadFolderMapping
-        ? path.join(downloadFolderMapping, download.category, `${download.title}.mkv`)
-        : finalMkvPath;
-
-      // Mark as completed
+      // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await prisma.download.update({
-        where: { id: downloadId },
-        data: {
-          status: "completed",
-          progress: 100,
-          size: stats.size,
-          filePath: storagePath,
-          completedAt: new Date(),
-        },
-      });
+      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
       );
     } else {
       // Keep non-MP4 files and MP4 files with disabled conversion unchanged.
-      const finalPath = path.join(categoryDir, `${download.title}${fileExtension}`);
-      await moveIntoCategoryDir(mp4Path, finalPath, categoryDir);
+      const finalPath = path.join(completeJobDir, `${filename}${fileExtension}`);
+      await moveIntoJobDir(
+        mp4Path,
+        finalPath,
+        tempJobDir,
+        downloadBasePath,
+        categoryDir,
+        completeJobDir
+      );
 
       const stats = await fs.stat(finalPath);
 
-      const downloadFolderMapping = process.env.DOWNLOAD_FOLDER_PATH_MAPPING;
-      const storagePath = downloadFolderMapping
-        ? path.join(downloadFolderMapping, download.category, `${download.title}${fileExtension}`)
-        : finalPath;
-
-      await prisma.download.update({
-        where: { id: downloadId },
-        data: {
-          status: "completed",
-          progress: 100,
-          size: stats.size,
-          filePath: storagePath,
-          completedAt: new Date(),
-        },
-      });
+      await completeValidatedDownload(downloadId, finalPath, completeJobDir, expectations);
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB)`
       );
     }
-  } catch (error) {
-    console.error(`[Download] Error processing download ${downloadId}:`, error);
-    await markAsFailed(downloadId, error instanceof Error ? error.message : "Unknown error");
+  } catch {
+    console.error(`[Download] Error processing download ${downloadId}`);
+    await markAsFailed(downloadId, "Download processing failed");
   } finally {
-    downloadSemaphore.release();
-
-    // Check if there are more items to process
-    const hasMore = await prisma.download.count({
-      where: { status: "queued" },
-    });
-
-    if (hasMore > 0 && !isProcessing) {
-      startDownloadProcessing().catch(console.error);
+    // Remove only empty directories owned by this job. A failed tool's
+    // unexpected leftovers remain visible for diagnosis, never swept broadly.
+    for (const directory of [tempJobDir, completeJobDir]) {
+      if (!directory) continue;
+      await fs.rmdir(directory).catch((error: NodeJS.ErrnoException) => {
+        if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code ?? "")) {
+          console.error("[Download] Could not remove empty job directory");
+        }
+      });
     }
+    downloadSemaphore.release();
   }
 }
 
 async function markAsFailed(downloadId: string, error: string): Promise<void> {
+  pendingFailures.set(downloadId, error);
+  // A lost transaction acknowledgement is not proof of rollback. Preserve an
+  // already durable terminal row instead of overwriting a verified completion.
+  const row = await prisma.download.findUnique({ where: { id: downloadId } });
+  if (!row || ["completed", "failed"].includes(row.status)) {
+    pendingFailures.delete(downloadId);
+    return;
+  }
   await prisma.download.update({
     where: { id: downloadId },
     data: {
@@ -374,6 +468,7 @@ async function markAsFailed(downloadId: string, error: string): Promise<void> {
       completedAt: new Date(),
     },
   });
+  pendingFailures.delete(downloadId);
 }
 
 // CDN streams (confirmed live: a 3sat direct-download URL) can stop sending
@@ -398,6 +493,7 @@ async function downloadFile(
 ): Promise<boolean> {
   const abortController = new AbortController();
   let fileStream: ReturnType<typeof createWriteStream> | undefined;
+  let fileCreated = false;
   let completed = false;
   let stallTimer: ReturnType<typeof setTimeout> | undefined;
   const resetStallTimer = () => {
@@ -410,15 +506,28 @@ async function downloadFile(
 
   try {
     resetStallTimer();
-    const response = await fetch(url, { signal: abortController.signal });
+    const response = await fetch(url, { redirect: "error", signal: abortController.signal });
 
     if (!response.ok || !response.body) {
-      console.error(`[Download] HTTP error: ${response.status} ${response.statusText}`);
+      console.error(`[Download] HTTP error: ${response.status}`);
       return false;
     }
 
-    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
-    fileStream = createWriteStream(destPath);
+    const lengthHeader = response.headers.get("content-length");
+    const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
+    // Fetch may decode an encoded body: its wire Content-Length is not the
+    // resulting file length. Compare only an unencoded, fully valid length.
+    const reliableLength = lengthHeader !== null && (!encoding || encoding === "identity");
+    if (
+      reliableLength &&
+      (!/^\d+$/.test(lengthHeader) || !Number.isSafeInteger(Number(lengthHeader)))
+    )
+      return false;
+    const contentLength = reliableLength ? Number(lengthHeader) : 0;
+    fileStream = createWriteStream(destPath, { flags: "wx" });
+    fileStream.once("open", () => {
+      fileCreated = true;
+    });
     fileStream.on("error", () => abortController.abort());
 
     const reader = response.body.getReader();
@@ -435,6 +544,7 @@ async function downloadFile(
       if (done) {
         break;
       }
+      if (reliableLength && downloadedBytes + value.length > contentLength) return false;
 
       await new Promise<void>((resolve, reject) => {
         fileStream!.write(Buffer.from(value), (error) => (error ? reject(error) : resolve()));
@@ -461,17 +571,19 @@ async function downloadFile(
       }
     }
 
+    if (reliableLength && downloadedBytes !== contentLength) return false;
+
     completed = await new Promise<boolean>((resolve) => {
       fileStream!.once("finish", () => resolve(true));
-      fileStream!.once("error", (err) => {
-        console.error(`[Download] Write error: ${err}`);
+      fileStream!.once("error", () => {
+        console.error("[Download] Write error");
         resolve(false);
       });
       fileStream!.end();
     });
     return completed;
-  } catch (error) {
-    console.error(`[Download] Error downloading file:`, error);
+  } catch {
+    console.error("[Download] Error downloading file");
     return false;
   } finally {
     clearTimeout(stallTimer);
@@ -483,7 +595,7 @@ async function downloadFile(
           fileStream!.once("close", resolve);
           fileStream!.destroy();
         });
-        await fs.unlink(destPath).catch(() => {});
+        if (fileCreated) await fs.unlink(destPath).catch(() => {});
       }
     }
   }

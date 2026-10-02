@@ -3,9 +3,10 @@ import path from "path";
 
 export default defineConfig({
   test: {
+    env: { PINGUFUNK_WRITES_ENABLED: "1" },
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

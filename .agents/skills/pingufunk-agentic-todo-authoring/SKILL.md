@@ -71,7 +71,9 @@ einen autorisierten Replan; Konflikte stoppen den betroffenen Punkt, kein
 Umdeuten. Erfüllt bedeutet unveränderte Abnahme bestanden und Ownerreview ohne
 offene Findings; späterer Befund öffnet den Punkt erneut. Kohärente Commits/
 Pushes zum eigenen Topicbranch vor nächster unabhängiger Arbeit, kein implizites
-Upstream-PR oder Release. Beginn: erste offene Checkbox der frühesten Phase.
+Upstream-PR oder Release. Beginn: erste offene Checkbox auf dem ausdrücklich
+gewählten Arbeits- und Abhängigkeitspfad; eine optionale, unabhängige Phase
+blockiert andere Pfade nicht allein durch ihre Position im Dokument.
 
 Zum Schluss Vollständigkeit gegen Quellen, Code-Anker, Reihenfolge, Gates,
 Ressourcenlinks und Eliminierung konkurrierender TODO-Kopien prüfen.

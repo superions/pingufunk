@@ -6,6 +6,7 @@ const mediathekMocks = vi.hoisted(() => ({
   getShowInfoByTvdbId: vi.fn(),
   cacheEntries: new Map<string, { response?: string; results?: ApiResultItem[] }>(),
   rulesets: {
+    getRulesetContext: vi.fn(() => "synthetic-rules"),
     ensureRulesetsLoaded: vi.fn().mockResolvedValue(undefined),
     getRulesetsForTopic: vi.fn().mockReturnValue([]),
     getRulesetsForTopicAndTvdbId: vi.fn().mockReturnValue([]),
@@ -21,6 +22,7 @@ vi.mock("@/lib/settings", () => ({
   getMinDurationSeconds: vi.fn().mockResolvedValue(300),
 }));
 vi.mock("@/lib/cache", () => ({
+  cacheContextEpoch: () => 0,
   mediathekCache: {
     get: vi.fn((key: string) => mediathekMocks.cacheEntries.get(key)),
     set: vi.fn((key: string, value: { response?: string; results?: ApiResultItem[] }) =>
@@ -28,8 +30,15 @@ vi.mock("@/lib/cache", () => ({
     ),
   },
 }));
-vi.mock("@/lib/fetch-retry", () => ({ fetchWithRetry: vi.fn() }));
-vi.mock("./shows", () => ({ getShowInfoByTvdbId: mediathekMocks.getShowInfoByTvdbId }));
+vi.mock("@/lib/fetch-retry", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/fetch-retry")>()),
+  fetchWithRetry: vi.fn(),
+}));
+vi.mock("./shows", () => ({
+  getShowInfoByTvdbId: mediathekMocks.getShowInfoByTvdbId,
+  getBaseShowInfoByTvdbId: mediathekMocks.getShowInfoByTvdbId,
+  getBaseShowForSonarrRss: vi.fn(async () => null),
+}));
 // No rulesets by default -> every API result becomes an "unmatched" item.
 vi.mock("./rulesets", () => mediathekMocks.rulesets);
 vi.mock("./tmdb", () => ({
@@ -44,6 +53,7 @@ import {
   fetchSearchResultsForRssSync,
 } from "./mediathek";
 import { fetchWithRetry } from "@/lib/fetch-retry";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getShowInfoByTvdbId } from "./shows";
@@ -92,10 +102,7 @@ function makeTvSearchContext(overrides: Partial<TvSearchContext> = {}): TvSearch
 }
 
 function mockApi(results: ApiResultItem[]): void {
-  mockedFetch.mockResolvedValue({
-    ok: true,
-    json: async () => ({ result: { results } }),
-  } as Response);
+  mockedFetch.mockImplementation(async () => Response.json({ result: { results } }));
 }
 
 beforeEach(() => {
@@ -112,7 +119,286 @@ beforeEach(() => {
   mockedGenerateRuleset.mockResolvedValue(null);
 });
 
+describe("Sonarr supplemental search consumer", () => {
+  const supplemental: TvdbData = {
+    id: 123,
+    name: "Synthetic series",
+    germanName: null,
+    aliases: [],
+    episodes: [
+      {
+        name: "Missing episode",
+        seasonNumber: 2,
+        episodeNumber: 3,
+        aired: new Date("2026-09-29T12:00:00Z"),
+        runtime: 2,
+        metadataSource: "sonarr",
+      },
+    ],
+  };
+
+  it("finds an exact supplemental episode via its real title on the same caller budget", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockedFetch.mockImplementation(async (_input, init, options) => {
+      options?.requestBudget?.takeAttempt();
+      const query = JSON.parse(String(init?.body)).queries[0].query;
+      return Response.json({
+        result: {
+          results:
+            query === "Missing episode"
+              ? [
+                  makeItem({
+                    topic: "Synthetic series",
+                    title: "Missing episode",
+                    duration: 120,
+                    url_video_low: "",
+                    url_video_hd: "",
+                  }),
+                ]
+              : [],
+        },
+      });
+    });
+    const budget = new HttpRequestBudget(2);
+    const xml = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2", episode: "3" }),
+      100,
+      0,
+      budget
+    );
+    expect(xml).toContain("S02E03");
+    expect(xml).toContain('total="1"');
+    expect(budget.remainingAttempts).toBe(0);
+    expect(
+      mockedFetch.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).queries[0].query)
+    ).toEqual(["Synthetic series", "Missing episode"]);
+  });
+
+  it("uses the same final short-episode filter for exact and season searches before pagination", async () => {
+    mockApi([
+      makeItem({ topic: "Synthetic series", title: "Missing episode", duration: 120 }),
+      makeItem({
+        topic: "Synthetic series",
+        title: "Missing episode Trailer",
+        duration: 120,
+        url_video: "https://example.invalid/trailer.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+      makeItem({
+        topic: "Foreign series",
+        title: "Missing episode",
+        duration: 120,
+        url_video: "https://example.invalid/foreign.mp4",
+        url_video_low: "",
+        url_video_hd: "",
+      }),
+    ]);
+    const exact = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2", episode: "3" }),
+      100,
+      0
+    );
+    const season = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2" }),
+      100,
+      0
+    );
+    expect(exact).toContain("S02E03");
+    expect(season).toContain("S02E03");
+    expect(exact).not.toContain("Trailer");
+    expect(exact).not.toContain("Foreign.series");
+    expect(exact).toContain('total="3"'); // Three progressive quality releases, one verified episode.
+    expect(exact).not.toContain("GERMAN");
+    const page = await fetchSearchResultsById(
+      supplemental,
+      makeTvSearchContext({ tvdbId: 123, season: "2" }),
+      1,
+      1
+    );
+    expect(page).toContain('total="3"');
+    expect(page.match(/<item>/g)).toHaveLength(1);
+    expect(mockedGenerateRuleset).not.toHaveBeenCalled();
+  });
+
+  it("reports an unavailable missing episode instead of caching successful empty RSS", async () => {
+    await expect(
+      fetchSearchResultsById(
+        { ...supplemental, episodes: [], sonarrUnavailable: true },
+        makeTvSearchContext({ tvdbId: 123, season: "2", episode: "3" }),
+        100,
+        0
+      )
+    ).rejects.toThrow("Optional episode metadata unavailable");
+    expect(mockedCacheSet).not.toHaveBeenCalled();
+  });
+});
+
+describe("shared catalogue rules preserve identity and independent candidates", () => {
+  const show: TvdbData = {
+    id: 299964,
+    name: "Occupied - Die Besatzung",
+    germanName: null,
+    aliases: [{ language: "eng", name: "Occupied" }],
+    episodes: [
+      { name: "Episode one", seasonNumber: 2, episodeNumber: 1, aired: null, runtime: 45 },
+    ],
+  };
+  const rule: Ruleset = {
+    id: 109,
+    mediaId: 68,
+    topic: "Fernsehfilme und Serien - Serien",
+    priority: 0,
+    filters: "[]",
+    titleRegexRules: "[]",
+    episodeRegex: "E(\\d+)",
+    seasonRegex: "S(\\d+)",
+    matchingStrategy: MatchingStrategy.SeasonAndEpisodeNumber,
+    media: {
+      media_id: 68,
+      media_name: show.name,
+      media_type: "show",
+      media_tvdbId: show.id,
+      media_tmdbId: null,
+      media_imdbId: null,
+    },
+  };
+  beforeEach(() => {
+    mockedGetShowInfo.mockResolvedValue(show);
+    mockedRulesetsForTopic.mockReturnValue([rule]);
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+  });
+  it("never assigns foreign series coordinates to Occupied and retains neutral text results", async () => {
+    mockApi([makeItem({ topic: rule.topic, title: "Foreign series S02E01" })]);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Foreign series" }),
+      100,
+      0
+    );
+    expect(xml).toContain('total="1"');
+    expect(xml).not.toContain('name="tvdbid"');
+    expect(xml).not.toContain("Occupied");
+  });
+  it("accepts the verified series alias with the same source coordinates", async () => {
+    mockApi([makeItem({ topic: rule.topic, title: "Occupied S02E01" })]);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({ query: "Occupied" }),
+      100,
+      0
+    );
+    expect(xml).toContain('name="tvdbid" value="299964"');
+    expect(xml).toContain("S02E01");
+  });
+  it("does not reuse identity output after a rule-context change, while reusing source candidates", async () => {
+    mockApi([makeItem({ topic: rule.topic, title: "Occupied S02E01" })]);
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("rules-before");
+    const context = makeTvSearchContext({ query: "Occupied" });
+    const before = await fetchSearchResultsByString(context, 100, 0);
+    expect(before).toContain('name="tvdbid" value="299964"');
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("rules-after");
+    mockedRulesetsForTopic.mockReturnValue([]);
+    const after = await fetchSearchResultsByString(context, 100, 0);
+    expect(after).not.toContain('name="tvdbid"');
+    expect(after).toContain('total="1"');
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+  it.each(["bad-json", '[{"attribute":"duration","type":"GreaterThan","value":"1000"}]', "[]"])(
+    "keeps independent candidates when a rule fails: %s",
+    async (filters) => {
+      mockedRulesetsForTopic.mockReturnValue([{ ...rule, topic: "Own topic", filters }]);
+      mockApi([makeItem({ topic: "Own topic", title: "Independent result without coordinates" })]);
+      const xml = await fetchSearchResultsByString(
+        makeTvSearchContext({ query: "Independent" }),
+        100,
+        0
+      );
+      expect(xml).toContain('total="1"');
+      expect(xml).not.toContain('name="tvdbid"');
+    }
+  );
+});
+
 describe("fetchSearchResultsByString – generic result gating", () => {
+  it("keeps an ID-scoped unknown-coordinate candidate neutral while excluding source neighbors", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "A missing title",
+        url_video: "https://example.org/unknown.mp4",
+      }),
+      makeItem({
+        topic: "Example Show",
+        title: "Example Show S02E12",
+        url_video: "https://example.org/neighbor.mp4",
+      }),
+    ]);
+    const xml = await fetchSearchResultsByString(
+      makeTvSearchContext({
+        query: "Example Show",
+        tvdbId: 12345,
+        season: "2",
+        episode: "13",
+      }),
+      100,
+      0
+    );
+    expect(xml).toContain('total="1"');
+    expect(xml).toContain("Example.Show.A.missing.title");
+    expect(xml).toContain("unknown.mp4");
+    expect(xml).not.toContain("neighbor.mp4");
+    expect(xml).not.toMatch(/name="(?:tvdbid|season|episode)"|S02E13/);
+  });
+
+  it("keeps ID-search candidates tied to the verified series name, never the request's foreign title", async () => {
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "720p" : null
+    );
+    const show: TvdbData = {
+      id: 12345,
+      name: "Example Show",
+      germanName: null,
+      aliases: [],
+      episodes: [
+        { name: "Known episode", seasonNumber: 2, episodeNumber: 13, aired: null, runtime: 60 },
+      ],
+    };
+    mockApi([
+      makeItem({
+        topic: "Example Show",
+        title: "A missing title",
+        url_video: "https://example.org/unknown.mp4",
+      }),
+      makeItem({
+        topic: "Foreign Show",
+        title: "A missing title",
+        url_video: "https://example.org/foreign.mp4",
+      }),
+    ]);
+    const xml = await fetchSearchResultsById(
+      show,
+      makeTvSearchContext({
+        tvdbId: 12345,
+        season: "2",
+        episode: "13",
+      }),
+      100,
+      0
+    );
+    expect(xml).toContain('total="1"');
+    expect(xml).toContain("unknown.mp4");
+    expect(xml).not.toContain("foreign.mp4");
+    expect(xml).not.toMatch(/name="(?:tvdbid|season|episode)"|S02E13/);
+  });
   it("emits NO generic results for a season-only query (no q)", async () => {
     // Regression for tvsearch&season=01 without q: without the gate this
     // returned generic items for every unrelated show whose title contains "S01".
@@ -174,7 +460,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
           )
         )
       );
-      return { ok: true, json: async () => ({ result: { results: matched } }) } as Response;
+      return Response.json({ result: { results: matched } });
     });
 
     const xml = await fetchSearchResultsByString(
@@ -250,7 +536,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(xml).not.toContain("Requested.Show.S02E03");
   });
 
-  it("characterizes A5: a long unrelated text result is published as a movie", async () => {
+  it("fixes A5: preserves candidate title without inventing film year, language or identity", async () => {
     mockedGetMinDuration.mockResolvedValue(300);
     mockedGetSetting.mockImplementation(async (key) =>
       key === "download.quality" ? "720p" : null
@@ -266,7 +552,10 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     const xml = await fetchMovieSearchByQuery("Example Film 1998", 100, 0);
 
     expect(xml).toContain('total="1"');
-    expect(xml).toContain("Magazine.Feature.2024.GERMAN");
+    expect(xml).toContain("Magazine.Feature.A.report.unrelated.to.the.requested.film.720p");
+    expect(xml).not.toContain(".2024.");
+    expect(xml).not.toContain(".GERMAN.");
+    expect(xml).not.toMatch(/name="(?:tmdbid|imdbid)"/);
     expect(xml).not.toContain("Example.Film.1998");
   });
 
@@ -327,7 +616,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(disabledXml).not.toContain("standard.m3u8");
     expect(enabledXml).toContain("progressive-hd.mp4");
     expect(enabledXml).toContain("standard.m3u8");
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
 
   it("characterizes A7: a TVDB-ID search returns the requested episode only", async () => {
@@ -456,7 +745,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
       const { queries } = JSON.parse(String(init?.body));
       const query = queries[0].query as string;
       const matches = source.title.toLowerCase().includes(query.toLowerCase()) ? [source] : [];
-      return { ok: true, json: async () => ({ result: { results: matches } }) } as Response;
+      return Response.json({ result: { results: matches } });
     });
 
     const context = makeTvSearchContext({ season: "2", episode: "2" });
@@ -958,7 +1247,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_v2_["Example",null,null,null]_1_1_720p_300'),
+      expect.stringContaining('q_v8-shared-search-budget_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -966,17 +1255,15 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
   it("does not cache a failed provider response as a successful empty search", async () => {
     mockedFetch
       .mockRejectedValueOnce(new Error("synthetic provider failure"))
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ result: { results: [makeItem()] } }),
-      } as Response);
+      .mockResolvedValueOnce(Response.json({ result: { results: [makeItem()] } }));
 
     const context = makeTvSearchContext({ query: "Example" });
-    const failedResponse = await fetchSearchResultsByString(context, 100, 0);
+    await expect(fetchSearchResultsByString(context, 100, 0)).rejects.toThrow(
+      "Search provider unavailable"
+    );
     expect(mockedCacheSet).not.toHaveBeenCalled();
     const retriedResponse = await fetchSearchResultsByString(context, 100, 0);
 
-    expect(failedResponse).toContain('total="0"');
     expect(retriedResponse).toContain('total="3"');
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(mockedCacheSet).toHaveBeenCalledTimes(2);
@@ -996,7 +1283,7 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_Documentary__100_0_all_2700"),
+      expect.stringContaining("movie_query_v8-shared-search-budget_Documentary__100_0_all_2700"),
       expect.any(Object)
     );
   });
@@ -1028,10 +1315,35 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_28_100_0_all_2700"),
+      expect.stringMatching(/^movie_v8-shared-search-budget_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });
+});
+
+it("rejects an incomplete multi-title movie search without caching partial RSS", async () => {
+  const movie: TmdbMovieData = {
+    tmdbId: 29,
+    imdbId: "tt0000029",
+    title: "Original Title",
+    germanTitle: "Deutscher Titel",
+    runtime: 90,
+    releaseDate: "2026-07-12",
+  };
+  mockedFetch
+    .mockRejectedValueOnce(new Error("token=private"))
+    .mockResolvedValueOnce(Response.json({ result: { results: [makeItem()] } }));
+
+  await expect(fetchMovieSearchResults(movie, 100, 0)).rejects.toThrow(
+    "Search provider unavailable"
+  );
+  expect(mockedCacheSet).not.toHaveBeenCalledWith(
+    expect.stringMatching(/^movie_/),
+    expect.anything()
+  );
+  const deadlines = mockedFetch.mock.calls.map(([, , options]) => options?.deadlineAt);
+  expect(deadlines).toHaveLength(2);
+  expect(new Set(deadlines).size).toBe(1);
 });
 
 it.each(["standard", "high"])("keeps direct movie variants when %s is HLS", async (streaming) => {

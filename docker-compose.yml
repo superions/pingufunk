@@ -5,18 +5,19 @@ services:
     container_name: rundfunkarr
     environment:
       - TZ=Europe/Berlin
-      - TVDB_API_KEY=${TVDB_API_KEY}  # Required: Your TVDB API key
+      - TVDB_API_KEY=${TVDB_API_KEY:-} # Optional metadata account
       - DOWNLOAD_FOLDER_PATH=/downloads
-      - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed  # Path mapping for Sonarr/Radarr
+      - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed # Path mapping for Sonarr/Radarr
       - DATABASE_URL=file:/app/prisma/data/rundfunkarr.db
+      - PINGUFUNK_PUBLIC_URL=${PINGUFUNK_PUBLIC_URL:-}
     volumes:
-      - ./data:/app/prisma/data          # Database persistence
-      - ./downloads:/app/downloads        # Temporary download folder
+      - ./downloads:/app/downloads # Temporary download folder
+      - ./prisma/data:/app/prisma/data # SQLite persistence; initialize explicitly
     ports:
       - "6767:6767"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6767/api/download?mode=version"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6767/api/download?mode=queue"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -67,3 +68,6 @@ services:
     ports:
       - "9696:9696"
     restart: unless-stopped
+
+# Optional PostgreSQL uses docker-compose.postgresql.yml with a private
+# secret-file path. No database service or particular access route is assumed.

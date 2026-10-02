@@ -10,10 +10,15 @@
  * query and breaking ruleset auto-generation for every show. Consolidating
  * to one implementation removes that whole class of bug.
  */
-import { fetchWithRetry } from "@/lib/fetch-retry";
-import type { ApiResultItem, MediathekApiResponse } from "@/types";
+import { fetchWithRetry, requestDeadline, type HttpRequestBudget } from "@/lib/fetch-retry";
+import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
+import type { ApiResultItem, MediathekApiResponse, TvdbData } from "@/types";
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+
+// MediathekViewWeb caps every response page at 1,000 results; callers page with offset.
+export const MEDIATHEK_VIEW_MAX_PAGE_SIZE = 1000;
 
 export interface MediathekQueryField {
   fields: string[];
@@ -24,6 +29,15 @@ export interface MediathekQueryOptions {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   future?: boolean;
+  offset?: number;
+  deadlineAt?: number;
+  requestBudget?: HttpRequestBudget;
+  /** Callers can restrict their candidate window to progressive renditions. */
+  progressiveOnly?: boolean;
+  /** Verified metadata owner; shared-topic ARTE editions are resolved before language selection. */
+  arteSeries?: TvdbData;
+  /** Internal catalogue owner must resolve verified editions before final selection. */
+  deferLanguageSelection?: boolean;
 }
 
 /**
@@ -36,28 +50,47 @@ export async function queryMediathekView(
   size: number,
   options: MediathekQueryOptions = {}
 ): Promise<ApiResultItem[] | null> {
+  const normalizedSize = Number.isFinite(size)
+    ? Math.max(0, Math.min(Math.trunc(size), MEDIATHEK_VIEW_MAX_PAGE_SIZE))
+    : 0;
+  const normalizedOffset = Number.isFinite(options.offset)
+    ? Math.max(0, Math.trunc(options.offset!))
+    : 0;
   const requestBody = {
     queries,
     sortBy: options.sortBy ?? "filmlisteTimestamp",
     sortOrder: options.sortOrder ?? "desc",
     future: options.future ?? true,
-    offset: 0,
-    size,
+    offset: normalizedOffset,
+    size: normalizedSize,
   };
+  const deadlineAt = requestDeadline({
+    deadlineAt: options.deadlineAt,
+    requestBudget: options.requestBudget,
+  });
 
   try {
-    const response = await fetchWithRetry(MEDIATHEK_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-    });
+    const response = await fetchWithRetry(
+      MEDIATHEK_API_URL,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      },
+      { deadlineAt, requestBudget: options.requestBudget }
+    );
 
     if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
       console.error(`[MediathekClient] API request failed with status ${response.status}`);
       return null;
     }
 
-    const parsed: MediathekApiResponse = await response.json();
+    const parsed = (await readBoundedProviderJson(
+      response,
+      deadlineAt,
+      MAX_RESPONSE_BYTES
+    )) as MediathekApiResponse;
     if (parsed?.err || !Array.isArray(parsed?.result?.results)) {
       console.error("[MediathekClient] Invalid or unsuccessful API response");
       return null;
@@ -91,9 +124,25 @@ export async function queryMediathekView(
       console.error("[MediathekClient] Invalid result item");
       return null;
     }
-    return items;
-  } catch (error) {
-    console.error("[MediathekClient] Error fetching from API:", error);
+    // Keep this boundary aligned with the provider's Filmliste schema. In particular,
+    // arbitrary response properties must not silently become audio-language evidence.
+    return items.map((item) => ({
+      ...(typeof item.id === "string" ? { id: item.id } : {}),
+      channel: item.channel,
+      topic: item.topic,
+      title: item.title,
+      description: item.description,
+      filmlisteTimestamp: item.filmlisteTimestamp,
+      duration: item.duration,
+      size: item.size,
+      url_website: item.url_website,
+      url_video: item.url_video,
+      url_video_low: item.url_video_low,
+      url_video_hd: item.url_video_hd,
+    }));
+  } catch {
+    // Error objects and provider bodies can contain access URLs or credentials.
+    console.error("[MediathekClient] Provider request or response failed");
     return null;
   }
 }

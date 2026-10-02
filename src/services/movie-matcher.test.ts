@@ -63,3 +63,31 @@ describe("matchMovieItems – HLS eligibility", () => {
     expect(await matchMovieItems([hlsOnly], movie, 0, true)).toHaveLength(1);
   });
 });
+
+describe("source candidates are not canonical movie proof", () => {
+  it("keeps an exact title as an unverified candidate, including a different source year", async () => {
+    const source = { ...makeItem(2700, "remake"), title: "Documentary (1998)" };
+    const [match] = await matchMovieItems([source], movie, 2700);
+    expect(match.item).toEqual(source);
+    expect(match.identityVerified).toBe(false);
+  });
+  it("permits a qualified short film only with full title, source year and minute/second agreement", async () => {
+    const shortMovie = { ...movie, runtime: 10, productionYear: 2026 };
+    const source = { ...makeItem(600, "short"), title: "Documentary (2026)" };
+    expect(await matchMovieItems([source], shortMovie, 2700)).toHaveLength(1);
+    expect(
+      await matchMovieItems([{ ...source, title: "Documentary" }], shortMovie, 2700)
+    ).toHaveLength(0);
+    expect(await matchMovieItems([{ ...source, duration: 10 }], shortMovie, 2700)).toHaveLength(0);
+    expect(await matchMovieItems([source], { ...shortMovie, runtime: null }, 2700)).toHaveLength(0);
+    expect(
+      await matchMovieItems([{ ...source, title: "Documentary Trailer (2026)" }], shortMovie, 2700)
+    ).toHaveLength(0);
+  });
+  it.each([0, -1, NaN, Infinity])(
+    "does not treat invalid source duration %s as verified",
+    async (duration) => {
+      expect(await matchMovieItems([makeItem(duration, "invalid")], movie, 0)).toHaveLength(0);
+    }
+  );
+});

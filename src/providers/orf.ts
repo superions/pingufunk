@@ -129,9 +129,9 @@ export class OrfProvider extends BaseProvider {
       console.log(`[${this.id}] Found ${items.length} items after filtering`);
 
       return items.slice(0, limit);
-    } catch (error) {
-      console.error(`[${this.id}] Search error:`, error);
-      throw error;
+    } catch {
+      console.error(`[${this.id}] Search failed`);
+      throw new Error("Provider search failed");
     }
   }
 
@@ -173,11 +173,11 @@ export class OrfProvider extends BaseProvider {
               ? undefined
               : "MediathekView returned no ORF results",
       };
-    } catch (error) {
+    } catch {
       return {
         available: false,
         lastCheck: Date.now(),
-        error: error instanceof Error ? error.message : "Failed to reach MediathekView",
+        error: "Provider status check failed",
       };
     }
   }
@@ -210,8 +210,8 @@ export class OrfProvider extends BaseProvider {
               preferredQuality === "high" ? "1080p" : preferredQuality === "low" ? "480p" : "720p",
           };
         }
-      } catch (error) {
-        console.error(`[${this.id}] Failed to get video info for ${videoUrl}:`, error);
+      } catch {
+        console.error(`[${this.id}] Failed to get video info`);
       }
     }
 

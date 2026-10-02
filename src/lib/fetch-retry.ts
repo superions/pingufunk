@@ -1,102 +1,150 @@
-/**
- * Fetch wrapper with retry logic and exponential backoff
- */
-
-interface RetryOptions {
+/** Bounded retries for provider HTTP requests; response bodies need their own limit. */
+export interface RetryOptions {
   maxRetries?: number;
   baseDelayMs?: number;
   maxDelayMs?: number;
+  deadlineAt?: number;
+  timeoutMs?: number;
+  requestBudget?: HttpRequestBudget;
 }
 
-const DEFAULT_OPTIONS: Required<RetryOptions> = {
-  maxRetries: 3,
-  baseDelayMs: 1000,
-  maxDelayMs: 10000,
-};
+const DEFAULT_TIMEOUT_MS = 15_000;
+const MAX_TIMEOUT_MS = 30_000;
 
-/**
- * Check if an error or status code is retryable
- */
+export class FetchBudgetError extends Error {
+  constructor() {
+    super("Provider request deadline exceeded");
+  }
+}
+
+/** One deadline and attempt counter shared across a complete provider operation. */
+export class HttpRequestBudget {
+  readonly deadlineAt: number;
+  private remaining: number;
+
+  constructor(attempts = 10, timeoutMs = 15_000) {
+    if (
+      !Number.isSafeInteger(attempts) ||
+      attempts < 1 ||
+      attempts > 10 ||
+      !Number.isSafeInteger(timeoutMs) ||
+      timeoutMs < 1 ||
+      timeoutMs > 15_000
+    )
+      throw new FetchBudgetError();
+    this.remaining = attempts;
+    this.deadlineAt = Date.now() + timeoutMs;
+  }
+
+  get remainingAttempts(): number {
+    return this.remaining;
+  }
+
+  assertAvailable(): void {
+    if (this.remaining <= 0 || Date.now() >= this.deadlineAt) throw new FetchBudgetError();
+  }
+
+  takeAttempt(): void {
+    this.assertAvailable();
+    this.remaining--;
+  }
+}
+
 function isRetryable(status: number): boolean {
-  // Retry on server errors (5xx) and rate limiting (429)
-  return status >= 500 || status === 429;
+  return status === 429 || status >= 500;
 }
 
-/**
- * Calculate delay with exponential backoff and jitter
- */
-function calculateDelay(attempt: number, baseDelayMs: number, maxDelayMs: number): number {
-  const exponentialDelay = baseDelayMs * Math.pow(2, attempt);
-  const jitter = Math.random() * 0.3 * exponentialDelay; // 0-30% jitter
-  return Math.min(exponentialDelay + jitter, maxDelayMs);
+function boundedInteger(value: number | undefined, fallback: number, upper: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.min(Math.trunc(value!), upper)) : fallback;
 }
 
-/**
- * Sleep for a given number of milliseconds
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export function requestDeadline(options: RetryOptions = {}): number {
+  const timeout = boundedInteger(
+    options.timeoutMs,
+    options.deadlineAt === undefined ? DEFAULT_TIMEOUT_MS : MAX_TIMEOUT_MS,
+    MAX_TIMEOUT_MS
+  );
+  const callerDeadline = Number.isFinite(options.deadlineAt) ? options.deadlineAt! : Infinity;
+  return Math.min(
+    callerDeadline,
+    options.requestBudget?.deadlineAt ?? Infinity,
+    Date.now() + timeout
+  );
 }
 
-/**
- * Fetch with automatic retry on transient failures
- *
- * Retries on:
- * - Network errors (fetch throws)
- * - Server errors (5xx)
- * - Rate limiting (429)
- *
- * Does NOT retry on:
- * - Client errors (4xx except 429)
- * - Successful responses (2xx, 3xx)
- */
+async function waitWithinBudget(
+  ms: number,
+  deadlineAt: number,
+  signal?: AbortSignal
+): Promise<void> {
+  const remaining = deadlineAt - Date.now();
+  if (remaining <= 0 || signal?.aborted) throw new FetchBudgetError();
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new FetchBudgetError());
+    };
+    const timer = setTimeout(
+      () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      Math.min(ms, remaining)
+    );
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
+  if (Date.now() >= deadlineAt || signal?.aborted) throw new FetchBudgetError();
+}
+
+/** Retry transient headers responses only; never log URLs or provider error bodies. */
 export async function fetchWithRetry(
   url: string,
-  init?: RequestInit,
-  options?: RetryOptions
+  init: RequestInit = {},
+  options: RetryOptions = {}
 ): Promise<Response> {
-  const { maxRetries, baseDelayMs, maxDelayMs } = { ...DEFAULT_OPTIONS, ...options };
-
-  let lastError: Error | null = null;
-  let lastResponse: Response | null = null;
+  const maxRetries = boundedInteger(options.maxRetries, 2, 5);
+  const baseDelayMs = boundedInteger(options.baseDelayMs, 250, 5_000);
+  const maxDelayMs = boundedInteger(options.maxDelayMs, 2_000, 10_000);
+  const deadlineAt = requestDeadline(options);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 0 || init.signal?.aborted) throw new FetchBudgetError();
+    options.requestBudget?.takeAttempt();
+    const controller = new AbortController();
+    const signal = init.signal
+      ? AbortSignal.any([init.signal, controller.signal])
+      : controller.signal;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const response = await fetch(url, init);
-
-      // Success or non-retryable error - return immediately
-      if (response.ok || !isRetryable(response.status)) {
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new FetchBudgetError());
+        }, remaining);
+      });
+      const response = await Promise.race([
+        fetch(url, { ...init, redirect: "error", signal }),
+        timeout,
+      ]);
+      if (response.ok || !isRetryable(response.status) || attempt === maxRetries) {
         return response;
       }
-
-      // Retryable error - save response and continue
-      lastResponse = response;
-
-      if (attempt < maxRetries) {
-        const delay = calculateDelay(attempt, baseDelayMs, maxDelayMs);
-        console.log(
-          `[fetchWithRetry] Request failed with status ${response.status}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`
-        );
-        await sleep(delay);
-      }
+      controller.abort();
+      void response.body?.cancel().catch(() => {});
     } catch (error) {
-      // Network error - save and retry
-      lastError = error instanceof Error ? error : new Error(String(error));
-
-      if (attempt < maxRetries) {
-        const delay = calculateDelay(attempt, baseDelayMs, maxDelayMs);
-        console.log(
-          `[fetchWithRetry] Network error, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries}): ${lastError.message}`
-        );
-        await sleep(delay);
+      if (error instanceof FetchBudgetError || init.signal?.aborted || Date.now() >= deadlineAt) {
+        throw new FetchBudgetError();
       }
+      if (attempt === maxRetries) throw new Error("Provider request failed after retries");
+    } finally {
+      if (timer) clearTimeout(timer);
     }
+    options.requestBudget?.assertAvailable();
+    const delay = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
+    await waitWithinBudget(delay, deadlineAt, init.signal ?? undefined);
   }
 
-  // All retries exhausted
-  if (lastResponse) {
-    return lastResponse;
-  }
-
-  throw lastError || new Error("Fetch failed after retries");
+  throw new Error("Provider request failed after retries");
 }

@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, Film } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
+import type { UiNzbDownloads } from "@/types";
+import { useContentSearch } from "@/hooks/use-content-search";
 
 interface SearchResult {
   id: string;
@@ -21,38 +23,30 @@ interface SearchResult {
   url_video_hd: string;
   url_video_low: string;
   url_website: string;
+  nzbDownloads: UiNzbDownloads;
 }
 
 type QualityOption = {
   label: string;
-  url: string;
-  key: string;
+  nzb: string;
+  key: keyof UiNzbDownloads;
 };
 
 export default function MoviesPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const {
+    results: searchResults,
+    isSearching,
+    submittedQuery,
+    error: searchError,
+    search,
+  } = useContentSearch<SearchResult>("movie");
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
 
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    try {
-      const res = await fetch(
-        `/api/search?q=${encodeURIComponent(searchQuery)}&limit=50&type=movie`
-      );
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setSearchResults(data.results || []);
-    } catch (error) {
-      console.error("Search failed:", error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
+    setDownloadError(null);
+    await search(searchQuery);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -63,31 +57,22 @@ export default function MoviesPage() {
 
   const getQualityOptions = (result: SearchResult): QualityOption[] => {
     const options: QualityOption[] = [];
-    if (result.url_video_hd && result.url_video_hd !== result.url_video) {
-      options.push({ label: "HD", url: result.url_video_hd, key: "hd" });
+    if (result.nzbDownloads.hd && result.url_video_hd !== result.url_video) {
+      options.push({ label: "HD", nzb: result.nzbDownloads.hd, key: "hd" });
     }
-    if (result.url_video) {
-      options.push({ label: "SD", url: result.url_video, key: "sd" });
+    if (result.nzbDownloads.sd) {
+      options.push({ label: "SD", nzb: result.nzbDownloads.sd, key: "sd" });
     }
-    if (result.url_video_low) {
-      options.push({ label: "Low", url: result.url_video_low, key: "low" });
+    if (result.nzbDownloads.low) {
+      options.push({ label: "Low", nzb: result.nzbDownloads.low, key: "low" });
     }
     return options;
   };
 
-  const handleDownload = async (result: SearchResult, url: string, qualityKey: string) => {
+  const handleDownload = async (result: SearchResult, nzbContent: string, qualityKey: string) => {
     const downloadKey = `${result.id}-${qualityKey}`;
+    setDownloadError(null);
     setDownloadingIds((prev) => new Set(prev).add(downloadKey));
-
-    const fileName = `${result.topic} - ${result.title}`.replace(/[<>:"/\\|?*]/g, "_");
-    const nzbContent = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">
-<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">
-  <head>
-    <meta type="filename" filename="${fileName}.nzb"/>
-  </head>
-  <!-- ${url} -->
-</nzb>`;
 
     try {
       const res = await fetch("/api/download?mode=addfile&cat=default", {
@@ -99,10 +84,12 @@ export default function MoviesPage() {
       }
       const data = await res.json();
       if (!data.status) {
-        console.error("Download failed");
+        throw new Error("Download rejected");
       }
-    } catch (error) {
-      console.error("Download failed:", error);
+    } catch {
+      setDownloadError(
+        "Der Download wurde nicht bestätigt. Queue prüfen, bevor du erneut einreihst."
+      );
     } finally {
       setDownloadingIds((prev) => {
         const next = new Set(prev);
@@ -118,7 +105,7 @@ export default function MoviesPage() {
       <div>
         <h1 className="text-2xl font-bold">Filme</h1>
         <p className="text-muted-foreground text-sm">
-          Suche nach Filmen in den Mediatheken (min. 60 Min.)
+          Suche nach Filmen in den Mediatheken mit den konfigurierten Suchfiltern
         </p>
       </div>
 
@@ -151,6 +138,12 @@ export default function MoviesPage() {
           </p>
         </CardContent>
       </Card>
+
+      {(searchError || downloadError) && (
+        <p role="alert" className="text-sm text-destructive">
+          {searchError || downloadError}
+        </p>
+      )}
 
       {/* Search Results */}
       {searchResults.length > 0 && (
@@ -202,7 +195,7 @@ export default function MoviesPage() {
                           key={option.key}
                           size="sm"
                           variant={option.key === "hd" ? "default" : "outline"}
-                          onClick={() => handleDownload(result, option.url, option.key)}
+                          onClick={() => handleDownload(result, option.nzb, option.key)}
                           disabled={downloadingIds.has(downloadKey)}
                           className="min-w-[80px]"
                         >
@@ -220,10 +213,10 @@ export default function MoviesPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && searchResults.length === 0 && searchQuery && (
+      {!isSearching && !searchError && searchResults.length === 0 && submittedQuery && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
-            Keine Filme gefunden für &quot;{searchQuery}&quot;
+            Keine Filme gefunden für &quot;{submittedQuery}&quot;
           </CardContent>
         </Card>
       )}

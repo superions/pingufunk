@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { mediathekCache } from "@/lib/cache";
+import { getSetting } from "@/lib/settings";
 import {
   fetchMovieSearchByQuery,
   fetchMovieSearchResults,
@@ -10,12 +11,16 @@ import {
 } from "./mediathek";
 import type { TmdbMovieData, TvdbData, TvSearchContext } from "@/types";
 
-vi.mock("@/lib/fetch-retry", () => ({ fetchWithRetry: vi.fn() }));
+vi.mock("@/lib/fetch-retry", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/fetch-retry")>()),
+  fetchWithRetry: vi.fn(),
+}));
 vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn(async () => null),
   getMinDurationSeconds: vi.fn(async () => 300),
 }));
 vi.mock("./rulesets", () => ({
+  getRulesetContext: () => "ac16be42",
   ensureRulesetsLoaded: vi.fn(),
   getAllTopics: () => [],
   getRulesetsForTopic: () => [],
@@ -57,6 +62,26 @@ beforeEach(() => {
   mediathekCache.clear();
   vi.clearAllMocks();
   vi.mocked(fetchWithRetry).mockReset();
+  vi.mocked(getSetting).mockReset().mockResolvedValue(null);
+});
+
+it("separates cached search results after a credential-context rotation", async () => {
+  let credential = "synthetic-old-secret";
+  vi.mocked(getSetting).mockImplementation(async (key) =>
+    key === "api.srgssr.consumerKey" ? credential : null
+  );
+  vi.mocked(fetchWithRetry).mockImplementation(async () => emptyResult());
+  const cacheSet = vi.spyOn(mediathekCache, "set");
+
+  await fetchSearchResultsByString(tvSearchContext, 10, 0);
+  await fetchSearchResultsByString(tvSearchContext, 10, 0);
+  expect(fetchWithRetry).toHaveBeenCalledTimes(1);
+
+  credential = "synthetic-new-secret";
+  await fetchSearchResultsByString(tvSearchContext, 10, 0);
+  expect(fetchWithRetry).toHaveBeenCalledTimes(2);
+  expect(cacheSet.mock.calls.map(([key]) => key).join(" ")).not.toContain("synthetic-");
+  cacheSet.mockRestore();
 });
 
 describe.each(searches)("$name cache recovery", ({ run, name }) => {
@@ -65,7 +90,7 @@ describe.each(searches)("$name cache recovery", ({ run, name }) => {
       .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
       .mockImplementation(async () => emptyResult());
 
-    await run(10);
+    await expect(run(10)).rejects.toThrow("Search provider unavailable");
     await run(10);
     expect(fetchWithRetry).toHaveBeenCalledTimes(2);
 
@@ -84,7 +109,9 @@ it("retries only a failed movie title and does not cache the incomplete combined
     .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
     .mockResolvedValueOnce(emptyResult());
 
-  await fetchMovieSearchResults(bilingualMovie, 10, 0);
+  await expect(fetchMovieSearchResults(bilingualMovie, 10, 0)).rejects.toThrow(
+    "Search provider unavailable"
+  );
   expect(fetchWithRetry).toHaveBeenCalledTimes(2);
   await fetchMovieSearchResults(bilingualMovie, 10, 0);
   expect(fetchWithRetry).toHaveBeenCalledTimes(3);

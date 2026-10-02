@@ -11,6 +11,12 @@
 
 Rundfunk-Indexer für Sonarr/Radarr - Automatischer Download von ARD, ZDF und anderen deutschen Mediatheken.
 
+> Pingufunk-Fork: Der PostgreSQL-Wechsel wird in
+> [P11/P10](todo/proxy-retirement.md) entwickelt. Dieser Branch ist kein
+> freigegebenes Image und darf nicht gegen die vorhandene SQLite-Installation
+> gestartet werden. Der bisherige Compose-/Image-Abschnitt unten beschreibt
+> den veröffentlichten Upstream, nicht das neue PostgreSQL-Cutover-Verfahren.
+
 ## Screenshots
 
 <p align="center">
@@ -24,7 +30,7 @@ Rundfunk-Indexer für Sonarr/Radarr - Automatischer Download von ARD, ZDF und an
 - **Optionale MKV-Konvertierung** - FFmpeg-Integration mit deutschen Sprachmetadaten
 - **Flexible Metadaten-Quellen** - Lokale Datenbank, TVDB oder TMDB
 - **Community-Rulesets** - Lokale Rulesets via Pull Request erweiterbar
-- **SQLite-Datenbank** - Persistente Speicherung von Cache und Download-Historie
+- **PostgreSQL-Ziel** - Persistente Speicherung und kontrollierte Übernahme des SQLite-Bestands (Fork in Entwicklung)
 
 ## SRF und ORF über HLS
 
@@ -127,7 +133,9 @@ npm start
 | `PGID` | Group ID für Dateiberechtigungen | `1001` |
 | `DOWNLOAD_FOLDER_PATH` | Pfad für fertige Downloads im Container | `/downloads` |
 | `DOWNLOAD_TEMP_PATH` | Pfad für laufende Downloads (incomplete) | `$DOWNLOAD_FOLDER_PATH/incomplete` |
-| `DATABASE_URL` | SQLite Datenbank-Pfad | `file:./prisma/data/rundfunkarr.db` |
+| `DATABASE_URL_FILE` | Absoluter Pfad zur PostgreSQL-URL als Docker Secret | erforderlich im Container |
+| `DATABASE_URL` | Direkte PostgreSQL-URL nur für isolierte Entwicklung; nicht gleichzeitig mit `_FILE` | kein Default |
+| `PINGUFUNK_WRITES_ENABLED` | Explizite Freigabe der Anwendungsschreibpfade nach PostgreSQL-Abnahme | `0` |
 
 ### Web-Oberfläche
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -44,21 +44,34 @@ export default function DownloadsPage() {
   const [history, setHistory] = useState<HistorySlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [readError, setReadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const reading = useRef(false);
 
   const fetchData = useCallback(async () => {
+    if (reading.current) return;
+    reading.current = true;
     try {
+      const signal = AbortSignal.timeout(15000);
       const [queueRes, historyRes] = await Promise.all([
-        fetch("/api/download?mode=queue"),
-        fetch("/api/download?mode=history"),
+        fetch("/api/download?mode=queue", { signal }),
+        fetch("/api/download?mode=history", { signal }),
       ]);
+      if (!queueRes.ok || !historyRes.ok) throw new Error("Download API unavailable");
       const queueData = await queueRes.json();
       const historyData = await historyRes.json();
-      setQueue(queueData.queue?.slots || []);
-      setHistory(historyData.history?.slots || []);
+      if (!Array.isArray(queueData.queue?.slots) || !Array.isArray(historyData.history?.slots)) {
+        throw new Error("Invalid download response");
+      }
+      setQueue(queueData.queue.slots);
+      setHistory(historyData.history.slots);
+      setReadError(null);
       setLastRefresh(new Date());
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
+    } catch {
+      setReadError("Downloads konnten nicht aktualisiert werden. Ein angezeigter Bestand kann veraltet sein.");
     } finally {
+      reading.current = false;
       setIsLoading(false);
     }
   }, []);
@@ -70,34 +83,40 @@ export default function DownloadsPage() {
   }, [fetchData]);
 
   const handleDelete = async (nzoId: string, delFiles: boolean = false) => {
+    setActionError(null);
+    setPendingIds(prev => new Set(prev).add(nzoId));
     try {
       const res = await fetch(
-        `/api/download?mode=history&name=delete&value=${nzoId}&del_files=${delFiles ? 1 : 0}`
+        `/api/download?mode=history&name=delete&value=${encodeURIComponent(nzoId)}&del_files=${delFiles ? 1 : 0}`
       );
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
-      if (data.status) {
-        fetchData();
-      }
-    } catch (error) {
-      console.error("Delete failed:", error);
+      if (!data.status) throw new Error("Removal rejected");
+      await fetchData();
+    } catch {
+      setActionError("Löschen wurde nicht bestätigt. Bestand prüfen, bevor du es erneut versuchst.");
+    } finally {
+      setPendingIds(prev => { const next = new Set(prev); next.delete(nzoId); return next; });
     }
   };
 
   const handleRetry = async (nzoId: string) => {
+    setActionError(null);
+    setPendingIds(prev => new Set(prev).add(nzoId));
     try {
-      const res = await fetch(`/api/download?mode=history&name=retry&value=${nzoId}`);
+      const res = await fetch(`/api/download?mode=history&name=retry&value=${encodeURIComponent(nzoId)}`);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
-      if (data.status) {
-        fetchData();
-      }
-    } catch (error) {
-      console.error("Retry failed:", error);
+      if (!data.status) throw new Error("Retry rejected");
+      await fetchData();
+    } catch {
+      setActionError("Erneuter Download wurde nicht bestätigt. Queue prüfen, bevor du erneut einreihst.");
+    } finally {
+      setPendingIds(prev => { const next = new Set(prev); next.delete(nzoId); return next; });
     }
   };
 
@@ -120,6 +139,8 @@ export default function DownloadsPage() {
         </div>
       </div>
 
+      {(readError || actionError) && <p role="alert" className="text-sm text-destructive">{actionError || readError}</p>}
+
       {/* Tabs */}
       <Card>
         <CardHeader>
@@ -135,7 +156,7 @@ export default function DownloadsPage() {
             <TabsContent value="queue">
               {isLoading ? (
                 <p className="text-muted-foreground text-center py-8">Laden...</p>
-              ) : queue.length === 0 ? (
+              ) : !readError && queue.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">Keine aktiven Downloads</p>
               ) : (
                 <div className="overflow-x-auto">
@@ -166,8 +187,9 @@ export default function DownloadsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDelete(item.nzo_id)}
-                              title="Abbrechen"
+                              disabled
+                              title="Aktive Downloads können hier nicht abgebrochen werden"
+                              aria-label="Aktive Downloads können hier nicht abgebrochen werden"
                             >
                               <X className="w-4 h-4" />
                             </Button>
@@ -181,7 +203,9 @@ export default function DownloadsPage() {
             </TabsContent>
 
             <TabsContent value="history">
-              {history.length === 0 ? (
+              {isLoading ? (
+                <p className="text-muted-foreground text-center py-8">Laden...</p>
+              ) : !readError && history.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">
                   Keine Downloads in der History
                 </p>
@@ -225,6 +249,7 @@ export default function DownloadsPage() {
                                   size="icon"
                                   onClick={() => handleRetry(item.nzo_id)}
                                   title="Erneut versuchen"
+                                  disabled={pendingIds.has(item.nzo_id)}
                                 >
                                   <RotateCcw className="w-4 h-4" />
                                 </Button>
@@ -234,6 +259,7 @@ export default function DownloadsPage() {
                                 size="icon"
                                 onClick={() => handleDelete(item.nzo_id, true)}
                                 title="Löschen"
+                                disabled={pendingIds.has(item.nzo_id)}
                               >
                                 <X className="w-4 h-4" />
                               </Button>

@@ -16,13 +16,56 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build image without publishing
+      - name: Setup Node.js for disposable SQLite fixture
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install locked harness dependencies
+        run: npm ci
+
+      - name: Build application image without publishing
         uses: docker/build-push-action@v7
         with:
           context: .
+          target: runner
           platforms: linux/amd64
           push: false
+          load: true
+          tags: pingufunk-p11-runtime-qa
+
+      - name: Build migration image without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: migrator
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: pingufunk-p11-migrator-qa
+
+      - name: Build pinned rollback checkpoints without publishing
+        run: |
+          git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker build --target runner -t pingufunk-sqlite-source-rollback-qa -
+          git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | docker build --target runner -t pingufunk-pg-maintenance-rollback-qa -
+
+      - name: Rehearse disposable TLS migration and post-write rollback
+        run: |
+          export PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-pg-maintenance-rollback-qa --format '{{.Id}}')"
+          PINGUFUNK_SMOKE_SQLITE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-sqlite-source-rollback-qa --format '{{.Id}}')" bash scripts/postgresql-container-smoke.sh
+          PINGUFUNK_SMOKE_SOURCE_VARIANT=current bash scripts/postgresql-container-smoke.sh
+
+      - name: Verify isolated SQLite runtime and persistence
+        run: |
+          PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-sqlite-source-rollback-qa --format '{{.Id}}')" bash scripts/sqlite-container-smoke.sh
+
+      - name: Verify real media completion on both disposable backends
+        env:
+          PINGUFUNK_SMOKE_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_SMOKE_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+        run: bash scripts/media-container-smoke.sh

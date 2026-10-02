@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/contexts/settings-context";
-import { buildTvdbLoginPayload } from "@/lib/tvdb-auth";
+import { isDownloadPathInput } from "@/lib/download-path-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -27,22 +27,24 @@ const STEPS = [
   { id: "welcome", title: "Willkommen" },
   { id: "paths", title: "Pfade" },
   { id: "api", title: "API-Keys" },
-  { id: "test", title: "Test" },
+  { id: "test", title: "Prüfung" },
   { id: "arr", title: "*arr Setup" },
   { id: "done", title: "Fertig" },
 ];
 
 export default function SetupPage() {
   const router = useRouter();
-  const { settings, updateSettings } = useSettings();
+  const { settings, isLoading, updateSettings, refreshSettings } = useSettings();
   const [currentStep, setCurrentStep] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Form state - use settings as initial values, track local overrides
   const [localOverrides, setLocalOverrides] = useState<Record<string, string>>({});
 
   // Get value: local override > settings > default
-  // Note: Empty strings are valid values (e.g., cleared API keys)
+  // Empty strings are valid values for editable non-secret settings.
   const getValue = (key: string, defaultValue: string) => {
     if (localOverrides[key] !== undefined) return localOverrides[key];
     if (settings?.[key] !== undefined && settings[key] !== null) return settings[key];
@@ -54,9 +56,6 @@ export default function SetupPage() {
   };
 
   const downloadPath = getValue("download.path", "/downloads");
-  const tvdbKey = getValue("api.tvdb.key", "");
-  const tvdbPin = getValue("api.tvdb.pin", "");
-  const tmdbKey = getValue("api.tmdb.key", "");
 
   // Validation state
   const [pathValid, setPathValid] = useState<boolean | null>(null);
@@ -65,45 +64,14 @@ export default function SetupPage() {
 
   const validatePath = async () => {
     setIsValidating(true);
-    // In a real app, this would check if the path exists and is writable
-    // For now, just check if it's not empty
-    setPathValid(downloadPath.trim().length > 0);
+    setPathValid(isDownloadPathInput(downloadPath));
     setIsValidating(false);
   };
 
   const validateApis = async () => {
-    setIsValidating(true);
-
-    // Validate TVDB
-    const tvdbPayload = buildTvdbLoginPayload(tvdbKey, tvdbPin);
-    if (tvdbPayload) {
-      try {
-        const res = await fetch("https://api4.thetvdb.com/v4/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(tvdbPayload),
-        });
-        setTvdbValid(res.ok);
-      } catch {
-        setTvdbValid(false);
-      }
-    } else {
-      setTvdbValid(null);
-    }
-
-    // Validate TMDB
-    if (tmdbKey) {
-      try {
-        const res = await fetch(`https://api.themoviedb.org/3/configuration?api_key=${tmdbKey}`);
-        setTmdbValid(res.ok);
-      } catch {
-        setTmdbValid(false);
-      }
-    } else {
-      setTmdbValid(null);
-    }
-
-    setIsValidating(false);
+    // The browser only receives redacted presence; it cannot test provider auth.
+    setTvdbValid(settings?.["api.tvdb.key"] ? true : null);
+    setTmdbValid(settings?.["api.tmdb.key"] ? true : null);
   };
 
   const runAllTests = async () => {
@@ -114,20 +82,33 @@ export default function SetupPage() {
   };
 
   const saveAndContinue = async () => {
-    await updateSettings({
-      "download.path": downloadPath,
-      "api.tvdb.key": tvdbKey,
-      "api.tvdb.pin": tvdbPin,
-      "api.tmdb.key": tmdbKey,
-    });
-    setCurrentStep((prev) => prev + 1);
+    if (!isDownloadPathInput(downloadPath) || isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updateSettings({ "download.path": downloadPath });
+      setCurrentStep((prev) => prev + 1);
+    } catch {
+      setSaveError(
+        "Speichern fehlgeschlagen. Der Schritt bleibt offen; Eingaben prüfen und erneut versuchen."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const finishSetup = async () => {
-    await updateSettings({
-      "system.setupComplete": "true",
-    });
-    router.push("/");
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updateSettings({ "system.setupComplete": "true" });
+      router.push("/");
+    } catch {
+      setSaveError("Setup-Abschluss wurde nicht gespeichert. Bitte erneut versuchen.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -141,8 +122,22 @@ export default function SetupPage() {
     return "http://localhost:3000";
   };
 
+  if (isLoading) return <p className="p-8">Einstellungen werden geladen...</p>;
+  if (!settings)
+    return (
+      <div className="p-8 space-y-4">
+        <p role="alert">Einstellungen konnten nicht geladen werden. Setup bleibt unverändert.</p>
+        <Button onClick={refreshSettings}>Erneut laden</Button>
+      </div>
+    );
+
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto">
+      {saveError && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {saveError}
+        </p>
+      )}
       {/* Progress Steps */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -218,14 +213,15 @@ export default function SetupPage() {
                   placeholder="/downloads"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Das Verzeichnis muss existieren und beschreibbar sein.
+                  Prüft lokale Pfadsyntax ohne URL oder Steuerzeichen; Existenz und Schreibrechte
+                  des Mounts werden nicht geprüft.
                 </p>
               </div>
 
               {pathValid !== null && (
                 <Badge variant={pathValid ? "default" : "destructive"}>
                   {pathValid ? <Check className="w-3 h-3 mr-1" /> : <X className="w-3 h-3 mr-1" />}
-                  {pathValid ? "Pfad gültig" : "Pfad ungültig"}
+                  {pathValid ? "Pfadsyntax gültig" : "Ungültige Pfadeingabe"}
                 </Badge>
               )}
 
@@ -237,9 +233,12 @@ export default function SetupPage() {
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={validatePath} disabled={isValidating}>
                     {isValidating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    Prüfen
+                    Eingabe prüfen
                   </Button>
-                  <Button onClick={() => setCurrentStep(2)}>
+                  <Button
+                    onClick={() => setCurrentStep(2)}
+                    disabled={!isDownloadPathInput(downloadPath)}
+                  >
                     Weiter
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
@@ -276,26 +275,13 @@ export default function SetupPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Input
-                    value={tvdbKey}
-                    onChange={(e) => setValue("api.tvdb.key", e.target.value)}
-                    placeholder="API Key"
-                  />
-                  <Input
-                    value={tvdbPin}
-                    onChange={(e) => setValue("api.tvdb.pin", e.target.value)}
-                    placeholder="PIN (optional)"
-                  />
-                  {tvdbValid !== null && (
-                    <Badge variant={tvdbValid ? "default" : "destructive"}>
-                      {tvdbValid ? (
-                        <Check className="w-3 h-3 mr-1" />
-                      ) : (
-                        <X className="w-3 h-3 mr-1" />
-                      )}
-                      {tvdbValid ? "Verbunden" : "Fehler"}
-                    </Badge>
-                  )}
+                  <p className="text-sm">
+                    TVDB-Key und optionale PIN serverseitig über PINGUFUNK_TVDB_KEY_FILE und
+                    PINGUFUNK_TVDB_PIN_FILE bereitstellen.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.tvdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </Badge>
                 </CardContent>
               </Card>
 
@@ -315,21 +301,13 @@ export default function SetupPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Input
-                    value={tmdbKey}
-                    onChange={(e) => setValue("api.tmdb.key", e.target.value)}
-                    placeholder="API Key"
-                  />
-                  {tmdbValid !== null && (
-                    <Badge variant={tmdbValid ? "default" : "destructive"}>
-                      {tmdbValid ? (
-                        <Check className="w-3 h-3 mr-1" />
-                      ) : (
-                        <X className="w-3 h-3 mr-1" />
-                      )}
-                      {tmdbValid ? "Verbunden" : "Fehler"}
-                    </Badge>
-                  )}
+                  <p className="text-sm">
+                    TMDB Read Access Token serverseitig über PINGUFUNK_TMDB_READ_TOKEN_FILE
+                    bereitstellen.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.tmdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </Badge>
                 </CardContent>
               </Card>
 
@@ -341,9 +319,9 @@ export default function SetupPage() {
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={validateApis} disabled={isValidating}>
                     {isValidating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    Testen
+                    Status prüfen
                   </Button>
-                  <Button onClick={saveAndContinue}>
+                  <Button onClick={saveAndContinue} disabled={isSaving}>
                     Weiter
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
@@ -358,8 +336,10 @@ export default function SetupPage() {
               <div className="flex items-center gap-3 mb-4">
                 <CheckCircle className="w-6 h-6 text-primary" />
                 <div>
-                  <h2 className="text-xl font-bold">Verbindungstest</h2>
-                  <p className="text-sm text-muted-foreground">Überprüfe alle Verbindungen</p>
+                  <h2 className="text-xl font-bold">Konfigurationsprüfung</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Prüft nur Pfad-Eingabe und Secret-Präsenz, keine externen API-Verbindungen.
+                  </p>
                 </div>
               </div>
 
@@ -370,7 +350,7 @@ export default function SetupPage() {
                     <Badge variant="outline">Nicht geprüft</Badge>
                   ) : pathValid ? (
                     <Badge className="bg-green-500">
-                      <Check className="w-3 h-3 mr-1" /> OK
+                      <Check className="w-3 h-3 mr-1" /> Konfiguriert
                     </Badge>
                   ) : (
                     <Badge variant="destructive">
@@ -384,7 +364,7 @@ export default function SetupPage() {
                     <Badge variant="outline">Nicht konfiguriert</Badge>
                   ) : tvdbValid ? (
                     <Badge className="bg-green-500">
-                      <Check className="w-3 h-3 mr-1" /> OK
+                      <Check className="w-3 h-3 mr-1" /> Konfiguriert
                     </Badge>
                   ) : (
                     <Badge variant="destructive">
@@ -398,7 +378,7 @@ export default function SetupPage() {
                     <Badge variant="outline">Nicht konfiguriert</Badge>
                   ) : tmdbValid ? (
                     <Badge className="bg-green-500">
-                      <Check className="w-3 h-3 mr-1" /> OK
+                      <Check className="w-3 h-3 mr-1" /> Konfiguriert
                     </Badge>
                   ) : (
                     <Badge variant="destructive">
@@ -410,7 +390,7 @@ export default function SetupPage() {
 
               <Button onClick={runAllTests} disabled={isValidating} className="w-full">
                 {isValidating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Alle Tests ausführen
+                Konfiguration prüfen
               </Button>
 
               <div className="flex justify-between">
@@ -797,12 +777,16 @@ export default function SetupPage() {
                 <h3 className="font-medium mb-2">Zusammenfassung:</h3>
                 <ul className="text-sm space-y-1 text-muted-foreground">
                   <li>Download-Pfad: {downloadPath}</li>
-                  <li>TVDB: {tvdbKey ? "Konfiguriert" : "Nicht konfiguriert"}</li>
-                  <li>TMDB: {tmdbKey ? "Konfiguriert" : "Nicht konfiguriert"}</li>
+                  <li>
+                    TVDB: {settings?.["api.tvdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </li>
+                  <li>
+                    TMDB: {settings?.["api.tmdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </li>
                 </ul>
               </div>
 
-              <Button onClick={finishSetup} size="lg">
+              <Button onClick={finishSetup} size="lg" disabled={isSaving}>
                 Zum Dashboard
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>

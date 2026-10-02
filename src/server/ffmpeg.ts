@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
+import { writesEnabled } from "@/lib/write-gate";
 
 const isWindows = process.platform === "win32";
 const APP_DIR = process.cwd();
@@ -24,6 +25,7 @@ export async function ensureFfmpegExists(): Promise<boolean> {
     console.log(`[FFmpeg] Already exists at ${FFMPEG_PATH}`);
     return true;
   } catch {
+    if (!writesEnabled()) return false;
     // FFmpeg doesn't exist, need to download
     console.log(`[FFmpeg] Not found at ${FFMPEG_PATH}. Starting download...`);
     return downloadFfmpeg();
@@ -65,8 +67,8 @@ async function downloadFfmpeg(): Promise<boolean> {
     console.log(`[FFmpeg] Successfully installed at ${FFMPEG_PATH}`);
 
     return true;
-  } catch (error) {
-    console.error("[FFmpeg] Error during download/extraction:", error);
+  } catch {
+    console.error("[FFmpeg] Error during download/extraction");
     return false;
   } finally {
     // Cleanup temp file
@@ -197,9 +199,7 @@ export async function convertMp4ToMkv(
     // FFmpeg arguments:
     // -i input: input file
     // -map 0:v -map 0:a: copy video and audio streams
-    // -c copy: stream copy (no re-encoding)
-    // -metadata:s:v:0 language=ger: set German language for video
-    // -metadata:s:a:0 language=ger: set German language for audio
+    // -c copy: stream copy preserves any source track metadata without inventing language.
     const args = [
       "-i",
       mp4Path,
@@ -209,10 +209,6 @@ export async function convertMp4ToMkv(
       "0:a",
       "-c",
       "copy",
-      "-metadata:s:v:0",
-      "language=ger",
-      "-metadata:s:a:0",
-      "language=ger",
       "-y", // Overwrite output
       mkvPath,
     ];
@@ -253,21 +249,20 @@ export async function convertMp4ToMkv(
         try {
           await fs.unlink(mp4Path);
           console.log(`[FFmpeg] Deleted original file: ${mp4Path}`);
-        } catch (err) {
-          console.warn(`[FFmpeg] Could not delete original file: ${err}`);
+        } catch {
+          console.warn("[FFmpeg] Could not delete original file");
         }
 
         resolve({ success: true, outputPath: mkvPath });
       } else {
         console.error(`[FFmpeg] Conversion failed with code ${code}`);
-        console.error(`[FFmpeg] Error output: ${stderr}`);
         resolve({ success: false, error: `FFmpeg exited with code ${code}` });
       }
     });
 
-    proc.on("error", (err) => {
-      console.error(`[FFmpeg] Process error: ${err}`);
-      resolve({ success: false, error: err.message });
+    proc.on("error", () => {
+      console.error("[FFmpeg] Process error");
+      resolve({ success: false, error: "FFmpeg process failed" });
     });
   });
 }
@@ -289,6 +284,8 @@ export async function mergeVideoAudio(
   }
 
   return new Promise((resolve) => {
+    // The HLS consumer selects the audio stream but has no language evidence;
+    // stream-copy its metadata rather than assigning a synthetic German tag.
     const args = [
       "-i",
       videoPath,
@@ -307,11 +304,7 @@ export async function mergeVideoAudio(
     console.log(`[FFmpeg] Muxing video+audio: ${videoPath} + ${audioPath} -> ${outputPath}`);
     const proc = spawn(FFMPEG_PATH, args);
 
-    let stderr = "";
-
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.on("data", () => {});
 
     proc.on("close", (code) => {
       if (code === 0) {
@@ -319,14 +312,13 @@ export async function mergeVideoAudio(
         resolve({ success: true, outputPath });
       } else {
         console.error(`[FFmpeg] Mux failed with code ${code}`);
-        console.error(`[FFmpeg] Error output: ${stderr}`);
-        resolve({ success: false, error: `FFmpeg exited with code ${code}: ${stderr}` });
+        resolve({ success: false, error: `FFmpeg exited with code ${code}` });
       }
     });
 
-    proc.on("error", (err) => {
-      console.error(`[FFmpeg] Process error: ${err}`);
-      resolve({ success: false, error: err.message });
+    proc.on("error", () => {
+      console.error("[FFmpeg] Process error");
+      resolve({ success: false, error: "FFmpeg process failed" });
     });
   });
 }

@@ -9,6 +9,9 @@
  */
 
 import { getSetting } from "@/lib/settings";
+import { createHash } from "node:crypto";
+import { fetchWithRetry, requestDeadline, type RetryOptions } from "@/lib/fetch-retry";
+import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 
 // API Base URLs
 const API_BASE_URL = "https://api.srgssr.ch";
@@ -20,7 +23,7 @@ const TOKEN_EXPIRY_BUFFER_MS = 60000;
 export type SrgssrBusinessUnit = "SRF" | "RTS" | "RSI" | "RTR" | "SWI";
 
 // Token cache
-let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedToken: { token: string; expiresAt: number; credentialHash: string } | null = null;
 
 /**
  * Get API credentials from settings
@@ -43,16 +46,18 @@ async function getApiCredentials(): Promise<{
  * Get OAuth2 access token
  * Uses client credentials grant type
  */
-async function getAccessToken(): Promise<string | null> {
-  // Check cache
-  if (cachedToken && Date.now() < cachedToken.expiresAt - TOKEN_EXPIRY_BUFFER_MS) {
-    return cachedToken.token;
-  }
-
+async function getAccessToken(options: RetryOptions = {}): Promise<string | null> {
   const credentials = await getApiCredentials();
   if (!credentials) {
     console.error("[SRG-SSR] No API credentials configured");
     return null;
+  }
+  const credentialHash = createHash("sha256")
+    .update(JSON.stringify([credentials.consumerKey, credentials.consumerSecret]))
+    .digest("hex");
+  if (cachedToken?.credentialHash !== credentialHash) cachedToken = null;
+  if (cachedToken && Date.now() < cachedToken.expiresAt - TOKEN_EXPIRY_BUFFER_MS) {
+    return cachedToken.token;
   }
 
   try {
@@ -60,24 +65,30 @@ async function getAccessToken(): Promise<string | null> {
       `${credentials.consumerKey}:${credentials.consumerSecret}`
     ).toString("base64");
 
-    const response = await fetch(
+    const deadlineAt = requestDeadline(options);
+    const response = await fetchWithRetry(
       `${API_BASE_URL}/oauth/v1/accesstoken?grant_type=client_credentials`,
       {
         method: "POST",
+        redirect: "error",
         signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Basic ${authHeader}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-      }
+      },
+      { ...options, deadlineAt, maxRetries: options.requestBudget ? 2 : 0 }
     );
 
     if (!response.ok) {
-      console.error(`[SRG-SSR] Token request failed: ${response.status} ${response.statusText}`);
+      console.error(`[SRG-SSR] Token request failed: ${response.status}`);
       return null;
     }
 
-    const data = await response.json();
+    const data = (await readBoundedProviderJson(response, deadlineAt, 1024 * 1024)) as {
+      access_token?: unknown;
+      expires_in?: unknown;
+    };
 
     // Validate token response
     if (!data || typeof data.access_token !== "string") {
@@ -86,18 +97,22 @@ async function getAccessToken(): Promise<string | null> {
     }
 
     const token = data.access_token;
-    const expiresIn = typeof data.expires_in === "number" ? data.expires_in : 3600;
+    const expiresIn =
+      typeof data.expires_in === "number" && Number.isFinite(data.expires_in) && data.expires_in > 0
+        ? Math.min(data.expires_in, 86_400)
+        : 3600;
 
     // Cache token
     cachedToken = {
       token,
       expiresAt: Date.now() + expiresIn * 1000,
+      credentialHash,
     };
 
     console.log(`[SRG-SSR] Obtained access token, expires in ${expiresIn}s`);
     return token;
-  } catch (error) {
-    console.error("[SRG-SSR] Token request error:", error);
+  } catch {
+    console.error("[SRG-SSR] Token request failed");
     return null;
   }
 }
@@ -107,33 +122,40 @@ async function getAccessToken(): Promise<string | null> {
  */
 async function apiRequest<T>(
   endpoint: string,
-  baseUrl: string = VIDEO_API_BASE_URL
+  baseUrl: string = VIDEO_API_BASE_URL,
+  options: RetryOptions = {}
 ): Promise<T | null> {
-  const token = await getAccessToken();
+  const deadlineAt = requestDeadline(options);
+  const token = await getAccessToken({ ...options, deadlineAt });
   if (!token) {
     return null;
   }
 
   try {
     const url = `${baseUrl}${endpoint}`;
-    console.log(`[SRG-SSR] API request: ${url}`);
+    console.log("[SRG-SSR] API request started");
 
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
+    const response = await fetchWithRetry(
+      url,
+      {
+        redirect: "error",
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
       },
-    });
+      { ...options, deadlineAt, maxRetries: options.requestBudget ? 2 : 0 }
+    );
 
     if (!response.ok) {
-      console.error(`[SRG-SSR] API request failed: ${response.status} ${response.statusText}`);
+      console.error(`[SRG-SSR] API request failed: ${response.status}`);
       return null;
     }
 
-    return (await response.json()) as T;
-  } catch (error) {
-    console.error("[SRG-SSR] API request error:", error);
+    return (await readBoundedProviderJson(response, deadlineAt, 8 * 1024 * 1024)) as T;
+  } catch {
+    console.error("[SRG-SSR] API request failed");
     return null;
   }
 }
@@ -255,11 +277,14 @@ function validateMediaItems(items: unknown, source: string): SrgssrMediaItem[] {
 export async function searchVideos(
   query: string,
   businessUnit: SrgssrBusinessUnit = "SRF",
-  pageSize: number = 50
+  pageSize: number = 50,
+  options: RetryOptions = {}
 ): Promise<SrgssrMediaItem[]> {
   const encodedQuery = encodeURIComponent(query);
   const response = await apiRequest<SrgssrSearchResponse>(
-    `/search?bu=${businessUnit.toLowerCase()}&q=${encodedQuery}&pageSize=${Math.max(1, Math.min(pageSize, 100))}`
+    `/search?bu=${businessUnit.toLowerCase()}&q=${encodedQuery}&pageSize=${Math.max(1, Math.min(pageSize, 100))}`,
+    VIDEO_API_BASE_URL,
+    options
   );
 
   if (!response) throw new Error("SRF search failed");
@@ -283,13 +308,16 @@ export async function getMediaComposition(urn: string): Promise<SrgssrMediaCompo
  */
 export async function getLatestVideos(
   businessUnit: SrgssrBusinessUnit = "SRF",
-  pageSize: number = 50
+  pageSize: number = 50,
+  options: RetryOptions = {}
 ): Promise<SrgssrMediaItem[]> {
   const response = await apiRequest<{
     mediaList?: SrgssrMediaItem[];
     MediaList?: SrgssrMediaItem[];
   }>(
-    `/latest_episodes?bu=${businessUnit.toLowerCase()}&pageSize=${Math.max(1, Math.min(pageSize, 100))}`
+    `/latest_episodes?bu=${businessUnit.toLowerCase()}&pageSize=${Math.max(1, Math.min(pageSize, 100))}`,
+    VIDEO_API_BASE_URL,
+    options
   );
 
   if (!response) throw new Error("SRF latest episodes failed");
@@ -356,11 +384,11 @@ export async function checkApiStatus(): Promise<{
   try {
     const videos = await getLatestVideos("SRF", 1);
     return { configured: true, working: videos.length > 0 };
-  } catch (error) {
+  } catch {
     return {
       configured: true,
       working: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: "SRG-SSR request failed",
     };
   }
 }

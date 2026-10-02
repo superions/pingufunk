@@ -12,6 +12,9 @@ vi.mock("@/services/category", () => ({
 }));
 
 import { GET } from "./route";
+import { providerRegistry } from "@/providers";
+import { parseNzbContent } from "@/services/download";
+vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 function apiItem(title: string, duration: number) {
   return {
@@ -68,4 +71,50 @@ describe("movie search API minimum duration", () => {
 
     expect(body.results).toHaveLength(1);
   });
+});
+
+it("reports an upstream failure without exposing its token", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("token=private", { status: 401 }));
+  const response = await GET(new NextRequest("http://localhost/api/search?q=Documentary"));
+  expect(response.status).toBe(502);
+  expect(JSON.stringify(await response.json())).not.toContain("private");
+});
+
+it("preserves explicit provider audio in server-authored UI releases", async () => {
+  vi.spyOn(providerRegistry, "searchProvider").mockResolvedValue([
+    {
+      id: "synthetic-provider",
+      providerId: "srf",
+      channel: "Synthetic",
+      topic: "Example",
+      title: "Episode",
+      description: "",
+      timestamp: 1700000000,
+      duration: 120,
+      size: 0,
+      audioLanguage: "de",
+      websiteUrl: "https://example.invalid/page",
+      videoUrls: {
+        standard: "https://example.invalid/sd.mp4",
+        high: "https://example.invalid/hd.mp4",
+      },
+    },
+  ]);
+  const response = await GET(new NextRequest("http://localhost/api/search?q=Example&provider=srf"));
+  expect(response.status).toBe(200);
+  const result = (await response.json()).results[0];
+  expect(parseNzbContent(result.nzbDownloads.hd)).toEqual({
+    title: "Example - Episode",
+    url: "https://example.invalid/hd.mp4",
+    mediaExpectations: {
+      version: 1,
+      duration: { seconds: 120, provenance: "source_catalogue" },
+      audio: { language: "de", provenance: "provider_audio" },
+      resolution: null,
+    },
+  });
+  expect(vi.mocked(providerRegistry.searchProvider)).toHaveBeenCalledWith(
+    "srf",
+    expect.objectContaining({ query: "Example" })
+  );
 });

@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchWithRetry } from "./fetch-retry";
 import { queryMediathekView } from "./mediathek-client";
 
-vi.mock("./fetch-retry", () => ({ fetchWithRetry: vi.fn() }));
+vi.mock("./fetch-retry", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./fetch-retry")>()),
+  fetchWithRetry: vi.fn(),
+}));
 
 beforeEach(() => vi.resetAllMocks());
 
@@ -45,10 +48,40 @@ const validItem = {
   url_video_low: "",
   url_video_hd: "",
 };
-it("returns complete valid items unchanged", async () => {
+it("returns only the documented provider fields for valid items", async () => {
   vi.mocked(fetchWithRetry).mockResolvedValue(Response.json({ result: { results: [validItem] } }));
   expect(await queryMediathekView([], 10)).toEqual([validItem]);
 });
+
+it("caps each source page and honors its offset", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(Response.json({ result: { results: [] } }));
+
+  await queryMediathekView([], 5000, { offset: 2000 });
+
+  const request = vi.mocked(fetchWithRetry).mock.calls[0]?.[1];
+  expect(request).toBeDefined();
+  expect(JSON.parse(request!.body as string)).toMatchObject({ size: 1000, offset: 2000 });
+});
+
+it("does not promote uncontracted response properties to language evidence", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(
+    Response.json({
+      result: {
+        results: [
+          {
+            ...validItem,
+            audioLanguage: "de",
+            subtitleLanguage: "de",
+            originalVersion: true,
+          },
+        ],
+      },
+    })
+  );
+
+  expect(await queryMediathekView([], 10)).toEqual([validItem]);
+});
+
 it.each([
   null,
   {},
@@ -74,4 +107,32 @@ it("normalizes the unknown size of live ORF HLS entries to zero", async () => {
   expect(await queryMediathekView([], 10)).toEqual([
     { ...validItem, size: 0, url_video: "https://example.org/orf.m3u8" },
   ]);
+});
+
+it("rejects an advertised oversized body without reading it", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(
+    new Response("not read", { headers: { "content-length": String(9 * 1024 * 1024) } })
+  );
+  expect(await queryMediathekView([], 10)).toBeNull();
+});
+
+it("rejects a streamed body that exceeds the size limit", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(8 * 1024 * 1024 + 1));
+          controller.close();
+        },
+      })
+    )
+  );
+  expect(await queryMediathekView([], 10)).toBeNull();
+});
+
+it("does not treat a stalled response body as an empty result", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(new Response(new ReadableStream()));
+  const started = Date.now();
+  expect(await queryMediathekView([], 10, { deadlineAt: Date.now() + 25 })).toBeNull();
+  expect(Date.now() - started).toBeLessThan(250);
 });

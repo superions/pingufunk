@@ -7,10 +7,14 @@ import {
   getBestStreamUrl,
   type SrgssrMediaComposition,
 } from "./srgssr-api";
+import { getSetting } from "@/lib/settings";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 vi.mock("@/lib/settings", () => ({ getSetting: vi.fn(async () => "fixture") }));
 const fetchMock = vi.fn();
 beforeEach(() => {
+  vi.mocked(getSetting).mockReset();
+  vi.mocked(getSetting).mockImplementation(async () => "fixture");
   clearTokenCache();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
@@ -43,11 +47,41 @@ it("uses latest episodes for RSS and resolves compositions from stable URNs", as
   );
 });
 
+it("re-authenticates when a mounted credential rotates", async () => {
+  const current = vi.mocked(getSetting);
+  current.mockImplementation(async (key) =>
+    key === "api.srgssr.consumerSecret" ? "first-secret" : "fixture"
+  );
+  fetchMock.mockResolvedValueOnce(Response.json({ searchResultListMedia: [] }));
+  await searchVideos("News");
+  current.mockImplementation(async (key) =>
+    key === "api.srgssr.consumerSecret" ? "second-secret" : "fixture"
+  );
+  fetchMock.mockResolvedValueOnce(
+    Response.json({ access_token: "second-token", expires_in: 3600 })
+  );
+  fetchMock.mockResolvedValueOnce(Response.json({ searchResultListMedia: [] }));
+  await searchVideos("News");
+  expect(fetchMock.mock.calls[2][0]).toContain("/oauth/v1/accesstoken");
+  expect(fetchMock.mock.calls[2][1].redirect).toBe("error");
+});
+
 it("does not report malformed responses or API outages as successful empty searches", async () => {
   fetchMock.mockResolvedValueOnce(Response.json({ unexpected: [] }));
   await expect(searchVideos("test")).rejects.toThrow("Invalid SRF search response");
   fetchMock.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
   await expect(searchVideos("test")).rejects.toThrow("SRF search failed");
+});
+
+it("counts authentication and search against the same caller budget", async () => {
+  const budget = new HttpRequestBudget(2);
+  fetchMock.mockResolvedValueOnce(Response.json({ searchResultListMedia: [] }));
+  expect(await searchVideos("Synthetic", "SRF", 10, { requestBudget: budget })).toEqual([]);
+  expect(budget.remainingAttempts).toBe(0);
+  await expect(searchVideos("Synthetic", "SRF", 10, { requestBudget: budget })).rejects.toThrow(
+    "SRF search failed"
+  );
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
 const validVideo = {

@@ -4,6 +4,7 @@ import * as path from "path";
 import { createHash } from "crypto";
 import release from "./ytdlp-release.json";
 import { getSetting } from "@/lib/settings";
+import { writesEnabled } from "@/lib/write-gate";
 
 const isWindows = process.platform === "win32";
 const APP_DIR = process.cwd();
@@ -49,9 +50,11 @@ async function getProxyUrl(): Promise<string | null> {
   if (!proxyUrl?.trim()) return null;
   const parsed = new URL(proxyUrl.trim());
   if (
-    !["http:", "https:", "socks4:", "socks4a:", "socks5:", "socks5h:"].includes(parsed.protocol)
+    !["http:", "https:", "socks4:", "socks4a:", "socks5:", "socks5h:"].includes(parsed.protocol) ||
+    parsed.username ||
+    parsed.password
   ) {
-    throw new Error("Unsupported proxy protocol");
+    throw new Error("Unsupported proxy configuration");
   }
   return proxyUrl.trim();
 }
@@ -67,6 +70,7 @@ export async function ensureYtdlpExists(): Promise<boolean> {
     console.log(`[yt-dlp] Already exists at ${ytdlpPath}`);
     return true;
   } catch {
+    if (!writesEnabled()) return false;
     // If using custom path and it doesn't exist, that's an error
     const customPath = await getSetting("download.ytdlpPath");
     if (customPath && customPath.trim()) {
@@ -93,7 +97,7 @@ async function downloadYtdlp(): Promise<boolean> {
     await fs.mkdir(YTDLP_DIR, { recursive: true });
 
     // Download yt-dlp
-    console.log(`[yt-dlp] Downloading from ${downloadUrl}`);
+    console.log("[yt-dlp] Downloading verified release asset");
     const response = await fetch(downloadUrl, { signal: AbortSignal.timeout(120000) });
 
     if (!response.ok || !response.body) {
@@ -109,9 +113,9 @@ async function downloadYtdlp(): Promise<boolean> {
     console.log(`[yt-dlp] Successfully installed at ${YTDLP_PATH}`);
 
     return true;
-  } catch (error) {
+  } catch {
     await fs.unlink(temporaryPath).catch(() => {});
-    console.error("[yt-dlp] Error during download:", error);
+    console.error("[yt-dlp] Error during download");
     return false;
   }
 }
@@ -202,11 +206,10 @@ export async function getVideoInfo(url: string): Promise<YtdlpVideoInfo | null> 
 
   return new Promise((resolve) => {
     let resolved = false;
-    console.log(`[yt-dlp] Getting info for: ${url}`);
+    console.log("[yt-dlp] Getting video info");
     const proc = spawn(ytdlpPath, args);
 
     let stdout = "";
-    let stderr = "";
 
     // Timeout after 30 seconds
     const timeout = setTimeout(() => {
@@ -221,9 +224,7 @@ export async function getVideoInfo(url: string): Promise<YtdlpVideoInfo | null> 
       stdout += data.toString();
     });
 
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.resume();
 
     proc.on("close", (code) => {
       if (resolved) return;
@@ -251,21 +252,21 @@ export async function getVideoInfo(url: string): Promise<YtdlpVideoInfo | null> 
               url: f.url,
             })),
           });
-        } catch (parseError) {
-          console.error("[yt-dlp] Failed to parse JSON output:", parseError);
+        } catch {
+          console.error("[yt-dlp] Failed to parse JSON output");
           resolve(null);
         }
       } else {
-        console.error(`[yt-dlp] Failed with code ${code}: ${stderr}`);
+        console.error(`[yt-dlp] Failed with code ${code}`);
         resolve(null);
       }
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", () => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
-      console.error("[yt-dlp] Process error:", err);
+      console.error("[yt-dlp] Process error");
       resolve(null);
     });
   });
@@ -332,10 +333,9 @@ export async function downloadVideo(
   args.push(url);
 
   return new Promise((resolve) => {
-    console.log(`[yt-dlp] Starting download: ${url} -> ${options.outputPath}`);
+    console.log("[yt-dlp] Starting stream download");
     const proc = spawn(ytdlpPath, args);
 
-    let stderr = "";
     let progressUpdates = Promise.resolve();
     let progressError: unknown;
     let ended = false;
@@ -374,10 +374,9 @@ export async function downloadVideo(
       }
     });
 
-    proc.stderr.on("data", (data) => {
+    proc.stderr.on("data", () => {
       if (ended) return;
       resetStallTimer();
-      stderr += data.toString();
     });
 
     proc.on("close", async (code) => {
@@ -410,17 +409,17 @@ export async function downloadVideo(
           }
         }
       } else {
-        console.error(`[yt-dlp] Download failed with code ${code}: ${stderr}`);
-        resolve({ success: false, error: stderr || `Exit code ${code}` });
+        console.error(`[yt-dlp] Download failed with code ${code}`);
+        resolve({ success: false, error: `yt-dlp exited with code ${code}` });
       }
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", () => {
       clearTimeout(stallTimer);
       if (ended) return;
       ended = true;
-      console.error("[yt-dlp] Process error:", err);
-      resolve({ success: false, error: err.message });
+      console.error("[yt-dlp] Process error");
+      resolve({ success: false, error: "yt-dlp process failed" });
     });
   });
 }
@@ -535,20 +534,20 @@ export async function downloadHlsStream(
       // complete download into a reported failure (the caller would then
       // skip moving the finished file and mark a successful download as
       // failed instead).
-      await onProgress(100, 0, 0, 0).catch((error) => {
-        console.error("[downloadHlsStream] Failed to report final progress:", error);
+      await onProgress(100, 0, 0, 0).catch(() => {
+        console.error("[downloadHlsStream] Failed to report final progress");
       });
     }
 
     return { success: true, outputPath: mergeResult.outputPath };
-  } catch (error) {
+  } catch {
     // downloadVideo/mergeVideoAudio can reject before their own process
     // handlers ever run (a bad proxy URL, a DB read failure fetching
     // settings, fs.mkdir failing, ...) - catch that here so this function
     // keeps its documented contract of always resolving, and so the
     // finally block below still runs to clean up temp files either way.
-    console.error("[downloadHlsStream] Failed:", error);
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
+    console.error("[downloadHlsStream] Failed");
+    return { success: false, error: "Stream download failed" };
   } finally {
     // Failed yt-dlp downloads can leave .part, .ytdl and fragment files.
     // Match this attempt's UID plus the extension separator so concurrent
@@ -581,26 +580,23 @@ export async function testYtdlp(): Promise<{ success: boolean; version?: string;
     const proc = spawn(ytdlpPath, ["--version"]);
 
     let stdout = "";
-    let stderr = "";
 
     proc.stdout.on("data", (data) => {
       stdout += data.toString();
     });
 
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.resume();
 
     proc.on("close", (code) => {
       if (code === 0 && stdout) {
         resolve({ success: true, version: stdout.trim() });
       } else {
-        resolve({ success: false, error: stderr || `Exit code ${code}` });
+        resolve({ success: false, error: `yt-dlp exited with code ${code}` });
       }
     });
 
-    proc.on("error", (err) => {
-      resolve({ success: false, error: err.message });
+    proc.on("error", () => {
+      resolve({ success: false, error: "yt-dlp process failed" });
     });
   });
 }
@@ -628,8 +624,6 @@ export async function testProxy(
     // Use yt-dlp to test connectivity through proxy
     const proc = spawn(ytdlpPath, ["--proxy", proxyUrl, "--simulate", "--no-warnings", testUrl]);
 
-    let stderr = "";
-
     // Timeout after 30 seconds
     const timeout = setTimeout(() => {
       if (resolved) return;
@@ -638,9 +632,7 @@ export async function testProxy(
       resolve({ success: false, error: "Connection timeout" });
     }, 30000);
 
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.resume();
 
     proc.on("close", (code) => {
       if (resolved) return;
@@ -649,15 +641,15 @@ export async function testProxy(
       if (code === 0) {
         resolve({ success: true });
       } else {
-        resolve({ success: false, error: stderr || `Connection failed (code ${code})` });
+        resolve({ success: false, error: `Connection failed (code ${code})` });
       }
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", () => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
-      resolve({ success: false, error: err.message });
+      resolve({ success: false, error: "yt-dlp process failed" });
     });
   });
 }
@@ -695,11 +687,10 @@ export async function extractPlaylistEntries(
 
   return new Promise((resolve) => {
     let resolved = false;
-    console.log(`[yt-dlp] Extracting playlist entries from: ${url}`);
+    console.log("[yt-dlp] Extracting playlist entries");
     const proc = spawn(ytdlpPath, args);
 
     let stdout = "";
-    let stderr = "";
 
     // Timeout after 60 seconds for search operations
     const timeout = setTimeout(() => {
@@ -714,9 +705,7 @@ export async function extractPlaylistEntries(
       stdout += data.toString();
     });
 
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.resume();
 
     proc.on("close", (code) => {
       if (resolved) return;
@@ -755,23 +744,21 @@ export async function extractPlaylistEntries(
 
           console.log(`[yt-dlp] Extracted ${entries.length} playlist entries`);
           resolve(entries);
-        } catch (parseError) {
-          console.error("[yt-dlp] Failed to parse playlist output:", parseError);
+        } catch {
+          console.error("[yt-dlp] Failed to parse playlist output");
           resolve([]);
         }
       } else {
-        if (stderr) {
-          console.error(`[yt-dlp] Playlist extraction failed: ${stderr}`);
-        }
+        console.error("[yt-dlp] Playlist extraction failed");
         resolve([]);
       }
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", () => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
-      console.error("[yt-dlp] Process error:", err);
+      console.error("[yt-dlp] Process error");
       resolve([]);
     });
   });
@@ -801,11 +788,10 @@ export async function getDetailedVideoInfo(url: string): Promise<YtdlpVideoInfo 
 
   return new Promise((resolve) => {
     let resolved = false;
-    console.log(`[yt-dlp] Getting detailed info for: ${url}`);
+    console.log("[yt-dlp] Getting detailed video info");
     const proc = spawn(ytdlpPath, args);
 
     let stdout = "";
-    let stderr = "";
 
     // Timeout after 30 seconds
     const timeout = setTimeout(() => {
@@ -820,9 +806,7 @@ export async function getDetailedVideoInfo(url: string): Promise<YtdlpVideoInfo 
       stdout += data.toString();
     });
 
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.resume();
 
     proc.on("close", (code) => {
       if (resolved) return;
@@ -858,21 +842,21 @@ export async function getDetailedVideoInfo(url: string): Promise<YtdlpVideoInfo 
               url: f.url,
             })),
           });
-        } catch (parseError) {
-          console.error("[yt-dlp] Failed to parse JSON output:", parseError);
+        } catch {
+          console.error("[yt-dlp] Failed to parse JSON output");
           resolve(null);
         }
       } else {
-        console.error(`[yt-dlp] Failed with code ${code}: ${stderr}`);
+        console.error(`[yt-dlp] Failed with code ${code}`);
         resolve(null);
       }
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", () => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
-      console.error("[yt-dlp] Process error:", err);
+      console.error("[yt-dlp] Process error");
       resolve(null);
     });
   });

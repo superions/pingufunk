@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useSettings } from "@/contexts/settings-context";
-import { buildTvdbLoginPayload } from "@/lib/tvdb-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -24,14 +23,56 @@ import {
   Sliders,
   Database,
   Info,
-  Check,
-  X,
   Loader2,
   Save,
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import {
+  DEFAULT_LANGUAGE_POLICY,
+  LANGUAGE_POLICY_SETTING_KEY,
+  readLanguagePolicy,
+  serializeLanguagePolicy,
+  type LanguagePolicy,
+} from "@/lib/language-policy";
 import packageJson from "../../../package.json";
+
+const LANGUAGE_PREFERENCES: {
+  key: Exclude<keyof LanguagePolicy, "version">;
+  title: string;
+  description: string;
+}[] = [
+  {
+    key: "includeOriginalAudio",
+    title: "Originalton ohne deutsche Tonspur",
+    description: "Als neutrale OV-Fassung anbieten, niemals als GERMAN kennzeichnen.",
+  },
+  {
+    key: "includeGermanSubtitleOnly",
+    title: "Originalton mit deutschen Untertiteln",
+    description: "Als eigene Untertitel-Fassung anbieten, nicht als deutschsprachigen Ton.",
+  },
+  {
+    key: "includeAudioDescription",
+    title: "Audiodeskription",
+    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
+  },
+  {
+    key: "includeSignLanguage",
+    title: "Gebärdenfassung",
+    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
+  },
+  {
+    key: "includeClearSpeech",
+    title: "Klare Sprache",
+    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
+  },
+  {
+    key: "includeUnverifiedLegacy",
+    title: "Altbestand ohne belastbaren Sprachnachweis",
+    description: "Als neutrale, ungeprüfte Fassung anbieten; niemals als GERMAN kennzeichnen.",
+  },
+];
 
 // Helper functions
 function formatBytes(bytes: number): string {
@@ -53,8 +94,11 @@ function formatUptime(seconds: number): string {
 }
 
 export default function SettingsPage() {
-  const { settings, isLoading, updateSettings } = useSettings();
+  const { settings, isLoading, updateSettings, refreshSettings } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ error: boolean; message: string } | null>(
+    null
+  );
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearResult, setClearResult] = useState<{
@@ -66,8 +110,6 @@ export default function SettingsPage() {
     success: false,
     message: "",
   });
-  const [validatingApi, setValidatingApi] = useState<string | null>(null);
-  const [apiStatus, setApiStatus] = useState<Record<string, boolean | null>>({});
   const [systemInfo, setSystemInfo] = useState<{
     version: { node: string; ffmpeg: string | null; ytdlp: string | null };
     database: { sizeBytes: number; shows: number; episodes: number; configEntries: number };
@@ -100,8 +142,48 @@ export default function SettingsPage() {
     setFormState((prev) => ({ ...prev, [key]: value }));
   };
 
+  const sonarrFormError = (() => {
+    const window = getFieldValue("integration.sonarr.windowDays");
+    const tolerance = getFieldValue("matching.sonarr.tolerancePercent");
+    if (!/^\d+$/.test(window) || Number(window) < 1 || Number(window) > 90)
+      return "RSS-Fenster: ganze Tage zwischen 1 und 90 eingeben.";
+    if (!/^\d+$/.test(tolerance) || Number(tolerance) < 0 || Number(tolerance) > 25)
+      return "Laufzeittoleranz: ganze Prozent zwischen 0 und 25 eingeben.";
+    const value = getFieldValue("integration.sonarr.url").trim();
+    if (!value)
+      return getFieldValue("integration.sonarr.enabled") === "true"
+        ? "Zum Aktivieren eine Sonarr-Basis-URL eingeben."
+        : null;
+    try {
+      const url = new URL(value);
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      )
+        throw new Error();
+    } catch {
+      return "Basis-URL: HTTP(S) ohne Zugangsdaten, Query oder Fragment eingeben.";
+    }
+    return null;
+  })();
+
+  const getLanguagePolicy = () =>
+    readLanguagePolicy(getFieldValue(LANGUAGE_POLICY_SETTING_KEY) || DEFAULT_LANGUAGE_POLICY);
+
+  const setLanguagePreference = (key: Exclude<keyof LanguagePolicy, "version">, value: boolean) => {
+    const current = getLanguagePolicy();
+    setFieldValue(
+      LANGUAGE_POLICY_SETTING_KEY,
+      serializeLanguagePolicy({ ...current, [key]: value })
+    );
+  };
+
   const handleSave = async (keys: string[]) => {
     setIsSaving(true);
+    setSaveFeedback(null);
     try {
       const updates: Record<string, string> = {};
       for (const key of keys) {
@@ -111,51 +193,24 @@ export default function SettingsPage() {
       }
       if (Object.keys(updates).length > 0) {
         await updateSettings(updates);
-        setFormState({});
+        // Saving one card must not discard unsaved changes in another card.
+        setFormState((previous) => {
+          const remaining = { ...previous };
+          for (const [key, value] of Object.entries(updates)) {
+            if (remaining[key] === value) delete remaining[key];
+          }
+          return remaining;
+        });
       }
+      setSaveFeedback({ error: false, message: "Einstellungen gespeichert." });
+    } catch {
+      setSaveFeedback({
+        error: true,
+        message:
+          "Speichern fehlgeschlagen. Eingaben und Wartungsstatus prüfen; Änderungen bleiben zur Korrektur erhalten.",
+      });
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const validateTvdbApi = async () => {
-    setValidatingApi("tvdb");
-    try {
-      const key = getFieldValue("api.tvdb.key");
-      const pin = getFieldValue("api.tvdb.pin");
-      const payload = buildTvdbLoginPayload(key, pin);
-      if (!payload) {
-        setApiStatus((prev) => ({ ...prev, tvdb: false }));
-        return;
-      }
-      // Attempt to login to TVDB
-      const res = await fetch("https://api4.thetvdb.com/v4/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      setApiStatus((prev) => ({ ...prev, tvdb: res.ok }));
-    } catch {
-      setApiStatus((prev) => ({ ...prev, tvdb: false }));
-    } finally {
-      setValidatingApi(null);
-    }
-  };
-
-  const validateTmdbApi = async () => {
-    setValidatingApi("tmdb");
-    try {
-      const key = getFieldValue("api.tmdb.key");
-      if (!key) {
-        setApiStatus((prev) => ({ ...prev, tmdb: false }));
-        return;
-      }
-      const res = await fetch(`https://api.themoviedb.org/3/configuration?api_key=${key}`);
-      setApiStatus((prev) => ({ ...prev, tmdb: res.ok }));
-    } catch {
-      setApiStatus((prev) => ({ ...prev, tmdb: false }));
-    } finally {
-      setValidatingApi(null);
     }
   };
 
@@ -173,7 +228,8 @@ export default function SettingsPage() {
         setClearResult({
           show: true,
           success: true,
-          message: `${data.cleared.tvdbSeries} Serien und ${data.cleared.tvdbEpisodes} Episoden gelöscht.`,
+          message:
+            "Temporäre Such- und Metadaten-Caches geleert; historische Datenbankzeilen bleiben erhalten.",
         });
       } else {
         setClearResult({
@@ -202,6 +258,17 @@ export default function SettingsPage() {
     );
   }
 
+  if (!settings) {
+    return (
+      <div className="p-8 space-y-4">
+        <p role="alert">
+          Einstellungen konnten nicht geladen werden. Es werden keine Ersatzwerte gespeichert.
+        </p>
+        <Button onClick={refreshSettings}>Erneut laden</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -209,6 +276,17 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground text-sm">Konfiguriere RundfunkArr</p>
       </div>
+
+      {saveFeedback && (
+        <p
+          role={saveFeedback.error ? "alert" : "status"}
+          className={
+            saveFeedback.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"
+          }
+        >
+          {saveFeedback.message}
+        </p>
+      )}
 
       {/* Tabs */}
       <Card>
@@ -360,24 +438,21 @@ export default function SettingsPage() {
                     </p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Proxy-URL (optional)</label>
-                    <Input
-                      value={getFieldValue("download.proxyUrl")}
-                      onChange={(e) => setFieldValue("download.proxyUrl", e.target.value)}
-                      placeholder="socks5://localhost:1080"
-                      className="mt-1"
-                    />
+                    <label className="text-sm font-medium">Streaming-Proxy (optional)</label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Proxy für geo-blockierte Inhalte (SRF/ORF). Unterstützt HTTP, HTTPS, SOCKS4
-                      und SOCKS5.
+                      Serverseitig über PINGUFUNK_STREAMING_PROXY_URL_FILE konfigurieren. Proxy-URLs
+                      mit Zugangsdaten werden abgelehnt, da yt-dlp sie sonst in Prozessargumenten
+                      führen würde.
                     </p>
+                    <Badge variant="outline">
+                      {settings?.["download.proxyUrl"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                    </Badge>
                   </div>
                   <Button
                     onClick={() =>
                       handleSave([
                         "download.enableHLS",
                         "download.ytdlpPath",
-                        "download.proxyUrl",
                         "provider.orf.enabled",
                       ])
                     }
@@ -413,48 +488,13 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">API Key</label>
-                    <Input
-                      value={getFieldValue("api.tvdb.key")}
-                      onChange={(e) => setFieldValue("api.tvdb.key", e.target.value)}
-                      placeholder="TVDB API Key"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">PIN (optional)</label>
-                    <Input
-                      value={getFieldValue("api.tvdb.pin")}
-                      onChange={(e) => setFieldValue("api.tvdb.pin", e.target.value)}
-                      placeholder="TVDB PIN (optional)"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={validateTvdbApi}
-                      disabled={validatingApi === "tvdb"}
-                    >
-                      {validatingApi === "tvdb" ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                      )}
-                      Testen
-                    </Button>
-                    {apiStatus.tvdb !== undefined && (
-                      <Badge variant={apiStatus.tvdb ? "default" : "destructive"}>
-                        {apiStatus.tvdb ? (
-                          <Check className="w-3 h-3 mr-1" />
-                        ) : (
-                          <X className="w-3 h-3 mr-1" />
-                        )}
-                        {apiStatus.tvdb ? "Verbunden" : "Fehler"}
-                      </Badge>
-                    )}
-                  </div>
+                  <p className="text-sm">
+                    Zugang serverseitig über PINGUFUNK_TVDB_KEY_FILE konfigurieren; PIN optional
+                    über PINGUFUNK_TVDB_PIN_FILE.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.tvdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </Badge>
                 </CardContent>
               </Card>
 
@@ -474,39 +514,14 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">API Key</label>
-                    <Input
-                      value={getFieldValue("api.tmdb.key")}
-                      onChange={(e) => setFieldValue("api.tmdb.key", e.target.value)}
-                      placeholder="TMDB API Key"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={validateTmdbApi}
-                      disabled={validatingApi === "tmdb"}
-                    >
-                      {validatingApi === "tmdb" ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                      )}
-                      Testen
-                    </Button>
-                    {apiStatus.tmdb !== undefined && (
-                      <Badge variant={apiStatus.tmdb ? "default" : "destructive"}>
-                        {apiStatus.tmdb ? (
-                          <Check className="w-3 h-3 mr-1" />
-                        ) : (
-                          <X className="w-3 h-3 mr-1" />
-                        )}
-                        {apiStatus.tmdb ? "Verbunden" : "Fehler"}
-                      </Badge>
-                    )}
-                  </div>
+                  <p className="text-sm">
+                    TMDB Read Access Token serverseitig über PINGUFUNK_TMDB_READ_TOKEN_FILE
+                    konfigurieren. Ein alter v3-API-Key in der Datenbank wird nicht mehr für
+                    URL-Authentifizierung verwendet.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.tmdb.key"] ? "Konfiguriert" : "Nicht konfiguriert"}
+                  </Badge>
                 </CardContent>
               </Card>
 
@@ -526,53 +541,21 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">Consumer Key</label>
-                    <Input
-                      value={getFieldValue("api.srgssr.consumerKey")}
-                      onFocus={(e) => e.currentTarget.select()}
-                      onChange={(e) => setFieldValue("api.srgssr.consumerKey", e.target.value)}
-                      placeholder="SRG-SSR Consumer Key"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Consumer Secret</label>
-                    <Input
-                      type="password"
-                      value={getFieldValue("api.srgssr.consumerSecret")}
-                      onFocus={(e) => e.currentTarget.select()}
-                      onChange={(e) => setFieldValue("api.srgssr.consumerSecret", e.target.value)}
-                      placeholder="SRG-SSR Consumer Secret"
-                      className="mt-1"
-                    />
-                  </div>
+                  <p className="text-sm">
+                    Consumer Key und Secret serverseitig über PINGUFUNK_SRGSSR_CONSUMER_KEY_FILE und
+                    PINGUFUNK_SRGSSR_CONSUMER_SECRET_FILE konfigurieren.
+                  </p>
+                  <Badge variant="outline">
+                    {settings?.["api.srgssr.consumerKey"] && settings?.["api.srgssr.consumerSecret"]
+                      ? "Konfiguriert"
+                      : "Nicht konfiguriert"}
+                  </Badge>
                   <p className="text-xs text-muted-foreground">
                     Hinweis: Inhalte von SRF sind oft geo-blockiert. Konfiguriere einen Schweizer
                     Proxy in den Streaming-Einstellungen für Zugriff aus dem Ausland.
                   </p>
                 </CardContent>
               </Card>
-
-              <Button
-                onClick={() =>
-                  handleSave([
-                    "api.tvdb.key",
-                    "api.tvdb.pin",
-                    "api.tmdb.key",
-                    "api.srgssr.consumerKey",
-                    "api.srgssr.consumerSecret",
-                  ])
-                }
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                API-Keys speichern
-              </Button>
             </TabsContent>
 
             {/* Matching Tab */}
@@ -643,6 +626,157 @@ export default function SettingsPage() {
                   </Button>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Optionale Sonarr-Metadaten</CardTitle>
+                  <CardDescription>
+                    Ergänzt fehlende Episoden aus einer Sonarr-3/4-Instanz, ohne vorhandene
+                    Metadaten zu ersetzen. Kein zusätzliches TVDB-/TMDB-Konto erforderlich.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={getFieldValue("integration.sonarr.enabled") === "true"}
+                      onChange={(event) =>
+                        setFieldValue("integration.sonarr.enabled", String(event.target.checked))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    <span className="text-sm font-medium">Sonarr-Ergänzung aktivieren</span>
+                  </label>
+                  <div>
+                    <label htmlFor="sonarr-url" className="text-sm font-medium">
+                      Sonarr-Basis-URL
+                    </label>
+                    <Input
+                      id="sonarr-url"
+                      type="url"
+                      value={getFieldValue("integration.sonarr.url")}
+                      onChange={(event) =>
+                        setFieldValue("integration.sonarr.url", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      HTTP(S), optional mit Unterpfad. Keine Zugangsdaten oder API-Keys in der URL.
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    API-Key ausschließlich serverseitig über <code>PINGUFUNK_SONARR_API_KEY</code>
+                    oder <code>PINGUFUNK_SONARR_API_KEY_FILE</code> konfigurieren. Status:{" "}
+                    {settings?.["api.sonarr.key"]
+                      ? "konfiguriert (verborgen)"
+                      : "nicht konfiguriert"}
+                    . Speichern führt keine Sonarr-Abfrage aus.
+                  </p>
+                  <div>
+                    <label htmlFor="sonarr-window" className="text-sm font-medium">
+                      RSS-Aktualitätsfenster (Tage)
+                    </label>
+                    <Input
+                      id="sonarr-window"
+                      type="number"
+                      min="1"
+                      max="90"
+                      step="1"
+                      value={getFieldValue("integration.sonarr.windowDays")}
+                      onChange={(event) =>
+                        setFieldValue("integration.sonarr.windowDays", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      1–90 Tage; nur überwachte Serien. Snapshots sind zeit- und mengenbegrenzt.
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="sonarr-tolerance" className="text-sm font-medium">
+                      Episoden-Laufzeittoleranz (%)
+                    </label>
+                    <Input
+                      id="sonarr-tolerance"
+                      type="number"
+                      min="0"
+                      max="25"
+                      step="1"
+                      value={getFieldValue("matching.sonarr.tolerancePercent")}
+                      onChange={(event) =>
+                        setFieldValue("matching.sonarr.tolerancePercent", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      0–25 %; 0 verlangt exakte Laufzeit. Kurze Folgen werden nur mit belegter
+                      Identität und Laufzeit zugelassen. Ohne Solllaufzeit gilt weiterhin die oben
+                      eingestellte Mindestdauer.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() =>
+                      handleSave([
+                        "integration.sonarr.enabled",
+                        "integration.sonarr.url",
+                        "integration.sonarr.windowDays",
+                        "matching.sonarr.tolerancePercent",
+                      ])
+                    }
+                    disabled={isSaving || sonarrFormError !== null}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    Sonarr-Einstellungen speichern
+                  </Button>
+                  {sonarrFormError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {sonarrFormError}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sprache und Fassungen</CardTitle>
+                  <CardDescription>
+                    Bestimmt, welche zusätzlichen Fassungen in deutschen Feeds sichtbar sind.
+                    Deutsch als Tonspur wird ausschließlich bei belastbarem Nachweis angegeben;
+                    diese Schutzregel lässt sich hier nicht abschalten.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {LANGUAGE_PREFERENCES.map(({ key, title, description }) => (
+                    <label key={key} className="flex items-start gap-3 rounded-md border p-3">
+                      <input
+                        type="checkbox"
+                        checked={getLanguagePolicy()[key]}
+                        onChange={(event) => setLanguagePreference(key, event.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-input"
+                      />
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium">{title}</span>
+                        <span className="block text-xs text-muted-foreground">{description}</span>
+                      </span>
+                    </label>
+                  ))}
+                  <Button
+                    onClick={() => handleSave([LANGUAGE_POLICY_SETTING_KEY])}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    Sprachpräferenzen speichern
+                  </Button>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Cache Tab */}
@@ -710,8 +844,8 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Tipp: &quot;Cache leeren&quot; erzwingt das Neuladen aller Daten bei der
-                    nächsten Anfrage.
+                    Tipp: &quot;Cache leeren&quot; erneuert die temporären Caches bei der nächsten
+                    Anfrage.
                   </p>
                 </CardContent>
               </Card>
@@ -783,11 +917,11 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Gecachte Shows</p>
+                        <p className="text-xs text-muted-foreground">Historische Shows</p>
                         <p className="font-medium">{systemInfo?.database.shows ?? "..."}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Gecachte Episoden</p>
+                        <p className="text-xs text-muted-foreground">Historische Episoden</p>
                         <p className="font-medium">{systemInfo?.database.episodes ?? "..."}</p>
                       </div>
                       <div>
@@ -834,8 +968,8 @@ export default function SettingsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cache leeren?</AlertDialogTitle>
             <AlertDialogDescription>
-              Alle gecachten Daten werden gelöscht und bei der nächsten Anfrage neu geladen. Dies
-              betrifft Mediathek-Suchergebnisse und TVDB-Metadaten.
+              Nur temporäre Such- und Metadaten-Caches werden geleert. Historische
+              Serien-/Episodenzeilen in der Datenbank bleiben erhalten.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

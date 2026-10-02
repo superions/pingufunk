@@ -1,5 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import { fetchWithRetry } from "@/lib/fetch-retry";
+import type { HttpRequestBudget } from "@/lib/fetch-retry";
+import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
+import { MatchingStrategy } from "@/types";
+import { mediathekCache } from "@/lib/cache";
 import type { Ruleset, TvdbData } from "@/types";
 import {
   getGeneratedRulesets,
@@ -13,28 +20,84 @@ let generatedRulesetsByTopic: Map<string, Ruleset[]> = new Map();
 let lastFetchTime: number = 0;
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
-// GitHub raw URLs for auto-update
-const GITHUB_RULESETS_URL =
-  process.env.RULESETS_URL ||
-  "https://raw.githubusercontent.com/rundfunkarr/rundfunkarr/main/data/rulesets.json";
+const rulesetSchema = z.object({
+  id: z.number().int(),
+  mediaId: z.number().int(),
+  topic: z.string().min(1),
+  priority: z.number().int(),
+  filters: z.string().refine((value) => {
+    try {
+      return Array.isArray(JSON.parse(value));
+    } catch {
+      return false;
+    }
+  }),
+  titleRegexRules: z.string().refine((value) => {
+    try {
+      return Array.isArray(JSON.parse(value));
+    } catch {
+      return false;
+    }
+  }),
+  episodeRegex: z.string().nullable(),
+  seasonRegex: z.string().nullable(),
+  matchingStrategy: z.enum(MatchingStrategy),
+  media: z.object({
+    media_id: z.number().int(),
+    media_name: z.string(),
+    media_type: z.string(),
+    media_tvdbId: z.number().int().positive().nullable(),
+    media_tmdbId: z.number().int().nullable(),
+    media_imdbId: z.string().nullable(),
+  }),
+});
+const catalogueSchema = z.array(rulesetSchema).max(10_000);
 
-async function fetchFromGitHub(): Promise<Ruleset[] | null> {
+let activeSource: { kind: "bundled" | "configured"; sha256: string } | null = null;
+/** Content fingerprint, never a potentially credential-bearing source URL. */
+export function getRulesetSource(): typeof activeSource {
+  return activeSource ? { ...activeSource } : null;
+}
+
+/** Bind response caches to external and generated rules, including refreshes. */
+export function getRulesetContext(): string {
+  return createHash("sha256")
+    .update(JSON.stringify([activeSource, [...rulesetsByTopic], [...generatedRulesetsByTopic]]))
+    .digest("hex");
+}
+
+async function fetchFromGitHub(budget?: HttpRequestBudget): Promise<Ruleset[] | null> {
   try {
-    console.log(`[Rulesets] Fetching from GitHub: ${GITHUB_RULESETS_URL}`);
-    const response = await fetch(GITHUB_RULESETS_URL, {
-      headers: { "User-Agent": "RundfunkArr" },
-    });
+    const configured = process.env.RULESETS_URL;
+    if (!configured) return null;
+    const url = new URL(configured);
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.hash)
+      throw new Error("Invalid ruleset source");
+    const deadlineAt = budget?.deadlineAt ?? Date.now() + 15_000;
+    const response = await fetchWithRetry(
+      url.href,
+      {
+        headers: { "User-Agent": "RundfunkArr" },
+      },
+      { deadlineAt, requestBudget: budget }
+    );
 
     if (!response.ok) {
-      console.warn(`[Rulesets] GitHub fetch failed: ${response.status}`);
+      void response.body?.cancel().catch(() => {});
+      console.warn("[Rulesets] Configured source unavailable; using bundled rules");
       return null;
     }
 
-    const rulesets: Ruleset[] = await response.json();
-    console.log(`[Rulesets] Fetched ${rulesets.length} rulesets from GitHub`);
+    const rulesets = catalogueSchema.parse(
+      await readBoundedProviderJson(response, deadlineAt, 8 * 1024 * 1024)
+    );
+    activeSource = {
+      kind: "configured",
+      sha256: createHash("sha256").update(JSON.stringify(rulesets)).digest("hex"),
+    };
     return rulesets;
-  } catch (error) {
-    console.warn("[Rulesets] Error fetching from GitHub:", error);
+  } catch {
+    console.warn("[Rulesets] Configured source unavailable; using bundled rules");
     return null;
   }
 }
@@ -42,7 +105,11 @@ async function fetchFromGitHub(): Promise<Ruleset[] | null> {
 async function loadFromLocalFile(): Promise<Ruleset[]> {
   const rulesetsPath = path.join(process.cwd(), "data", "rulesets.json");
   const fileContent = await fs.readFile(rulesetsPath, "utf-8");
-  const rulesets: Ruleset[] = JSON.parse(fileContent);
+  const rulesets = catalogueSchema.parse(JSON.parse(fileContent));
+  activeSource = {
+    kind: "bundled",
+    sha256: createHash("sha256").update(JSON.stringify(rulesets)).digest("hex"),
+  };
   console.log(`[Rulesets] Loaded ${rulesets.length} rulesets from local file`);
   return rulesets;
 }
@@ -71,10 +138,21 @@ function indexRulesets(allRulesets: Ruleset[]): void {
   );
 }
 
-export async function loadRulesets(): Promise<void> {
+let loading: Promise<void> | null = null;
+export function loadRulesets(): Promise<void> {
+  if (!loading)
+    loading = loadRulesetSnapshot().finally(() => {
+      loading = null;
+    });
+  return loading;
+}
+
+async function loadRulesetSnapshot(budget?: HttpRequestBudget): Promise<void> {
   try {
-    // Try GitHub first, fall back to local file
-    let allRulesets = await fetchFromGitHub();
+    // Bundled rules are pinned to the image. Remote updates require explicit opt-in.
+    const previousSource = activeSource?.sha256;
+    let allRulesets = await fetchFromGitHub(budget);
+    if (budget && Date.now() >= budget.deadlineAt) throw new Error("Search deadline exceeded");
 
     if (!allRulesets) {
       console.log("[Rulesets] Falling back to local file");
@@ -85,14 +163,16 @@ export async function loadRulesets(): Promise<void> {
 
     // Also load generated rulesets from database
     await loadGeneratedRulesets();
+    if (activeSource?.sha256 !== previousSource) mediathekCache.clear();
 
     lastFetchTime = Date.now();
-  } catch (error) {
-    console.error("[Rulesets] Error loading rulesets:", error);
+  } catch {
+    console.error("[Rulesets] Error loading rulesets");
+    if (budget) throw new Error("Rules unavailable within search budget");
   }
 }
 
-async function loadGeneratedRulesets(): Promise<void> {
+export async function loadGeneratedRulesets(): Promise<void> {
   try {
     const generated = await getGeneratedRulesets();
     generatedRulesetsByTopic = new Map();
@@ -108,8 +188,11 @@ async function loadGeneratedRulesets(): Promise<void> {
         `[Rulesets] Loaded ${generated.length} generated rulesets for ${generatedRulesetsByTopic.size} topics`
       );
     }
-  } catch (error) {
-    console.warn("[Rulesets] Error loading generated rulesets:", error);
+  } catch {
+    console.warn("[Rulesets] Error loading generated rulesets");
+    generatedRulesetsByTopic = new Map();
+    mediathekCache.clear();
+    throw new Error("Generated rules unavailable");
   }
 }
 
@@ -168,7 +251,9 @@ export function hasRulesetForTvdbId(tvdbId: number): boolean {
  * Add a generated ruleset to the in-memory cache
  */
 export function addGeneratedRuleset(ruleset: Ruleset): void {
-  const existing = generatedRulesetsByTopic.get(ruleset.topic) || [];
+  const existing = (generatedRulesetsByTopic.get(ruleset.topic) || []).filter(
+    (entry) => entry.id !== ruleset.id && entry.media.media_tvdbId !== ruleset.media.media_tvdbId
+  );
   existing.push(ruleset);
   generatedRulesetsByTopic.set(ruleset.topic, existing);
   console.log(`[Rulesets] Added generated ruleset for topic "${ruleset.topic}"`);
@@ -180,7 +265,8 @@ export function addGeneratedRuleset(ruleset: Ruleset): void {
  */
 export async function getOrGenerateRulesetForShow(
   tvdbId: number,
-  showInfo: TvdbData
+  showInfo: TvdbData,
+  budget?: HttpRequestBudget
 ): Promise<Ruleset | null> {
   // First check if we already have a ruleset (external or generated)
   if (hasRulesetForTvdbId(tvdbId)) {
@@ -198,7 +284,7 @@ export async function getOrGenerateRulesetForShow(
 
   // Try to auto-generate a new ruleset
   console.log(`[Rulesets] No ruleset found for TVDB ${tvdbId}, attempting auto-generation...`);
-  const generated = await generateRulesetForShow(tvdbId, showInfo);
+  const generated = await generateRulesetForShow(tvdbId, showInfo, budget);
 
   if (generated) {
     // Add to in-memory cache
@@ -216,15 +302,21 @@ export function isRulesetsLoaded(): boolean {
 // Initialize rulesets on first import
 let initPromise: Promise<void> | null = null;
 
-export async function ensureRulesetsLoaded(): Promise<void> {
+export async function ensureRulesetsLoaded(budget?: HttpRequestBudget): Promise<void> {
   if (isRulesetsLoaded()) {
-    // Check for hourly refresh in background
-    refreshRulesetsIfNeeded().catch(console.error);
+    // Search callers do not launch a separate, unaccounted maintenance request.
+    if (budget && Date.now() - lastFetchTime > REFRESH_INTERVAL_MS)
+      return loadRulesetSnapshot(budget);
+    if (!budget) refreshRulesetsIfNeeded().catch(() => console.error("Failed to refresh rulesets"));
     return;
   }
 
+  if (budget) return loadRulesetSnapshot(budget);
+
   if (!initPromise) {
-    initPromise = loadRulesets();
+    initPromise = loadRulesets().finally(() => {
+      initPromise = null;
+    });
   }
 
   await initPromise;
