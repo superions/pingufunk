@@ -813,3 +813,37 @@ Timeoutlockerung, kein Skip und keine Abschwächung des Datenvertrags.
 Erneut lokal ausgeführt: zehn fokussierte Tests sowie 830 reguläre Tests grün;
 die zwölf bedingten DB-Tests werden nicht als hier ausgeführte PG-Tests gezählt.
 Der neue Fork-CI-Lauf bleibt bis zur tatsächlichen Ausführung ein eigener Gate.
+
+### Autorisierter Sicherheitscheckpoint (02.10.2026)
+
+Der Nutzer hat die gezielte Behebung und Aktualisierung freigegeben. Next,
+`@next/env` und `eslint-config-next` sind gemeinsam auf 16.3.8 gepinnt;
+Vitest/Coverage auf 4.1.11 und Prisma CLI/Client gemeinsam auf 6.19.3.
+PostCSS 8.5.28 und AJV 8.20.0 sowie die betroffenen transitiven Abhängigkeiten
+wurden mit npm im Lockfile aktualisiert. Keine pauschale Latest-/Force-Aktion,
+kein Prisma-Majorwechsel oder Downgrade. Vite 8 ist der von Vitest ausdrücklich
+akzeptierte Test-Consumer; die Produktlaufzeit nutzt Next, nicht Vite.
+
+Primärquellen: [Next-AVIF-Advisory](https://github.com/vercel/next.js/security/advisories/GHSA-2xp9-vwfh-vxw4),
+[Vitest-UI-Advisory](https://github.com/vitest-dev/vitest/security/advisories/GHSA-5xrq-8626-4rwp)
+und [Deepmerge-Rekursions-Advisory](https://github.com/RebeccaStevens/deepmerge-ts/security/advisories/GHSA-ggr8-5vv4-36mx).
+Prisma 6.19.3 verlangt weiterhin Deepmerge 7.1.5. Der ausschließlich auf
+`@prisma/config` begrenzte Override 8.0.2 erhält den Prisma-6-Vertrag und wird
+durch echten c12-Konfigurationsload sowie eine rekursive Merge-Regression geprüft.
+Bei einer passenden korrigierten Prisma-Abhängigkeit den Override erneut prüfen
+und entfernen; er ist keine allgemeine Freigabe beliebiger transitiver Majors.
+
+Frisches `npm ci`: beide Clients generiert, vollständiger und Production-only
+`npm audit` jeweils null Befunde. Dies ist kein Exploit- oder vollständiger
+OCI-Sicherheitsnachweis. Lokal neu ausgeführt: 832 Tests, Lint, Typecheck,
+Formatcheck und Produktionsbuild erfolgreich. `downloads/` ist ein ignorierter
+Daten-/QA-Artefaktbereich, kein zweites TS-Projekt: Der Typecheck schließt ihn
+jetzt aus, statt archivierte alte Next-Typen mit der aktuellen Anwendung zu mischen.
+Produktquellen und eigentliche Tests bleiben enthalten; SQL unverändert.
+
+Vite weist auf einen künftig anderen Configloader hin; Next meldet dynamische
+Dateitracingstellen in generiertem Prisma-Code und Medienprozessen. Diese
+Warnungen werden nicht unterdrückt oder durch Editieren generierter Clients
+kaschiert. Der Docker-Buildkontext schließt private Daten/Environmentfiles aus.
+Native DB-/Container-/Arr- und Desktopnachprüfung sowie Fork-CI bleiben bis
+zur tatsächlichen neuen Ausführung offen. Release/Rollout weiterhin gesperrt.
