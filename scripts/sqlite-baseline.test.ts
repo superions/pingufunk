@@ -77,6 +77,8 @@ function fixture(variant: "bootstrap" | "migrated" | "seriesTopic" | "current") 
   return { snapshotPath, expectedHash: hash(snapshotPath), targetPath: join(dir, "target.sqlite") };
 }
 
+// Real Prisma CLI startup is an integration cost, not a 5-second unit-test budget.
+// Keep all preservation assertions and the migrator's subprocess bounds intact.
 it.each(["bootstrap", "migrated", "seriesTopic", "current"] as const)(
   "transitions %s to a new ledger without modifying source and repeats read-only",
   (variant) => {
@@ -132,7 +134,8 @@ it.each(["bootstrap", "migrated", "seriesTopic", "current"] as const)(
     expect(() => transitionSqliteSnapshot(options)).toThrow("Baseline target changed");
     expect(hash(options.targetPath)).toBe(changed);
     expect(hash(options.snapshotPath)).toBe(options.expectedHash);
-  }
+  },
+  60_000
 );
 
 it("refuses unknown source drift before creating a target", () => {

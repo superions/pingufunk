@@ -96,6 +96,8 @@ function seed(filename: string, bootstrap: boolean) {
   }
 }
 
+// Multiple real CLI processes plus client startup exceed the default unit budget
+// on a cold CI runner. Each child remains bounded and teardown still disconnects.
 it.each(["bootstrap", "migrated"])(
   "preserves %s SQLite data through readiness, real client writes and restart",
   async (variant) => {
@@ -259,7 +261,8 @@ it.each(["bootstrap", "migrated"])(
     } finally {
       inspect.close();
     }
-  }
+  },
+  60_000
 );
 
 it("refuses missing or incompatible SQLite databases without creating or repairing them", () => {

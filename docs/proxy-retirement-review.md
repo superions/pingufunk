@@ -800,3 +800,15 @@ Security-/Kompatibilitätscheckpoint mit primärquellengeprüften Fixversionen,
 beiden Clients und betroffenen Produkt-/DB-/Build-/Desktop-/Arr-Gates nötig.
 Die funktionale P10.1-Abnahme schließt diesen Befund nicht. Kein Live-Zugriff
 wird vorausgesetzt oder angefragt; späterer Rollout bleibt nutzergeführt.
+### CI-Nachprüfung der Verbraucherabnahme (02.10.2026)
+
+Der erste Fork-CI-Lauf für `b4655e4` scheiterte nicht an einer fachlichen
+Assertion, sondern an zwei 5-Sekunden-Testlimits: Bootstrap-Baseline und
+migrierte SQLite-Runtime starten echte Prisma-CLI-Prozesse. Der separate
+PostgreSQL-Job bestand. Beide parametrisierten Integrationstestgruppen erhalten
+ein explizites äußeres Budget von 60 Sekunden; Unterprozessgrenzen, sämtliche
+Preservation-/Negativassertions und Teardown bleiben unverändert. Keine globale
+Timeoutlockerung, kein Skip und keine Abschwächung des Datenvertrags.
+Erneut lokal ausgeführt: zehn fokussierte Tests sowie 830 reguläre Tests grün;
+die zwölf bedingten DB-Tests werden nicht als hier ausgeführte PG-Tests gezählt.
+Der neue Fork-CI-Lauf bleibt bis zur tatsächlichen Ausführung ein eigener Gate.
