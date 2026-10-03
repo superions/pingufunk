@@ -1667,7 +1667,7 @@ Abhängigkeit P08; B10/R7.
       nimmt die historische Grundprüfung P09.2 nicht zurück und gehört nicht zur
       Tonsprachenabnahme P03.4.
 
-- [ ] **P09.4 — Sichere Transferdiagnostik und isolierte Reproduktion.**
+- [x] **P09.4 — Sichere Transferdiagnostik und isolierte Reproduktion.**
       Nutzerauftrag 03.10.2026: bestehende progressive Workerpfade in
       `download-manager.ts` statt generischer Sammelfehlermeldung mit begrenztem
       Phasen-/Byte-/HTTP-/Allowlistcode-Vertrag über `download-failure.ts`
@@ -1687,8 +1687,11 @@ Abhängigkeit P08; B10/R7.
       mit Node 26.10.0 bestanden Lint, Typecheck, Formatcheck, Build und Diffcheck.
       Ein anfänglicher Open-Listener-Typfehler wurde korrigiert, alle relevanten
       Gates danach erneut ausgeführt. Die 14 vorhandenen Turbopack-Tracing-
-      Warnungen bleiben sichtbar. Fork-Validierung mit Node 24 folgt am gepushten
-      Produktstand; keine Produktivursache oder produktive Installation behauptet.
+      Warnungen bleiben sichtbar. Entwicklungsabnahme auf Produktstand `fc99caf`:
+      [Fork-CI](https://github.com/superions/pingufunk/actions/runs/37150444785)
+      mit Node 24 einschließlich separater PostgreSQL-Integration erfolgreich.
+      Dokumentationsabnahme verändert die Produktinputs nicht; diese Evidenz
+      bleibt gültig. Keine Produktivursache oder produktive Installation behauptet.
 
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und

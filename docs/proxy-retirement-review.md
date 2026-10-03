@@ -1117,4 +1117,8 @@ Owner-Tests; 13 PostgreSQL-Gates bedingt und lokal nicht ausgeführt. Lint,
 Typecheck, Formatcheck, Build und Diffcheck bestanden mit Node 26.10.0.
 Der zuerst gefundene Open-Listener-Typfehler ist behoben; relevante Gates danach
 erneut grün. Bestehende 14 Turbopack-Tracingwarnungen bleiben unverändert.
-Neue Node-24-Fork-/Backend-Validierung ist vom lokalen Nachweis zu unterscheiden.
+[Fork-CI](https://github.com/superions/pingufunk/actions/runs/37150444785) auf
+Produktstand `fc99caf` ist zusätzlich mit Node 24 erfolgreich, einschließlich
+separater PostgreSQL-Integration. P09.4 entwicklungsseitig abgenommen; kein
+Produktiv-Rollout oder historischer Root-Cause-Nachweis. Die automatische
+Docker-Validierung ist ein eigenes Release-Gate und keine Deploymentfreigabe.
