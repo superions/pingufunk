@@ -82,7 +82,8 @@ export function createReadOnlyArrJsonClient(baseUrl: string, credential: string)
   return async (
     route: string,
     query?: URLSearchParams,
-    budget: RetryOptions = {}
+    budget: RetryOptions = {},
+    maxJsonBytes: number = MAX_ARR_JSON_BYTES
   ): Promise<unknown> => {
     const deadlineAt = requestDeadline(budget);
     const response = await fetchArrResponse(baseUrl, route, credential, query, {
@@ -90,7 +91,7 @@ export function createReadOnlyArrJsonClient(baseUrl: string, credential: string)
       deadlineAt,
     });
     try {
-      return await readBoundedProviderJson(response, deadlineAt, MAX_ARR_JSON_BYTES);
+      return await readBoundedProviderJson(response, deadlineAt, maxJsonBytes);
     } catch {
       throw new ArrRequestError();
     }

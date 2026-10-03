@@ -4,6 +4,7 @@ import { getSetting } from "@/lib/settings";
 import { externalCredential } from "@/lib/credential-settings";
 import { cacheContextEpoch, metadataCacheKey } from "@/lib/cache";
 import { createReadOnlyArrJsonClient } from "@/lib/read-only-arr-client";
+import { RADARR_DEFAULT_SETTINGS, validateRadarrSetting } from "@/lib/radarr-settings";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import type { TmdbMovieData } from "@/types";
 
@@ -59,9 +60,19 @@ export async function getRadarrMonitoredMovies(
   try {
     const epoch = cacheContextEpoch();
     const url = await getSetting("integration.radarr.url");
+    const limitKey = "integration.radarr.inventoryMaxMiB";
+    const limit = validateRadarrSetting(
+      limitKey,
+      (await getSetting(limitKey)) ?? RADARR_DEFAULT_SETTINGS[limitKey]
+    );
+    if (!limit) throw new RadarrUnavailableError();
+    const maximumBytes = Number(limit) * 1024 * 1024;
     const credential = await externalCredential("PINGUFUNK_RADARR_API_KEY");
     if (!url || !credential.configured || !credential.value) throw new RadarrUnavailableError();
-    const key = metadataCacheKey("radarr-monitored-inventory", null, [url, credential.value]);
+    const key = metadataCacheKey("radarr-monitored-inventory", maximumBytes, [
+      url,
+      credential.value,
+    ]);
     const assertCurrent = () => {
       if (epoch !== cacheContextEpoch() || Date.now() >= budget.deadlineAt)
         throw new RadarrUnavailableError();
@@ -77,7 +88,9 @@ export async function getRadarrMonitoredMovies(
     const payload = z
       .array(z.unknown())
       .max(2000)
-      .safeParse(await client("api/v3/movie", undefined, { requestBudget: budget }));
+      // Library responses include cover/overview fields. Bound this larger,
+      // explicitly selected response separately; all individual lookups keep 5 MiB.
+      .safeParse(await client("api/v3/movie", undefined, { requestBudget: budget }, maximumBytes));
     if (!payload.success) throw new RadarrUnavailableError();
     const seen = new Set<number>();
     const movies: TmdbMovieData[] = [];
@@ -132,13 +145,25 @@ export async function getRadarrMovie(
     const query = new URLSearchParams(
       tmdbId !== null ? { tmdbId: String(tmdbId) } : { imdbId: imdbId! }
     );
-    const movie = parseRadarrMovie(
-      await client(
+    // Prefer persisted library metadata: the tmdbId filter is documented by
+    // Radarr 6 and does not depend on Skyhook being reachable during a search.
+    // A malformed/mismatched local response must not become a remote fallback.
+    let payload: unknown;
+    if (tmdbId !== null) {
+      const local = z
+        .array(z.unknown())
+        .max(1)
+        .safeParse(await client("api/v3/movie", query, { requestBudget: budget }));
+      if (!local.success) throw new RadarrUnavailableError();
+      payload = local.data[0];
+    }
+    if (payload === undefined)
+      payload = await client(
         tmdbId !== null ? "api/v3/movie/lookup/tmdb" : "api/v3/movie/lookup/imdb",
         query,
         { requestBudget: budget }
-      )
-    );
+      );
+    const movie = parseRadarrMovie(payload);
     if (
       (tmdbId !== null && movie.tmdbId !== tmdbId) ||
       (imdbId !== null && movie.imdbId !== imdbId)

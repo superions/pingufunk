@@ -15,8 +15,8 @@ globalThis.fetch = async (input, init) => {
   if (url.hostname === "mediathekviewweb.de" && url.pathname === "/api/query") {
     const response = await sourceFetch(input, init);
     const data = await response.json();
-    // A synthetically evidenced year lets the real Radarr title parser run.
-    // No request ID or year is copied into a product result or live feed.
+    // The correlation variant deliberately has no source year: native metadata
+    // correlation, not an already parseable fixture, must satisfy Radarr.
     const body = JSON.parse(init?.body ?? "{}");
     const terms = (body.queries ?? []).map((entry) => String(entry.query ?? "").toLowerCase());
     const normalized = (value) => value.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
@@ -27,7 +27,10 @@ globalThis.fetch = async (input, init) => {
     const rows = [];
     for (const row of data.result.results) {
       row.topic = "Synthetic Media";
-      row.title = "Synthetic Media (2024)";
+      row.title =
+        process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1"
+          ? "Synthetic Media"
+          : "Synthetic Media (2024)";
       row.duration = 600;
       if (matches(row)) rows.push(row);
       const episode = {

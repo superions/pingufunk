@@ -537,7 +537,7 @@ function createMovieRssItem(
     title: formattedTitle,
     guid: {
       isPermaLink: false,
-      value: buildReleaseGuid(item, quality, url, `tmdb:${movieData.tmdbId}:movie`),
+      value: buildReleaseGuid(item, quality, url, "candidate:movie"),
     },
     link: url,
     comments: item.url_website,
@@ -645,6 +645,18 @@ export function generateMovieRssItems(
   }
 
   return items;
+}
+
+/** Only the strict matcher may enrich a source with metadata-backed identity. */
+export function generateMatchedMovieRssItems(
+  match: MovieMatchResult,
+  movie: TmdbMovieData,
+  quality: QualityPreference,
+  hlsEnabled: boolean
+): NewznabItem[] {
+  return match.identityVerified === true
+    ? generateMovieRssItems(match, movie, quality, hlsEnabled)
+    : generateGenericRssItems(match.item, quality, hlsEnabled, "movie");
 }
 
 /**

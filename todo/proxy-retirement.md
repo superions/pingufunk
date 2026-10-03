@@ -1293,7 +1293,7 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Synthetische direkte/vermittelte ID-/RSS-Abfrage einschließlich
       RSS→NZB→Queue, Monitoring, Pagination und Providerfehler ohne
       Teilbestandcache erfolgreich. Keine reale Instanz angebunden.
-- [x] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
+- [ ] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts`,
       neuer Radarr-Owner und
       `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}`
@@ -1312,6 +1312,17 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Abnahme: sichere Treffer plus unaufgelöste plausible Kandidaten,
       Metadatenkonflikte, fehlendes Jahr/ID/Dauer, gleiche Titel verschiedener
       Werke und alle Routeformen; generische Nichtfilmverträge erhalten.
+      Wiedereröffnet 03.10.2026: Nutzerfreigabe für Metadatenkorrelation bei
+      exaktem vollständigem Quelltitel/belegtem Alias, bestätigter Laufzeit
+      mit anfänglich ±10 % (inklusive Grenzen) und ±1 Jahr Mindesttoleranz
+      zwischen vorhandenem Quell-/Suchjahr und Metadatenjahr. Fehlendes
+      Quelljahr darf nach dieser Prüfung ergänzt werden, Ausstrahlungsjahr
+      und beiläufige Beschreibungsjahre nicht. Unbekannte Laufzeit, Fuzzy,
+      Titelkonflikte und mehrdeutige RSS-Remakes bleiben unbestätigt.
+      Historische pauschale Nichtkorrelation wird damit ausdrücklich ersetzt.
+      Erhalt: Fassungen/Sprache, vorherige generische Film-GUIDs und aktuelle
+      Medien-URL durch RSS→NZB→Queue. Abnahme ergänzt die Grenzwerte ±10 %,
+      ±1 Jahr und jeweils unmittelbar außerhalb, sowohl ID-Suche als auch RSS.
 - [x] **P08.3 — Begrenzte Kandidatensuche ohne vorgespielte Gewissheit.**
       Film-/TV-Consumer, Content-Search und gemeinsame Release-/NZB-Owner:
       vollständige Titel/Aliase/Episodentitel sowie begrenzte markante Wörter
@@ -1327,7 +1338,7 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Abnahme: korrekte Reihenfolge/Counts/IDs/Titel/aktuelle Medien-URLs,
       Varianten vor Pagination, Quellenfehler ohne partiellen Erfolg oder
       Empty-Success-Cache, bounded Requests und RSS→NZB→Queue-Konsistenz.
-- [x] **P08.4 — Direkter und Prowlarr-vermittelter Arr-Verbrauchervertrag.**
+- [ ] **P08.4 — Direkter und Prowlarr-vermittelter Arr-Verbrauchervertrag.**
       `src/app/api/newznab/route.ts`, vorhandener API-Alias, RSS-/NZB-Owner,
       Sonarr-/Radarr-Consumerregressionen und Cutover-Runbook:
       gleiche Caps/Kategorien/Anfrageparameter, stabile Quell-/Fassungs-GUIDs,
@@ -1346,6 +1357,17 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       ehrliche unbekannte Felder keine garantierte Ablehnung bewirken.
       Abnahme: reproduzierbare Consumer-Evidenz, kein zweiter Modus/Endpunkt,
       keine produktiven Suchläufe, Grabs oder Instanzänderungen ohne Freigabe.
+      Wiedereröffnet 03.10.2026: Frühere Consumerprobe mit bereits im
+      Quelltitel vorhandenem Jahr bewies die neue Metadatenkorrelation nicht.
+      Isolierte echte Radarr-/Prowlarr-Probe muss jetzt einen Film ohne
+      Quelljahr korrekt parsen/zuordnen, nicht bloß einen abgelehnten Treffer
+      anzeigen. Optionalen Metadatenzugriff separat prüfen; Prowlarr-Sync
+      allein richtet ihn nicht ein. Bibliotheksantworten bleiben bounded
+      (2.000 Zeilen, `integration.radarr.inventoryMaxMiB`: Default 10 MiB,
+      konfigurierbar 1–64 ganze MiB), einzelne Lookups 5 MiB. Ungültige Werte
+      abbrechen, Limitänderung invalidiert Bibliotheks-/Suchcaches; lokale TMDB-Auflösung
+      vor externem Lookup. Produktionsabnahme bleibt gesondert dokumentiert,
+      Tests starten keine realen Downloads.
 
 Implementierungscheckpoint 01.10.2026, keine vollständige P08-Abnahme:
 der gemeinsame Filmkontext prüft q/IMDb/TMDB/Jahr inklusive Konflikten;

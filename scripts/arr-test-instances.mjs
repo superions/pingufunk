@@ -111,21 +111,25 @@ async function api(root, manifest, app, path, body, method, expectedStatus, cred
   return result.data;
 }
 async function up() {
+  const runnerTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE ?? "pingufunk-p10-arr-qa";
+  const migratorTag =
+    process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
+  const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
   for (const app of ["sonarr", "radarr", "prowlarr"])
     docker(["image", "inspect", `lscr.io/linuxserver/${app}:latest`, "--format", "{{.Id}}"]);
-  docker(["image", "inspect", "pingufunk-p10-arr-qa", "--format", "{{.Id}}"]);
-  const migrator = docker([
-    "image",
-    "inspect",
-    "pingufunk-p10-arr-migrator-qa",
-    "--format",
-    "{{.Id}}",
-  ]);
+  docker(["image", "inspect", runnerTag, "--format", "{{.Id}}"]);
+  const migrator = docker(["image", "inspect", migratorTag, "--format", "{{.Id}}"]);
   const parent = resolve("downloads");
   mkdirSync(parent, { recursive: true });
   const root = mkdtempSync(join(parent, "arr-qa."));
   const owner = `${process.pid}-${Date.now()}`;
-  const manifest = { owner, network: `pingufunk-arr-${owner}`, migrator, apps: {} };
+  const manifest = {
+    owner,
+    network: `pingufunk-arr-${owner}`,
+    migrator,
+    movieCorrelation,
+    apps: {},
+  };
   save(root, manifest);
   docker(["network", "create", "--internal", "--label", `${label}=${owner}`, manifest.network]);
   for (const app of ["sonarr", "radarr", "prowlarr"]) {
@@ -168,6 +172,8 @@ async function up() {
   }
   const dir = join(root, "pingufunk");
   mkdirSync(dir, { mode: 0o700 });
+  if (movieCorrelation)
+    writeFileSync(join(dir, "radarr-api-key"), apiKey(root, "radarr"), { mode: 0o600 });
   // Initialize only this newly allocated SQLite test file, using the schema runner.
   docker([
     "run",
@@ -185,7 +191,7 @@ async function up() {
     migrator,
     "/app/scripts/database-migrate.mjs",
   ]);
-  const image = docker(["image", "inspect", "pingufunk-p10-arr-qa", "--format", "{{.Id}}"]);
+  const image = docker(["image", "inspect", runnerTag, "--format", "{{.Id}}"]);
   const name = `pingufunk-arr-pingufunk-${owner}`;
   manifest.apps.pingufunk = { name, image };
   save(root, manifest);
@@ -213,6 +219,14 @@ async function up() {
     `PINGUFUNK_MEDIA_QA_OWNER=${owner}`,
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
+    ...(movieCorrelation
+      ? [
+          "-e",
+          "PINGUFUNK_ARR_QA_MOVIE_CORRELATION=1",
+          "-e",
+          "PINGUFUNK_RADARR_API_KEY_FILE=/qa/radarr-api-key",
+        ]
+      : []),
     "--mount",
     `type=bind,src=${dir},dst=/qa`,
     "--mount",
@@ -243,6 +257,13 @@ async function up() {
     }
     if (!ready) throw new Error(`Owned ${app} readiness failed; retained QA state at ${root}`);
   }
+  if (movieCorrelation)
+    await api(root, manifest, "pingufunk", "/api/settings", {
+      "integration.radarr.enabled": "true",
+      "integration.radarr.url": "http://radarr:7878",
+      "integration.radarr.inventoryMaxMiB": "10",
+      "matching.movie.tolerancePercent": "10",
+    });
   save(root, manifest);
   console.log(`QA_DIRECTORY=${root}`);
   await status(root, manifest);
@@ -484,6 +505,8 @@ async function movieFixture(root, manifest) {
         VALUES (?, '[]', 'Synthetic Media', 'syntheticmedia', 'syntheticmedia', 'Synthetic Media', 'syntheticmedia', 1, 3, 0, 2024, '[]', '[]', '[]', '{}')`
         ).run(id);
       const metadata = db.prepare("SELECT Id FROM MovieMetadata WHERE TmdbId=?").get(id);
+      if (manifest.movieCorrelation)
+        db.prepare("UPDATE MovieMetadata SET Runtime=10 WHERE Id=?").run(metadata.Id);
       const profile = db.prepare("SELECT Id FROM QualityProfiles ORDER BY Id LIMIT 1").get();
       if (!profile) throw new Error("Owned Radarr fixture profile missing");
       if (!db.prepare("SELECT Id FROM Movies WHERE MovieMetadataId=?").get(metadata.Id))
@@ -614,6 +637,15 @@ async function movieSearch(root, manifest, app = "radarr") {
         );
       if (!candidates[0].guid || !candidates[0].downloadUrl)
         throw new Error("Owned Radarr candidate transport identity missing");
+      if (
+        app === "radarr" &&
+        manifest.movieCorrelation &&
+        (candidates[0].mappedMovieId !== movie.id ||
+          candidates[0].tmdbId !== movie.tmdbId ||
+          !candidates[0].title.includes(".2024.") ||
+          candidates[0].rejections.some((reason) => /unable to parse|unknown movie/i.test(reason)))
+      )
+        throw new Error("Owned yearless source did not acquire verified native film identity");
       console.log(
         `${app}: ${transport} native search parsed one synthetic candidate; no grab submitted`
       );

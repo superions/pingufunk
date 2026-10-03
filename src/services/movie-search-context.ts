@@ -1,4 +1,4 @@
-import { normalizeMovieTitle } from "./movie-matcher";
+import { MOVIE_YEAR_TOLERANCE, normalizeMovieTitle } from "./movie-matcher";
 import type { TmdbMovieData } from "@/types";
 
 export class MovieSearchContextError extends Error {
@@ -37,7 +37,11 @@ export function parseMovieSearchContext(params: URLSearchParams): MovieSearchCon
   const queryYear = query?.match(/\s+(\d{4})$/)?.[1] ?? null;
   const rawYear = params.get("year");
   if (rawYear !== null && !/^\d{4}$/.test(rawYear)) throw new MovieSearchContextError();
-  if (rawYear !== null && queryYear !== null && rawYear !== queryYear)
+  if (
+    rawYear !== null &&
+    queryYear !== null &&
+    Math.abs(Number(rawYear) - Number(queryYear)) > MOVIE_YEAR_TOLERANCE
+  )
     throw new MovieSearchContextError();
   const year = rawYear !== null || queryYear !== null ? Number(rawYear ?? queryYear) : null;
   if (year !== null && (year < 1800 || year > new Date().getUTCFullYear() + 2))
@@ -58,7 +62,10 @@ export function assertMovieSearchGoal(context: MovieSearchContext, movie: TmdbMo
   if (
     (context.tmdbId !== null && context.tmdbId !== movie.tmdbId) ||
     (context.imdbId !== null && context.imdbId !== movie.imdbId) ||
-    (context.year !== null && context.year !== year) ||
+    (context.year !== null &&
+      (year === null ||
+        !Number.isFinite(year) ||
+        Math.abs(context.year - year) > MOVIE_YEAR_TOLERANCE)) ||
     (context.query !== null && !names.includes(normalizeMovieTitle(context.query)))
   )
     throw new MovieSearchContextError();

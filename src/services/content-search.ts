@@ -43,6 +43,7 @@ export async function searchCacheContext(): Promise<string> {
     "api.sonarr.key",
     "integration.radarr.enabled",
     "integration.radarr.url",
+    "integration.radarr.inventoryMaxMiB",
     "matching.movie.tolerancePercent",
     "api.radarr.key",
   ];

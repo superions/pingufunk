@@ -95,10 +95,18 @@ export async function queryMediathekView(
       console.error("[MediathekClient] Invalid or unsuccessful API response");
       return null;
     }
-    // HLS entries use null for an unknown byte size in the live API.
-    const items = parsed.result.results.map((item) =>
-      item && typeof item === "object" && item.size === null ? { ...item, size: 0 } : item
-    );
+    // The catalogue uses null size (HLS) and empty/null duration for unknown
+    // values. Normalize only these explicit sentinels; zero never supplies
+    // positive runtime proof. Other malformed strings still fail the page.
+    const items = parsed.result.results.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const duration: unknown = Reflect.get(item, "duration");
+      return {
+        ...item,
+        ...(item.size === null ? { size: 0 } : {}),
+        ...(duration === null || duration === "" ? { duration: 0 } : {}),
+      };
+    });
     if (
       !items.every(
         (item) =>

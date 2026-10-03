@@ -4,6 +4,10 @@ export class ProviderResponseError extends Error {
   }
 }
 
+// Absolute safety ceiling, not a default body allowance. Every caller still
+// supplies its own smaller response limit; only explicit settings may raise it.
+export const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024 * 1024;
+
 /** Bound headers, streamed bytes and parsing with one absolute operation deadline. */
 export async function readBoundedProviderText(
   response: Response,
@@ -18,7 +22,7 @@ export async function readBoundedProviderText(
       !Number.isFinite(deadlineAt) ||
       !Number.isSafeInteger(maximumBytes) ||
       maximumBytes < 1 ||
-      maximumBytes > 8 * 1024 * 1024
+      maximumBytes > MAX_PROVIDER_RESPONSE_BYTES
     )
       throw new ProviderResponseError();
     reader = response.body?.getReader();

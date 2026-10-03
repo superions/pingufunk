@@ -1,12 +1,14 @@
 import { arrApiUrl } from "./read-only-arr-client";
+import { MAX_PROVIDER_RESPONSE_BYTES } from "./bounded-provider-json";
 
 export const RADARR_DEFAULT_SETTINGS: Record<string, string> = {
   "integration.radarr.enabled": "false",
   "integration.radarr.url": "",
+  "integration.radarr.inventoryMaxMiB": "10",
   "matching.movie.tolerancePercent": "10",
 };
 
-/** Credentials are external; the settings API only accepts activation and routing. */
+/** Credentials are external; only nonsecret integration/matching settings are writable. */
 export function validateRadarrSetting(key: string, value: unknown): string | null | undefined {
   if (key === "integration.radarr.enabled")
     return typeof value === "string" && ["true", "false"].includes(value) ? value : null;
@@ -24,6 +26,15 @@ export function validateRadarrSetting(key: string, value: unknown): string | nul
     if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
     const number = Number(value);
     return Number.isSafeInteger(number) && number <= 25 ? String(number) : null;
+  }
+  if (key === "integration.radarr.inventoryMaxMiB") {
+    if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
+    const number = Number(value);
+    return Number.isSafeInteger(number) &&
+      number >= 1 &&
+      number <= MAX_PROVIDER_RESPONSE_BYTES / (1024 * 1024)
+      ? String(number)
+      : null;
   }
   return undefined;
 }

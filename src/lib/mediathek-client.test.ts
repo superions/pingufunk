@@ -109,6 +109,16 @@ it("normalizes the unknown size of live ORF HLS entries to zero", async () => {
   ]);
 });
 
+it.each([null, ""])(
+  "keeps unknown catalogue duration %j unknown without discarding the whole page",
+  async (duration) => {
+    vi.mocked(fetchWithRetry).mockResolvedValue(
+      Response.json({ result: { results: [validItem, { ...validItem, duration }] } })
+    );
+    expect(await queryMediathekView([], 10)).toEqual([validItem, { ...validItem, duration: 0 }]);
+  }
+);
+
 it("rejects an advertised oversized body without reading it", async () => {
   vi.mocked(fetchWithRetry).mockResolvedValue(
     new Response("not read", { headers: { "content-length": String(9 * 1024 * 1024) } })

@@ -3,7 +3,17 @@ import {
   readBoundedProviderJson,
   readBoundedProviderText,
   ProviderResponseError,
+  MAX_PROVIDER_RESPONSE_BYTES,
 } from "./bounded-provider-json";
+
+it("allows explicitly larger bounded responses but not an unbounded safety ceiling", async () => {
+  await expect(
+    readBoundedProviderJson(new Response("[1]"), Date.now() + 1000, 10 * 1024 * 1024)
+  ).resolves.toEqual([1]);
+  await expect(
+    readBoundedProviderJson(new Response("[1]"), Date.now() + 1000, MAX_PROVIDER_RESPONSE_BYTES + 1)
+  ).rejects.toBeInstanceOf(ProviderResponseError);
+});
 
 it("allows the exact byte boundary and rejects one byte over it", async () => {
   await expect(

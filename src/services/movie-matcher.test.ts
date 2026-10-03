@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiResultItem, TmdbMovieData } from "@/types";
 
 vi.mock("@/lib/settings", () => ({
@@ -6,6 +6,9 @@ vi.mock("@/lib/settings", () => ({
 }));
 
 import { matchMovieItems } from "./movie-matcher";
+import { getSetting } from "@/lib/settings";
+
+beforeEach(() => vi.mocked(getSetting).mockResolvedValue(null));
 
 const movie: TmdbMovieData = {
   tmdbId: 28,
@@ -65,6 +68,62 @@ describe("matchMovieItems – HLS eligibility", () => {
 });
 
 describe("source candidates are not canonical movie proof", () => {
+  it.each([
+    [4859, false],
+    [4860, true],
+    [5400, true],
+    [5940, true],
+    [5941, false],
+  ])(
+    "verifies a 90-minute film with inclusive ±10%% runtime: %s seconds -> %s",
+    async (seconds, verified) => {
+      const [match] = await matchMovieItems(
+        [makeItem(seconds as number, "runtime")],
+        { ...movie, runtime: 90 },
+        300
+      );
+      expect(match.identityVerified).toBe(verified);
+    }
+  );
+  it("uses the configured runtime tolerance instead of a fixed threshold", async () => {
+    vi.mocked(getSetting).mockImplementation(async (key) =>
+      key === "matching.movie.tolerancePercent" ? "5" : null
+    );
+    const [match] = await matchMovieItems(
+      [makeItem(4860, "runtime")],
+      { ...movie, runtime: 90 },
+      300
+    );
+    expect(match.identityVerified).toBe(false);
+  });
+  it.each([2025, 2026, 2027])("verifies an exact source title within ±1 year: %s", async (year) => {
+    const [match] = await matchMovieItems(
+      [{ ...makeItem(2700, "year"), title: `Documentary (${year}) (mit Untertitel)` }],
+      movie,
+      300
+    );
+    expect(match.identityVerified).toBe(true);
+    expect(match.item.title).toBe(`Documentary (${year}) (mit Untertitel)`);
+  });
+  it.each([2024, 2028])(
+    "retains a source beyond the year tolerance as an unverified candidate: %s",
+    async (year) => {
+      const [match] = await matchMovieItems(
+        [{ ...makeItem(2700, "year"), title: `Documentary (${year})` }],
+        movie,
+        300
+      );
+      expect(match.identityVerified).toBe(false);
+    }
+  );
+  it("does not invent runtime proof from an exact title", async () => {
+    const [match] = await matchMovieItems(
+      [makeItem(2700, "unknown")],
+      { ...movie, runtime: null },
+      300
+    );
+    expect(match.identityVerified).toBe(false);
+  });
   it("keeps an exact title as an unverified candidate, including a different source year", async () => {
     const source = { ...makeItem(2700, "remake"), title: "Documentary (1998)" };
     const [match] = await matchMovieItems([source], movie, 2700);

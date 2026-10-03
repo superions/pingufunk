@@ -62,14 +62,14 @@ it("preserves subpaths and shares a GET-only authenticated budget with identity 
   const fetch = vi
     .spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(Response.json({ version: "6.0.0.1234" }))
-    .mockResolvedValueOnce(Response.json(movie()));
+    .mockResolvedValueOnce(Response.json([movie()]));
   const budget = new HttpRequestBudget(2);
   const result = await getRadarrMovie(28, "tt0000028", budget);
   expect(result?.aliases).toEqual(["Verified alias"]);
   expect(budget.remainingAttempts).toBe(0);
   expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
     "https://arr.invalid/base/radarr/api/v3/system/status",
-    "https://arr.invalid/base/radarr/api/v3/movie/lookup/tmdb?tmdbId=28",
+    "https://arr.invalid/base/radarr/api/v3/movie?tmdbId=28",
   ]);
   for (const [, init] of fetch.mock.calls) {
     expect(init).toMatchObject({
@@ -91,6 +91,30 @@ it("uses the IMDb lookup without assuming a local library ID", async () => {
   expect(String(fetch.mock.calls[1][0])).toContain("lookup/imdb?imdbId=tt0000028");
 });
 
+it("uses a remote lookup only for a schema-valid empty local library result", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+    .mockResolvedValueOnce(Response.json([]))
+    .mockResolvedValueOnce(Response.json(movie()));
+  expect((await getRadarrMovie(28, null, new HttpRequestBudget(3)))?.tmdbId).toBe(28);
+  expect(String(fetch.mock.calls[2][0])).toContain("movie/lookup/tmdb?tmdbId=28");
+});
+
+it.each([{}, [movie(), movie()]])(
+  "rejects a malformed local lookup without calling Skyhook",
+  async (payload) => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+      .mockResolvedValueOnce(Response.json(payload));
+    await expect(getRadarrMovie(28, null, new HttpRequestBudget(3))).rejects.toThrow(
+      "Optional movie metadata unavailable"
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
+  }
+);
+
 it.each([
   { ...movie(), tmdbId: 29 },
   { ...movie(), imdbId: "tt0000029" },
@@ -102,9 +126,9 @@ it.each([
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
-      .mockResolvedValueOnce(Response.json(payload))
+      .mockResolvedValueOnce(Response.json([payload]))
       .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
-      .mockResolvedValueOnce(Response.json(movie()));
+      .mockResolvedValueOnce(Response.json([movie()]));
     await expect(getRadarrMovie(28, "tt0000028", new HttpRequestBudget(2))).rejects.toThrow(
       "Optional movie metadata unavailable"
     );
@@ -140,7 +164,7 @@ it("invalidates snapshots after credential rotation and settings epoch changes",
   const fetch = vi
     .spyOn(globalThis, "fetch")
     .mockImplementation(async (url) =>
-      Response.json(String(url).includes("system/status") ? { version: "6.0.0" } : movie())
+      Response.json(String(url).includes("system/status") ? { version: "6.0.0" } : [movie()])
     );
   await getRadarrMovie(28, null, new HttpRequestBudget(2));
   vi.mocked(externalCredential).mockResolvedValue({ configured: true, value: "synthetic-rotated" });
@@ -160,6 +184,48 @@ it("validates activation, URL and explicit percent units without accepting crede
   );
   expect(validateRadarrSetting("matching.movie.tolerancePercent", "26")).toBeNull();
   expect(validateRadarrSetting("matching.movie.tolerancePercent", "0")).toBe("0");
+  expect(validateRadarrSetting("integration.radarr.inventoryMaxMiB", "10")).toBe("10");
+  expect(validateRadarrSetting("integration.radarr.inventoryMaxMiB", "64")).toBe("64");
+  for (const value of ["0", "65", "-1", "10.5", "NaN", "", 10])
+    expect(validateRadarrSetting("integration.radarr.inventoryMaxMiB", value)).toBeNull();
+});
+
+it("does not reuse an oversized inventory after lowering its configured limit", async () => {
+  const payload = [{ ...movie(), monitored: true, overview: "x".repeat(6 * 1024 * 1024) }];
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (url) =>
+      Response.json(String(url).includes("system/status") ? { version: "6.0.0" } : payload)
+    );
+  expect(await getRadarrMonitoredMovies(new HttpRequestBudget(2))).toHaveLength(1);
+  vi.mocked(getSetting).mockImplementation(
+    async (key) =>
+      ({
+        "integration.radarr.enabled": "true",
+        "integration.radarr.url": "https://arr.invalid/base/radarr",
+        "integration.radarr.inventoryMaxMiB": "5",
+      })[key] ?? null
+  );
+  await expect(getRadarrMonitoredMovies(new HttpRequestBudget(2))).rejects.toThrow(
+    "Optional movie metadata unavailable"
+  );
+  expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+it("rejects invalid persisted inventory limits before reading secrets or HTTP", async () => {
+  vi.mocked(getSetting).mockImplementation(
+    async (key) =>
+      ({ "integration.radarr.enabled": "true", "integration.radarr.inventoryMaxMiB": "unbounded" })[
+        key
+      ] ?? null
+  );
+  vi.mocked(externalCredential).mockClear();
+  const fetch = vi.spyOn(globalThis, "fetch");
+  await expect(getRadarrMonitoredMovies(new HttpRequestBudget(2))).rejects.toThrow(
+    "Optional movie metadata unavailable"
+  );
+  expect(externalCredential).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
 });
 
 it("reads only monitored movie goals, strips library fields and caches isolated copies", async () => {
@@ -190,6 +256,26 @@ it("does not read a disabled inventory's credentials or make HTTP requests", asy
   expect(await getRadarrMonitoredMovies(new HttpRequestBudget())).toEqual([]);
   expect(externalCredential).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("bounds the library separately from 5-MiB single-film metadata responses", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+    .mockResolvedValueOnce(
+      Response.json([{ ...movie(), monitored: true, overview: "x".repeat(6 * 1024 * 1024) }])
+    );
+  expect(await getRadarrMonitoredMovies(new HttpRequestBudget(2))).toEqual([
+    parseRadarrMovie(movie()),
+  ]);
+  clearMetadataCaches();
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(Response.json({ version: "6.0.0" }))
+    .mockResolvedValueOnce(
+      new Response("not read", { headers: { "content-length": String(10 * 1024 * 1024 + 1) } })
+    );
+  await expect(getRadarrMonitoredMovies(new HttpRequestBudget(2))).rejects.toThrow(
+    "Optional movie metadata unavailable"
+  );
 });
 
 it("rejects duplicate monitored IDs and malformed monitoring without a partial inventory cache", async () => {

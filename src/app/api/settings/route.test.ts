@@ -137,6 +137,22 @@ it("defaults Sonarr off and accepts validated nonsecret controls with reload/rea
   });
 });
 
+it("defaults the Radarr library limit to 10 MiB and persists configurable limits with cache invalidation", async () => {
+  const key = "integration.radarr.inventoryMaxMiB";
+  const initial = await (
+    await GET(new NextRequest(`http://localhost/api/settings?key=${key}`))
+  ).json();
+  expect(initial.value).toBe("10");
+  expect((await post({ [key]: "12" })).status).toBe(200);
+  expect(values.get(key)).toBe("12");
+  const reloaded = await (
+    await GET(new NextRequest(`http://localhost/api/settings?key=${key}`))
+  ).json();
+  expect(reloaded.value).toBe("12");
+  expect(clearSettingsCache).toHaveBeenCalled();
+  expect(mediathekCache.clear).toHaveBeenCalled();
+});
+
 it.each([
   ["integration.sonarr.enabled", "yes"],
   ["integration.sonarr.url", "https://user:private@example.invalid/sonarr"],
@@ -147,6 +163,9 @@ it.each([
   ["integration.sonarr.windowDays", "1.5"],
   ["matching.sonarr.tolerancePercent", "26"],
   ["matching.sonarr.tolerancePercent", "NaN"],
+  ["integration.radarr.inventoryMaxMiB", "0"],
+  ["integration.radarr.inventoryMaxMiB", "65"],
+  ["integration.radarr.inventoryMaxMiB", "10.5"],
   ["matching.minDuration", "-1"],
   ["download.path", "https://example.invalid/media"],
   ["download.path", "folder\u0000other"],

@@ -3,6 +3,33 @@ import { verifiedDurationCheck } from "@/lib/verified-duration";
 import { getSetting } from "@/lib/settings";
 import type { ApiResultItem, TmdbMovieData } from "@/types";
 
+// Production/premiere metadata commonly differs by one calendar year. Never
+// derive a production year from the broadcast timestamp or loose description text.
+export const MOVIE_YEAR_TOLERANCE = 1;
+
+export function movieSourceTitle(value: string): { title: string; year: number | null } {
+  let title = value.trim();
+  let year: number | null = null;
+  for (let pass = 0; pass < 3; pass++) {
+    const edition =
+      /\s*\((?:mit Untertitel|Originalversion(?: mit Untertitel)?|Audiodeskription|Hörfassung|Englisch|Französisch|Deutsch|OV|OmU)\)\s*$/i;
+    if (edition.test(title)) {
+      title = title.replace(edition, "").trim();
+      continue;
+    }
+    const match = /\s+(?:\((19\d{2}|20\d{2})\)|(19\d{2}|20\d{2}))$/.exec(title);
+    if (match) {
+      const found = Number(match[1] ?? match[2]);
+      if (year !== null && year !== found) return { title: value, year: null };
+      year = found;
+      title = title.slice(0, match.index).trim();
+      continue;
+    }
+    break;
+  }
+  return { title, year };
+}
+
 export function normalizeMovieTitle(title: string): string {
   return title
     .normalize("NFC")
@@ -53,10 +80,8 @@ export async function matchMovieItems(
       )
     )
       continue;
-    const sourceYear = /\s+(?:\((\d{4})\)|(\d{4}))$/.exec(item.title.trim());
-    const title = normalizeMovieTitle(
-      sourceYear ? item.title.slice(0, sourceYear.index) : item.title
-    );
+    const source = movieSourceTitle(item.title);
+    const title = normalizeMovieTitle(source.title);
     const topic = normalizeMovieTitle(item.topic);
     const exact = names.includes(title);
     const plausible =
@@ -75,13 +100,22 @@ export async function matchMovieItems(
     const qualifiedShortFilm =
       exact &&
       year !== null &&
-      Number(sourceYear?.[1] ?? sourceYear?.[2]) === year &&
+      source.year !== null &&
+      Math.abs(source.year - year) <= MOVIE_YEAR_TOLERANCE &&
       duration.expectedVerified &&
       !/\b(?:trailer|teaser|clip|preview|outtakes)\b/i.test(item.title);
     if (item.duration < minDurationSeconds && !qualifiedShortFilm) continue;
-    // MediathekView has no verified film IDs/production-year field. Even exact
-    // text/year/runtime correlation cannot justify copying a request ID.
-    const identityVerified = false;
+    // Explicitly approved metadata-backed correlation, not a fuzzy score or
+    // a request stamp. Unknown runtime/year, conflicting years and clips remain
+    // source candidates, including on the exact-title retrieval path.
+    const identityVerified =
+      exact &&
+      duration.expectedVerified &&
+      year !== null &&
+      Number.isSafeInteger(year) &&
+      year >= 1800 &&
+      (source.year === null || Math.abs(source.year - year) <= MOVIE_YEAR_TOLERANCE) &&
+      !/\b(?:trailer|teaser|clip|preview|outtakes)\b/i.test(item.title);
     results.push({
       item,
       score: exact ? 80 : 40,

@@ -22,6 +22,7 @@ import {
 import {
   generateRssItems,
   generateGenericRssItems,
+  generateMatchedMovieRssItems,
   convertItemsToRss,
   serializeRss,
   getEmptyRssResult,
@@ -53,7 +54,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v8-shared-search-budget";
+const CONTENT_SEARCH_CACHE_VERSION = "v9-verified-movie-identity";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -1280,7 +1281,10 @@ export async function fetchMovieSearchForRssSync(
   const eligible = sources.filter(
     (item) => !SKIP_KEYWORDS.some((word) => item.title.includes(word))
   );
-  const matches: ApiResultItem[] = [];
+  const matches: {
+    match: Awaited<ReturnType<typeof matchMovieItems>>[number];
+    movie: TmdbMovieData;
+  }[] = [];
   for (const movie of movies) {
     if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
       throw new Error("Search provider unavailable");
@@ -1289,13 +1293,28 @@ export async function fetchMovieSearchForRssSync(
     matches.push(
       ...(await matchMovieItems(eligible, movie, minimum, hlsEnabled))
         .filter(({ titleMatch }) => titleMatch === "exact")
-        .map(({ item }) => item)
+        .map((match) => ({ match, movie }))
     );
   }
-  const selected = selectLanguageVariants(matches, await getConfiguredLanguagePolicy());
+  const owners = new Map<ApiResultItem, typeof matches>();
+  for (const entry of matches)
+    owners.set(entry.match.item, [...(owners.get(entry.match.item) ?? []), entry]);
+  const selected = selectLanguageVariants([...owners.keys()], await getConfiguredLanguagePolicy());
   const rss = convertItemsToRss(
     dedupeNewznabItems(
-      selected.flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "movie"))
+      selected.flatMap((item) => {
+        const entries = owners.get(item)!;
+        const verified = entries.filter(({ match }) => match.identityVerified);
+        // Same-title remakes must not inherit whichever inventory entry was first.
+        if (new Set(verified.map(({ movie }) => movie.tmdbId)).size !== 1)
+          return generateGenericRssItems(item, quality, hlsEnabled, "movie");
+        return generateMatchedMovieRssItems(
+          verified[0].match,
+          verified[0].movie,
+          quality,
+          hlsEnabled
+        );
+      })
     ),
     limit,
     offset
@@ -1352,7 +1371,9 @@ export async function fetchMovieSearchResults(
     }
 
     console.log(`[Mediathek] Searching MediathekView API for movie: "${searchTerm}"`);
-    const results = await queryContent([{ fields: QUERY_FIELDS, query: searchTerm }], 500, {
+    // A broadcaster/topic bearing the film's name must not crowd the bounded
+    // source window with unrelated programmes before exact-title matching.
+    const results = await queryContent([{ fields: ["title"], query: searchTerm }], 500, {
       requestBudget,
       deferLanguageSelection: true,
     });
@@ -1413,8 +1434,9 @@ export async function fetchMovieSearchResults(
     matchResults.map((match) => match.item),
     await getConfiguredLanguagePolicy()
   );
+  const matchesByItem = new Map(matchResults.map((match) => [match.item, match]));
   const newznabItems: NewznabItem[] = selected.flatMap((item) =>
-    generateGenericRssItems(item, quality, hlsEnabled, "movie")
+    generateMatchedMovieRssItems(matchesByItem.get(item)!, movieData, quality, hlsEnabled)
   );
 
   console.log(

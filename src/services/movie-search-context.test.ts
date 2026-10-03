@@ -18,6 +18,12 @@ const movie: TmdbMovieData = {
 };
 
 describe("one movie search context", () => {
+  it.each([1997, 1998, 1999])("accepts the one-year metadata tolerance: %s", (year) => {
+    const context = parseMovieSearchContext(
+      new URLSearchParams(`q=Beispielfilm+1998&year=${year}`)
+    );
+    expect(() => assertMovieSearchGoal(context, movie)).not.toThrow();
+  });
   it("normalizes numeric IMDb IDs and Radarr's title/year fallback", () => {
     const context = parseMovieSearchContext(
       new URLSearchParams("q=Beispielfilm+1998&year=1998&tmdbid=42&imdbid=0000042")
