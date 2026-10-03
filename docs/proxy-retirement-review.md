@@ -1042,3 +1042,18 @@ Entwicklungsabhängigkeiten (braces/micromatch samt ESLint-/lint-staged-Konsumen
 Reichweite und neue genaue Imagescans bleiben vor einem nächsten Rollout zu
 prüfen. Keine Produktionsdienste, Secrets oder Datenbanken in diesem Schritt
 verändert; PostgreSQL-Übernahme und reale Freigabegates bleiben offen.
+
+Container-Nachprüfung: Der zunächst laufende Docker-Gate `37129277596` scheiterte
+am fehlenden neuen Helper im expliziten Migrator-COPY. Lokaler Build zeigte
+zusätzlich die fehlende Ausnahme der Script-Allowlist in `.dockerignore`.
+Beide Verpackungsfehler in `1f5bfb5` korrigiert; keine geschwächte Assertion oder
+blinder Retry. Danach beide tatsächlichen Images auf dem Entwicklungshost neu
+gebaut und vollständige TLS-Containerprobe einschließlich Snapshot, prepare,
+Import/Verify/Sequences, Maintenance, Appstart und durablem First-write-Checkpoint
+erfolgreich. Immutable Post-write-Rollback nicht neu lokal ausgeführt;
+dieser zusätzliche Gate bleibt im noch laufenden Docker-Forklauf.
+[Fork-CI für den Verpackungsfix](https://github.com/superions/pingufunk/actions/runs/37130113142)
+erfolgreich; Dockerlauf `37130113176` noch nicht abschließend bestätigt.
+Auch die neue SQLite-Containerprobe bestand: Fresh Install, Bootstrap-Baseline,
+gespeicherte Settings, Restart/Persistenz und fail-closed Negativfälle. Keine
+produktive SQLite-Datei angesprochen und keine Testdatenbank beibehalten.

@@ -1677,7 +1677,10 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       Implementiert auf `96e3082`: gemeinsamer URL-Transportowner, ungültige/
       doppelte Modi gesperrt, Secret-Preflight und echte Klartext-CLI-Abnahmen
       einschließlich Sequences. 842 reguläre Tests und 15 disposable PG-Tests
-      grün; aktueller Fork-CI erfolgreich. Docker-/TLS-Neuabnahme noch laufend,
+      grün; aktueller Fork-CI erfolgreich. Docker-/TLS-Neuabnahme fand fehlenden
+      Helper im expliziten Migrator-COPY/Buildcontext; in `1f5bfb5` korrigiert.
+      Neue lokale App-/Migratorbuilds und TLS-Containerprobe danach erfolgreich;
+      aktueller Docker-Forklauf noch laufend,
       produktive Images unverändert. Frischer unveränderter Lockfile-Audit:
       sechs HIGH in Entwicklungsabhängigkeiten, Production-Audit null; Build-/
       Migratorreichweite und genaue neue Images vor Rollout prüfen. Keine
