@@ -40,7 +40,7 @@ it.skipIf(!required)(
       };
       const deploy = vi.fn();
       const secret = join(dir, "database-url");
-      const preflightEnv = { ...process.env, DATABASE_URL_FILE: secret };
+      const preflightEnv: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL_FILE: secret };
       delete preflightEnv.DATABASE_URL;
       const preflightArgs = [
         "scripts/postgresql-preflight.mjs",
