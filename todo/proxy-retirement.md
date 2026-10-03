@@ -1683,7 +1683,13 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       aktueller Docker-Forklauf noch laufend,
       produktive Images unverändert. Frischer unveränderter Lockfile-Audit:
       sechs HIGH in Entwicklungsabhängigkeiten, Production-Audit null; Build-/
-      Migratorreichweite und genaue neue Images vor Rollout prüfen. Keine
+      Migratorreichweite und genaue neue Images vor Rollout prüfen.
+      Autorisierter Dependency-Fix 03.10.2026: lint-staged 17.6.0 und eng
+      versionierter Next-Glob-Alias entfernen beide braces/micromatch-Pfade;
+      kein Advisory-Ignore oder Downgrade. Frisches npm ci, beide Clients,
+      beide Audits null; 846 Tests, Lint, Types, Format und Build grün.
+      Reale Consumer-/Hook-Regressionen; neue Linux-/Containergates noch offen.
+      Details, Override-Removal-Gate und Abnahmegrenzen im Review. Keine
       Rollen-/DB-Anlage, Datenmigration oder gemeinsame Clusteränderung.
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
       Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/

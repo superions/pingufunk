@@ -1057,3 +1057,42 @@ erfolgreich; Dockerlauf `37130113176` noch nicht abschließend bestätigt.
 Auch die neue SQLite-Containerprobe bestand: Fresh Install, Bootstrap-Baseline,
 gespeicherte Settings, Restart/Persistenz und fail-closed Negativfälle. Keine
 produktive SQLite-Datei angesprochen und keine Testdatenbank beibehalten.
+
+### Neuer braces-Auditbefund: gezielter Dependency-Ausstieg (03.10.2026)
+
+Der frühere Nullbefund bleibt ein historischer Scanzeitpunkt, keine dauerhafte
+Garantie. [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+wurde am 02.10.2026 aktualisiert; `braces <=3.0.3` besitzt noch keine gepatchte
+Version. Sechs HIGH-Paketmeldungen gehen auf diesen einen Rootbefund zurück.
+Zwei eingehende Pfade: lint-staged→micromatch→braces und
+Next-ESLint→fast-glob→micromatch→braces. Production-only Audit war bereits null;
+der Migrator enthält jedoch die vollständige Installation einschließlich
+Entwicklungsabhängigkeiten. Deshalb ist „nur dev“ keine Containerfreigabe.
+
+Autorisierter Fix: lint-staged 17.6.0 verwendet Picomatch ohne braces; Node >=24
+erfüllt seine neue Mindestversion, Git muss >=2.32 sein. Die bestehende
+package.json-Hookkonfiguration bleibt unverändert, keine optionale YAML-
+Konfiguration erforderlich. Der Next-Plugin-Owner 16.3.8 benutzt fast-glob
+ausschließlich als `globSync(pattern, {onlyDirectories:true})` zur Rootsuche.
+Nur dieser versionierte Edge wird per npm-Alias durch tinyglobby 0.2.17 ersetzt,
+nicht global fast-glob oder micromatch. Tinyglobby ist bereits im Dependency-
+Graph und [dokumentiert diesen API-Teil](https://superchupu.dev/tinyglobby).
+Es ist **kein vollständiger fast-glob-API-Ersatz**: absolute Eingaben liefern
+relative Pfade mit abschließendem Slash; der tatsächliche Consumer verwendet
+`path.join` und dateisystemrelative Zugriffe. Regressionen prüfen die aufgelösten
+Verzeichnisse und tatsächliche ESLint-Rejections für Pages/App-Routen sowie
+externe/unbekannte Links, nicht bloß identische Rückgabestrings.
+
+Der eng begrenzte Override ist bei jedem Next-Pluginupdate zu reviewen und zu
+entfernen, sobald dessen Originaldependency sicher ist. Ein zusätzlicher Test
+führt den echten Consumer mit tief verschachtelten Klammern in einem begrenzten
+Childprozess aus. Ein disposable Git-Repository prüft die echten lint-staged-
+Auswahlmuster für verschachtelte TS/TSX-, JSON-/CSS-Dateien und Negativfälle.
+Keine ESLint-Regel abgeschaltet, Advisory ignoriert, Packageversion umbenannt
+oder unsicherer Major-Downgrade übernommen. Upstream enthält diesen Fix nicht.
+CI prüft künftig auch den vollständigen gelockten HIGH/CRITICAL-Audit.
+
+Zwischenstand: frisches npm ci generierte beide Datenbankclients; vollständiger
+und Production-Audit null, braces/micromatch vollständig aus dem installierten
+Graph entfernt. Produkt-, Linux-/Container- und CI-Abnahme werden nach diesem
+Checkpoint ergänzt; keine Deployment- oder Datenmigrationsbehauptung.
