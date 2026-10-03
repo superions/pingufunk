@@ -12,6 +12,16 @@ SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
 
 ## Haltelinien vor jeder Ausführung
 
+Transportnachtrag 03.10.2026: TLS ist keine zwingende Infrastrukturvoraussetzung.
+App-, DDL- und Import-Secret wählen konsistent `sslmode=require` (TLS) oder
+`sslmode=disable` (ausdrücklich unverschlüsselt). Ohne Parameter verlangt der
+Migrationsgate TLS; `prefer` ist kein zulässiger Cutovermodus. Kein automatischer
+Fallback. Der CLI-Preflight löst auch `DATABASE_URL_FILE` auf; Vorbereitung,
+Import, Verify und Sequences prüfen dieselbe tatsächliche Transportwahl.
+Identität, Berechtigungen, Integrity, Datenvergleich und Rollback bleiben Pflicht.
+Die folgenden historischen TLS-Proben bleiben gültige TLS-Abnahmen; ergänzende
+Klartext-CLI-Proben sind im regulären disposable PG-Harness enthalten.
+
 1. Tatsächliche Quelle, Dateisystem, Journal-/WAL-/SHM-Status, Tabellenstand,
    Datenmenge, SQLite-Image-Digest und Backupablage belegen. Quell-DB nicht
    kopieren, reparieren, checkpointen oder löschen. Die Backup-API darf bei WAL

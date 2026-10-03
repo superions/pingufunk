@@ -7,6 +7,7 @@ import { PrismaClient } from "@prisma/client";
 import { inspectSource, inspectTarget, assertConnectedTarget } from "./postgresql-preflight.mjs";
 import { hashSnapshotFile } from "./postgresql-import.mjs";
 import { importOrder } from "./postgresql-row-transform.mjs";
+import { postgresqlRequiresTls } from "./postgresql-transport.mjs";
 
 /** Prepare only an empty dedicated migration target, never upgrade an active app. */
 export async function preparePostgresqlTarget({
@@ -15,7 +16,7 @@ export async function preparePostgresqlTarget({
   database,
   role,
   host,
-  requireTls = true,
+  requireTls = postgresqlRequiresTls(),
   deploy = /** @type {undefined | (() => void | Promise<void>)} */ (undefined),
 }) {
   if (!snapshotPath?.startsWith("/") || !/^[a-f0-9]{64}$/.test(expectedHash ?? ""))
@@ -46,7 +47,7 @@ export async function preparePostgresqlTarget({
   } finally {
     sqlite.close();
   }
-  // Identity, supported server, primary, TLS, role and real schema are checked
+  // Identity, supported server, primary, chosen transport, role and schema are checked
   // before invoking DDL. No superuser provisioning or credential creation here.
   const target = await inspectTarget(database, role, host, requireTls);
   const pg = new PrismaClient({ log: [] });

@@ -1670,6 +1670,10 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       ausgegeben. Details und Abnahmegrenzen im Review. Kein automatischer
       Prowlarr-Application-Sync-Nachweis; P10.2–P10.7 bleiben offen.
 - [ ] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
+      Transportentscheidung 03.10.2026: ausdrücklicher unverschlüsselter Betrieb
+      ist freigegeben; URL `sslmode=disable` statt zwingendem TLS. App und
+      Migrationsrunner müssen denselben Transport benutzen; kein automatischer
+      TLS-Fehlerfallback, keine gemeinsame Clusteränderung erforderlich.
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
       Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/
       Pfad-/Rechtekonvention; bei PG-Wahl Serverversion/Primary/Transport/TLS,

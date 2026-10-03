@@ -17,6 +17,12 @@ im Phasenvertrag offen.
 
 ## Entscheidung, Umfang und Reihenfolge
 
+Transportentscheidung 03.10.2026: PostgreSQL muss auch ohne TLS nutzbar sein.
+Die geschützte URL wählt dafür ausdrücklich `sslmode=disable`; `require`
+erzwingt TLS. Der Migrationsstandard bleibt TLS, kein Fehlerfallback und keine
+fest verdrahtete Proxyroute. `prefer`/mehrdeutige Modi sind für den Cutover
+gesperrt. Aktueller Vertrag und Grenzen: [Backendwahl](database-backends.md).
+
 Eine Installation wählt SQLite oder PostgreSQL ausdrücklich. Der Proxy-Ausstieg
 darf mit SQLite erfolgen; er hängt nicht von P11 oder einem PG-Cutover ab.
 P11 liefert eine isoliert geprobte PostgreSQL-Option mit erhaltener SQLite-

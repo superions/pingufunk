@@ -7,6 +7,7 @@ import { createSmokeSource } from "./postgresql-smoke-fixture.mjs";
 import { createSnapshot } from "./postgresql-snapshot.mjs";
 import { hashSnapshotFile } from "./postgresql-import.mjs";
 import { preparePostgresqlTarget } from "./postgresql-prepare.mjs";
+import { spawnSync } from "node:child_process";
 
 const required = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 it.skipIf(!required)(
@@ -21,6 +22,7 @@ it.skipIf(!required)(
     )
       throw new Error("Disposable preparation role required");
     url.searchParams.set("schema", "p11_prepare");
+    url.searchParams.set("sslmode", "disable");
     vi.stubEnv("DATABASE_URL", url.href);
     vi.stubEnv("DATABASE_URL_FILE", undefined);
     const dir = mkdtempSync(join(tmpdir(), "pingufunk-prepare-"));
@@ -35,7 +37,6 @@ it.skipIf(!required)(
         database: "pingufunk_qa",
         role: "pingufunk_qa_runtime",
         host: "127.0.0.1",
-        requireTls: false,
       };
       const deploy = vi.fn();
       const missing = new URL(url);
@@ -60,7 +61,27 @@ it.skipIf(!required)(
       );
       expect(deploy).not.toHaveBeenCalled();
       await pg.$executeRawUnsafe("DROP SEQUENCE synthetic_foreign_sequence");
-      expect((await preparePostgresqlTarget(args)).prepared).toBe(true);
+      const prepared = spawnSync(
+        process.execPath,
+        [
+          "scripts/postgresql-migration-cli.mjs",
+          "prepare",
+          "--snapshot",
+          snapshot.snapshotPath,
+          "--sha256",
+          snapshot.sha256,
+          "--database",
+          args.database,
+          "--role",
+          args.role,
+          "--host",
+          args.host,
+          "--confirm-writers-stopped",
+        ],
+        { env: process.env, encoding: "utf8", timeout: 30000 }
+      );
+      expect(prepared.status, prepared.stderr).toBe(0);
+      expect(JSON.parse(prepared.stdout).prepared).toBe(true);
       expect((await preparePostgresqlTarget({ ...args, deploy })).prepared).toBe(false);
       expect(deploy).not.toHaveBeenCalled();
       await pg.config.create({ data: { key: "synthetic-owned", value: "preserved" } });

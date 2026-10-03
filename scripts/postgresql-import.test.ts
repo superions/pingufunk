@@ -8,9 +8,13 @@ import { createSnapshot } from "./postgresql-snapshot.mjs";
 import { importSnapshot } from "./postgresql-import.mjs";
 import { synchronizeOwnedSequences } from "./postgresql-verify.mjs";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 const enabled = process.env.PINGUFUNK_REQUIRE_PG_IMPORT_TESTS === "1";
-const url = process.env.PINGUFUNK_TEST_IMPORT_URL;
+const configuredUrl = process.env.PINGUFUNK_TEST_IMPORT_URL;
+const url = configuredUrl
+  ? `${configuredUrl}${configuredUrl.includes("?") ? "&" : "?"}sslmode=disable`
+  : undefined;
 if (enabled) {
   let safe = false;
   try {
@@ -74,7 +78,6 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
           database: "pingufunk_qa_fresh",
           role: "pingufunk_qa_import",
           host: "127.0.0.1",
-          requireTls: false,
         };
         await expect(importSnapshot({ ...args, verifyOnly: true })).rejects.toThrow(
           "No validated import manifest"
@@ -128,6 +131,33 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
         expect((await importSnapshot(args)).imported).toBe(false);
         expect((await importSnapshot({ ...args, verifyOnly: true })).imported).toBe(false);
         expect(JSON.parse(readFileSync(manifestPath, "utf8")).status).toBe("validated");
+        // Exercise the real CLI, including its sequence transaction, without
+        // the former in-process requireTls=false test override.
+        for (const action of ["import", "verify", "sequences"]) {
+          const result = spawnSync(
+            process.execPath,
+            [
+              "scripts/postgresql-migration-cli.mjs",
+              action,
+              "--snapshot",
+              snapshot.snapshotPath,
+              "--sha256",
+              snapshot.sha256,
+              "--database",
+              args.database,
+              "--role",
+              args.role,
+              "--host",
+              args.host,
+              ...(action === "verify" ? [] : ["--confirm-writers-stopped"]),
+              ...(action === "sequences" ? ["--confirm-no-app-writes-since-import"] : []),
+            ],
+            { env: process.env, encoding: "utf8", timeout: 30000 }
+          );
+          expect(result.status, result.stderr).toBe(0);
+          expect(JSON.parse(result.stdout).action).toBe(action);
+          expect(result.stdout).not.toContain("synthetic-private");
+        }
         const otherUrl = new URL(url!);
         otherUrl.searchParams.set("schema", "p11_other_target");
         process.env.DATABASE_URL = otherUrl.href;

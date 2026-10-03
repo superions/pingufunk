@@ -13,6 +13,7 @@ import {
 import { convertRow, importOrder } from "./postgresql-row-transform.mjs";
 import { verifyRows } from "./postgresql-verify.mjs";
 import { hasRunManifest, prepareRunManifest } from "./postgresql-run-manifest.mjs";
+import { postgresqlRequiresTls } from "./postgresql-transport.mjs";
 import {
   validatePostgresqlLedger,
   validatePostgresqlStructure,
@@ -35,7 +36,7 @@ export async function importSnapshot({
   database,
   role,
   host,
-  requireTls = true,
+  requireTls = postgresqlRequiresTls(),
   afterTable = /** @type {undefined | ((table: string) => void | Promise<void>)} */ (undefined),
   verifyOnly = false,
 }) {
@@ -71,6 +72,7 @@ export async function importSnapshot({
       "postgresql-migration-cli.mjs",
       "check-postgresql-schema.mjs",
       "postgresql-prepare.mjs",
+      "postgresql-transport.mjs",
     ];
     const importerVersion = createHash("sha256")
       .update(scriptNames.map((name) => readFileSync(resolve(scriptRoot, name))).join("\n"))
