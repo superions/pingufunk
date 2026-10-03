@@ -314,7 +314,7 @@ B05/B07, A2/A3, R4.
       Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
-- [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+- [x] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe
@@ -342,6 +342,25 @@ B05/B07, A2/A3, R4.
       Quellen-/Beweisgrenzen und Rollback in `docs/source-audio-contract.md`,
       Review und Cutover-Runbook dokumentieren. Produktion bleibt gesondert;
       laufende echte Downloads nicht für einen Testdeploy unterbrechen.
+      Entwicklungsabnahme am 03.10.2026 auf Produktstand `1f9f18e`:
+      Rendition-Owner und versionierter Workervertrag sind implementiert und
+      erneut selbstreviewt. 906 reguläre Tests grün, 13 bedingte PG-Gates in der
+      Vollsuite separat; `npm ci`, Audit ohne Befunde, Lint, Typecheck, Formatcheck,
+      Produktionsbuild und Diffcheck bestanden. Reale v1-/v2-Persistenz über
+      SQLite und PostgreSQL samt Queue, Restart und Retry zusätzlich ausgeführt.
+      [Fork-CI](https://github.com/superions/pingufunk/actions/runs/37142390426)
+      und [Docker-Abnahme](https://github.com/superions/pingufunk/actions/runs/37142390422)
+      mit beiden Backends/Migration/Medien/Recovery erfolgreich, ohne Publikation.
+      Isolierte native Radarr 6.4.4.10685 und Prowlarr 2.6.5.5623 auf dem aus
+      diesem Produktstand gebauten Runner erkennen direkt sowie vermittelt
+      genau eine German-Fassung trotz Originalsprache Englisch und jahrloser
+      Quelle; korrekte native Film-ID/TMDB-ID/Jahr und keine Parseablehnung.
+      Frühere leere Anlaufversuche wurden nicht als Erfolg gewertet; nur der
+      spätere vollständig bestandene native Suchlauf zählt. Kein Grab ausgelöst,
+      Credentials/Netzwerkgrenzen geprüft, eigene Instanzen gestoppt und deren
+      Konfiguration erhalten. Fremde Runtimes und Produktion unverändert.
+      Kein pauschaler Sprachabdeckungs-, Auflösungs- oder Deploymentnachweis;
+      gesonderter Qualitätsbefund P09.3 bleibt offen.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
@@ -1604,6 +1623,21 @@ Abhängigkeit P08; B10/R7.
       Jobpfad-/Commitfehler sind kausal getestet. Docker-Forklauf 36798866196,
       CI 36798866207 einschließlich Lint/Typecheck/Format/Build grün. HLS bleibt
       opt-in; ffprobe beweist keinen Voll-Decode oder unbekannte Inhaltsidentität.
+
+- [ ] **P09.3 — Katalog-Qualitätsfeld von belegter Auflösung trennen.**
+      Separater Befund beim P03.4-Review: `newznab.ts` behandelt `url_video_hd`
+      pauschal als 1080p, obwohl darin eine tatsächliche 720p-Fassung liegen kann.
+      Tonsprachenbeleg ist kein Dimensionsbeleg. Vor einer neuen Auflösungszusage
+      gemeinsame Rendition-/Titel-/GUID-/Erwartungs-/Worker-Owner prüfen; bekannte
+      Provider-Dimensionen nur an die exakte Medien-URL binden, Unbekannt nicht
+      umetikettieren und keinen Senderseitenparser hinzufügen. Historische
+      Qualitäts-/GUID-/History-Verträge und mögliche Doppelgrabs ausdrücklich
+      bewerten. Abnahme: synthetische echte 720p-Fassung im HD-Feld, konkurrierende
+      SD/HD-URLs, fehlende/widersprüchliche Maße, native Consumer-Zuordnung und
+      positive/negative Workerchecks. Keine ungefragte Neubewertung importierter
+      Dateien oder Veränderung produktiver Profile. Dieser neue offene Befund
+      nimmt die historische Grundprüfung P09.2 nicht zurück und gehört nicht zur
+      Tonsprachenabnahme P03.4.
 
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und

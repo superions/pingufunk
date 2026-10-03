@@ -1027,3 +1027,19 @@ Die alte HD-Feld-/Auflösungsannahme ist keine Sprachinvariante und bleibt ein
 separates Risiko. Ältere Images ohne v2 sind nach v2-Writes kein sicherer Rollback.
 Abnahme und verbleibende Gates stehen ausschließlich bei P03.4 im Phasen-TODO;
 kein unabhängiger Peer-Review, produktiver Imagewechsel oder DB-Cutover behauptet.
+
+Finaler Produktstand `1f9f18e`: zusätzlich die UTF-8-Decodierung wieder in die
+absolute Bodydeadline einbezogen und kausal gegen Zeitüberschreitung getestet.
+906 reguläre Tests, Lint, Typecheck, Formatcheck, Build und Diffcheck grün;
+bedingte PostgreSQL-Prüfungen separat erfolgreich. v1/v2 über beide echten
+disposable Backends, Queue/Restart/Retry sowie native direkte und Prowlarr-
+vermittelte Radarr-Suche bestanden: Originalsprache Englisch, konkreter
+Release German, korrekte Film-ID/Jahr; kein Grab. Anlaufversuche ohne Kandidat
+waren keine Abnahme; der spätere assertierte Lauf bestand. Eigene Instanzen
+gestoppt, Konfiguration erhalten, andere Instanzen unangetastet.
+[CI](https://github.com/superions/pingufunk/actions/runs/37142390426) und
+[Docker-Abnahme](https://github.com/superions/pingufunk/actions/runs/37142390422)
+auf diesem Produktstand bestanden ohne Veröffentlichung. P03.4 ist als
+Entwicklungsabnahme geschlossen, nicht als produktiver Wechsel. Der separate
+HD-Feld-/Auflösungsbefund ist als P09.3 offen erfasst; keine stillschweigende
+Gesamtabnahme aller Qualitätszusagen.

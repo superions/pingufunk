@@ -50,6 +50,9 @@ Die alte Katalog-Qualitätszuordnung `url_video_hd` zu 1080p wird hier nicht
 repariert: eine tatsächliche 720p-Datei kann in diesem Feld liegen. Audiosprache
 beweist keine Bildauflösung. Diese separate Grenze muss vor einer strengeren
 Auflösungszusage berücksichtigt werden.
+Die strukturierte ARTE-Schnittstelle ist kein von Pingufunk kontrollierter
+Dienst mit zugesicherter Verfügbarkeit. Vertragsänderungen werden nicht durch
+einen HTML-Fallback kaschiert, sondern verlangen Providerprüfung und Regression.
 
 ## Download und Speicherung
 
@@ -67,6 +70,12 @@ verhindern `Completed`. Bei belegtem Provider und unbekannten Tracktags bleibt
 `audioLanguages` leer; separat steht `expectedChecks.audio=passed_provider`.
 Das ist Provider-Evidenz, kein akustischer Hörtest. Dateiidentität wird auch
 nach dem Providerabruf erneut geprüft.
+
+Der frische Workerbeleg hat ein eigenes begrenztes Budget von einem Versuch
+und höchstens 15 Sekunden. Ist die Fassung inzwischen ausgelistet oder der
+Provider unerreichbar, darf auch eine technisch lesbare Datei mit unbekannten
+Tracktags nicht als sprachgeprüft fertig gemeldet werden. Ein solcher Fehler
+verlangt Diagnose/Retry; keine automatische Umgehung des Belegs.
 
 SQLite und PostgreSQL speichern und lesen beide Versionen. Eine PostgreSQL-
 Migration ist weder Voraussetzung noch Teil dieser Änderung. Datenbank-URLs,
