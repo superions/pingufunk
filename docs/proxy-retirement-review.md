@@ -1069,3 +1069,16 @@ Grab; Auth-/Netzwerkgrenzen ebenfalls grün. Ein vorheriger Readinessfehler war
 keine Abnahme. Eigene QA gestoppt, Daten erhalten. Schema, v1/v2-Payloads und
 Worker unverändert; keine neue DB-Migration oder öffentliche Veröffentlichung.
 Private Betriebsabnahme und echte Importdaten bleiben im Homelab-Runbook.
+
+### Nachprüfung: auseinanderliegende Track-Trailer
+
+Der größere `moov` allein war nicht die vollständige Ursache. Zusätzlich
+entfernte Trailer nach großen Sampletabellen können weitere Headerfenster
+benötigen. Auch eine tiefenorientierte Reihenfolge garantiert dann nicht, dass
+alle Trackgrenzen in zwei Bereichen liegen. Die sichere Unknown-Antwort darf
+nicht durch das Überspringen möglicher weiterer `mdia`-/Audiotracks ersetzt
+werden. Die bestehenden Tests und die native ARTE-Verbraucherabnahme bleiben
+gültig, belegen aber diese MP4-Struktur nicht. P03.4 ist deshalb erneut offen;
+synthetische Trailer-Regression und begrenzte Leseplanung bzw. ehrliche
+Abdeckungsgrenze sind beim bestehenden Owner zu bearbeiten. Keine privaten
+Quellantworten oder operatorseitigen Einzelgrabs als Produktfixture/Abnahme.

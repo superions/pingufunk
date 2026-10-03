@@ -314,7 +314,7 @@ B05/B07, A2/A3, R4.
       Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
-- [x] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+- [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe
@@ -375,6 +375,20 @@ B05/B07, A2/A3, R4.
       direkte/vermittelte Radarr-Tonsprachensuche und Auth-/Netzwerkgrenzen in
       isolierter QA; ein vorheriger API-Readinessfehler zählt nicht als Abnahme.
       Eigene QA gestoppt, Zustand erhalten; keine neue Schema-/Payloadversion.
+      Erneut offen nach realer Quellenprüfung am 03.10.2026: voneinander
+      entfernte Track-Trailer können zusätzliche Headerfenster erfordern,
+      selbst wenn `mdhd` und `hdlr` erreichbar sind. Die vorhandene sichere
+      Unknown-Ausgabe ist korrekt, aber der konkrete automatische Consumerpfad
+      bleibt damit unbelegt. Owner `mp4-audio-language.ts`/`source-audio.ts`:
+      synthetische Video- und Audio-Tracks mit großen Sampletabellen und
+      nachgelagerten `trgr`-Boxen regressionsprüfen; bounded Leseplanung verbessern
+      oder die nachgewiesene Abdeckungsgrenze ausdrücklich als offene
+      Produktlücke beibehalten. Keine ausgelassenen Track-/Containerprüfungen,
+      erfundenen Sprachlabels oder heimlich erhöhten Body-/Request-/Zeitlimits.
+      Danach echte direkte und Prowlarr-vermittelte Arr-Verbraucher erneut
+      prüfen; operatorseitige Einzelquellenprüfung ist keine automatische
+      Produktabnahme. Frühere grüne Entwicklungs-Gates bleiben gültige Evidenz
+      ihres beschriebenen Scopes, schließen diese neue Lücke aber nicht.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
