@@ -18,6 +18,10 @@ const movie: TmdbMovieData = {
 };
 
 describe("one movie search context", () => {
+  it("does not compound the year tolerance across the query, explicit parameter and metadata", () => {
+    const context = parseMovieSearchContext(new URLSearchParams("q=Beispielfilm+2000&year=1999"));
+    expect(() => assertMovieSearchGoal(context, movie)).toThrow(MovieSearchContextError);
+  });
   it.each([1997, 1998, 1999])("accepts the one-year metadata tolerance: %s", (year) => {
     const context = parseMovieSearchContext(
       new URLSearchParams(`q=Beispielfilm+1998&year=${year}`)

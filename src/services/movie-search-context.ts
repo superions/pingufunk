@@ -10,6 +10,8 @@ export class MovieSearchContextError extends Error {
 export interface MovieSearchContext {
   query: string | null;
   year: number | null;
+  /** Keep a distinct title-suffix year so tolerance cannot compound across fields. */
+  queryYear?: number;
   tmdbId: number | null;
   imdbId: string | null;
 }
@@ -49,6 +51,9 @@ export function parseMovieSearchContext(params: URLSearchParams): MovieSearchCon
   return {
     query: queryYear ? query!.replace(/\s+\d{4}$/, "").trim() : query,
     year,
+    ...(rawYear !== null && queryYear !== null && Number(rawYear) !== Number(queryYear)
+      ? { queryYear: Number(queryYear) }
+      : {}),
     tmdbId,
     imdbId,
   };
@@ -66,6 +71,10 @@ export function assertMovieSearchGoal(context: MovieSearchContext, movie: TmdbMo
       (year === null ||
         !Number.isFinite(year) ||
         Math.abs(context.year - year) > MOVIE_YEAR_TOLERANCE)) ||
+    (context.queryYear !== undefined &&
+      (year === null ||
+        !Number.isFinite(year) ||
+        Math.abs(context.queryYear - year) > MOVIE_YEAR_TOLERANCE)) ||
     (context.query !== null && !names.includes(normalizeMovieTitle(context.query)))
   )
     throw new MovieSearchContextError();
