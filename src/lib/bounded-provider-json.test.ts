@@ -66,3 +66,27 @@ it("uses the same byte, UTF-8 and deadline protections for public HTML", async (
     "Invalid provider response"
   );
 });
+
+it("includes UTF-8 decoding in the original absolute operation deadline", async () => {
+  vi.useFakeTimers();
+  const response = new Response("bounded");
+  const deadline = Date.now() + 1000;
+  const decode = TextDecoder.prototype.decode;
+  vi.spyOn(TextDecoder.prototype, "decode").mockImplementation(function (
+    this: TextDecoder,
+    input,
+    options
+  ) {
+    const value = decode.call(this, input, options);
+    vi.advanceTimersByTime(1000);
+    return value;
+  });
+  try {
+    await expect(readBoundedProviderText(response, deadline, 100)).rejects.toThrow(
+      "Invalid provider response"
+    );
+  } finally {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  }
+});

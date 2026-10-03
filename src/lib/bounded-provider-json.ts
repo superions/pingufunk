@@ -70,9 +70,11 @@ export async function readBoundedProviderText(
   maximumBytes: number
 ): Promise<string> {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(
+    const value = new TextDecoder("utf-8", { fatal: true }).decode(
       await readBoundedProviderBytes(response, deadlineAt, maximumBytes)
     );
+    if (Date.now() >= deadlineAt) throw new ProviderResponseError();
+    return value;
   } catch {
     throw new ProviderResponseError();
   }
