@@ -23,6 +23,36 @@ it("preserves positive seconds, explicit audio evidence and dimensions without t
   expect(parseMediaExpectations(serializeMediaExpectations(expected))).toEqual(expected);
 });
 
+it("retains the separate v2 source proof and rejects mixed/forged declarations", () => {
+  const value = {
+    ...unknownMediaExpectations(),
+    version: 2 as const,
+    audio: null,
+    sourceAudio: {
+      provider: "arte_hbbtv" as const,
+      videoId: "123456-001-A",
+      mediaIdentity: "a".repeat(64),
+      language: "de",
+    },
+  };
+  expect(readPersistedMediaExpectations(serializeMediaExpectations(value))).toEqual(value);
+  expect(() =>
+    parseMediaExpectations({ ...value, audio: { language: "de", provenance: "provider_audio" } })
+  ).toThrow();
+  expect(() =>
+    parseMediaExpectations({
+      ...value,
+      sourceAudio: { ...value.sourceAudio, provider: "untrusted" },
+    })
+  ).toThrow();
+  expect(() =>
+    parseMediaExpectations({
+      ...value,
+      sourceAudio: { ...value.sourceAudio, mediaIdentity: "raw-secret-url" },
+    })
+  ).toThrow();
+});
+
 it.each([
   {},
   { version: 1 },

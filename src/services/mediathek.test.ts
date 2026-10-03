@@ -4,6 +4,7 @@ import type { ApiResultItem, Ruleset, TmdbMovieData, TvdbData, TvSearchContext }
 
 const mediathekMocks = vi.hoisted(() => ({
   getShowInfoByTvdbId: vi.fn(),
+  getRadarrMonitoredMovies: vi.fn().mockResolvedValue([]),
   cacheEntries: new Map<string, { response?: string; results?: ApiResultItem[] }>(),
   rulesets: {
     getRulesetContext: vi.fn(() => "synthetic-rules"),
@@ -44,10 +45,14 @@ vi.mock("./rulesets", () => mediathekMocks.rulesets);
 vi.mock("./tmdb", () => ({
   searchMovieByTitle: vi.fn().mockResolvedValue(null),
 }));
+vi.mock("./radarr-provider", () => ({
+  getRadarrMonitoredMovies: mediathekMocks.getRadarrMonitoredMovies,
+}));
 
 import {
   fetchMovieSearchByQuery,
   fetchMovieSearchResults,
+  fetchMovieSearchForRssSync,
   fetchSearchResultsById,
   fetchSearchResultsByString,
   fetchSearchResultsForRssSync,
@@ -108,6 +113,7 @@ function mockApi(results: ApiResultItem[]): void {
 beforeEach(() => {
   vi.clearAllMocks();
   mockedFetch.mockReset();
+  mediathekMocks.getRadarrMonitoredMovies.mockResolvedValue([]);
   mediathekMocks.cacheEntries.clear();
   mockedGetMinDuration.mockResolvedValue(300);
   mockedGetSetting.mockResolvedValue(null);
@@ -1248,7 +1254,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
       expect.stringContaining(
-        'q_v9-verified-movie-identity_["Example",null,null,null]_1_1_720p_300'
+        'q_v10-rendition-audio-evidence_["Example",null,null,null]_1_1_720p_300'
       ),
       expect.objectContaining({ response: secondPage })
     );
@@ -1285,8 +1291,79 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v9-verified-movie-identity_Documentary__100_0_all_2700"),
+      expect.stringContaining(
+        "movie_query_v10-rendition-audio-evidence_Documentary__100_0_all_2700"
+      ),
       expect.any(Object)
+    );
+  });
+});
+
+describe("movie rendition source audio consumer", () => {
+  const movie: TmdbMovieData = {
+    tmdbId: 123,
+    imdbId: null,
+    title: "Synthetic Film",
+    germanTitle: "Synthetic Film",
+    runtime: 60,
+    productionYear: 2024,
+    releaseDate: "2024-01-01",
+  };
+  function source() {
+    return makeItem({
+      channel: "ARTE.DE",
+      topic: "Kino",
+      title: "Synthetic Film",
+      url_website: "https://www.arte.tv/de/videos/123456-001-A/synthetic/",
+      url_video: "https://fixture.akamaized.net/french.mp4",
+      url_video_hd: "https://fixture.akamaized.net/german.mp4",
+      url_video_low: "",
+    });
+  }
+  it.each(["id", "text", "rss"])(
+    "selects German before the one-result limit in the actual %s film owner",
+    async (path) => {
+      const raw = source();
+      mediathekMocks.getRadarrMonitoredMovies.mockResolvedValue([movie]);
+      mockedFetch.mockImplementation(async (input, _init, options) => {
+        options?.requestBudget?.takeAttempt();
+        return Response.json(
+          String(input).includes("hbbtvv2")
+            ? {
+                videoStreams: [
+                  { programId: "123456-001-A", url: raw.url_video, audioCode: "VOF-STA" },
+                  { programId: "123456-001-A", url: raw.url_video_hd, audioCode: "VA" },
+                ],
+              }
+            : { result: { results: [raw] } }
+        );
+      });
+      const xml =
+        path === "id"
+          ? await fetchMovieSearchResults(movie, 1, 0)
+          : path === "text"
+            ? await fetchMovieSearchByQuery("Synthetic Film", 1, 0)
+            : await fetchMovieSearchForRssSync(1, 0);
+      expect(xml).toContain(".GERMAN.");
+      expect(xml).toContain("german.mp4");
+      expect(xml).not.toContain("french.mp4");
+      expect(xml.match(/<item>/g)).toHaveLength(1);
+      expect(xml).toContain('total="1"');
+      expect(raw).not.toHaveProperty("audioLanguage");
+    }
+  );
+  it("does not cache a partial successful feed after the source proof fails", async () => {
+    mockedFetch.mockImplementation(async (input) =>
+      String(input).includes("hbbtvv2")
+        ? new Response(null, { status: 503 })
+        : Response.json({ result: { results: [source()] } })
+    );
+    await expect(fetchMovieSearchResults(movie, 1, 0)).rejects.toThrow(
+      "Source evidence unavailable"
+    );
+    expect(mockedCacheSet).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^movie_/),
+      expect.anything()
     );
   });
 });
@@ -1317,7 +1394,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v9-verified-movie-identity_[a-f0-9]{64}_100_0_all_2700/),
+      expect.stringMatching(/^movie_v10-rendition-audio-evidence_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });

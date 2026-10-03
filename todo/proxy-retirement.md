@@ -314,6 +314,35 @@ B05/B07, A2/A3, R4.
       Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
+- [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+      Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
+      `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
+      Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe
+      gemeinsam erweitern. Kein Sprachwunsch wird aus Radarr-Originalsprache,
+      Prowlarr, Locale, Sender oder übersetztem Titel abgeleitet. Jede geprüfte
+      progressive Rendition erhält nur ihren eigenen Beleg: ARTE-Streamdaten
+      mit identischer Video-ID und exakter Medien-URL/Audiocode; bekannte MP4-
+      Quellen über begrenzte ISO-BMFF-Audiotrack-Metadaten, ohne Voll-Download
+      oder Netzwerk-ffprobe in Suchanfragen. Kein HTML-/Flight-Scraping, keine
+      Accounts, kopierten Tokens oder Secrets. Gemeinsames P05-Budget und feste
+      Body-/Probegrenzen; außerhalb des belegten Fensters bleibt Sprache unbekannt.
+      Sprachwahl vor Dedupe/Pagination, quellbasierte GUIDs trotz zusätzlicher
+      Belege erhalten. Provider-Audiobeleg getrennt von Container-Tracktags
+      versionieren: Legacy/v1 unverändert lesen, neue Fassung im Worker frisch
+      an die tatsächlich geladene URL binden, widersprüchliche Tracktags und
+      fehlgeschlagene Belegprüfung ablehnen; `und` nie als deutschen Track speichern.
+      Beide DB-Provider erhalten Payloads exakt durch Aufnahme/Restart/Retry;
+      kein Schema-/DB-Cutover. Alte Images können den neuen Vertrag nicht lesen:
+      Rollback vor neuen Jobs oder queuefähiges kompatibles Image verlangen.
+      Abnahme: synthetische DE/FR/OV/Untertitel/AD/Unknown-, gemischte Rendition-,
+      exakte URL-/ID-/Signaturkonflikt-, Body-/Range-/Timeout-/Budgetfälle,
+      RSS→NZB→persistierter Job→Worker positiv und negativ, gleiches Verhalten
+      direkt und über Prowlarr an echter disposable Radarr-/Prowlarr-Instanz ohne
+      Grab; SQLite-/PostgreSQL-Roundtrip, vollständige Test-Gates und Ownerreview.
+      Quellen-/Beweisgrenzen und Rollback in `docs/source-audio-contract.md`,
+      Review und Cutover-Runbook dokumentieren. Produktion bleibt gesondert;
+      laufende echte Downloads nicht für einen Testdeploy unterbrechen.
+
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
 Ergebnis: parallele Jobs können unabhängig heruntergeladen/importiert werden.

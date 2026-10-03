@@ -96,3 +96,18 @@ Rollbackimage muss die aktuelle Sicherheits- und Schemafreigabe besitzen.
 Installationswerte, genaue Image-IDs, Sicherungen und Controllerrevisionen
 gehören ins private Betriebsrunbook. Dieser Vertrag ist keine DB-Cutover-
 oder allgemeine Deploymentfreigabe.
+
+## P03.4 — Quellenbelegte Tonsprachen und v2-Jobs
+
+Der [Tonsprachenvertrag](source-audio-contract.md) ergänzt konkrete progressive
+Filmfassungen, nicht Radarrs Originalsprache. Eine durch Prowlarr erreichbare
+Indexerroute ist noch kein Beleg korrekt erkannter Audiosprache; synthetisch
+beide nativen Wege mit englischem Original und belegter deutscher Fassung prüfen.
+
+Vor Imagewechsel Queue/History und Jobvertragsversionen kontrollieren. Laufende
+Grabs nicht durch einen unvalidierten Wechsel unterbrechen. Nach neuen v2-Jobs
+kein Image ohne v2-Unterstützung als Rollback verwenden, keine gespeicherten
+Erwartungen löschen/abschwächen und keine alte DB-Sicherung über neue Writes
+legen. Ein reiner App-Rollback verlangt ein kompatibles geprüftes Image;
+SQLite/PostgreSQL-Schema und Backend bleiben unverändert. Kein DB-Cutover oder
+produktiver Rollout ist durch diese Entwicklungsabnahme autorisiert.

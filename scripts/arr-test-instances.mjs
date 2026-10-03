@@ -115,6 +115,7 @@ async function up() {
   const migratorTag =
     process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
   const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
+  const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
   for (const app of ["sonarr", "radarr", "prowlarr"])
     docker(["image", "inspect", `lscr.io/linuxserver/${app}:latest`, "--format", "{{.Id}}"]);
   docker(["image", "inspect", runnerTag, "--format", "{{.Id}}"]);
@@ -128,6 +129,7 @@ async function up() {
     network: `pingufunk-arr-${owner}`,
     migrator,
     movieCorrelation,
+    sourceAudio,
     apps: {},
   };
   save(root, manifest);
@@ -219,6 +221,7 @@ async function up() {
     `PINGUFUNK_MEDIA_QA_OWNER=${owner}`,
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
+    ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
     ...(movieCorrelation
       ? [
           "-e",
@@ -639,6 +642,14 @@ async function movieSearch(root, manifest, app = "radarr") {
         throw new Error("Owned Radarr candidate transport identity missing");
       if (
         app === "radarr" &&
+        manifest.sourceAudio &&
+        (!candidates[0].title.includes(".GERMAN.") ||
+          candidates[0].languages.length !== 1 ||
+          candidates[0].languages[0].name !== "German")
+      )
+        throw new Error("Owned rendition evidence not parsed as German by native Radarr");
+      if (
+        app === "radarr" &&
         manifest.movieCorrelation &&
         (candidates[0].mappedMovieId !== movie.id ||
           candidates[0].tmdbId !== movie.tmdbId ||
@@ -647,7 +658,7 @@ async function movieSearch(root, manifest, app = "radarr") {
       )
         throw new Error("Owned yearless source did not acquire verified native film identity");
       console.log(
-        `${app}: ${transport} native search parsed one synthetic candidate; no grab submitted`
+        `${app}: ${transport} native search parsed one synthetic candidate${app === "radarr" && manifest.sourceAudio ? "; actual audio German, fixture original language English" : ""}; no grab submitted`
       );
     }
   } finally {

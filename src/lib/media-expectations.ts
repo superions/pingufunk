@@ -25,7 +25,7 @@ const resolutionSchema = z
   .strict();
 
 /** NULL is unknown, not a passed duration/language/resolution check. */
-export const mediaExpectationsSchema = z
+const v1Schema = z
   .object({
     version: z.literal(1),
     duration: durationSchema.nullable(),
@@ -33,6 +33,19 @@ export const mediaExpectationsSchema = z
     resolution: resolutionSchema.nullable(),
   })
   .strict();
+export const sourceAudioSchema = z
+  .object({
+    provider: z.literal("arte_hbbtv"),
+    videoId: z.string().regex(/^\d{6}-\d{3}-[AF]$/),
+    mediaIdentity: z.string().regex(/^[a-f0-9]{64}$/),
+    language: audioSchema.shape.language,
+  })
+  .strict();
+const v2Schema = v1Schema
+  .extend({ version: z.literal(2), audio: z.null(), sourceAudio: sourceAudioSchema })
+  .strict();
+export const mediaExpectationsSchema = z.discriminatedUnion("version", [v1Schema, v2Schema]);
+export type SourceAudioEvidence = z.infer<typeof sourceAudioSchema>;
 export type MediaExpectations = z.infer<typeof mediaExpectationsSchema>;
 
 export class MediaExpectationsError extends Error {
@@ -60,7 +73,7 @@ export function serializeMediaExpectations(value: MediaExpectations): string {
 }
 
 /** New producers can declare genuinely unknown facts without inventing defaults. */
-export function unknownMediaExpectations(): MediaExpectations {
+export function unknownMediaExpectations(): z.infer<typeof v1Schema> {
   return { version: 1, duration: null, audio: null, resolution: null };
 }
 

@@ -3,6 +3,7 @@ import { cacheContextEpoch, mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
+import { enrichSourceAudio } from "./source-audio";
 import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
@@ -54,7 +55,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v9-verified-movie-identity";
+const CONTENT_SEARCH_CACHE_VERSION = "v10-rendition-audio-evidence";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -1314,11 +1315,22 @@ export async function fetchMovieSearchForRssSync(
   const owners = new Map<ApiResultItem, typeof matches>();
   for (const entry of matches)
     owners.set(entry.match.item, [...(owners.get(entry.match.item) ?? []), entry]);
-  const selected = selectLanguageVariants([...owners.keys()], await getConfiguredLanguagePolicy());
+  const editions = await enrichSourceAudio([...owners.keys()], budget);
+  const editionOwners = new Map<ApiResultItem, typeof matches>();
+  for (const [source, renditions] of editions)
+    for (const item of renditions)
+      editionOwners.set(
+        item,
+        owners.get(source)!.map((entry) => ({ ...entry, match: { ...entry.match, item } }))
+      );
+  const selected = selectLanguageVariants(
+    [...editionOwners.keys()],
+    await getConfiguredLanguagePolicy()
+  );
   const rss = convertItemsToRss(
     dedupeNewznabItems(
       selected.flatMap((item) => {
-        const entries = owners.get(item)!;
+        const entries = editionOwners.get(item)!;
         const verified = entries.filter(({ match }) => match.identityVerified);
         // Same-title remakes must not inherit whichever inventory entry was first.
         if (new Set(verified.map(({ movie }) => movie.tmdbId)).size !== 1)
@@ -1445,11 +1457,17 @@ export async function fetchMovieSearchResults(
   }
 
   // Generate RSS items using the same rendition setting used for matching.
-  const selected = selectLanguageVariants(
+  const editions = await enrichSourceAudio(
     matchResults.map((match) => match.item),
+    requestBudget
+  );
+  const matchesByItem = new Map<ApiResultItem, (typeof matchResults)[number]>();
+  for (const match of matchResults)
+    for (const item of editions.get(match.item)!) matchesByItem.set(item, { ...match, item });
+  const selected = selectLanguageVariants(
+    [...matchesByItem.keys()],
     await getConfiguredLanguagePolicy()
   );
-  const matchesByItem = new Map(matchResults.map((match) => [match.item, match]));
   const newznabItems: NewznabItem[] = selected.flatMap((item) =>
     generateMatchedMovieRssItems(matchesByItem.get(item)!, movieData, quality, hlsEnabled)
   );
@@ -1551,7 +1569,11 @@ export async function fetchMovieSearchByQuery(
 
   // The query year and optional metadata describe the search goal, not these
   // source videos. Do not stamp IDs or turn the broadcast timestamp into a year.
-  const selected = selectLanguageVariants(filteredResults, await getConfiguredLanguagePolicy());
+  const editions = await enrichSourceAudio(filteredResults, requestBudget);
+  const selected = selectLanguageVariants(
+    [...editions.values()].flat(),
+    await getConfiguredLanguagePolicy()
+  );
   const newznabItems = selected.flatMap((item) =>
     generateGenericRssItems(item, quality, hlsEnabled, "movie")
   );

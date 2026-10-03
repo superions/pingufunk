@@ -5,6 +5,9 @@ import { z } from "zod";
 import { isGermanLanguageCode } from "@/lib/language-policy";
 import { parseMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
 import { verifiedDurationCheck } from "@/lib/verified-duration";
+import { type SourceAudioEvidence } from "@/lib/media-expectations";
+import { verifyArteSourceAudio } from "@/services/source-audio";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 export class MediaProbeError extends Error {
   constructor() {
@@ -46,9 +49,10 @@ export interface MediaProbeFacts {
   durationSeconds: number;
   video: { width: number; height: number }[];
   audioLanguages: string[];
+  sourceAudioEvidence?: SourceAudioEvidence;
   expectedChecks: {
     duration: "unknown" | "passed";
-    audio: "unknown" | "passed";
+    audio: "unknown" | "passed" | "passed_provider";
     resolution: "unknown" | "passed";
   };
 }
@@ -57,7 +61,8 @@ export interface MediaProbeFacts {
 export function validateMediaProbe(
   value: unknown,
   expected: MediaExpectations | null,
-  tolerancePercent: number
+  tolerancePercent: number,
+  sourceAudioEvidence?: SourceAudioEvidence
 ): MediaProbeFacts {
   try {
     const probe = probeSchema.parse(value);
@@ -109,6 +114,20 @@ export function validateMediaProbe(
       throw new MediaProbeError();
     if (contract?.audio && !audioLanguages.includes(languageTag(contract.audio.language)!))
       throw new MediaProbeError();
+    if (contract?.version === 2) {
+      if (
+        !sourceAudioEvidence ||
+        sourceAudioEvidence.provider !== contract.sourceAudio.provider ||
+        sourceAudioEvidence.videoId !== contract.sourceAudio.videoId ||
+        sourceAudioEvidence.mediaIdentity !== contract.sourceAudio.mediaIdentity ||
+        sourceAudioEvidence.language !== contract.sourceAudio.language
+      )
+        throw new MediaProbeError();
+      // Independent provider evidence can fill absent tags, never contradict a
+      // known foreign track or relabel the probed track list as German.
+      if (audioLanguages.some((language) => language !== languageTag(sourceAudioEvidence.language)))
+        throw new MediaProbeError();
+    }
     if (
       contract?.resolution &&
       !video.some(
@@ -122,9 +141,10 @@ export function validateMediaProbe(
       durationSeconds,
       video,
       audioLanguages,
+      ...(contract?.version === 2 ? { sourceAudioEvidence } : {}),
       expectedChecks: {
         duration: contract?.duration ? "passed" : "unknown",
-        audio: contract?.audio ? "passed" : "unknown",
+        audio: contract?.audio ? "passed" : contract?.version === 2 ? "passed_provider" : "unknown",
         resolution: contract?.resolution ? "passed" : "unknown",
       },
     };
@@ -138,7 +158,8 @@ export async function probeJobMedia(
   filePath: string,
   jobDirectory: string,
   expected: MediaExpectations | null,
-  tolerancePercent: number
+  tolerancePercent: number,
+  sourceUrl?: string
 ): Promise<MediaProbeFacts> {
   try {
     const file = path.resolve(filePath);
@@ -170,6 +191,14 @@ export async function probeJobMedia(
       path.join(process.cwd(), "ffmpeg", process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
     if (!path.isAbsolute(binary)) throw new MediaProbeError();
     const output = await readLocalProbe(binary, file);
+    const proof =
+      expected?.version === 2
+        ? await verifyArteSourceAudio(
+            expected.sourceAudio,
+            sourceUrl ?? "",
+            new HttpRequestBudget(1)
+          )
+        : undefined;
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);
     if (
@@ -181,7 +210,7 @@ export async function probeJobMedia(
       after.mtimeMs !== stat.mtimeMs
     )
       throw new MediaProbeError();
-    return validateMediaProbe(JSON.parse(output), expected, tolerancePercent);
+    return validateMediaProbe(JSON.parse(output), expected, tolerancePercent, proof);
   } catch {
     throw new MediaProbeError();
   }

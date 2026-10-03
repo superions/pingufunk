@@ -9,11 +9,11 @@ export class ProviderResponseError extends Error {
 export const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024 * 1024;
 
 /** Bound headers, streamed bytes and parsing with one absolute operation deadline. */
-export async function readBoundedProviderText(
+export async function readBoundedProviderBytes(
   response: Response,
   deadlineAt: number,
   maximumBytes: number
-): Promise<string> {
+): Promise<Buffer> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let complete = false;
@@ -47,7 +47,7 @@ export async function readBoundedProviderText(
       // array/object overhead. This is a transport cap, not an API page size.
       if (chunks.length > 8_192) throw new ProviderResponseError();
     }
-    const value = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
+    const value = Buffer.concat(chunks);
     if (Date.now() >= deadlineAt) throw new ProviderResponseError();
     complete = true;
     return value;
@@ -61,6 +61,20 @@ export async function readBoundedProviderText(
       if (!complete) void reader.cancel().catch(() => {});
       reader.releaseLock();
     }
+  }
+}
+
+export async function readBoundedProviderText(
+  response: Response,
+  deadlineAt: number,
+  maximumBytes: number
+): Promise<string> {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      await readBoundedProviderBytes(response, deadlineAt, maximumBytes)
+    );
+  } catch {
+    throw new ProviderResponseError();
   }
 }
 

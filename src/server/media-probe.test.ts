@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { unknownMediaExpectations } from "@/lib/media-expectations";
 import { validateMediaProbe } from "./media-probe";
+import { mediaSourceIdentity } from "@/services/source-audio";
 
 interface TestStream {
   codec_type: string;
@@ -125,4 +126,30 @@ it("rejects HTML, absent audio, cover-only video and invalid codecs", () => {
   const invalid = media();
   invalid.streams[1] = { ...invalid.streams[1], codec_name: "unknown" };
   expect(() => validateMediaProbe(invalid, null, 10)).toThrow();
+});
+
+it("accepts fresh rendition-bound provider proof with unknown tracks, never fabricating track tags", () => {
+  const proof = {
+    provider: "arte_hbbtv" as const,
+    videoId: "123456-001-A",
+    language: "de",
+    mediaIdentity: mediaSourceIdentity("https://fixture.akamaized.net/movie.mp4"),
+  };
+  const expected = {
+    ...unknownMediaExpectations(),
+    version: 2 as const,
+    audio: null,
+    sourceAudio: proof,
+  };
+  const facts = validateMediaProbe(media(), expected, 10, proof);
+  expect(facts.audioLanguages).toEqual([]);
+  expect(facts.sourceAudioEvidence).toEqual(proof);
+  expect(facts.expectedChecks.audio).toBe("passed_provider");
+  expect(() => validateMediaProbe(media(), expected, 10)).toThrow();
+  expect(() => validateMediaProbe(media(), expected, 10, { ...proof, language: "fr" })).toThrow();
+  const foreign = media();
+  foreign.streams[1].tags = { language: "fra" };
+  expect(() => validateMediaProbe(foreign, expected, 10, proof)).toThrow();
+  const noAudio = { ...media(), streams: [media().streams[0]] };
+  expect(() => validateMediaProbe(noAudio, expected, 10, proof)).toThrow();
 });

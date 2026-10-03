@@ -4,6 +4,9 @@ const sourceFetch = globalThis.fetch;
 // The base provider validates the exact disposable DB and owner first.
 // Only owned application aliases can receive integration API calls.
 const ports = { sonarr: "8989", radarr: "7878", prowlarr: "9696", pingufunk: "6767" };
+const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
+const germanUrl = "https://fixture.akamaized.net/german.mp4";
+const frenchUrl = "https://fixture.akamaized.net/french.mp4";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
   if (
@@ -12,6 +15,17 @@ globalThis.fetch = async (input, init) => {
     url.pathname.startsWith("/api/")
   )
     return nativeFetch(input, { ...init, redirect: "error" });
+  if (
+    sourceAudio &&
+    url.href ===
+      "https://www.arte.tv/hbbtvv2/services/web/index.php/OPA/v3/streams/123456-001-A/SHOW/de"
+  )
+    return Response.json({
+      videoStreams: [
+        { programId: "123456-001-A", url: germanUrl, audioCode: "VA" },
+        { programId: "123456-001-A", url: frenchUrl, audioCode: "VOF-STA" },
+      ],
+    });
   if (url.hostname === "mediathekviewweb.de" && url.pathname === "/api/query") {
     const response = await sourceFetch(input, init);
     const data = await response.json();
@@ -32,6 +46,13 @@ globalThis.fetch = async (input, init) => {
           ? "Synthetic Media"
           : "Synthetic Media (2024)";
       row.duration = 600;
+      if (sourceAudio) {
+        row.channel = "ARTE.DE";
+        row.url_website = "https://www.arte.tv/de/videos/123456-001-A/synthetic/";
+        row.url_video = frenchUrl;
+        row.url_video_hd = germanUrl;
+        row.url_video_low = "";
+      }
       if (matches(row)) rows.push(row);
       const episode = {
         ...row,

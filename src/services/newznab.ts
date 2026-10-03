@@ -278,7 +278,7 @@ export function buildReleaseGuid(
   const edition = classifyLanguageEdition(item);
   const identity = JSON.stringify([
     getLanguageSourceIdentity(item),
-    edition.variantKey,
+    item.releaseVariantKey ?? edition.variantKey,
     quality,
     stableUrlIdentity(renditionUrl),
     releaseIdentity,
@@ -326,7 +326,7 @@ function createRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime),
+    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime, url),
   });
   const item = info.item;
 
@@ -530,7 +530,7 @@ function createMovieRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(item),
+    mediaExpectations: releaseMediaExpectations(item, null, url),
   });
 
   return {
@@ -867,7 +867,7 @@ function createGenericRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(item),
+    mediaExpectations: releaseMediaExpectations(item, null, url),
   });
 
   const attributes: NewznabAttribute[] = categoryValues.map((v) => ({

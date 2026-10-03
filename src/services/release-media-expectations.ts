@@ -5,11 +5,13 @@ import {
   type MediaExpectations,
 } from "@/lib/media-expectations";
 import { classifyLanguageEdition } from "./language-editions";
+import { mediaSourceIdentity } from "./source-audio";
 
 /** Catalogue durations are seconds; verified episode metadata is minutes. */
 export function releaseMediaExpectations(
   item: ApiResultItem,
-  episodeRuntimeMinutes: number | null = null
+  episodeRuntimeMinutes: number | null = null,
+  renditionUrl: string = item.url_video || item.url_video_hd || item.url_video_low
 ): MediaExpectations {
   const expected = unknownMediaExpectations();
   const episodeSeconds = episodeRuntimeMinutes === null ? null : episodeRuntimeMinutes * 60;
@@ -27,6 +29,17 @@ export function releaseMediaExpectations(
   )
     expected.duration = { seconds: item.duration, provenance: "source_catalogue" };
   const edition = classifyLanguageEdition(item);
+  if (item.sourceAudioEvidence) {
+    // A provider promise is not a container tag. Its separate v2 proof will be
+    // revalidated by the worker against the exact URL, without stamping tracks.
+    if (item.sourceAudioEvidence.mediaIdentity !== mediaSourceIdentity(renditionUrl))
+      throw new Error("Source evidence mismatch");
+    return parseMediaExpectations({
+      ...expected,
+      version: 2,
+      sourceAudio: item.sourceAudioEvidence,
+    });
+  }
   if (edition.audioEvidence === "german")
     expected.audio = { language: "de", provenance: "provider_audio" };
   else if (edition.audioLanguage) {

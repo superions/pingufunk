@@ -91,7 +91,7 @@ export function parseArteVersion(code: string) {
   };
 }
 
-function progressiveUrl(raw: string): boolean {
+export function progressiveUrl(raw: string): boolean {
   try {
     const url = new URL(raw);
     // Only existing ARTE/CDN progressive contracts; no new arbitrary fetch owner

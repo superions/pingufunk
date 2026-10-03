@@ -64,6 +64,7 @@ vi.mock("./media-probe", async (importOriginal) => ({
   probeJobMedia,
 }));
 import { unknownMediaExpectations } from "@/lib/media-expectations";
+import { mediaSourceIdentity } from "@/services/source-audio";
 import { validateMediaProbe } from "./media-probe";
 
 const basicFacts = {
@@ -145,6 +146,40 @@ it("does not report legacy completion until the probe resolves and persists unkn
   expect(completed.filePath).toBe(
     path.join(testRoot, job.category, jobDirectoryName(job.title, job.id), `${job.title}.mp4`)
   );
+});
+
+it("passes v2 source URL to the media owner and persists separate evidence without invented track tags", async () => {
+  const url = "https://fixture.akamaized.net/movie.mp4";
+  const sourceAudio = {
+    provider: "arte_hbbtv" as const,
+    videoId: "123456-001-A",
+    language: "de",
+    mediaIdentity: mediaSourceIdentity(url),
+  };
+  const expected = { ...unknownMediaExpectations(), version: 2, sourceAudio };
+  const job = progressiveJob("v2-source", JSON.stringify(expected));
+  job.url = url;
+  probeJobMedia.mockResolvedValue({
+    ...basicFacts,
+    sourceAudioEvidence: sourceAudio,
+    expectedChecks: { ...basicFacts.expectedChecks, audio: "passed_provider" },
+  });
+  await processDownload(job.id);
+  expect(probeJobMedia).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expected,
+    10,
+    url
+  );
+  const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
+    .data;
+  expect(JSON.parse(completed.mediaValidation)).toMatchObject({
+    version: 2,
+    audioLanguages: [],
+    sourceAudioEvidence: sourceAudio,
+    expectedChecks: { audio: "passed_provider" },
+  });
 });
 
 it.each(["missing-audio", "html", "sample", "probe-timeout"])(

@@ -41,6 +41,10 @@ export interface ApiResultItem {
   clearSpeech?: boolean;
   /** Transient adapter proof, never accepted from raw MediathekView fields. */
   arteVerifiedVideoId?: string;
+  /** Server-only exact-rendition proof; untrusted catalogue fields never supply this. */
+  sourceAudioEvidence?: import("@/lib/media-expectations").SourceAudioEvidence;
+  /** Preserve shipped rendition identity when better evidence adds release labels. */
+  releaseVariantKey?: string;
 }
 
 // TVDB Types

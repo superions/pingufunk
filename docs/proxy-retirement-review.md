@@ -1004,3 +1004,26 @@ Korrekte Identität garantiert keine Freigabe durch das Arr-Sprachprofil:
 unbelegte Tonsprachen bleiben neutral. Keine DB-Migration, keine Testgrabs und
 keine öffentliche Imagepublikation; späterer Dokumentationscommit baut dieses
 unveränderte Produktimage nicht erneut und wiederholt dessen Tests nicht.
+
+## P03.4 — Struktureller Tonsprachenvertrag (Entwicklungsreview)
+
+Neuer Owner `source-audio.ts`: ARTE-HbbTV mit exakter Programm-/URL-Bindung,
+ZDF mit begrenztem MP4-Sound-Track-Header. Keine HTML-Parser, Konten, Fremdtoken,
+Originalsprachenheuristik oder Medienvollabfrage. Rendition-Splitting verhindert
+die Übertragung eines HD-Belegs auf fremdsprachige Standard-URLs. Film-ID, Text
+und RSS führen die Ergänzung vor Selektion/Dedupe/Pagination durch.
+
+Im Selbstreview wurde ein sachlicher Fehler behoben: Providerbelege dürfen
+nicht durch `JSON.stringify`-Schlüsselreihenfolge verglichen werden. Der Worker
+vergleicht jetzt einzelne Vertragsfelder und prüft die Dateiidentität erneut
+nach dem frischen Providerabruf. v1 bleibt streng; v2 trennt Providerbeleg und
+fehlende Tracktags. Beide Versionen müssen auf beiden Backends erhalten bleiben.
+Cacheversion v10 vermeidet veraltete Antwortverträge; bessere Sprachbelege
+ändern allein keine bisherigen Fassungs-GUIDs.
+
+Grenzen ausdrücklich dokumentiert: höchstens vier Probeidentitäten im gemeinsamen
+Budget, keine volle Katalogabdeckung und keine neue HLS-/Sender-/TV-Abdeckung.
+Die alte HD-Feld-/Auflösungsannahme ist keine Sprachinvariante und bleibt ein
+separates Risiko. Ältere Images ohne v2 sind nach v2-Writes kein sicherer Rollback.
+Abnahme und verbleibende Gates stehen ausschließlich bei P03.4 im Phasen-TODO;
+kein unabhängiger Peer-Review, produktiver Imagewechsel oder DB-Cutover behauptet.

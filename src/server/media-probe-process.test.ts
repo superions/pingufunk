@@ -10,6 +10,8 @@ const state = vi.hoisted(() => ({
 vi.mock("node:child_process", () => ({ spawn: state.spawn, spawnSync: state.spawnSync }));
 vi.mock("node:fs/promises", () => ({ lstat: state.lstat, realpath: state.realpath }));
 import { probeJobMedia } from "./media-probe";
+import { unknownMediaExpectations, parseMediaExpectations } from "@/lib/media-expectations";
+import { mediaSourceIdentity } from "@/services/source-audio";
 
 const file = "/synthetic/job/movie.mp4";
 const directory = "/synthetic/job";
@@ -62,6 +64,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 const started = async () => {
@@ -131,3 +134,52 @@ it("rejects escaped paths or symlinked job files before starting a tool", async 
   await expect(probeJobMedia(file, directory, null, 10)).rejects.toThrow();
   expect(state.spawn).not.toHaveBeenCalled();
 });
+
+it.each(["german", "foreign", "missing", "wrong-source"])(
+  "revalidates v2 %s provider binding before accepting unknown local tracks",
+  async (kind) => {
+    const url = "https://fixture.akamaized.net/movie.mp4";
+    const proof = {
+      provider: "arte_hbbtv" as const,
+      videoId: "123456-001-A",
+      language: "de",
+      mediaIdentity: mediaSourceIdentity(url),
+    };
+    const expected = parseMediaExpectations({
+      ...unknownMediaExpectations(),
+      version: 2,
+      sourceAudio: proof,
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({
+        videoStreams:
+          kind === "missing"
+            ? []
+            : [{ programId: proof.videoId, url, audioCode: kind === "foreign" ? "VF" : "VA" }],
+      })
+    );
+    vi.stubGlobal("fetch", fetch);
+    const result = probeJobMedia(
+      file,
+      directory,
+      expected,
+      10,
+      kind === "wrong-source" ? url + "?edition=fr" : url
+    );
+    const rejected =
+      kind === "german"
+        ? undefined
+        : expect(result).rejects.toThrow("Local media validation failed");
+    await started();
+    child.stdout.emit("data", output());
+    child.emit("close", 0);
+    if (kind === "german") {
+      const facts = await result;
+      expect(facts.audioLanguages).toEqual([]);
+      expect(facts.sourceAudioEvidence).toEqual(proof);
+      expect(facts.expectedChecks.audio).toBe("passed_provider");
+    } else await rejected;
+    expect(fetch).toHaveBeenCalledTimes(kind === "wrong-source" ? 0 : 1);
+    expect(state.spawn.mock.calls[0][1]).not.toContain(url);
+  }
+);

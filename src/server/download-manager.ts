@@ -129,12 +129,16 @@ async function completeValidatedDownload(
   id: string,
   filePath: string,
   jobDirectory: string,
-  expectations: MediaExpectations | null
+  expectations: MediaExpectations | null,
+  sourceUrl: string
 ): Promise<void> {
   const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
   if (!Number.isSafeInteger(tolerance) || tolerance < 0 || tolerance > 25)
     throw new Error("Invalid media validation policy");
-  const facts = await probeJobMedia(filePath, jobDirectory, expectations, tolerance);
+  const facts =
+    expectations?.version === 2
+      ? await probeJobMedia(filePath, jobDirectory, expectations, tolerance, sourceUrl)
+      : await probeJobMedia(filePath, jobDirectory, expectations, tolerance);
   const stats = await fs.lstat(filePath);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)
     throw new Error("Invalid completed media file");
@@ -152,7 +156,7 @@ async function completeValidatedDownload(
           size: stats.size,
           filePath,
           completedAt: new Date(),
-          mediaValidation: JSON.stringify({ version: 1, ...facts }),
+          mediaValidation: JSON.stringify({ version: expectations?.version ?? 1, ...facts }),
         },
       });
     },
@@ -323,7 +327,13 @@ async function processDownload(downloadId: string): Promise<void> {
       // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
+      await completeValidatedDownload(
+        downloadId,
+        finalMkvPath,
+        completeJobDir,
+        expectations,
+        download.url
+      );
 
       console.log(
         `[Download] HLS completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
@@ -408,7 +418,13 @@ async function processDownload(downloadId: string): Promise<void> {
       // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
+      await completeValidatedDownload(
+        downloadId,
+        finalMkvPath,
+        completeJobDir,
+        expectations,
+        download.url
+      );
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
@@ -427,7 +443,13 @@ async function processDownload(downloadId: string): Promise<void> {
 
       const stats = await fs.stat(finalPath);
 
-      await completeValidatedDownload(downloadId, finalPath, completeJobDir, expectations);
+      await completeValidatedDownload(
+        downloadId,
+        finalPath,
+        completeJobDir,
+        expectations,
+        download.url
+      );
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB)`
