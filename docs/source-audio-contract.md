@@ -21,6 +21,10 @@ RSS-Suchen vor Sprachselektion, Deduplikation und Pagination:
   1 MiB, keine vollständigen Medien, Remote-ffprobe oder Senderseiten. Nur eine
   einheitliche, bekannte Sprache aller Audiotracks gilt als Beleg. `und`,
   gemischte oder unvollständige Metadaten bleiben unbekannt.
+  Große Sampletabellen werden über deklarierte Boxgrößen übersprungen, nicht
+  vollständig geladen. Alle Track-/Containergrenzen und Audiotrackheader müssen
+  im Zwei-Fenster-Budget geprüft werden; ein benötigtes drittes Fenster bleibt
+  unbekannt. Keine Suche nach vermeintlichen Headerzeichenketten in Medienbytes.
 
 Die drei Qualitäts-URLs einer Quellzeile werden getrennt behandelt. Deutsch in
 HD beweist weder die Sprache der Standard- noch der Low-Fassung. Rohdaten aus

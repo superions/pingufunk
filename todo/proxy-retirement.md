@@ -314,7 +314,7 @@ B05/B07, A2/A3, R4.
       Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
-- [x] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+- [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe
@@ -361,6 +361,11 @@ B05/B07, A2/A3, R4.
       Konfiguration erhalten. Fremde Runtimes und Produktion unverändert.
       Kein pauschaler Sprachabdeckungs-, Auflösungs- oder Deploymentnachweis;
       gesonderter Qualitätsbefund P09.3 bleibt offen.
+      Nachprüfung am 03.10.2026 erneut offen: große MP4-Sampletabellen verhindern
+      bislang den Beleg, obwohl die Trackheader im gleichen Zwei-Range-Budget
+      erreichbar sind. Deklarierte Containergrenzen statt vollständigem `moov`
+      lesen; alle Audiotracks, Mischsprachen, beschädigte Grenzen und notwendiges
+      drittes Fenster kausal testen. Body-/Versuchs-/Deadlinegrenzen unverändert.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 

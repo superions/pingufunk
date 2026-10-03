@@ -25,7 +25,10 @@ function metadata(codes: string[], version = 0) {
   );
 }
 const url = "https://rodlzdf-a.akamaihd.net/synthetic/movie.mp4";
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 it.each([0, 1])("reads only coherent sound-track mdhd language, version %i", (version) => {
   expect(readMp4AudioLanguage(metadata(["deu"], version))).toBe("de");
@@ -87,6 +90,113 @@ it("skips a top-level mdat by its declared size, reading at most two bounded ran
   });
   expect(fetch.mock.calls[1][1].headers.Range).toBe(`bytes=${start}-${start + 1048575}`);
   expect(budget.remainingAttempts).toBe(8);
+});
+
+function largeTrack(handlerType: string, code: string, padding: number) {
+  const handler = Buffer.alloc(12);
+  handler.write(handlerType, 8);
+  const mdhd = Buffer.alloc(24);
+  mdhd.writeUInt16BE(
+    [...code].reduce((value, letter) => (value << 5) | (letter.charCodeAt(0) - 96), 0),
+    20
+  );
+  return atom(
+    "trak",
+    atom(
+      "mdia",
+      Buffer.concat([
+        atom("mdhd", mdhd),
+        atom("hdlr", handler),
+        atom("minf", Buffer.alloc(padding)),
+      ])
+    )
+  );
+}
+
+function stubRanges(data: Buffer) {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    const range = /^bytes=(\d+)-(\d+)$/.exec((init.headers as Record<string, string>).Range)!;
+    const start = Number(range[1]),
+      end = Math.min(Number(range[2]), data.length - 1);
+    return new Response(new Uint8Array(data.subarray(start, end + 1)), {
+      status: 206,
+      headers: { "content-range": `bytes ${start}-${end}/${data.length}` },
+    });
+  });
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
+}
+
+it.each(["deu", "fra"])(
+  "reads %s sound headers across large sample tables without fetching the tables",
+  async (code) => {
+    const video = largeTrack("vide", "und", 8 * 1024 * 1024);
+    const audio = largeTrack("soun", code, 4 * 1024 * 1024);
+    const data = atom("moov", Buffer.concat([video, audio]));
+    const fetch = stubRanges(data);
+    const budget = new HttpRequestBudget();
+    expect(await probeMp4AudioLanguage(url, budget)).toBe(code === "deu" ? "de" : "fr");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      fetch.mock.calls.map((call) => (call[1].headers as Record<string, string>).Range)
+    ).toEqual(["bytes=0-1048575", `bytes=${8 + video.length}-${8 + video.length + 1048575}`]);
+    expect(budget.remainingAttempts).toBe(8);
+  }
+);
+
+it("does not accept one German header while a further track needs a third window", async () => {
+  const data = atom(
+    "moov",
+    Buffer.concat([
+      largeTrack("vide", "und", 8 * 1024 * 1024),
+      largeTrack("soun", "deu", 4 * 1024 * 1024),
+      metadata(["fra"]),
+    ])
+  );
+  const fetch = stubRanges(data);
+  expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBeNull();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["deu", "fra"],
+  ["deu", "und"],
+  ["deu", "deu"],
+])("inspects every reachable audio header (%j)", async (first, last) => {
+  const data = atom(
+    "moov",
+    Buffer.concat([largeTrack("vide", "und", 8 * 1024 * 1024), metadata([first, last])])
+  );
+  stubRanges(data);
+  expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBe(
+    first === last ? "de" : null
+  );
+});
+
+it("refuses child sizes escaping their declared parent even when German text is readable", async () => {
+  const data = atom("moov", metadata(["deu"]));
+  data.writeUInt32BE(data.length, 24); // hdlr must fit inside mdia, not merely the response.
+  stubRanges(data);
+  expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBeNull();
+});
+
+it.each([0, 1, 2])("checks mdhd version %i on the actual Range path", async (version) => {
+  stubRanges(atom("moov", metadata(["deu"], version)));
+  expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBe(version < 2 ? "de" : null);
+});
+
+it("keeps the deadline through the final language decoding", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const budget = new HttpRequestBudget();
+  stubRanges(atom("moov", metadata(["deu"])));
+  vi.spyOn(Intl, "Locale").mockImplementation(function () {
+    now += 16_000;
+    return { language: "de" } as Intl.Locale;
+  });
+  await expect(probeMp4AudioLanguage(url, budget)).rejects.toThrow(
+    "Provider request deadline exceeded"
+  );
 });
 
 it.each(["ignored", "wrong-offset", "overflow", "truncated", "encoded"])(
