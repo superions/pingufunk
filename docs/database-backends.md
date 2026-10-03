@@ -72,6 +72,29 @@ Produktiver PG-Cutover bleibt separat freigabepflichtig. Siehe
 [Migrations-Runbook](postgresql-migration-runbook.md) für Snapshot, Zielidentität,
 Import, Vergleich, Sequences und die Rollbackgrenze nach dem ersten PG-Write.
 
+### PostgreSQL mit oder ohne TLS
+
+Der Transport wird in derselben geschützten URL für App und Migrator festgelegt:
+`sslmode=require` verlangt TLS, `sslmode=disable` wählt ausdrücklich eine
+unverschlüsselte Verbindung. Das funktioniert direkt oder über einen passenden
+TCP-Proxy, ohne eine bestimmte Infrastruktur vorauszusetzen. Keine zusätzliche
+Umgebungsvariable, kein Umschalten nach einem Verbindungsfehler.
+
+Die Migrationsprüfung verlangt ohne Parameter weiterhin tatsächlich TLS.
+`sslmode=prefer` ist für den Cutover nicht zulässig: Prisma könnte damit auf
+Klartext zurückfallen. Bestehende Laufzeitkonfigurationen mit Prisma-Default
+`prefer` werden nicht automatisch umgeschrieben; für einen kontrollierten
+Cutover App- und Runner-Secret ausdrücklich identisch auf `require` oder
+`disable` setzen. Doppelte, leere oder unbekannte Modi werden abgelehnt.
+Preflight, DDL-Vorbereitung, Import/Resume, Vergleich und Sequence-Transaktion
+prüfen den gewählten Transport neben Primary/Rolle/Schema. Die tatsächliche
+TLS-Eigenschaft gehört zur Importidentität; ein Transportwechsel ist kein Resume.
+
+Ohne TLS sind DB-Daten und Verbindungsverkehr nicht verschlüsselt; dies ist eine
+bewusste installationsbezogene Entscheidung, kein Ersatz für Zugriffsschutz.
+Secrets bleiben außerhalb Git. Grundlage:
+[Prisma-6-PostgreSQL-Connector](https://www.prisma.io/docs/orm/v6/overview/databases/postgresql).
+
 ## Reproduzierbare Entwicklungsprüfung
 
 ```sh

@@ -1122,3 +1122,102 @@ Produktstand `fc99caf` ist zusätzlich mit Node 24 erfolgreich, einschließlich
 separater PostgreSQL-Integration. P09.4 entwicklungsseitig abgenommen; kein
 Produktiv-Rollout oder historischer Root-Cause-Nachweis. Die automatische
 Docker-Validierung ist ein eigenes Release-Gate und keine Deploymentfreigabe.
+
+## Autorisierte Betriebsumschaltung und nachfolgender PG-Halt (03.10.2026)
+
+Nach gesonderter Nutzerfreigabe: Proxy-Ausstieg zuerst auf SQLite, PostgreSQL
+danach; ausschließlich lokal übertragene Images. Betriebswerte, Geheimdateien,
+Backups und tatsächliche Controllerrevisionen stehen ausschließlich im privaten
+Betriebsrunbook, nicht in diesem öffentlichen Fork.
+
+- OCI-Hardening `23ad4b1`: globales npm/npx aus Runtime und Migrator entfernt,
+  nicht aus Buildstages. Frische exakte Archivscans einschließlich ungefixter
+  HIGH/CRITICAL auf unterstütztem Alpine ohne Findings. Kein Lockfilewechsel.
+  [CI](https://github.com/superions/pingufunk/actions/runs/37075947430) und
+  [Dockerprüfung](https://github.com/superions/pingufunk/actions/runs/37075947435)
+  erfolgreich, einschließlich nativer SQLite-/PG-/TLS-/Rollbackgates.
+- Legacy-SQLite mit leerem Ledger über den geprüften Baselineowner in eine
+  separate Datei überführt, nie neue App gegen die alte Bootstrapdatei gestartet.
+  Sechs Modelle erhalten; Original und finaler Snapshot zeilenweise gleich.
+  Aktive Datei integrity_check `ok`, keine FK-Verletzungen, fünf Migrationen,
+  zwei weiterhin abgeschlossene Downloads. Nur zwei neue Integration-Settings.
+- Prowlarr-Indexer und alle drei SAB-Verbindungstests bestanden; vorhandene
+  Consumer-IDs/Keys, Pfade und Kategorien erhalten. Native Adressen und originale
+  Such-/Enableflags nach Freigabe per API verifiziert. Prowlarr-Synchronisierung
+  reaktivierte zwischenzeitlich Sonarr-Suchflags: deaktivierte Downloadclients
+  schützen die Prüfung; ein einzelner Arr-PUT beweist keine dauerhafte Sperre.
+- Die bisher proxyseitige verifizierte Identität `Solo for Weiss` / `Solo für
+  Weiss`, TVDB 319457, über den bestehenden Katalogmechanismus übernommen,
+  ohne erfundene Episoden oder Audio-Sprachbelege. [TVDB](https://thetvdb.com/series/319457-show)
+  bestätigt die Serienidentität. `1ec873e`: Datenvalidator und 58 fokussierte
+  Tests bestanden; [CI](https://github.com/superions/pingufunk/actions/runs/37078325186)
+  und [Dockerprüfung](https://github.com/superions/pingufunk/actions/runs/37078325198)
+  grün. Lokale Katalogdatei und gepinnte URL decken RSS-Erststart und Suche ab.
+- Echte native S02E01-Suche liefert Blackout. Sonarr-Interactive-API erkennt
+  Staffel/Folge und verweigert den erneuten Download wegen vorhandener Datei.
+  Negative Textsuche leer; unbekannte ID fail-closed 503. Keine produktiven
+  Testgrabs, keine neue vollständige Desktopmatrix behauptet. Vorherige
+  synthetische vollständige Import- und Desktopnachweise bleiben wiederverwendet.
+- Native App und übrige Media-Services laufen; Proxy bleibt bei null Replikaten
+  erhalten. Keine physische Proxyentfernung oder Daten-/Backupbereinigung.
+
+Verbleibende Betriebsgrenzen: täglicher Registry-only-Scanner kann lokale Tags
+nicht auflösen; frischer Archivscan ist keine dauerhafte Überwachung. Historische
+Rollbackarchive brauchen vor neuem Start die aktuelle Imagepolicy. PostgreSQL-
+Preflight fand einen gesunden unterstützten Primary, aber `ssl=off`; die
+implementierte CLI fordert TLS. Keine PG-Rolle/DB, DDL, Datenübernahme oder
+Secretanlage ausgeführt. Änderung am gemeinsamen Cluster erfordert separat
+reviewte Infrastrukturfreigabe; kein TLS-Bypass. P10.2–P10.7 bleiben wegen ihrer
+jeweils noch offenen Betriebs-/PG-/Beobachtungs-/Entfernungsgates ehrlich offen.
+
+## Expliziter PostgreSQL-Klartexttransport (03.10.2026)
+
+Auf Nutzerentscheidung ist TLS kein zwingender Installationsvertrag mehr:
+`sslmode=disable` in derselben geschützten App-/Runner-URL wählt ausdrücklich
+Klartext. Ohne Parameter bleibt die Migration TLS-pflichtig; `require` erzwingt
+TLS, `prefer` ist kein Cutovermodus. Doppelte/ungültige Werte brechen ab.
+Keine Netz-/HAProxy-Sonderannahme, kein Downgrade nach Verbindungsfehler und
+kein PostgreSQL→SQLite-Fallback. Der Runtime-Resolver erhält die gewählte
+Prisma-Option; bestehende Laufzeitdefaults werden nicht heimlich umgeschrieben.
+
+Review: Preflight, DDL-Vorbereitung, Import und Wiederaufnahme sowie tatsächliche
+Sequence-Transaktion benutzen denselben Transportowner. Der Standalone-
+Preflight löst jetzt ebenfalls Secret-Dateien auf. Tatsächliche TLS-Eigenschaft
+bleibt Bestandteil der Runidentität; Helperinhalt gehört zum Importerhash.
+Primary-, Versions-, Rollen-, Schema-, Fidelity- und Rollbackprüfungen bleiben
+unverändert. Ein TLS-Backend trotz explizitem `disable` wird ebenso abgelehnt.
+
+Neue Evidenz: `npm ci`, 842 reguläre Tests (zwölf separate PG-Gates im normalen
+Lauf nicht aktiviert), Lint, Typecheck, Formatcheck und Build bestanden.
+Vollständiger disposable PG-Harness auf dem Entwicklungshost anschließend
+grün: 15 Tests, einschließlich Bootstrap/current-Import, echte CLI prepare/
+import/verify/sequences ohne internen TLS-Testoverride, secret-backed Preflight,
+verweigerter `require`-Verbindung am TLS-losen Server, Persistenz/Write-Gate und
+Reconnect. Der zusätzliche Test hatte zunächst einen TypeScript-Env-Typfehler;
+in `96e3082` korrigiert und Typecheck erneut bestanden.
+[Aktueller Fork-CI-Lauf](https://github.com/superions/pingufunk/actions/runs/37129277696)
+erfolgreich. Docker-/TLS-Containerprüfung `37129277596` zum Zeitpunkt dieses
+Nachtrags noch laufend; nicht als frisch bestanden behauptet. Vorherige TLS-
+Containerbelege sind keine neue Containerabnahme der geänderten Skripte.
+
+Frischer unveränderter Lockfile-Audit meldet sechs HIGH-Paketbefunde in
+Entwicklungsabhängigkeiten (braces/micromatch samt ESLint-/lint-staged-Konsumenten);
+`npm audit --omit=dev` null. Kein unreviewtes audit-fix/Downgrade. Build-/Migrator-
+Reichweite und neue genaue Imagescans bleiben vor einem nächsten Rollout zu
+prüfen. Keine Produktionsdienste, Secrets oder Datenbanken in diesem Schritt
+verändert; PostgreSQL-Übernahme und reale Freigabegates bleiben offen.
+
+Container-Nachprüfung: Der zunächst laufende Docker-Gate `37129277596` scheiterte
+am fehlenden neuen Helper im expliziten Migrator-COPY. Lokaler Build zeigte
+zusätzlich die fehlende Ausnahme der Script-Allowlist in `.dockerignore`.
+Beide Verpackungsfehler in `1f5bfb5` korrigiert; keine geschwächte Assertion oder
+blinder Retry. Danach beide tatsächlichen Images auf dem Entwicklungshost neu
+gebaut und vollständige TLS-Containerprobe einschließlich Snapshot, prepare,
+Import/Verify/Sequences, Maintenance, Appstart und durablem First-write-Checkpoint
+erfolgreich. Immutable Post-write-Rollback nicht neu lokal ausgeführt;
+dieser zusätzliche Gate bleibt im noch laufenden Docker-Forklauf.
+[Fork-CI für den Verpackungsfix](https://github.com/superions/pingufunk/actions/runs/37130113142)
+erfolgreich; Dockerlauf `37130113176` noch nicht abschließend bestätigt.
+Auch die neue SQLite-Containerprobe bestand: Fresh Install, Bootstrap-Baseline,
+gespeicherte Settings, Restart/Persistenz und fail-closed Negativfälle. Keine
+produktive SQLite-Datei angesprochen und keine Testdatenbank beibehalten.

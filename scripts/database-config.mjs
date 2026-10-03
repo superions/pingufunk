@@ -66,6 +66,12 @@ export function resolveDatabaseConfig(env = process.env) {
       throw new Error("Invalid PostgreSQL pool configuration");
   }
   const pgbouncer = parsed.searchParams.getAll("pgbouncer");
+  const sslModes = parsed.searchParams.getAll("sslmode");
+  if (
+    sslModes.length > 1 ||
+    (sslModes.length === 1 && !["disable", "prefer", "require"].includes(sslModes[0]))
+  )
+    throw new Error("Invalid PostgreSQL transport configuration");
   const schemas = parsed.searchParams.getAll("schema");
   if (schemas.length > 1 || (schemas.length === 1 && schemas[0] === ""))
     throw new Error("Invalid PostgreSQL schema configuration");

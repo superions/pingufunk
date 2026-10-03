@@ -3,6 +3,8 @@ import { lstatSync, accessSync, statfsSync, constants } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient, Prisma } from "@prisma/client";
+import { postgresqlRequiresTls } from "./postgresql-transport.mjs";
+import { resolveDatabaseConfig } from "./database-config.mjs";
 import {
   validatePostgresqlLedger,
   validatePostgresqlStructure,
@@ -252,7 +254,7 @@ export function assertTargetMetadata(
   target,
   expectedDatabase,
   expectedRole,
-  requireTls = true,
+  requireTls = postgresqlRequiresTls(),
   now = Date.now()
 ) {
   if (target.database !== expectedDatabase || target.role !== expectedRole)
@@ -262,6 +264,8 @@ export function assertTargetMetadata(
     fail("Unsupported PostgreSQL server version");
   if (target.standby) fail("PostgreSQL target is a standby");
   if (requireTls && !target.tls) fail("PostgreSQL connection is not using TLS");
+  if (!requireTls && target.tls !== false)
+    fail("PostgreSQL connection does not match explicitly unencrypted transport");
   if (target.superuser || target.createdb || target.createrole)
     fail("PostgreSQL runtime role is overprivileged");
   return { version: target.version, primary: true, tls: target.tls, scopedRole: true };
@@ -285,7 +289,13 @@ export async function readTargetMetadata(client) {
 }
 
 /** Bind the actual transaction connection, not a prior pool connection. */
-export async function assertConnectedTarget(client, baseline, database, role, requireTls = true) {
+export async function assertConnectedTarget(
+  client,
+  baseline,
+  database,
+  role,
+  requireTls = postgresqlRequiresTls()
+) {
   const target = await readTargetMetadata(client);
   assertTargetMetadata(target, database, role, requireTls);
   for (const [field, key] of [
@@ -303,7 +313,7 @@ export async function inspectTarget(
   expectedDatabase,
   expectedRole,
   expectedHost,
-  requireTls = true
+  requireTls = postgresqlRequiresTls()
 ) {
   if (!expectedDatabase || !expectedRole || !expectedHost)
     fail("Expected database, role and endpoint host are required");
@@ -356,6 +366,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     if (process.argv.length !== 6) fail("Expected source, database, role and endpoint host");
     const [source, database, role, endpointHost] = process.argv.slice(2);
+    const config = resolveDatabaseConfig();
+    if (config.provider !== "postgresql") fail("PostgreSQL configuration required");
+    process.env.DATABASE_URL = config.url;
+    delete process.env.DATABASE_URL_FILE;
     const report = {
       version: 2,
       node: process.version,
