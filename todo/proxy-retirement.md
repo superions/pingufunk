@@ -1667,6 +1667,29 @@ Abhängigkeit P08; B10/R7.
       nimmt die historische Grundprüfung P09.2 nicht zurück und gehört nicht zur
       Tonsprachenabnahme P03.4.
 
+- [ ] **P09.4 — Sichere Transferdiagnostik und isolierte Reproduktion.**
+      Nutzerauftrag 03.10.2026: bestehende progressive Workerpfade in
+      `download-manager.ts` statt generischer Sammelfehlermeldung mit begrenztem
+      Phasen-/Byte-/HTTP-/Allowlistcode-Vertrag über `download-failure.ts`
+      diagnostizieren. Keine URLs, Rohfehler oder privaten Providerantworten;
+      keine neuen Retries, Profile, Timeouts, DB-Spalten oder Produktivgrabs.
+      Fehlertext in bestehender Failed-History und nach DB-Reconnect erhalten.
+      Abnahme: nativer Loopback-HTTP-Abbruch nach echten Bytes, Redirect-Grenze,
+      Gzip/positiver Transfer, Dateifehler/Open-Race, DB-Fortschrittsfehler,
+      Inaktivität und Secret-Negativtests; kein Probe/completed bei Transferfehler,
+      eigene Partialdateien bereinigen, Nachbarziele erhalten, Queue fortsetzen.
+      Vollständige Test-/Lint-/Typecheck-/Format-/Build-Gates und Ownerreview;
+      Grenzen in `docs/download-failure-diagnostics.md`. Reproduzierte Fehlerklasse
+      nicht als nachträglich bewiesene Produktionsursache behaupten. Produktion
+      und erneute Downloadbeauftragung bleiben separat freizugeben.
+      Implementiert und lokal reviewt 03.10.2026: 48 fokussierte Owner-Tests,
+      930 reguläre Tests; 13 bedingte PostgreSQL-Gates separat. Nach `npm ci`
+      mit Node 26.10.0 bestanden Lint, Typecheck, Formatcheck, Build und Diffcheck.
+      Ein anfänglicher Open-Listener-Typfehler wurde korrigiert, alle relevanten
+      Gates danach erneut ausgeführt. Die 14 vorhandenen Turbopack-Tracing-
+      Warnungen bleiben sichtbar. Fork-Validierung mit Node 24 folgt am gepushten
+      Produktstand; keine Produktivursache oder produktive Installation behauptet.
+
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und
 isoliert geprüft. Explizite NULL-Sollwerte bleiben unbekannt; kaputte v1-

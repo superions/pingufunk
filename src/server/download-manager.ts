@@ -17,7 +17,14 @@ import {
 } from "@/lib/download-paths";
 import * as fs from "fs/promises";
 import { constants, createWriteStream } from "fs";
+import { createHash } from "node:crypto";
 import * as path from "path";
+import {
+  safeTransferErrorCode,
+  transferFailureMessage,
+  type TransferFailure,
+  type TransferPhase,
+} from "./download-failure";
 
 const MAX_CONCURRENT_DOWNLOADS = 1;
 
@@ -229,6 +236,7 @@ async function processDownload(downloadId: string): Promise<void> {
   const startTime = Date.now();
   let tempJobDir: string | null = null;
   let completeJobDir: string | null = null;
+  let failureMessage = "Download processing failed";
 
   try {
     // Get download info
@@ -350,7 +358,7 @@ async function processDownload(downloadId: string): Promise<void> {
     const mp4Path = tempMp4Path;
 
     // Download the file
-    const downloadSuccess = await downloadFile(
+    const downloadFailure = await downloadFile(
       download.url,
       mp4Path,
       async (progress, downloadedBytes, totalBytes, speed) => {
@@ -366,8 +374,13 @@ async function processDownload(downloadId: string): Promise<void> {
       }
     );
 
-    if (!downloadSuccess) {
-      await markAsFailed(downloadId, "Download failed");
+    if (downloadFailure) {
+      console.error("[Download] Transfer failure", {
+        jobRef: createHash("sha256").update(downloadId).digest("hex").slice(0, 16),
+        ...downloadFailure,
+      });
+      failureMessage = transferFailureMessage(downloadFailure);
+      await markAsFailed(downloadId, failureMessage);
       return;
     }
 
@@ -457,7 +470,7 @@ async function processDownload(downloadId: string): Promise<void> {
     }
   } catch {
     console.error(`[Download] Error processing download ${downloadId}`);
-    await markAsFailed(downloadId, "Download processing failed");
+    await markAsFailed(downloadId, failureMessage);
   } finally {
     // Remove only empty directories owned by this job. A failed tool's
     // unexpected leftovers remain visible for diagnosis, never swept broadly.
@@ -503,6 +516,8 @@ async function markAsFailed(downloadId: string, error: string): Promise<void> {
 // arrives for this long.
 const STALL_TIMEOUT_MS = 60_000;
 
+/** Null confirms byte transfer and file finish, not media validation. Failures
+ * retain only the closed diagnostic contract; raw exceptions never escape. */
 async function downloadFile(
   url: string,
   destPath: string,
@@ -512,16 +527,44 @@ async function downloadFile(
     totalBytes: number,
     speed: number
   ) => Promise<void>
-): Promise<boolean> {
+): Promise<TransferFailure | null> {
   const abortController = new AbortController();
   let fileStream: ReturnType<typeof createWriteStream> | undefined;
   let fileCreated = false;
   let completed = false;
+  const startedAt = Date.now();
+  let phase: TransferPhase = "request";
+  let failure: TransferFailure | null = null;
+  let fileError: unknown;
+  let fileErrorPhase: TransferPhase = "file_open";
+  let timedOut = false;
+  let receivedBytes = 0;
+  let downloadedBytes = 0;
+  let expectedBytes: number | null = null;
+  let httpStatus: number | null = null;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  const fail = (reason: TransferFailure["reason"], error?: unknown): void => {
+    // File errors abort an outstanding network read too. Keep their original
+    // phase/code rather than blaming the resulting fetch AbortError.
+    failure = {
+      version: 1,
+      phase: fileError ? fileErrorPhase : phase,
+      reason: timedOut && !fileError ? "inactivity_timeout" : reason,
+      code: safeTransferErrorCode(fileError ?? error),
+      receivedBytes,
+      writtenBytes: downloadedBytes,
+      expectedBytes,
+      httpStatus,
+      elapsedMs: Math.max(0, Date.now() - startedAt),
+    };
+  };
   let stallTimer: ReturnType<typeof setTimeout> | undefined;
   const resetStallTimer = () => {
+    // This existing timer also runs during writes/progress persistence. Record
+    // the phase, not an unproven claim that the network itself stalled.
     if (stallTimer) clearTimeout(stallTimer);
     stallTimer = setTimeout(() => {
-      console.error(`[Download] No data received for ${STALL_TIMEOUT_MS / 1000}s, aborting`);
+      timedOut = true;
       abortController.abort();
     }, STALL_TIMEOUT_MS);
   };
@@ -529,10 +572,12 @@ async function downloadFile(
   try {
     resetStallTimer();
     const response = await fetch(url, { redirect: "error", signal: abortController.signal });
+    phase = "response";
+    httpStatus = response.status;
 
     if (!response.ok || !response.body) {
-      console.error(`[Download] HTTP error: ${response.status}`);
-      return false;
+      fail(response.ok ? "missing_body" : "http_status");
+      return failure;
     }
 
     const lengthHeader = response.headers.get("content-length");
@@ -543,31 +588,52 @@ async function downloadFile(
     if (
       reliableLength &&
       (!/^\d+$/.test(lengthHeader) || !Number.isSafeInteger(Number(lengthHeader)))
-    )
-      return false;
+    ) {
+      fail("invalid_length");
+      return failure;
+    }
     const contentLength = reliableLength ? Number(lengthHeader) : 0;
+    expectedBytes = reliableLength ? contentLength : null;
+    phase = "file_open";
     fileStream = createWriteStream(destPath, { flags: "wx" });
     fileStream.once("open", () => {
       fileCreated = true;
     });
-    fileStream.on("error", () => abortController.abort());
+    fileStream.on("error", (error) => {
+      fileError = error;
+      fileErrorPhase = fileCreated
+        ? phase === "file_finish"
+          ? "file_finish"
+          : "file_write"
+        : "file_open";
+      abortController.abort();
+    });
+    await new Promise<void>((resolve, reject) => {
+      fileStream!.once("open", () => resolve());
+      fileStream!.once("error", reject);
+    });
 
-    const reader = response.body.getReader();
-    let downloadedBytes = 0;
+    reader = response.body.getReader();
     let lastProgressUpdate = 0;
     let lastSpeedCheck = Date.now();
     let lastSpeedBytes = 0;
     let currentSpeed = 0;
 
     while (true) {
+      phase = "body_read";
       const { done, value } = await reader.read();
       resetStallTimer();
 
       if (done) {
         break;
       }
-      if (reliableLength && downloadedBytes + value.length > contentLength) return false;
+      receivedBytes += value.length;
+      if (reliableLength && receivedBytes > contentLength) {
+        fail("length_overflow");
+        return failure;
+      }
 
+      phase = "file_write";
       await new Promise<void>((resolve, reject) => {
         fileStream!.write(Buffer.from(value), (error) => (error ? reject(error) : resolve()));
       });
@@ -588,27 +654,37 @@ async function downloadFile(
         const percent = Math.floor((downloadedBytes / contentLength) * 100);
         if (percent > lastProgressUpdate) {
           lastProgressUpdate = percent;
+          phase = "progress";
           await onProgress(percent, downloadedBytes, contentLength, currentSpeed);
+          if (timedOut) {
+            fail("inactivity_timeout");
+            return failure;
+          }
         }
       }
     }
 
-    if (reliableLength && downloadedBytes !== contentLength) return false;
+    if (reliableLength && downloadedBytes !== contentLength) {
+      fail("length_mismatch");
+      return failure;
+    }
 
+    phase = "file_finish";
     completed = await new Promise<boolean>((resolve) => {
       fileStream!.once("finish", () => resolve(true));
       fileStream!.once("error", () => {
-        console.error("[Download] Write error");
         resolve(false);
       });
       fileStream!.end();
     });
-    return completed;
-  } catch {
-    console.error("[Download] Error downloading file");
-    return false;
+    if (!completed) fail("exception", fileError);
+    return failure;
+  } catch (error) {
+    fail("exception", error);
+    return failure;
   } finally {
     clearTimeout(stallTimer);
+    reader?.releaseLock();
     if (!completed) {
       abortController.abort();
       if (fileStream) {
@@ -617,7 +693,11 @@ async function downloadFile(
           fileStream!.once("close", resolve);
           fileStream!.destroy();
         });
-        if (fileCreated) await fs.unlink(destPath).catch(() => {});
+        if (fileCreated) {
+          await fs.unlink(destPath).catch((error: unknown) => {
+            if (failure) failure.cleanupCode = safeTransferErrorCode(error);
+          });
+        }
       }
     }
   }

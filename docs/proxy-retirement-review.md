@@ -1082,3 +1082,39 @@ gültig, belegen aber diese MP4-Struktur nicht. P03.4 ist deshalb erneut offen;
 synthetische Trailer-Regression und begrenzte Leseplanung bzw. ehrliche
 Abdeckungsgrenze sind beim bestehenden Owner zu bearbeiten. Keine privaten
 Quellantworten oder operatorseitigen Einzelgrabs als Produktfixture/Abnahme.
+
+## P09.4 — Secret-sichere progressive Transferdiagnose
+
+Der explizite Diagnose-/Reproduktionsauftrag ergänzt den bestehenden
+`download-manager.ts`-Owner, keine zweite Downloadpipeline. Upstream main
+`e62ed90` wurde frisch geprüft: dort werden rohe Transferausnahmen ausgegeben;
+ein gleichwertiger geschlossener secret-sicherer Diagnosevertrag ist nicht
+vorhanden. Diese Rohfehlerausgabe wird nicht in den Fork übernommen.
+
+Der bisherige Boolean verliert nun keine gesamte Fehlerphase mehr:
+ein typisierter Transferbeleg unterscheidet Request/Response, Open/Write/Finish,
+Body-Read und Fortschrittspersistenz. Geschlossene Code-Allowlist mit vier
+Cause-Ebenen; keinerlei Message/Stack/URL/Dateipfad/Response-/Prisma-Metadaten.
+Eine durch Dateifehler ausgelöste Reader-Abortion behält die Dateiphase.
+Inaktivität während eines DB-Callbacks wird nicht zum Netzwerkbeweis umgedeutet.
+Zuverlässige Content-Length und dekodierte Gzip-Bytes bleiben getrennt.
+Das bestehende Error-Textfeld und SAB-History tragen denselben safe Vertrag;
+DB-Ausfall/Reconnect darf ihn nicht zu einem generischen Folgefehler verlieren.
+Keine Schemamigration, neue Retries oder Änderung der Inaktivitätsdauer.
+
+Native Loopback-HTTP-Tests reproduzieren einen tatsächlichen Socket-Abbruch nach
+Byteempfang, Redirect-Ablehnung ohne Zielabruf, Gzip sowie gültige Dateiübertragung.
+Gezielte DB-/Write-/Open-Race-/Timer-/Längen-Faults schützen Fehlerphase,
+Secret-Negativfälle, Partialbereinigung, Nachbarfileerhalt und Queuefortsetzung.
+Die DB und Medienprobe dieses Transferharness sind gemockt; dies ist weder eine
+neue Medienabnahme noch der Beweis einer historischen Produktionsursache.
+Reproduktionsvertrag und Grenzen: `docs/download-failure-diagnostics.md`.
+Produktive Dienste, Quellen, Bibliothek und bestehende Aufträge bleiben
+unangetastet. P03.4 und P09.3 bleiben unabhängig offen.
+
+Lokale Entwicklungs-Gates: nach `npm ci` 930 reguläre Tests und 48 fokussierte
+Owner-Tests; 13 PostgreSQL-Gates bedingt und lokal nicht ausgeführt. Lint,
+Typecheck, Formatcheck, Build und Diffcheck bestanden mit Node 26.10.0.
+Der zuerst gefundene Open-Listener-Typfehler ist behoben; relevante Gates danach
+erneut grün. Bestehende 14 Turbopack-Tracingwarnungen bleiben unverändert.
+Neue Node-24-Fork-/Backend-Validierung ist vom lokalen Nachweis zu unterscheiden.
