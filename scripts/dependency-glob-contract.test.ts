@@ -71,22 +71,23 @@ describe("installed development glob consumers", () => {
 
   it("does not exhaust the stack on deeply nested braces in the real Next consumer", () => {
     const cwd = fixture();
-    const pattern = `${cwd}/${"{".repeat(12000)}x${"}".repeat(12000)}`;
-    // Run the installed consumer in a bounded child, not a mock or source-string check.
+    // This tests stack safety, not a 5-second performance SLA: shared CI CPUs
+    // need headroom while the equally deep input and success assertions stay fixed.
     const result = execFileSync(
       process.execPath,
       [
         "-e",
         `
       const {getRootDirs} = require(${JSON.stringify(path.join(pluginDirectory, "utils/get-root-dirs.js"))});
-      const roots = getRootDirs({cwd: ${JSON.stringify(cwd)}, settings: {next: {rootDir: ${JSON.stringify(pattern)}}}});
+      const pattern = ${JSON.stringify(cwd)} + '/' + '{'.repeat(12000) + 'x' + '}'.repeat(12000);
+      const roots = getRootDirs({cwd: ${JSON.stringify(cwd)}, settings: {next: {rootDir: pattern}}});
       if (roots.length) process.exit(1);
     `,
       ],
-      { timeout: 5000 }
+      { timeout: 20000 }
     );
     expect(result.toString()).toBe("");
-  });
+  }, 30000);
 
   it("retains staged-file selection for the shipped hook patterns without touching this checkout", async () => {
     const cwd = fixture();
