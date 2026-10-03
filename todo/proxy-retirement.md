@@ -1688,7 +1688,11 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       versionierter Next-Glob-Alias entfernen beide braces/micromatch-Pfade;
       kein Advisory-Ignore oder Downgrade. Frisches npm ci, beide Clients,
       beide Audits null; 846 Tests, Lint, Types, Format und Build grün.
-      Reale Consumer-/Hook-Regressionen; neue Linux-/Containergates noch offen.
+      Reale Consumer-/Hook-Regressionen, 15 neue disposable PG-Tests und
+      Linux-/App-/Migrator-/TLS-/Rollback-/SQLite-/Mediengates bestanden.
+      Erster Fork-CI fand zu knappes Stack-Testbudget; bei unverändertem Input/
+      Assertions korrigiert; Fork-CI 37131891118 anschließend erfolgreich,
+      Docker-Forklauf 37131891079 noch laufend (lokale Containerabnahme grün).
       Details, Override-Removal-Gate und Abnahmegrenzen im Review. Keine
       Rollen-/DB-Anlage, Datenmigration oder gemeinsame Clusteränderung.
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/

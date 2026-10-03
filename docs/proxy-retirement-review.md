@@ -1092,7 +1092,35 @@ Keine ESLint-Regel abgeschaltet, Advisory ignoriert, Packageversion umbenannt
 oder unsicherer Major-Downgrade übernommen. Upstream enthält diesen Fix nicht.
 CI prüft künftig auch den vollständigen gelockten HIGH/CRITICAL-Audit.
 
-Zwischenstand: frisches npm ci generierte beide Datenbankclients; vollständiger
-und Production-Audit null, braces/micromatch vollständig aus dem installierten
-Graph entfernt. Produkt-, Linux-/Container- und CI-Abnahme werden nach diesem
-Checkpoint ergänzt; keine Deployment- oder Datenmigrationsbehauptung.
+Verifiziert auf `4148d72`: frisches npm ci generierte beide Datenbankclients;
+vollständiger und Production-Audit null, braces/micromatch vollständig aus dem
+installierten Graph entfernt. 846 reguläre Tests bestanden (zwölf separate
+PG-Gates im normalen Lauf nicht aktiviert), Lint, Typecheck, Format und Build
+grün. Nur lint-staged änderte seine reale Paketversion, 43 Packagepfade entfielen.
+Echter Commit-Hook mit ESLint/Prettier erfolgreich, nicht nur Mock-Kommandos.
+Neue Linux-Installation und beide Audits ebenfalls grün; 15 disposable PG-
+Integrationstests und alle vier neuen Consumerregressionen bestanden.
+
+Beide lokalen Linux/amd64-Images neu gebaut, Prisma 6.19.3 wirklich gestartet;
+globale npm-Installation und root-installierte braces/micromatch nicht enthalten.
+App-ID `sha256:580deff2296aee6be46bb073d59d3a49f5f38c65597a0510c9245853269e3b58`,
+Migrator-ID `sha256:1c74fdd8d984333c2c7909a30cde71c81c13c5bccd57ffbca711a42657922d47`.
+Neue Containerproben bestanden: Bootstrap und Current SQLite→PG mit TLS,
+Maintenance/First-write, Post-write-Backuprestore und eigenständiges immutable
+PG-kompatibles Rollbackimage des vorigen Transportcheckpoints; SQLite Fresh/
+Bootstrap/Persistenz/Restart/fail-closed sowie realer progressiver, Mux- und
+HLS-Medienabschluss auf beiden Backends einschließlich PG-Ausfall/Recovery.
+Alle Daten synthetisch, Testressourcen bereinigt, keine Produktionsverbindung.
+Dies ist kein neuer vollständiger OS-/OCI-Vulnerabilitätsscan oder Rollout.
+
+Der erste Fork-CI-Lauf `37131704323` scheiterte nur am fünfsekündigen Budget des
+neuen Stacktests auf geteilten CPUs; PG-Job grün. `f189c21` behält den Input mit
+12.000 Klammerpaaren und identische Erfolgsassertions bei, begrenzt den Child
+auf 20 Sekunden und den Test auf 30 Sekunden. Kein Produktdefekt übersprungen,
+keine schwächere Assertion. Fokussierte Tests und Typecheck danach erneut grün;
+unveränderte übrige lokale Gates werden wiederverwendet.
+[Fork-CI für f189c21](https://github.com/superions/pingufunk/actions/runs/37131891118)
+erfolgreich, einschließlich vollständigem Audit und separatem PostgreSQL-Job.
+[Docker-Forklauf](https://github.com/superions/pingufunk/actions/runs/37131891079)
+zum Zeitpunkt dieses Nachtrags noch laufend; keine vorzeitige Fork-Container-
+oder Deploymentabnahme. Lokale Containerabnahmen sind davon getrennt belegt.
