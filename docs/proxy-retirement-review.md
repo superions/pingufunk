@@ -1043,3 +1043,29 @@ auf diesem Produktstand bestanden ohne Veröffentlichung. P03.4 ist als
 Entwicklungsabnahme geschlossen, nicht als produktiver Wechsel. Der separate
 HD-Feld-/Auflösungsbefund ist als P09.3 offen erfasst; keine stillschweigende
 Gesamtabnahme aller Qualitätszusagen.
+
+### MP4-Nachprüfung: große Sampletabellen
+
+Die bisherige begrenzte Probe verlangte einen vollständigen `moov` im
+Rangefenster. Große Sampletabellen verhinderten daher erreichbare Sound-
+Trackbelege. P03.4 wurde für diese Nachprüfung wieder geöffnet, nicht durch
+Sprachheuristik oder größere Antwortlimits umgangen. `00b2ce3` liest nur
+deklarierte, innerhalb ihrer Eltern und der unveränderten Dateilänge liegende
+Boxgrenzen und benötigte `hdlr`/`mdhd`-Felder. Sampletabellen werden übersprungen.
+Alle Trackheader müssen erreichbar sein; ein drittes nötiges Fenster bleibt
+unbekannt. Höchstens zwei 1-MiB-Antworten, 4.096 Header und gemeinsame Deadline;
+keine Zeichenkettensuche in Medienbytes, Remote-ffprobe oder Vollabfrage.
+
+Synthetische große Video-/Audio-Sampletabellen, DE/FR, gemischte/unklare weitere
+Spuren, Elternüberlauf, mdhd-Versionen und Deadline nach finaler Sprachdecodierung
+sind kausal geprüft. Nach Behebung eines Testfixture-Typfehlers bestanden
+917 reguläre Tests, Lint, Typecheck, Formatcheck, Build und Diffcheck; unveränderte
+Turbopack-Tracingwarnungen bleiben sichtbar. Aktuelle
+[CI](https://github.com/superions/pingufunk/actions/runs/37146674348) und
+[Docker-/Backend-Gates](https://github.com/superions/pingufunk/actions/runs/37146674264)
+grün. Echte isolierte native Radarr-/Prowlarr-Verbraucher auf dem neuen Runner
+prüften German trotz englischer Originalsprache direkt und vermittelt, ohne
+Grab; Auth-/Netzwerkgrenzen ebenfalls grün. Ein vorheriger Readinessfehler war
+keine Abnahme. Eigene QA gestoppt, Daten erhalten. Schema, v1/v2-Payloads und
+Worker unverändert; keine neue DB-Migration oder öffentliche Veröffentlichung.
+Private Betriebsabnahme und echte Importdaten bleiben im Homelab-Runbook.

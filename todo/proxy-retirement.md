@@ -314,7 +314,7 @@ B05/B07, A2/A3, R4.
       Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
-- [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+- [x] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe
@@ -361,11 +361,20 @@ B05/B07, A2/A3, R4.
       Konfiguration erhalten. Fremde Runtimes und Produktion unverändert.
       Kein pauschaler Sprachabdeckungs-, Auflösungs- oder Deploymentnachweis;
       gesonderter Qualitätsbefund P09.3 bleibt offen.
-      Nachprüfung am 03.10.2026 erneut offen: große MP4-Sampletabellen verhindern
-      bislang den Beleg, obwohl die Trackheader im gleichen Zwei-Range-Budget
-      erreichbar sind. Deklarierte Containergrenzen statt vollständigem `moov`
-      lesen; alle Audiotracks, Mischsprachen, beschädigte Grenzen und notwendiges
-      drittes Fenster kausal testen. Body-/Versuchs-/Deadlinegrenzen unverändert.
+      Nachprüfung am 03.10.2026 zwischenzeitlich erneut offen: große MP4-
+      Sampletabellen verhinderten einen im Zwei-Range-Budget erreichbaren Beleg.
+      Korrektur `00b2ce3` liest deklarierte Containergrenzen statt vollständigem
+      `moov`: alle Audiotracks, Mischsprachen, beschädigte Grenzen, notwendiges
+      drittes Fenster und finale Decodierungsdeadline kausal getestet. Body-/
+      Versuchs-/Deadlinegrenzen unverändert. 917 reguläre Tests, Lint, Typecheck,
+      Formatcheck, Produktionsbuild und Diffcheck bestanden; anfänglicher
+      Testfixture-Typfehler behoben und Gates danach erneut grün. Aktuelle
+      [CI](https://github.com/superions/pingufunk/actions/runs/37146674348) sowie
+      [Docker-/Backend-Abnahme](https://github.com/superions/pingufunk/actions/runs/37146674264)
+      erfolgreich ohne Publikation. Derselbe geprüfte Runner besteht native
+      direkte/vermittelte Radarr-Tonsprachensuche und Auth-/Netzwerkgrenzen in
+      isolierter QA; ein vorheriger API-Readinessfehler zählt nicht als Abnahme.
+      Eigene QA gestoppt, Zustand erhalten; keine neue Schema-/Payloadversion.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
