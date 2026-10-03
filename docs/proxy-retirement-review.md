@@ -1005,3 +1005,40 @@ implementierte CLI fordert TLS. Keine PG-Rolle/DB, DDL, Datenübernahme oder
 Secretanlage ausgeführt. Änderung am gemeinsamen Cluster erfordert separat
 reviewte Infrastrukturfreigabe; kein TLS-Bypass. P10.2–P10.7 bleiben wegen ihrer
 jeweils noch offenen Betriebs-/PG-/Beobachtungs-/Entfernungsgates ehrlich offen.
+
+## Expliziter PostgreSQL-Klartexttransport (03.10.2026)
+
+Auf Nutzerentscheidung ist TLS kein zwingender Installationsvertrag mehr:
+`sslmode=disable` in derselben geschützten App-/Runner-URL wählt ausdrücklich
+Klartext. Ohne Parameter bleibt die Migration TLS-pflichtig; `require` erzwingt
+TLS, `prefer` ist kein Cutovermodus. Doppelte/ungültige Werte brechen ab.
+Keine Netz-/HAProxy-Sonderannahme, kein Downgrade nach Verbindungsfehler und
+kein PostgreSQL→SQLite-Fallback. Der Runtime-Resolver erhält die gewählte
+Prisma-Option; bestehende Laufzeitdefaults werden nicht heimlich umgeschrieben.
+
+Review: Preflight, DDL-Vorbereitung, Import und Wiederaufnahme sowie tatsächliche
+Sequence-Transaktion benutzen denselben Transportowner. Der Standalone-
+Preflight löst jetzt ebenfalls Secret-Dateien auf. Tatsächliche TLS-Eigenschaft
+bleibt Bestandteil der Runidentität; Helperinhalt gehört zum Importerhash.
+Primary-, Versions-, Rollen-, Schema-, Fidelity- und Rollbackprüfungen bleiben
+unverändert. Ein TLS-Backend trotz explizitem `disable` wird ebenso abgelehnt.
+
+Neue Evidenz: `npm ci`, 842 reguläre Tests (zwölf separate PG-Gates im normalen
+Lauf nicht aktiviert), Lint, Typecheck, Formatcheck und Build bestanden.
+Vollständiger disposable PG-Harness auf dem Entwicklungshost anschließend
+grün: 15 Tests, einschließlich Bootstrap/current-Import, echte CLI prepare/
+import/verify/sequences ohne internen TLS-Testoverride, secret-backed Preflight,
+verweigerter `require`-Verbindung am TLS-losen Server, Persistenz/Write-Gate und
+Reconnect. Der zusätzliche Test hatte zunächst einen TypeScript-Env-Typfehler;
+in `96e3082` korrigiert und Typecheck erneut bestanden.
+[Aktueller Fork-CI-Lauf](https://github.com/superions/pingufunk/actions/runs/37129277696)
+erfolgreich. Docker-/TLS-Containerprüfung `37129277596` zum Zeitpunkt dieses
+Nachtrags noch laufend; nicht als frisch bestanden behauptet. Vorherige TLS-
+Containerbelege sind keine neue Containerabnahme der geänderten Skripte.
+
+Frischer unveränderter Lockfile-Audit meldet sechs HIGH-Paketbefunde in
+Entwicklungsabhängigkeiten (braces/micromatch samt ESLint-/lint-staged-Konsumenten);
+`npm audit --omit=dev` null. Kein unreviewtes audit-fix/Downgrade. Build-/Migrator-
+Reichweite und neue genaue Imagescans bleiben vor einem nächsten Rollout zu
+prüfen. Keine Produktionsdienste, Secrets oder Datenbanken in diesem Schritt
+verändert; PostgreSQL-Übernahme und reale Freigabegates bleiben offen.

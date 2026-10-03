@@ -1674,6 +1674,14 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       ist freigegeben; URL `sslmode=disable` statt zwingendem TLS. App und
       Migrationsrunner müssen denselben Transport benutzen; kein automatischer
       TLS-Fehlerfallback, keine gemeinsame Clusteränderung erforderlich.
+      Implementiert auf `96e3082`: gemeinsamer URL-Transportowner, ungültige/
+      doppelte Modi gesperrt, Secret-Preflight und echte Klartext-CLI-Abnahmen
+      einschließlich Sequences. 842 reguläre Tests und 15 disposable PG-Tests
+      grün; aktueller Fork-CI erfolgreich. Docker-/TLS-Neuabnahme noch laufend,
+      produktive Images unverändert. Frischer unveränderter Lockfile-Audit:
+      sechs HIGH in Entwicklungsabhängigkeiten, Production-Audit null; Build-/
+      Migratorreichweite und genaue neue Images vor Rollout prüfen. Keine
+      Rollen-/DB-Anlage, Datenmigration oder gemeinsame Clusteränderung.
       Runbooks/GitOps-Änderungsentwurf ohne Deploy an tatsächlichem Image-/Task-/
       Gitstand prüfen: gewählter Backendtyp und seine Network-/Secret-/Mount-/
       Pfad-/Rechtekonvention; bei PG-Wahl Serverversion/Primary/Transport/TLS,
