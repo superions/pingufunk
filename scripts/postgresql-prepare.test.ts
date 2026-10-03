@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSmokeSource } from "./postgresql-smoke-fixture.mjs";
@@ -39,6 +39,36 @@ it.skipIf(!required)(
         host: "127.0.0.1",
       };
       const deploy = vi.fn();
+      const secret = join(dir, "database-url");
+      const preflightEnv = { ...process.env, DATABASE_URL_FILE: secret };
+      delete preflightEnv.DATABASE_URL;
+      const preflightArgs = [
+        "scripts/postgresql-preflight.mjs",
+        snapshot.snapshotPath,
+        args.database,
+        args.role,
+        args.host,
+      ];
+      writeFileSync(secret, url.href, { mode: 0o600 });
+      const preflight = spawnSync(process.execPath, preflightArgs, {
+        env: preflightEnv,
+        encoding: "utf8",
+        timeout: 30000,
+      });
+      expect(preflight.status, preflight.stderr).toBe(0);
+      expect(JSON.parse(preflight.stdout).target.tls).toBe(false);
+      expect(preflight.stdout).not.toContain(url.href);
+      const tlsRequired = new URL(url);
+      tlsRequired.searchParams.set("sslmode", "require");
+      writeFileSync(secret, tlsRequired.href);
+      const denied = spawnSync(process.execPath, preflightArgs, {
+        env: preflightEnv,
+        encoding: "utf8",
+        timeout: 30000,
+      });
+      expect(denied.status).not.toBe(0);
+      expect(denied.stdout).toBe("");
+      expect(denied.stderr).not.toContain(tlsRequired.href);
       const missing = new URL(url);
       missing.searchParams.set("schema", "p11_missing_schema");
       vi.stubEnv("DATABASE_URL", missing.href);
