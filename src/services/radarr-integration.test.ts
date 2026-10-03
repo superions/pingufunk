@@ -35,6 +35,7 @@ import { GET as downloadNzb } from "@/app/api/newznab/fake_nzb_download/route";
 import { POST as addfile } from "@/app/api/route";
 import { parseNzbContent } from "./download";
 import { generateGenericRssItems } from "./newznab";
+import * as movieMatcher from "./movie-matcher";
 import { clearMetadataCaches, mediathekCache } from "@/lib/cache";
 import { clearSettingsCache } from "@/lib/settings";
 
@@ -169,6 +170,28 @@ it("does not enrich same-title same-runtime remakes by library ordering", async 
   const body = await response.text();
   expect(body).toContain("Filmreihe.Beispielfilm");
   expect(body).not.toMatch(/name="(?:tmdbid|imdbid)"/);
+});
+
+it("does not rescan all source videos for every nonmatching film in a large RSS library", async () => {
+  inventory = [
+    ...Array.from({ length: 1000 }, (_, index) => ({
+      ...movie,
+      tmdbId: 1000 + index,
+      title: `Other Film ${index}`,
+      originalTitle: `Other Film ${index}`,
+    })),
+    movie,
+  ];
+  const matcher = vi.spyOn(movieMatcher, "matchMovieItems");
+  try {
+    const response = await GET(new NextRequest("http://localhost/api/newznab?t=movie"));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Beispielfilm.1998.720p.WEB");
+    expect(matcher).toHaveBeenCalledTimes(1);
+    expect(matcher.mock.calls[0][0]).toEqual([source]);
+  } finally {
+    matcher.mockRestore();
+  }
 });
 
 it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding and NZB consumption", async () => {

@@ -29,7 +29,7 @@ import {
   QualityPreference,
   parseEpisodeFromTitle,
 } from "./newznab";
-import { matchMovieItems } from "./movie-matcher";
+import { matchMovieItems, movieSourceTitle, normalizeMovieTitle } from "./movie-matcher";
 import { movieSearchTerms } from "./movie-search-terms";
 import { titleSearchTerms } from "@/lib/title-search-terms";
 import { getRadarrMonitoredMovies } from "./radarr-provider";
@@ -1281,6 +1281,15 @@ export async function fetchMovieSearchForRssSync(
   const eligible = sources.filter(
     (item) => !SKIP_KEYWORDS.some((word) => item.title.includes(word))
   );
+  // Recent publishes exact source-title/alias candidates only. Index them once
+  // instead of parsing every source again for every film in a large library.
+  const byTitle = new Map<string, ApiResultItem[]>();
+  for (const item of eligible) {
+    const title = normalizeMovieTitle(movieSourceTitle(item.title).title);
+    const bucket = byTitle.get(title);
+    if (bucket) bucket.push(item);
+    else byTitle.set(title, [item]);
+  }
   const matches: {
     match: Awaited<ReturnType<typeof matchMovieItems>>[number];
     movie: TmdbMovieData;
@@ -1288,10 +1297,16 @@ export async function fetchMovieSearchForRssSync(
   for (const movie of movies) {
     if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
       throw new Error("Search provider unavailable");
+    const candidates = new Set(
+      [movie.title, movie.germanTitle, ...(movie.aliases ?? [])].flatMap(
+        (title) => byTitle.get(normalizeMovieTitle(title)) ?? []
+      )
+    );
+    if (candidates.size === 0) continue;
     // RSS has no search target available to the consumer. Do not turn broad
     // partial-title ranking into automatic recent-release announcements.
     matches.push(
-      ...(await matchMovieItems(eligible, movie, minimum, hlsEnabled))
+      ...(await matchMovieItems([...candidates], movie, minimum, hlsEnabled))
         .filter(({ titleMatch }) => titleMatch === "exact")
         .map((match) => ({ match, movie }))
     );
