@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 03.10.2026. **Lokale technische Abnahme und npm-Sicherheitscheckpoint abgeschlossen; produktive Betriebsgates offen, keine Deploymentfreigabe.**
+Stand: 03.10.2026. **Lokale technische Abnahme und autorisierter Radarr-Filmhotfix abgeschlossen; weitere installationsbezogene Betriebsgates bleiben separat. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -1293,7 +1293,7 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Synthetische direkte/vermittelte ID-/RSS-Abfrage einschließlich
       RSS→NZB→Queue, Monitoring, Pagination und Providerfehler ohne
       Teilbestandcache erfolgreich. Keine reale Instanz angebunden.
-- [ ] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
+- [x] **P08.2 — Kanonischer Suchkontext und ehrliche Releaseidentität.**
       Newznabroute, `src/services/movie-matcher.ts`, `src/services/tmdb.ts`,
       neuer Radarr-Owner und
       `mediathek.ts::{fetchMovieSearchResults,fetchMovieSearchByQuery}`
@@ -1323,6 +1323,11 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Erhalt: Fassungen/Sprache, vorherige generische Film-GUIDs und aktuelle
       Medien-URL durch RSS→NZB→Queue. Abnahme ergänzt die Grenzwerte ±10 %,
       ±1 Jahr und jeweils unmittelbar außerhalb, sowohl ID-Suche als auch RSS.
+      Erneut abgenommen 03.10.2026 auf Produktcheckpoint `55edcf7`: exakte
+      Titel-/Alias- und Laufzeitkorrelation, fehlendes Quelljahr, inklusive
+      Grenzen, nicht kumulierbare Jahrestoleranz, unbekannte Laufzeit,
+      Clips/Fuzzy/Konflikte und mehrdeutige RSS-Ziele kausal geprüft.
+      Generische Film-GUIDs und aktuelle NZB-Medien-URLs bleiben erhalten.
 - [x] **P08.3 — Begrenzte Kandidatensuche ohne vorgespielte Gewissheit.**
       Film-/TV-Consumer, Content-Search und gemeinsame Release-/NZB-Owner:
       vollständige Titel/Aliase/Episodentitel sowie begrenzte markante Wörter
@@ -1338,7 +1343,7 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       Abnahme: korrekte Reihenfolge/Counts/IDs/Titel/aktuelle Medien-URLs,
       Varianten vor Pagination, Quellenfehler ohne partiellen Erfolg oder
       Empty-Success-Cache, bounded Requests und RSS→NZB→Queue-Konsistenz.
-- [ ] **P08.4 — Direkter und Prowlarr-vermittelter Arr-Verbrauchervertrag.**
+- [x] **P08.4 — Direkter und Prowlarr-vermittelter Arr-Verbrauchervertrag.**
       `src/app/api/newznab/route.ts`, vorhandener API-Alias, RSS-/NZB-Owner,
       Sonarr-/Radarr-Consumerregressionen und Cutover-Runbook:
       gleiche Caps/Kategorien/Anfrageparameter, stabile Quell-/Fassungs-GUIDs,
@@ -1368,6 +1373,19 @@ Request-IDs, Produktionsjahre, Koordinaten oder Sprache verdecken.
       abbrechen, Limitänderung invalidiert Bibliotheks-/Suchcaches; lokale TMDB-Auflösung
       vor externem Lookup. Produktionsabnahme bleibt gesondert dokumentiert,
       Tests starten keine realen Downloads.
+      Erneut abgenommen 03.10.2026: isolierte echte Radarr 6.4.4.10685 /
+      Prowlarr 2.6.5.5623 auf Runner `55edcf7` ordnen den synthetischen Film
+      ohne Quelljahr direkt und vermittelt der tatsächlichen Movie-ID/TMDB-ID
+      und dem kanonischen Jahr zu; kein Grab. Ein erster Suchversuch vor
+      nativer Indexer-Readiness war leer und ist keine positive Evidenz;
+      spätere begrenzte Read-only-Probe bestand sämtliche Assertions.
+      873 reguläre Tests, Lint, Typecheck, Formatcheck und Build grün;
+      zwölf bedingte PG-Tests nicht im regulären Lauf, separate native PG-
+      und Docker-/Dual-Backend-Gates in Fork-CI `37135870734` / `37135870743`
+      erfolgreich. Bodylimit-Validierung, Abbruch und Cachewechsel geprüft.
+      Produktive Freigabe/Readback sind private Betriebsunterlagen; korrekte
+      Filmzuordnung ist kein Nachweis deutscher Tonspuren oder garantierter
+      Freigabe durch das unveränderte Arr-Sprachprofil.
 
 Implementierungscheckpoint 01.10.2026, keine vollständige P08-Abnahme:
 der gemeinsame Filmkontext prüft q/IMDb/TMDB/Jahr inklusive Konflikten;

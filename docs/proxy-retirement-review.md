@@ -958,3 +958,49 @@ SQLite-Laufzeitevidenz ersetzt nicht PostgreSQL-Evidenz; letztere stammt aus den
 unveränderten grünen Gates. **P10.2–P10.7 bleiben offen.** Keine Produktions-
 installation, Datenmigration, Proxy-Abschaltung, Routenumschaltung, Release-Tags
 oder öffentlichen Images wurden durch diese Testabnahme freigegeben.
+
+## Radarr-Filmkorrelation und Bibliothekslimit (03.10.2026)
+
+P08.2/P08.4 wurden nach dem Produktbefund ausdrücklich wiedereröffnet: die
+frühere synthetische Verbraucherprobe enthielt bereits ein Quelljahr und
+belegte die alltägliche Metadatenkorrelation deshalb nicht. Prowlarr transportiert
+Indexeranfragen, aber weder lokale Radarr-Bibliotheksmetadaten noch dessen
+API-Key. Der optionale native Metadatenzugriff benötigt eigene Konfiguration.
+
+Auf `55edcf7` erneut den vollständigen Pfad reviewt: lokale TMDB-Auflösung vor
+externem Lookup, vollständiger Titel/belegter Alias, Laufzeit in Sekunden gegen
+Metadatenminuten mit ±10 %, Produktionsjahr ±1 direkt gegen das Metadatenjahr,
+keine kumulierten Jahresabweichungen. Fehlendes Quelljahr darf erst danach
+ergänzt werden; unbekannte Dauer, Fuzzy/Clip, Konflikte und mehrdeutige RSS-
+Remakes bleiben generisch. Quell-/Fassungs-GUID und aktuelle Medien-URL bleiben
+erhalten. Explizite leere/null Quelllaufzeit bedeutet unbekannt, nicht bestanden;
+malforme numerische Angaben bleiben Fehler. RSS-Titelindex begrenzt die
+Zuordnungsarbeit, statt jedes Ziel gegen jedes Sourcefenster erneut zu parsen.
+
+Radarr-Bibliotheksantworten erhalten ein eigenes persistentes Bodylimit:
+`integration.radarr.inventoryMaxMiB`, Default 10, ganze MiB 1–64. Ungültige
+Werte scheitern vor Credential-/HTTP-I/O; Änderungen invalidieren Bibliotheks-
+und Suchcaches. Einzelne Metadatenantworten bleiben 5 MiB, Inventar höchstens
+2.000 Zeilen. Kein global höherer Response-Default und kein unbeschränkter Fetch.
+
+Abnahme: 873 reguläre Tests grün (zwölf bedingte PG-Gates separat), Lint,
+Typecheck, Formatcheck, Build und diff-check bestanden; `npm ci` und Audit ohne
+Befunde. [Fork-CI](https://github.com/superions/pingufunk/actions/runs/37135870734)
+mit nativer PostgreSQL-Prüfung und
+[Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37135870743)
+mit beiden Backends/Migration/Medien/Recovery bestanden, keine Veröffentlichung.
+Auf exakt diesem Runner bestätigt eine isolierte echte Radarr 6.4.4.10685 /
+Prowlarr 2.6.5.5623 den jahrlosen synthetischen Quelltitel direkt und vermittelt:
+korrekte Movie-ID/TMDB-ID/Jahr, keine Parse-/Unknown-Movie-Ablehnung, kein Grab.
+Der erste vor nativer Indexer-Readiness leere Versuch war keine Abnahme;
+die spätere begrenzte Read-only-Probe bestand alle Assertions. Eigene Instanzen
+anschließend gestoppt, Konfiguration erhalten; fremde Runtimes unangetastet.
+
+Unter separater Nutzerfreigabe wurde der lokale Runner im Homelab aktiviert,
+Settings per API gespeichert/readbackgeprüft und native Filmzuordnung gelesen.
+Private Betriebsparameter, tatsächliche Antworten, Secrets, Scan-/Backup-Pfade
+und Rückweg bleiben im privaten Homelab-Runbook, nicht im öffentlichen Fork.
+Korrekte Identität garantiert keine Freigabe durch das Arr-Sprachprofil:
+unbelegte Tonsprachen bleiben neutral. Keine DB-Migration, keine Testgrabs und
+keine öffentliche Imagepublikation; späterer Dokumentationscommit baut dieses
+unveränderte Produktimage nicht erneut und wiederholt dessen Tests nicht.

@@ -73,3 +73,26 @@ einen Symlink ausbricht oder von mehreren History-Einträgen referenziert wird,
 bricht `del_files=1` ab und lässt den History-Eintrag bestehen. Solche Fälle
 müssen einzeln geklärt werden; weder Datenbankzeilen noch Dateien pauschal
 umbenennen oder löschen. Der Pfadwechsel ist keine Freigabe für produktive Jobs.
+
+## Metadatenkorrelation und schemafreier Hotfix-Rollback
+
+Eine funktionierende Prowlarr-Indexerroute ist kein Nachweis einer aktivierten
+optional separaten Sonarr-/Radarr-Metadatenanbindung. Vor deren Aktivierung
+Settings, Secret-Dateimount und tatsächliche Instanz prüfen; keine API-Keys ins
+Git oder in öffentliche Betriebsbeispiele schreiben. Filmverifikation muss
+auch jahrlosen Quelltitel gegen den nativen Verbraucher prüfen. Sprach-/
+Qualitätsablehnung nicht mit fehlerhafter Filmidentität verwechseln; neutralen
+Quellen keine Tonsprachen hinzuerfinden.
+
+Bei einem reinen, schemafreien App-/Settings-Hotfix die aktuellen Settings und
+eine konsistente SQLite-Online-Sicherung mit Integritätsnachweis aufnehmen.
+Rückweg: Aufnahme/Clients unter eigener Betriebsfreigabe pausieren, aktuelle
+Queue/History und Dateisystemeffekte abgleichen, nur betroffene Settings auf
+ihren dokumentierten Vorzustand setzen, dann geprüfte vorige App über denselben
+GitOps-Controller wieder aktivieren. Die aktuelle kompatible Datenbank erhalten:
+eine ältere Sicherung nach neuen Writes würde neue Jobs/History/Config verlieren
+und ist kein regulärer App-Rollback. Keine ungeprüfte historische App starten;
+Rollbackimage muss die aktuelle Sicherheits- und Schemafreigabe besitzen.
+Installationswerte, genaue Image-IDs, Sicherungen und Controllerrevisionen
+gehören ins private Betriebsrunbook. Dieser Vertrag ist keine DB-Cutover-
+oder allgemeine Deploymentfreigabe.

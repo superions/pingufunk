@@ -164,6 +164,28 @@ Nachbarfolgen nicht irrtümlich als koordinatenlos durchgehen.
 
 ## Offene Abnahmegrenzen
 
+Die am 03.10.2026 wegen unzureichender jahrtragender Consumerfixtures
+wiedereröffneten P08.2/P08.4 sind auf `55edcf7` erneut abgenommen: eine echte
+isolierte Radarr-/Prowlarr-Probe ordnet einen synthetischen Quelltitel ohne Jahr
+direkt und vermittelt korrekt zu. 873 reguläre Tests und separate PG-/
+Docker-Gates bestanden. Die optionale Radarr-Metadatenanbindung muss weiterhin
+separat konfiguriert werden; eine Prowlarr-Verbindung aktiviert sie nicht.
+Die Einstellung `integration.radarr.inventoryMaxMiB` ist serverseitig persistent
+über die bestehende Settings-API änderbar (ganze MiB 1–64, Default 10).
+Beispiel-Payload für `POST /api/settings`:
+
+```json
+{ "integration.radarr.inventoryMaxMiB": "10" }
+```
+
+Dies erweitert nur die Radarr-Bibliotheksantwort, nicht einzelne Lookups
+(weiterhin 5 MiB), Zeilencap oder Requestbudget. Werteänderungen invalidieren
+die betreffenden Caches. Ein passender Film kann trotz korrekter Identität von
+Arr wegen Sprache/Qualität abgelehnt werden; ohne Quellbeleg kein erfundenes
+GERMAN-Label. Die Laufzeittoleranz ist über
+`matching.movie.tolerancePercent` konfigurierbar, anfänglich 10; die ±1-Jahr-
+Prüfung gilt unmittelbar gegen das Metadatenjahr, nicht als kumulierbare Kette.
+
 P08.1–P08.4 sind nach vollständigem Ownerreview und synthetischen
 Vertragsproben abgenommen. Film-Text/ID-Kontext und RSS→NZB→Queue sind synthetisch
 prüfbar, aber nicht dasselbe wie eine laufende Arr-/Prowlarr-Verbraucherprobe.
