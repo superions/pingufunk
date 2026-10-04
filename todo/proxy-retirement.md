@@ -1652,7 +1652,7 @@ Abhängigkeit P08; B10/R7.
       CI 36798866207 einschließlich Lint/Typecheck/Format/Build grün. HLS bleibt
       opt-in; ffprobe beweist keinen Voll-Decode oder unbekannte Inhaltsidentität.
 
-- [ ] **P09.3 — Katalog-Qualitätsfeld von belegter Auflösung trennen.**
+- [x] **P09.3 — Katalog-Qualitätsfeld von belegter Auflösung trennen.**
       Separater Befund beim P03.4-Review: `newznab.ts` behandelt `url_video_hd`
       pauschal als 1080p, obwohl darin eine tatsächliche 720p-Fassung liegen kann.
       Tonsprachenbeleg ist kein Dimensionsbeleg. Vor einer neuen Auflösungszusage
@@ -1666,13 +1666,24 @@ Abhängigkeit P08; B10/R7.
       Dateien oder Veränderung produktiver Profile. Dieser neue offene Befund
       nimmt die historische Grundprüfung P09.2 nicht zurück und gehört nicht zur
       Tonsprachenabnahme P03.4.
-      Entwicklungscheckpoint 04.10.2026: gemeinsame Renditionauswahl,
+      Abgenommen 04.10.2026: gemeinsame Renditionauswahl,
       exakt gebundene optionale ARTE-Maße, UNKNOWN ohne implizites WEB-SD-Label,
       historische Slot-GUIDs und per-URL-NZB-Erwartungen implementiert.
-      Vertrag/Grenzen in `docs/rendition-quality-contract.md`; vollständige
-      lokale Gates bestanden. Native Arr- und reale Medien-/Backend-Gates sind
-      im Forkworkflow vorbereitet, ihre erfolgreiche Ausführung bleibt für
-      die Abnahme erforderlich. Kein Produktivrollout oder Bestandsrewrite.
+      Vertrag/Grenzen in `docs/rendition-quality-contract.md`. 965 reguläre
+      Tests, Lint, Typecheck, Formatcheck und Build grün; separate PG-Integration
+      in Fork-CI 37167389069 erfolgreich. Docker-Gate 37167389065 auf `38836c5`
+      bestanden: echte isolierte Radarr 6.4.4.10685 direkt/via Prowlarr 2.6.5.5623
+      und Sonarr 4.0.20.3014 als nativer Parser des tatsächlichen Titelsuffixes
+      erkennen 720p im HD-Slot als WEBDL-720p, fehlende/widersprüchliche Maße als
+      Unknown. Drei neue interne Testkonturen, kein Grab. Reale synthetische
+      1280×720-Datei besteht Workercheck; falsche Höhe und falsche Breite bei
+      gleicher Höhe werden auf SQLite und PG abgewiesen. v1/v2-Sollmaße bleiben
+      über Queue/Restart/Retry erhalten; bestehende TLS-/Rollback-/PG-Ausfall-
+      Gates ebenfalls grün. Kein vollständiger neuer Sonarr-Importnachweis,
+      kein Produktivrollout, Profilwechsel oder Bestandsrewrite. Andere Quellen
+      ohne vorhandenen Dimensionsbeleg bleiben UNKNOWN; konkrete Auswahl bleibt
+      dort historischer Slothinweis, kein Mindestauflösungsfilter. Mögliche
+      neu sichtbare URLs/Upgrades im Cutover-Vertrag berücksichtigt. P03.4 offen.
 
 - [x] **P09.4 — Sichere Transferdiagnostik und isolierte Reproduktion.**
       Nutzerauftrag 03.10.2026: bestehende progressive Workerpfade in

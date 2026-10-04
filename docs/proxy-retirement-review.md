@@ -1143,11 +1143,46 @@ bleiben erhalten; neue Dimensionsbelege allein erzeugen keine neue Identität.
 Keine Altdateien, History, Profile oder gespeicherten Jobs umschreiben.
 
 Lokale Gates nach `npm ci` mit Node 26.10.0 bestanden: 965 reguläre Tests,
-Lint, Typecheck, Formatcheck, Build und Diffcheck. 13 PostgreSQL-Gates laufen
-separat; ihre lokalen Skips sind kein PG-Nachweis. Die nativen Arr- und echten
-Mediengates werden zusätzlich im Forkworkflow ausgeführt, ohne Veröffentlichung.
-Bis deren Erfolg bleibt P09.3 offen. P03.4s MP4-Sprachbefund ist unabhängig;
-keine Produktivfreigabe oder vollständige Sprachabdeckung behauptet.
+Lint, Typecheck, Formatcheck, Build und Diffcheck. 13 bedingte PostgreSQL-Tests
+werden lokal übersprungen; der gesonderte
+[Fork-CI-Lauf](https://github.com/superions/pingufunk/actions/runs/37167389069)
+auf `38836c5` ist mit Node 24 einschließlich PostgreSQL-Integration erfolgreich.
+
+Der native Qualitätsgate auf demselben Runnerstand ist bestanden: Radarr
+6.4.4.10685 direkt und durch Prowlarr 2.6.5.5623 klassifiziert den HD-Slot mit
+1280×720 als `WEBDL-720p`, fehlende oder widersprüchliche Maße als `Unknown`.
+Sonarr 4.0.20.3014 prüft jeweils den tatsächlichen Producer-Qualitätssuffix
+über seinen nativen Parser, nicht eine lokale Parserkopie. Filmzuordnung,
+TMDB-ID/Jahr und unabhängiger deutscher Tonsprachenbeleg bleiben erhalten.
+Alle drei Varianten laufen in neu angelegten internen Testnetzen; kein Grab.
+Das ist kein neuer vollständiger Sonarr-Importnachweis.
+
+Die vollständige
+[Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37167389065)
+für `38836c5` ist ebenfalls erfolgreich, ohne Image-Publikation. Eine real
+erzeugte 1280×720-Datei besteht mit passenden Sollmaßen; abweichende Sollmaße
+1920×1080 sowie 1920×720 werden vor Completed abgewiesen. Die Unit-Regressionen
+prüfen auch den umgekehrten Fall abweichender lokaler Maße. Beide disposable Backends prüfen
+die echte Datei/SAB-History und erhalten die v1/v2-Erwartungen über Restart und
+Retry. Bestehende TLS-Migrations-/post-write-Rollback-, SQLite-Persistenz- und
+PG-Ausfallgates bleiben grün. P09.3 ist entwicklungsseitig abgenommen.
+
+Die ersten Treiberläufe wurden **nicht** als Abnahme gewertet: Prozessstart
+war noch keine API-Readiness, ID-Suchen brauchen den eigenen verifizierten
+Radarr-Metadatenkontext, und der absichtlich fehlgeschlagene Empty-Feed-Test
+kann einen nativen Indexer-Cooldown hinterlassen. Der Treiber wartet nun
+begrenzt und lesend auf tatsächliche API-Readiness und Cooldownablauf. Kein
+Indexerstatus wird gelöscht, keine fehlgeschlagene Suchassertion wiederholt
+und keine Assertion für ein grünes Ergebnis abgeschwächt.
+
+Dimensionsabdeckung bleibt auf bereits gelesene, passende strukturierte
+ARTE-Maße begrenzt. Unbekannte Fassungen dürfen weiterhin über den historischen
+Slot-Auswahlhinweis sichtbar bleiben; dieser ist kein Mindestauflösungsfilter.
+Korrigierte konkrete Auswahl oder `best` kann eine andere vorhandene URL
+sichtbar machen; stabile GUIDs allein verhindern kein Upgrade gegenüber einer
+bereits geladenen Fassung. Profile/Auswahl/History vor einem gesonderten Rollout
+gemeinsam prüfen. P03.4s MP4-Sprachbefund ist unabhängig; keine Produktivfreigabe
+oder vollständige Sprachabdeckung behauptet.
 
 ## Autorisierte Betriebsumschaltung und nachfolgender PG-Halt (03.10.2026)
 
