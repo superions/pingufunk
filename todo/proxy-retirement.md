@@ -1826,7 +1826,21 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       werden ausdrücklich wiederverwendet, nicht als frische Ausführung
       ausgegeben. Details und Abnahmegrenzen im Review. Kein automatischer
       Prowlarr-Application-Sync-Nachweis; P10.2–P10.7 bleiben offen.
-- [ ] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
+- [x] **P10.2 — Produktionsparameter und Rollbacks vor Freigabe konkretisieren.**
+      Installationsbezogene Abnahme 04.10.2026: Backend, unterstützte tatsächliche
+      Serverversion, Primary, ausdrücklich unverschlüsselter Transport, eigene
+      DB-/Schema-/Rollenidentität, Rechte, Secret-Mounts und Ausführungs-UID
+      verifiziert. Exakte App-/Migratorimages aus `c727fc4` und das separate
+      PG-kompatible Rollbackimage frisch ohne HIGH/CRITICAL gescannt; zusätzlich
+      mit synthetischer aktueller Quelle auf derselben PG-Serverversion Import,
+      semantischen Vergleich, ersten Write, Backuprestore und immutable
+      Post-write-Rollback erfolgreich geprobt. Fork-CI `37161051635` und
+      Dockerabnahme `37161051630` erfolgreich; npm-Audits ohne Befunde.
+      Private Betriebswerte, unveränderliche Artefakte und vollständige
+      Befehls-/Rückwegbelege ausschließlich im privaten Betriebsrunbook.
+      Originalquelle, Snapshots, Dumps und Images bleiben erhalten; keine
+      Cleanup- oder allgemeine Deploymentfreigabe. Folgende Entwicklungs- und
+      Securitynotizen sind historische Zwischenstände, keine aktuellen Blocker.
       Transportentscheidung 03.10.2026: ausdrücklicher unverschlüsselter Betrieb
       ist freigegeben; URL `sslmode=disable` statt zwingendem TLS. App und
       Migrationsrunner müssen denselben Transport benutzen; kein automatischer
@@ -1882,16 +1896,21 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       Details und Grenzen im Review. Npm-Audit ersetzt weder OCI-/Scanpolicy
       noch installationsbezogene Betriebsabnahme. Historische Rollbackimages
       sind isolierte Testinputs, keine freigegebenen Sicherheitscheckpoints.
-      P10.2 bleibt wegen dieser Betriebsanforderungen offen; kein Deployment.
-- [ ] **P10.3 — Optionale freigegebene PG-Übernahme, Proxy unverändert.**
-      Betriebsnachtrag 03.10.2026: Nutzerfreigabe für Proxy-Ausstieg zuerst auf
-      SQLite, anschließend PostgreSQL liegt vor. Native Installation produktiv
-      umgestellt; PG-Preflight identifizierte einen gesunden unterstützten
-      Primary, aber deaktiviertes TLS. Die freigegebene CLI fordert TLS;
-      deshalb keine Rollen-/DB-Anlage, DDL oder Datenübernahme ausgeführt.
-      TLS-Infrastrukturänderung ist separat zu reviewen/freizugeben, kein
-      stiller TLS-Bypass. Private Betriebswerte und Nachweise nur im privaten
-      Runbook; PG-Gates bleiben offen.
+      Zum damaligen Checkpoint blieb P10.2 wegen der noch fehlenden
+      Betriebsabnahme offen; diese wurde am 04.10.2026 wie oben abgeschlossen.
+- [x] **P10.3 — Optionale freigegebene PG-Übernahme, Proxy unverändert.**
+      Installationsbezogene Abnahme 04.10.2026 nach ausdrücklicher Freigabe:
+      leere API-Queue und keine aktiven persistierten Jobs geprüft; Writers
+      gesperrt und App tatsächlich vollständig gestoppt. Konsistenter
+      SQLite-Backup-API-Snapshot mit Integrity-/FK-Prüfung und Sourcehash,
+      eigene native PG-Migrationskette, typisierter Import aller sechs Modelle,
+      unabhängiger vollständiger semantischer Vergleich und Korrektur der real
+      schemaeigenen Sequence erfolgreich. Originalquelle unverändert; ihre
+      Migrationshistorie nicht in PostgreSQL übernommen. Private Reports und
+      Backups erhalten. Kein gemeinsamer Clusterumbau, kein Matching-/Routing-
+      Wechsel oder Servarr-Stopp. Der frühere TLS-Blocker wurde durch den
+      separat implementierten und geprüften expliziten Klartextmodus gelöst,
+      nicht durch Fehlerfallback oder Abschwächung der Datenprüfungen.
       **Nur bei ausdrücklicher PostgreSQL-Wahl; hier
       anhalten bis zur ausdrücklichen Datenmigrations-/Deploymentfreigabe für
       genau diese Installation.** P11-Runbook ausführen: read-only Preflight,
@@ -1902,7 +1921,7 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       bei Fehler kein Appstart oder automatische Bereinigung. Abnahme: Sourcehash/
       Ziel-/Schema-/Imageversion und redigierter Vollvergleich dokumentiert,
       unveränderte SQLitequelle/Backups erhalten; danach Pause vor Appstart.
-- [ ] **P10.4 — Optionaler kontrollierter PG-Start, noch keine Writers.** **Nur nach
+- [x] **P10.4 — Optionaler kontrollierter PG-Start, noch keine Writers.** **Nur nach
       Validierung von P10.3 und zugehöriger Startfreigabe** neues Image/Secret im
       Maintenancegate starten; DB-/Schema-Readiness, Settings/Queue/History nur
       lesen, null Cache-/Setting-/Workerwrites nachweisen. Nicht allein Probe-200
@@ -1910,7 +1929,13 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       SQLitefallback; Ergebnisse prüfen und erneut anhalten. Fehlerrollback vor
       tatsächlichem erstem PG-Write auf immutable SQLiteimage+Originalquelle,
       PG-Ziel erhalten; keine alten/neuen Images an falschen Provider anschließen.
-- [ ] **P10.5 — Optionalen PG-Schreibbetrieb separat abnehmen.** **Nur nach expliziter
+      Abnahme 04.10.2026: Tatsächlichen PID-1-Provider und Writergate statt nur
+      Compose geprüft; genau eine gesunde Instanz auf dem freigegebenen Image.
+      Settings/History/Regeln und öffentliche API-Verträge lesend geprüft,
+      erster Write-Checkpoint leer und semantische Datenprüfung erneut grün.
+      Vor Writerfreigabe separaten geschützten PG-Dump gesichert und angehalten;
+      Nutzer hat danach ausdrücklich den PostgreSQL-Schreibbetrieb freigegeben.
+- [x] **P10.5 — Optionalen PG-Schreibbetrieb separat abnehmen.** **Nur nach expliziter
       Abnahme/Schreibfreigabe von P10.4** Aufnahme/Writer öffnen; ersten echten
       PG-Write einschließlich automatischer Caches/Settings erfassen. Restart/
       Persistenz und freigegebenen isolierten synthetischen Job-/Retry-/Importfall
@@ -1919,6 +1944,20 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       Matching-/Routing-/Replicacutover. Nach neuen PG-Writes nur Writerstopp+
       PG-Backup+geprüftes PG-kompatibles Rollbackimage; Rückschaltung zu SQLite
       nur nach P11.9, niemals still auf alten Snapshot.
+      Abnahme 04.10.2026: Normalen Writer-/Queuebetrieb aktiviert, echten
+      Anwendungsschreibzugriff über Settings mit unverändertem Wert und
+      dauerhaftem First-write-Checkpoint nachgewiesen. Kontrollierter
+      Taskersatz über den vorhandenen Deploymentweg: neuer gesunder Container,
+      richtiger PG-Provider, aktiver Writer, identischer Checkpoint und erhaltene
+      Settings/History; SQLite-Quellhash unverändert. Isolierte synthetische
+      Queue-/Medienabschluss-/Retry-/Persistenz- und DB-Ausfallfälle aus dem
+      erfolgreichen Dockerlauf für exakt `c727fc4` wiederverwendet, keine
+      produktiven Testgrabs. Native Indexer-/Downloadclientrouten nach Restart
+      lesend erneut bestätigt; bestehende autorisierte Filmimporte physisch
+      geprüft. Zusätzlich geschützten Post-write-Dump mit lesbarem Archivindex
+      gesichert; kein Restore auf Produktion. Private Vollabnahme persistiert.
+      Dies schließt nur den gewählten PG-Betriebsablauf, nicht die weiterhin
+      offenen Sprach-/Qualitätsbefunde oder die gesamte Proxy-Produktabnahme.
 - [ ] **P10.6 — Indexer und SAB gleichzeitig auf native Wege umstellen.**
       Betriebsnachtrag 03.10.2026: Freigegebener nativer SQLite-Proxy-Ausstieg
       ausgeführt, lokal übertragenes App-Image ohne Registrypublikation.

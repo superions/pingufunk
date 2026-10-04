@@ -5,7 +5,10 @@ Stand: 30.09.2026. Ergänzung P11 zum
 SQLite bleibt ein unterstützter Betriebsmodus.** Dieses Dokument bleibt technische Referenz mit Ausgangsbefunden
 und Daten-/Rollbackinvarianten. Einziger ausführbarer Entwicklungs- und
 Freigabevertrag: [Phasen-TODOs](../todo/proxy-retirement.md), P11 und P10.
-Keine produktive Migration ausgeführt, keine Deploymentfreigabe.
+Installationsnachtrag 04.10.2026: Ein ausdrücklich freigegebener produktiver
+Cutover ist einschließlich getrennt bestätigtem Schreibbetrieb und Restart
+abgenommen (P10.2–P10.5). Konkrete Betriebswerte und vollständige Nachweise
+bleiben im privaten Runbook. Dies ist keine allgemeine Deploymentfreigabe.
 
 Der Entwicklungsbranch unterstützt nach P11.1 wieder **beide Backendtypen**:
 Beide Backends sind gleichwertig unterstützt; ohne PG-Konfiguration wird SQLite
@@ -40,8 +43,9 @@ Transport sind keine Repository-Vorgabe. Keine Übernahme fremder
 Anwendungsrollen. Networks, Mounts, Downloads und Secret-/Deployment-Konventionen
 der jeweiligen Installation bleiben erhalten.
 Konkrete private Endpunkte und Zugangsdaten stehen nicht in diesem öffentlichen
-Repository. Die tatsächlich eingesetzte PostgreSQL-Version ist hier noch
-**nicht live festgestellt** und bleibt ein verpflichtender Preflight-Gate.
+Repository. Die tatsächlich eingesetzte PostgreSQL-Version muss für jeden
+Cutover live festgestellt werden; sie wurde für die abgenommene Installation
+verifiziert und bleibt für jede weitere Installation ein Preflight-Gate.
 
 ## Verifizierter Ausgangsstand
 
@@ -136,15 +140,15 @@ kein DDL aus und gibt weder Default- noch Zeilenwerte aus.
 
 ## Datenvertrag: erhalten statt neu erzeugen
 
-| Tabelle                               | Zwingend zu erhalten / prüfen                                                                                        |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Config                                | Schlüssel und Werte exakt, inklusive vorhandener Settings/Credentials; niemals Klarwerte im Bericht                  |
+| Tabelle                               | Zwingend zu erhalten / prüfen                                                                                                                                   |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Config                                | Schlüssel und Werte exakt, inklusive vorhandener Settings/Credentials; niemals Klarwerte im Bericht                                                             |
 | Download                              | IDs, Status, Fortschritt, BigInt-Bytewerte, Kategorie, URL, lokale Pfade, Fehler und Zeitpunkte sowie nullable P09-Erwartungs-/Prüfstrings; keine neue Queue-ID |
-| GeneratedRuleset                      | IDs, Topic-Unique, Zuordnungen, Regex-/Filterstrings und Zeitpunkte; keine Regeneration als Migrationsersatz         |
-| TopicCategory                         | IDs, Topic-Unique, Kategorie, TMDB-Zuordnung und cachedAt                                                            |
-| TvdbSeries                            | Externe Serien-ID, Namen, Aliase, Cachezeiten und Beziehungen                                                        |
-| TvdbEpisode                           | IDs, Serien-FK, Staffel/Folge, Titel, Laufzeit, Datum; bestehende IDs und nächste generierte ID korrekt              |
-| \_prisma_migrations / sqlite_sequence | Nicht als Anwendungsdaten kopieren; Ziel erhält eigenes korrektes Ledger und echte PostgreSQL-Sequences              |
+| GeneratedRuleset                      | IDs, Topic-Unique, Zuordnungen, Regex-/Filterstrings und Zeitpunkte; keine Regeneration als Migrationsersatz                                                    |
+| TopicCategory                         | IDs, Topic-Unique, Kategorie, TMDB-Zuordnung und cachedAt                                                                                                       |
+| TvdbSeries                            | Externe Serien-ID, Namen, Aliase, Cachezeiten und Beziehungen                                                                                                   |
+| TvdbEpisode                           | IDs, Serien-FK, Staffel/Folge, Titel, Laufzeit, Datum; bestehende IDs und nächste generierte ID korrekt                                                         |
+| \_prisma_migrations / sqlite_sequence | Nicht als Anwendungsdaten kopieren; Ziel erhält eigenes korrektes Ledger und echte PostgreSQL-Sequences                                                         |
 
 Keine stillschweigende Cache-Löschung. Zeitfelder können in SQLite als Text oder
 Integer vorliegen: Einheiten, UTC-Konvention und Millisekunden exakt feststellen.
@@ -256,7 +260,7 @@ und semantisch vergleichen.
 Tests nur eines Backends oder nur Tabellenname-Regex belegen das andere nicht.
 Die echte Betriebsabnahme bleibt bei einem tatsächlich gewählten Cutover separat.
 
-Vor einem optionalen produktiven PG-Cutover offen: tatsächliche Serverversion,
+Vor jedem weiteren optionalen produktiven PG-Cutover konkret zu prüfen: tatsächliche Serverversion,
 Sourcepfad und Schemafingerprint, DB-/Rollenname nach bestehender Konvention,
 Secretnamen, gewählter Primary-/Transport-/TLS-Vertrag, berechtigte Runner-
 Ausführung, Wartungsfenster, Datengröße/Importdauer, Backupablage, Retention und

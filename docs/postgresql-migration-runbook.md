@@ -1,14 +1,15 @@
 # Pingufunk PostgreSQL: Migrations-Runbook (Entwicklungsstand)
 
-Stand: 01.10.2026. Dies ist ein **noch nicht produktiv freigegebenes** Runbook
-für P11.3–P11.8. Die Befehle für Snapshot, Import, Verifikation und Sequences
-entsprechen den implementierten CLI-Einstiegen im `migrator`-Image. Sie wurden
-mit synthetischen Daten gegen disposable PostgreSQL 17 erprobt, aber **nicht**
-gegen eine konkrete produktive Netz-/DB-Topologie. P10.2 muss bei PG-Wahl die
-unten benannten Betriebswerte, Image-Digests, Rolle und Rollbacks konkret
-einsetzen; P10.3–P10.7
-brauchen jeweils ihre eigene Freigabe. Bis dahin: kein Deployment, keine echte
-SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
+Stand: 04.10.2026. Dieses portable Runbook für P11.3–P11.8 beschreibt die
+implementierten CLI-Einstiege im `migrator`-Image. Synthetische Proben und ein
+separat freigegebener produktiver Cutover einschließlich Maintenancepause,
+ausdrücklicher Writerfreigabe und Restart sind abgenommen; der konkrete
+Abnahmestatus steht ausschließlich in P10.2–P10.5, private Betriebswerte im
+privaten Runbook. Die Beispiele unten bleiben Platzhalter, keine universellen
+Produktionsbefehle. P10.2 muss für jede weitere Installation die Betriebswerte,
+Image-Identitäten, Rollen und Rollbacks konkret einsetzen; P10.3–P10.7 brauchen
+ihre jeweiligen Freigaben. Ohne diese: kein Deployment, keine echte SQLite-
+Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
 
 ## Haltelinien vor jeder Ausführung
 
