@@ -482,7 +482,8 @@ async function bootstrap(root, manifest) {
 async function fixtureRuntimeReady(root, manifest, app) {
   // docker start confirms process creation, not readiness of the restarted Arr API.
   // Only this owned fixture runtime is polled; no search, command or grab is retried.
-  for (let attempt = 0; attempt < 40; attempt++) {
+  const deadline = Date.now() + 30_000;
+  for (let attempt = 0; attempt < 40 && Date.now() < deadline; attempt++) {
     try {
       const status = await api(root, manifest, app, "/api/v3/system/status");
       if (status.version !== manifest.apps[app].version)
