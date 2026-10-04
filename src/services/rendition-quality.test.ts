@@ -95,7 +95,7 @@ describe("rendition resolution, not catalogue slot quality", () => {
     const source = {
       ...item,
       topic: "Synthetic 1920x1080",
-      title: "Synthetic Film 1080p",
+      title: "Synthetic Film_1080p_FHD_UHD_4K",
       sourceVideoDimensions: undefined,
     };
     const [unknown] = generateGenericRssItems(source, "1080p", false, "movie");
@@ -106,7 +106,7 @@ describe("rendition resolution, not catalogue slot quality", () => {
       "movie"
     );
     expect(unknown.title).toContain("UNKNOWN.h264");
-    expect(unknown.title).not.toMatch(/1080|1920x1080|\.WEB\./);
+    expect(unknown.title).not.toMatch(/1080|1920x1080|FHD|UHD|4K|\.WEB\./);
     expect(proved.title).toContain(".720p.WEB.");
     expect(proved.title).not.toContain("1080");
     expect(proved.guid).toEqual(unknown.guid);

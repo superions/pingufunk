@@ -37,20 +37,23 @@ Ohne verwertbares Label enthält der Titel `UNKNOWN.h264`, keine zusätzliche
 `WEB`-Markierung und keine SD-/HD-Unterkategorie. Der bisherige `WEB`-Zusatz
 würde bei fehlender Auflösung in den nativen Arr-Parsern selbst ein SD-Label
 erzeugen; siehe [Radarr QualityParser](https://github.com/Radarr/Radarr/blob/v6.4.4.10685/src/NzbDrone.Core/Parser/QualityParser.cs).
-Numerische Auflösungsmarker aus Quell-/Metadatentiteln werden vor dem eigenen
-Suffix entfernt. Titelbestandteile sind weiterhin keine allgemeine Garantie,
+Numerische Auflösungsmarker sowie FHD/UHD/4K aus Quell-/Metadatentiteln werden
+vor dem eigenen Suffix entfernt. Titelbestandteile sind weiterhin keine allgemeine Garantie,
 dass jeder zukünftige Arr-Parser alle unbekannten Fälle neutral behandelt.
 Unbekannt ist kein Auto-Grab-Verbot: die tatsächlichen Consumerprofile bleiben
 maßgeblich; bei notwendiger garantierter Auflösung müssen sie unbekannte
 Qualität ablehnen. Diese Änderung bearbeitet keine produktiven Profile.
 
-`all` erhält unterschiedliche URLs. Dieselbe exakte URL wird nach der Auswahl
-nur einmal angeboten. `best` bevorzugt die höchste belegte unterstützte Höhe;
+`all` erhält unterschiedliche URLs. Dieselbe exakte URL einer Quellzeile wird
+nach der Auswahl nur einmal angeboten. `best` bevorzugt innerhalb einer
+Quellzeile die höchste belegte unterstützte Höhe;
 ohne solche Maße bleibt die bisherige Slotreihenfolge ein deterministischer
 Auswahlhinweis, kein Beweis der besten Bildqualität. Eine konkrete Einstellung
 wie `720p` wählt bekannte 720p-Fassungen unabhängig vom Slot. Für unbekannte
 Fassungen bleibt der bisher zugehörige Slot als Auswahlhinweis nutzbar, der
 Titel bleibt aber `UNKNOWN`. Das ist kein strikter Mindestauflösungsfilter.
+Bereits vor dieser Korrektur getrennte Provider-/Sprachfassungszeilen werden
+nicht nachträglich zu einer globalen Best-Qualitätsauswahl zusammengeführt.
 HLS bleibt unverändert opt-in; Größenmultiplikatoren bleiben bisherige
 Katalog-Schätzungen, keine neu bewiesenen Dateigrößen.
 

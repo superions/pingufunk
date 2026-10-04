@@ -247,7 +247,11 @@ function getPaddedEpisode(episode: TvdbEpisode): string {
 /** Source names may contain scene-like resolution claims; only the rendition owner adds one. */
 function withoutSourceResolution(value: string): string {
   return value
-    .replace(/\b(?:360|480|540|576|720|960|1080|1440|2160)[pi]\b|\b\d{3,5}x\d{3,5}\b/gi, "")
+    .replace(/_/g, ".")
+    .replace(
+      /\b(?:360|480|540|576|720|960|1080|1440|2160)[pi]\b|\b\d{3,5}x\d{3,5}\b|\b(?:FHD|UHD|4K)\b/gi,
+      ""
+    )
     .replace(/\.{2,}/g, ".");
 }
 
