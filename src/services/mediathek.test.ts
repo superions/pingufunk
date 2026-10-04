@@ -558,7 +558,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     const xml = await fetchMovieSearchByQuery("Example Film 1998", 100, 0);
 
     expect(xml).toContain('total="1"');
-    expect(xml).toContain("Magazine.Feature.A.report.unrelated.to.the.requested.film.720p");
+    expect(xml).toContain("Magazine.Feature.A.report.unrelated.to.the.requested.film.UNKNOWN");
     expect(xml).not.toContain(".2024.");
     expect(xml).not.toContain(".GERMAN.");
     expect(xml).not.toMatch(/name="(?:tmdbid|imdbid)"/);
@@ -1253,9 +1253,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'q_v10-rendition-audio-evidence_["Example",null,null,null]_1_1_720p_300'
-      ),
+      expect.stringContaining('q_v11-rendition-dimensions_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -1291,9 +1289,7 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "movie_query_v10-rendition-audio-evidence_Documentary__100_0_all_2700"
-      ),
+      expect.stringContaining("movie_query_v11-rendition-dimensions_Documentary__100_0_all_2700"),
       expect.any(Object)
     );
   });
@@ -1394,7 +1390,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v10-rendition-audio-evidence_[a-f0-9]{64}_100_0_all_2700/),
+      expect.stringMatching(/^movie_v11-rendition-dimensions_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });

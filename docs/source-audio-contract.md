@@ -50,10 +50,12 @@ Anfrage ab; keine erfolgreiche Teilantwort oder deren Antwortcache. Redirects
 sind nicht erlaubt, alle Antwortkörper sind begrenzt, Fehlermeldungen enthalten
 keine Quell-URLs oder Credentials.
 
-Die alte Katalog-Qualitätszuordnung `url_video_hd` zu 1080p wird hier nicht
-repariert: eine tatsächliche 720p-Datei kann in diesem Feld liegen. Audiosprache
-beweist keine Bildauflösung. Diese separate Grenze muss vor einer strengeren
-Auflösungszusage berücksichtigt werden.
+Audiosprache beweist keine Bildauflösung. Die getrennte Korrektur P09.3 bindet
+optionale Maße aus dem bereits gelesenen strukturierten ARTE-JSON an die exakte
+URL; `url_video_hd` allein ist kein 1080p-Beleg. Ohne Maße bleibt die Auflösung
+unbekannt. Umfang, historische GUIDs und Rolloutgrenzen stehen im
+[Auflösungsvertrag](rendition-quality-contract.md). Die offene MP4-Sprachgrenze
+P03.4 wird dadurch nicht behoben.
 Die strukturierte ARTE-Schnittstelle ist kein von Pingufunk kontrollierter
 Dienst mit zugesicherter Verfügbarkeit. Vertragsänderungen werden nicht durch
 einen HTML-Fallback kaschiert, sondern verlangen Providerprüfung und Regression.

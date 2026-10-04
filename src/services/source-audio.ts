@@ -15,6 +15,8 @@ const streamsSchema = z.object({
         programId: z.string().max(100),
         url: z.string().max(16_384),
         audioCode: z.string().max(100),
+        width: z.unknown().optional(),
+        height: z.unknown().optional(),
       })
     )
     .max(200),
@@ -136,6 +138,16 @@ export async function enrichSourceAudio(
           arte.set(videoId, await getArteStreams(videoId, budget));
         }
         edition = arteEdition(arte.get(videoId) ?? [], videoId, url);
+        const matches = (arte.get(videoId) ?? []).filter(
+          (stream) => stream.programId === videoId && stream.url.replace(/^http:/, "https:") === url
+        );
+        // Preserve every exact-URL declaration: the quality owner rejects a
+        // disagreement or missing dimensions instead of choosing a convenient row.
+        split.sourceVideoDimensions = matches.map((stream) => ({
+          url,
+          width: typeof stream.width === "number" ? stream.width : 0,
+          height: typeof stream.height === "number" ? stream.height : 0,
+        }));
         language = edition?.audioLanguage ?? null;
         if (language)
           split.sourceAudioEvidence = {

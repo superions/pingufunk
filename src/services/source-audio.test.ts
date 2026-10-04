@@ -33,12 +33,45 @@ const streams = (code = "VA") => ({
     },
   ],
 });
-function mock(value = streams(), status = 200) {
+function mock(value: unknown = streams(), status = 200) {
   const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(value, { status }));
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it.each(["valid", "foreign-id", "selector", "conflict", "missing", "string"])(
+  "binds dimension evidence independently of audio only to the exact programme/URL: %s",
+  async (kind) => {
+    const entry = { ...streams().videoStreams[1], width: 1280, height: 720 };
+    if (kind === "foreign-id") entry.programId = "654321-001-A";
+    if (kind === "selector") entry.url += "?other=1";
+    const declarations: unknown[] = [entry];
+    if (kind === "conflict") declarations.push({ ...entry, width: 1920, height: 1080 });
+    if (kind === "missing") declarations.push(streams().videoStreams[1]);
+    if (kind === "string") declarations[0] = { ...entry, width: "1280" };
+    const fetch = mock({ videoStreams: [streams().videoStreams[0], ...declarations] });
+    const output = (await enrichSourceAudio([item], new HttpRequestBudget())).get(item)!;
+    const hd = output.find((i) => i.url_video_hd)!;
+    const contract = releaseMediaExpectations(hd, null, hd.url_video_hd);
+    expect(contract.resolution).toEqual(
+      kind === "valid"
+        ? {
+            width: 1280,
+            height: 720,
+            provenance: "provider_dimensions",
+          }
+        : null
+    );
+    expect(releaseMediaExpectations(output.find((i) => i.url_video)!).resolution).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(item).not.toHaveProperty("sourceVideoDimensions");
+    if (!["foreign-id", "selector"].includes(kind)) {
+      expect(contract.version).toBe(2);
+      expect(contract.version === 2 && contract.sourceAudio.language).toBe("de");
+    }
+  }
+);
 
 it("binds each rendition before selection without inferring German from source locale", async () => {
   const fetch = mock();
@@ -84,7 +117,7 @@ it("preserves source GUID while German RSS/NZB and v2 worker expectations use th
   );
   expect(rss).toHaveLength(1);
   expect(rss[0].guid.value).toBe(before);
-  expect(rss[0].title).toContain(".2020.GERMAN.1080p.");
+  expect(rss[0].title).toContain(".2020.GERMAN.UNKNOWN.");
   const query = new URL(rss[0].enclosure.url, "http://localhost").searchParams;
   const contract = decodeMediaExpectations(query.get("encodedExpectations")!);
   expect(contract).toEqual({

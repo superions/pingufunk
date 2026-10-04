@@ -6,6 +6,7 @@ import {
 } from "@/lib/media-expectations";
 import { classifyLanguageEdition } from "./language-editions";
 import { mediaSourceIdentity } from "./source-audio";
+import { renditionDimensions } from "./rendition-quality";
 
 /** Catalogue durations are seconds; verified episode metadata is minutes. */
 export function releaseMediaExpectations(
@@ -14,6 +15,8 @@ export function releaseMediaExpectations(
   renditionUrl: string = item.url_video || item.url_video_hd || item.url_video_low
 ): MediaExpectations {
   const expected = unknownMediaExpectations();
+  const dimensions = renditionDimensions(item, renditionUrl);
+  if (dimensions) expected.resolution = { ...dimensions, provenance: "provider_dimensions" };
   const episodeSeconds = episodeRuntimeMinutes === null ? null : episodeRuntimeMinutes * 60;
   if (
     episodeSeconds !== null &&
@@ -51,6 +54,6 @@ export function releaseMediaExpectations(
       // Unrecognized source text is not an audio-language fact.
     }
   }
-  // Quality labels/rendition selectors do not prove actual width/height.
+  // Only exact-URL evidence above supplies dimensions, never a quality label.
   return parseMediaExpectations(expected);
 }

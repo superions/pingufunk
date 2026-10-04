@@ -45,6 +45,8 @@ export interface ApiResultItem {
   sourceAudioEvidence?: import("@/lib/media-expectations").SourceAudioEvidence;
   /** Preserve shipped rendition identity when better evidence adds release labels. */
   releaseVariantKey?: string;
+  /** Server-authored dimensions bound to the exact rendition, never catalogue slot names. */
+  sourceVideoDimensions?: Array<{ url: string; width: number; height: number }>;
 }
 
 // TVDB Types

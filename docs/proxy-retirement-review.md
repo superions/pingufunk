@@ -1123,6 +1123,32 @@ separater PostgreSQL-Integration. P09.4 entwicklungsseitig abgenommen; kein
 Produktiv-Rollout oder historischer Root-Cause-Nachweis. Die automatische
 Docker-Validierung ist ein eigenes Release-Gate und keine Deploymentfreigabe.
 
+## P09.3 — Quellenauflösung und historische Slotidentität (04.10.2026)
+
+Der neue gemeinsame Renditionowner ersetzt die drei pauschalen Katalog-
+Slotstempel. Optionale strukturierte ARTE-Maße müssen an die exakte Medien-URL
+gebunden sein; fehlende, fremde und widersprüchliche Angaben bleiben unbekannt.
+Keine zusätzlichen Probeabfragen oder Senderseiten. Audiosprache und Maße
+werden getrennt klassifiziert. Ein 720p-Beleg im HD-Slot produziert 720p,
+nicht 1080p; Unbekannt erhält keine SD-/HD-Unterkategorie und keinen WEB-Hint,
+den Arr selbst als SD lesen würde. Der [Auflösungsvertrag](rendition-quality-contract.md)
+benennt bewusst begrenzte Abdeckung und die alte Auswahlhinweis-Semantik.
+
+Nachreview: dieselbe URL in HD-/Standard-Slots erst **nach** konkreter Auswahl
+deduplizieren, damit unbekannte Standardfassung weiter auswählbar bleibt.
+UI-NZB erwartete zuvor die Default-URL statt der angeklickten Rendition;
+jetzt tragen alle NZBs nur die jeweiligen Maße. Bestehende v1/v2-Verträge
+prüfen lokale Breite **und** Höhe vor Completed. Die historischen Slot-GUIDs
+bleiben erhalten; neue Dimensionsbelege allein erzeugen keine neue Identität.
+Keine Altdateien, History, Profile oder gespeicherten Jobs umschreiben.
+
+Lokale Gates nach `npm ci` mit Node 26.10.0 bestanden: 965 reguläre Tests,
+Lint, Typecheck, Formatcheck, Build und Diffcheck. 13 PostgreSQL-Gates laufen
+separat; ihre lokalen Skips sind kein PG-Nachweis. Die nativen Arr- und echten
+Mediengates werden zusätzlich im Forkworkflow ausgeführt, ohne Veröffentlichung.
+Bis deren Erfolg bleibt P09.3 offen. P03.4s MP4-Sprachbefund ist unabhängig;
+keine Produktivfreigabe oder vollständige Sprachabdeckung behauptet.
+
 ## Autorisierte Betriebsumschaltung und nachfolgender PG-Halt (03.10.2026)
 
 Nach gesonderter Nutzerfreigabe: Proxy-Ausstieg zuerst auf SQLite, PostgreSQL
@@ -1147,7 +1173,7 @@ Betriebsrunbook, nicht in diesem öffentlichen Fork.
   reaktivierte zwischenzeitlich Sonarr-Suchflags: deaktivierte Downloadclients
   schützen die Prüfung; ein einzelner Arr-PUT beweist keine dauerhafte Sperre.
 - Die bisher proxyseitige verifizierte Identität `Solo for Weiss` / `Solo für
-  Weiss`, TVDB 319457, über den bestehenden Katalogmechanismus übernommen,
+Weiss`, TVDB 319457, über den bestehenden Katalogmechanismus übernommen,
   ohne erfundene Episoden oder Audio-Sprachbelege. [TVDB](https://thetvdb.com/series/319457-show)
   bestätigt die Serienidentität. `1ec873e`: Datenvalidator und 58 fokussierte
   Tests bestanden; [CI](https://github.com/superions/pingufunk/actions/runs/37078325186)

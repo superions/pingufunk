@@ -116,8 +116,21 @@ async function up() {
     process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
   const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
   const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
+  const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
+  if (
+    renditionQuality &&
+    (!sourceAudio || !["720p", "unknown", "conflicting"].includes(renditionQuality))
+  )
+    throw new Error("Owned quality QA requires the bounded source-audio fixture");
+  const appImages = Object.fromEntries(
+    ["sonarr", "radarr", "prowlarr"].map((app) => [
+      app,
+      process.env[`PINGUFUNK_ARR_QA_${app.toUpperCase()}_IMAGE`] ??
+        `lscr.io/linuxserver/${app}:latest`,
+    ])
+  );
   for (const app of ["sonarr", "radarr", "prowlarr"])
-    docker(["image", "inspect", `lscr.io/linuxserver/${app}:latest`, "--format", "{{.Id}}"]);
+    docker(["image", "inspect", appImages[app], "--format", "{{.Id}}"]);
   docker(["image", "inspect", runnerTag, "--format", "{{.Id}}"]);
   const migrator = docker(["image", "inspect", migratorTag, "--format", "{{.Id}}"]);
   const parent = resolve("downloads");
@@ -130,6 +143,7 @@ async function up() {
     migrator,
     movieCorrelation,
     sourceAudio,
+    renditionQuality,
     apps: {},
   };
   save(root, manifest);
@@ -142,13 +156,7 @@ async function up() {
       `<Config><BindAddress>*</BindAddress><Port>${ports[app]}</Port><SslPort>0</SslPort><EnableSsl>False</EnableSsl><LaunchBrowser>False</LaunchBrowser><ApiKey>${randomBytes(16).toString("hex")}</ApiKey><AuthenticationMethod>None</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>warn</LogLevel><UpdateAutomatically>False</UpdateAutomatically><AnalyticsEnabled>False</AnalyticsEnabled><Branch>master</Branch></Config>`,
       { mode: 0o600 }
     );
-    const image = docker([
-      "image",
-      "inspect",
-      `lscr.io/linuxserver/${app}:latest`,
-      "--format",
-      "{{.Id}}",
-    ]);
+    const image = docker(["image", "inspect", appImages[app], "--format", "{{.Id}}"]);
     const name = `pingufunk-arr-${app}-${owner}`;
     manifest.apps[app] = { name, image };
     save(root, manifest);
@@ -222,6 +230,7 @@ async function up() {
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
     ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
+    ...(renditionQuality ? ["-e", `PINGUFUNK_ARR_QA_RENDITION_QUALITY=${renditionQuality}`] : []),
     ...(movieCorrelation
       ? [
           "-e",
@@ -640,6 +649,29 @@ async function movieSearch(root, manifest, app = "radarr") {
         );
       if (!candidates[0].guid || !candidates[0].downloadUrl)
         throw new Error("Owned Radarr candidate transport identity missing");
+      if (app === "radarr" && manifest.renditionQuality) {
+        const expected = manifest.renditionQuality === "720p" ? "WEBDL-720p" : "Unknown";
+        if (
+          candidates[0].quality?.quality?.name !== expected ||
+          (expected === "Unknown" && candidates[0].quality.quality.id !== 0)
+        )
+          throw new Error(`Owned ${transport} native resolution classification mismatch`);
+        // Feed the actual producer's quality suffix to Sonarr's native parser,
+        // not a locally reimplemented parser or an expected hard-coded title.
+        const suffix = candidates[0].title.split(".2024.")[1];
+        if (!suffix) throw new Error("Owned quality fixture title suffix unavailable");
+        const parsed = await api(
+          root,
+          manifest,
+          "sonarr",
+          `/api/v3/parse?title=${encodeURIComponent(`Synthetic.Series.S01E01.${suffix}`)}`
+        );
+        if (parsed.parsedEpisodeInfo?.quality?.quality?.name !== expected)
+          throw new Error("Owned Sonarr native resolution classification mismatch");
+        console.log(
+          `quality: ${transport} Radarr release and Sonarr parser=${expected}; original HD slot, no grab`
+        );
+      }
       if (
         app === "radarr" &&
         manifest.sourceAudio &&

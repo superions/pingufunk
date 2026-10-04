@@ -63,7 +63,7 @@ it("caps each source page and honors its offset", async () => {
   expect(JSON.parse(request!.body as string)).toMatchObject({ size: 1000, offset: 2000 });
 });
 
-it("does not promote uncontracted response properties to language evidence", async () => {
+it("does not promote uncontracted response properties to language or resolution evidence", async () => {
   vi.mocked(fetchWithRetry).mockResolvedValue(
     Response.json({
       result: {
@@ -73,6 +73,7 @@ it("does not promote uncontracted response properties to language evidence", asy
             audioLanguage: "de",
             subtitleLanguage: "de",
             originalVersion: true,
+            sourceVideoDimensions: [{ url: validItem.url_video, width: 1920, height: 1080 }],
           },
         ],
       },

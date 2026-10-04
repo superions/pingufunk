@@ -1666,6 +1666,13 @@ Abhängigkeit P08; B10/R7.
       Dateien oder Veränderung produktiver Profile. Dieser neue offene Befund
       nimmt die historische Grundprüfung P09.2 nicht zurück und gehört nicht zur
       Tonsprachenabnahme P03.4.
+      Entwicklungscheckpoint 04.10.2026: gemeinsame Renditionauswahl,
+      exakt gebundene optionale ARTE-Maße, UNKNOWN ohne implizites WEB-SD-Label,
+      historische Slot-GUIDs und per-URL-NZB-Erwartungen implementiert.
+      Vertrag/Grenzen in `docs/rendition-quality-contract.md`; vollständige
+      lokale Gates bestanden. Native Arr- und reale Medien-/Backend-Gates sind
+      im Forkworkflow vorbereitet, ihre erfolgreiche Ausführung bleibt für
+      die Abnahme erforderlich. Kein Produktivrollout oder Bestandsrewrite.
 
 - [x] **P09.4 — Sichere Transferdiagnostik und isolierte Reproduktion.**
       Nutzerauftrag 03.10.2026: bestehende progressive Workerpfade in

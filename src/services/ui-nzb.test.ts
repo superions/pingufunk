@@ -60,3 +60,27 @@ it("does not emit an HLS download while the existing opt-in is off", () => {
   expect(createUiNzbDownloads(mixed, false)).not.toHaveProperty("hd");
   expect(parseNzbContent(createUiNzbDownloads(mixed, true).hd!)?.url).toBe(mixed.url_video_hd);
 });
+
+it("binds UI NZB dimensions to the selected URL, never the default rendition", () => {
+  const releases = createUiNzbDownloads(
+    {
+      ...item,
+      sourceVideoDimensions: [
+        { url: item.url_video, width: 1920, height: 1080 },
+        { url: item.url_video_hd, width: 1280, height: 720 },
+      ],
+    },
+    false
+  );
+  expect(parseNzbContent(releases.hd!)?.mediaExpectations?.resolution).toEqual({
+    width: 1280,
+    height: 720,
+    provenance: "provider_dimensions",
+  });
+  expect(parseNzbContent(releases.sd!)?.mediaExpectations?.resolution).toEqual({
+    width: 1920,
+    height: 1080,
+    provenance: "provider_dimensions",
+  });
+  expect(parseNzbContent(releases.low!)?.mediaExpectations?.resolution).toBeNull();
+});

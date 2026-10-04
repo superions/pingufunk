@@ -97,6 +97,24 @@ Installationswerte, genaue Image-IDs, Sicherungen und Controllerrevisionen
 gehören ins private Betriebsrunbook. Dieser Vertrag ist keine DB-Cutover-
 oder allgemeine Deploymentfreigabe.
 
+## P09.3 — Auflösungskorrektur ohne neue Qualitäts-GUIDs
+
+Der [Auflösungsvertrag](rendition-quality-contract.md) trennt historische
+Katalog-Slots von tatsächlichen Maßen. Verbesserte Dimensionsbelege verändern
+Titel und NZB-Erwartungen, aber nicht den bisherigen Slotbestandteil im GUID-
+Hash. Ein altes `#1080p-…` kann deshalb eine nun korrekt als 720p veröffentlichte
+URL identifizieren. Dieses Fragment nicht als Pixelbeleg interpretieren.
+Keine gespeicherten Jobs, Dateien, GUIDs oder Consumerhistorien umschreiben.
+
+Vor separat freigegebenem Rollout neue UNKNOWN-Fälle und Qualitätsauswahl an
+den vorhandenen Consumerprofilen bewerten. Unbekannte Titel erhalten kein WEB-
+Hint, das Arr selbst pauschal als SD lesen würde; automatische Aufnahme hängt
+weiterhin von den tatsächlichen Profilen ab. Mehrfachindexer und historische
+Kontext-/Fassungs-GUID-Übergänge bleiben eigene Doppelgrabrisiken. Neue Sollmaße
+werden vor Completed geprüft; Rollbackimage muss diese v1/v2-Erwartungen auf
+dem aktuellen Backend weiter verstehen. Keine Datenbankmigration, erneute
+Bibliotheksbewertung oder neue Aufnahme ist Teil dieses Qualitätsfixes.
+
 ## P03.4 — Quellenbelegte Tonsprachen und v2-Jobs
 
 Der [Tonsprachenvertrag](source-audio-contract.md) ergänzt konkrete progressive

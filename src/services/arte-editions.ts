@@ -53,6 +53,8 @@ const playerSchema = z.object({
           z.object({
             protocol: z.string(),
             url: z.string(),
+            width: z.unknown().optional(),
+            height: z.unknown().optional(),
             versions: z
               .array(z.object({ eStat: z.object({ ml5: z.string() }) }))
               .min(1)
@@ -198,9 +200,10 @@ export async function resolveArteSeriesEditions(
               .map(stableUrlIdentity)
           )
         );
-      // The player proves audio, not MediathekView rendition quality. Website
-      // URLs are not indexed for search: discover by verified German title and
-      // recheck the exact video ID locally, never assign an arbitrary stream 720p.
+      // Stream/audio existence does not establish catalogue-slot quality; optional
+      // exact-URL dimensions below are independent evidence. Website URLs are
+      // not indexed: discover by verified title and recheck the exact video ID,
+      // never assign an arbitrary unindexed stream to a nominal 720p slot.
       if (
         attributes.streams.some(
           (stream) =>
@@ -271,6 +274,13 @@ export async function resolveArteSeriesEditions(
           url_video_low: "",
           url_video_hd: "",
           [slots[0]]: stream.url,
+          sourceVideoDimensions: attributes.streams
+            .filter((candidate) => candidate.url === stream.url)
+            .map((candidate) => ({
+              url: stream.url,
+              width: typeof candidate.width === "number" ? candidate.width : 0,
+              height: typeof candidate.height === "number" ? candidate.height : 0,
+            })),
         });
       }
     }

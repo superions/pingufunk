@@ -37,7 +37,7 @@ function request(endpoint, body) {
 function rawRequest(url) {
   return run(["exec", container, "curl", "-fsS", "--max-time", "5", url]);
 }
-function nzb(filename, duration) {
+function nzb(filename, duration, resolution = null) {
   const expected =
     duration === undefined
       ? null
@@ -46,7 +46,8 @@ function nzb(filename, duration) {
           duration:
             duration === null ? null : { seconds: duration, provenance: "source_catalogue" },
           audio: null,
-          resolution: null,
+          resolution:
+            resolution === null ? null : { ...resolution, provenance: "provider_dimensions" },
         };
   const title = `Synthetic.${filename.replaceAll(".", "-")}`;
   const url = `http://127.0.0.1:6767/pingufunk-media-qa/${filename}`;
@@ -117,7 +118,7 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   terminalSnapshots.set(id, row);
 }
 console.log("Both actual Newznab paths to NZB, queue, verified file and SAB history passed");
-for (const [filename, duration, status, convert] of [
+for (const [filename, duration, status, convert, resolution] of [
   ["valid.mp4", undefined, "completed", false],
   ["valid.mp4", null, "completed", false],
   ["valid.mp4", 2, "completed", false],
@@ -128,9 +129,12 @@ for (const [filename, duration, status, convert] of [
   ["stream.m3u8", 2, "completed", false],
   ["stream.m3u8", 2, "completed", true],
   ["valid.mp4", 2, "completed", true],
+  ["720p.mp4", 2, "completed", false, { width: 1280, height: 720 }],
+  ["720p.mp4", 2, "failed", false, { width: 1920, height: 1080 }],
+  ["720p.mp4", 2, "failed", false, { width: 1920, height: 720 }],
 ]) {
   request("api/settings", JSON.stringify({ key: "download.convertToMkv", value: String(convert) }));
-  const fixture = nzb(filename, duration);
+  const fixture = nzb(filename, duration, resolution);
   const added = request("api?mode=addfile&cat=sonarr", fixture.body);
   if (added.status !== true || added.nzo_ids.length !== 1)
     throw new Error("Synthetic enqueue failed");
@@ -166,12 +170,20 @@ for (const [filename, duration, status, convert] of [
       facts.audioLanguages.length !== 0 ||
       facts.expectedChecks.duration !== (duration == null ? "unknown" : "passed") ||
       facts.expectedChecks.audio !== "unknown" ||
-      facts.expectedChecks.resolution !== "unknown" ||
+      facts.expectedChecks.resolution !== (resolution ? "passed" : "unknown") ||
+      (resolution &&
+        !facts.video.some(
+          (video) => video.width === resolution.width && video.height === resolution.height
+        )) ||
       !job.filePath ||
       history.storage !== job.filePath.slice(0, job.filePath.lastIndexOf("/"))
     )
       throw new Error("Synthetic completed facts/import path mismatch");
-  } else if (job.validation !== null || history.fail_message === "") {
+  } else if (
+    job.validation !== null ||
+    history.fail_message === "" ||
+    (resolution && job.filePath !== null)
+  ) {
     throw new Error("Failed media exposed validation success");
   }
   terminalSnapshots.set(id, job);

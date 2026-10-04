@@ -55,7 +55,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v10-rendition-audio-evidence";
+const CONTENT_SEARCH_CACHE_VERSION = "v11-rendition-dimensions";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,

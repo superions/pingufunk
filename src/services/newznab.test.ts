@@ -586,7 +586,7 @@ describe("P00 historical release characterizations", () => {
       "720p"
     );
 
-    expect(item.title).toContain(".OV.SUBBED.720p");
+    expect(item.title).toContain(".OV.SUBBED.UNKNOWN");
     expect(item.title).not.toContain("GERMAN");
     expect(item.title).not.toContain("deutsche.Untertitel");
   });
@@ -657,6 +657,10 @@ describe("P00 historical release characterizations", () => {
         url_video: "https://example.org/episode-720.mp4",
         url_video_low: "https://example.org/episode-480.mp4",
         url_video_hd: "https://example.org/episode-1080.mp4",
+        sourceVideoDimensions: [
+          { url: "https://example.org/episode-720.mp4", width: 1280, height: 720 },
+          { url: "https://example.org/episode-1080.mp4", width: 1920, height: 1080 },
+        ],
       },
       "all"
     );

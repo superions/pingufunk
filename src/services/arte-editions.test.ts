@@ -5,6 +5,7 @@ import { selectLanguageVariants } from "./language-editions";
 import { readLanguagePolicy } from "@/lib/language-policy";
 import type { ApiResultItem, TvdbData } from "@/types";
 import { queryMediathekView } from "@/lib/mediathek-client";
+import { releaseMediaExpectations } from "./release-media-expectations";
 vi.mock("@/lib/mediathek-client", () => ({
   MEDIATHEK_VIEW_MAX_PAGE_SIZE: 1000,
   queryMediathekView: vi.fn(async () => []),
@@ -50,7 +51,7 @@ function config(streams = [stream()]) {
     },
   };
 }
-function mockPlayer(value = config(), status = 200) {
+function mockPlayer(value: unknown = config(), status = 200) {
   vi.mocked(queryMediathekView).mockResolvedValue([
     { ...item, url_video: "https://fixture.akamaized.net/german.mp4" },
     { ...item, url_video: "https://fixture.akamaized.net/ov.mp4" },
@@ -65,6 +66,29 @@ function mockPlayer(value = config(), status = 200) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ARTE source and edition contracts", () => {
+  it.each(["valid", "conflict", "missing", "different-url"])(
+    "preserves only exact player rendition dimensions for TV: %s",
+    async (kind) => {
+      const entry = { ...stream(), width: 1280, height: 720 };
+      const streams: Array<ReturnType<typeof stream> & { width?: number; height?: number }> =
+        kind === "different-url" ? [stream(), { ...entry, url: entry.url + "?other=1" }] : [entry];
+      if (kind === "conflict") streams.push({ ...entry, width: 1920, height: 1080 });
+      if (kind === "missing") streams.push(stream());
+      const fetch = mockPlayer(config(streams));
+      const result = await resolveArteSeriesEditions([item], show, new HttpRequestBudget());
+      const german = result!.find((i) => i.url_video === entry.url)!;
+      expect(releaseMediaExpectations(german).resolution).toEqual(
+        kind === "valid"
+          ? {
+              width: 1280,
+              height: 720,
+              provenance: "provider_dimensions",
+            }
+          : null
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  );
   it("accepts only exact official HTTPS video pages, never locale as audio", () => {
     expect(arteVideoId(item.url_website)).toBe("123456-001-A");
     for (const url of [

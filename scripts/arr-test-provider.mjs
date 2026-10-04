@@ -5,6 +5,7 @@ const sourceFetch = globalThis.fetch;
 // Only owned application aliases can receive integration API calls.
 const ports = { sonarr: "8989", radarr: "7878", prowlarr: "9696", pingufunk: "6767" };
 const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
+const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
 const germanUrl = "https://fixture.akamaized.net/german.mp4";
 const frenchUrl = "https://fixture.akamaized.net/french.mp4";
 globalThis.fetch = async (input, init) => {
@@ -22,8 +23,26 @@ globalThis.fetch = async (input, init) => {
   )
     return Response.json({
       videoStreams: [
-        { programId: "123456-001-A", url: germanUrl, audioCode: "VA" },
+        {
+          programId: "123456-001-A",
+          url: germanUrl,
+          audioCode: "VA",
+          ...(["720p", "conflicting"].includes(renditionQuality)
+            ? { width: 1280, height: 720 }
+            : {}),
+        },
         { programId: "123456-001-A", url: frenchUrl, audioCode: "VOF-STA" },
+        ...(renditionQuality === "conflicting"
+          ? [
+              {
+                programId: "123456-001-A",
+                url: germanUrl,
+                audioCode: "VA",
+                width: 1920,
+                height: 1080,
+              },
+            ]
+          : []),
       ],
     });
   if (url.hostname === "mediathekviewweb.de" && url.pathname === "/api/query") {

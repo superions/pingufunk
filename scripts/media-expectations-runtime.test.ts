@@ -70,6 +70,7 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           ...unknownMediaExpectations(),
           version,
           duration: { seconds: 120, provenance: "episode_metadata" as const },
+          resolution: { width: 1280, height: 720, provenance: "provider_dimensions" as const },
           ...(version === 2
             ? {
                 sourceAudio: {

@@ -17,7 +17,7 @@ export function createUiNzbDownloads(item: ApiResultItem, hlsEnabled: boolean): 
     downloads[key] = generateFakeNzb({
       title,
       url,
-      mediaExpectations: releaseMediaExpectations(item),
+      mediaExpectations: releaseMediaExpectations(item, null, url),
     });
   }
   return downloads;

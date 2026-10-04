@@ -111,7 +111,7 @@ it.each(["movie", "search&cat=2000"])(
     const body = await response.text();
     expect(response.status).toBe(200);
     expect(body).toContain('total="1"');
-    expect(body).toContain("Beispielfilm.1998.720p.WEB");
+    expect(body).toContain("Beispielfilm.1998.UNKNOWN.h264");
     expect(body).toContain('name="category" value="2000"');
     expect(body).toContain('name="tmdbid" value="42"');
     expect(body).toContain('name="imdbid" value="tt0000042"');
@@ -157,7 +157,7 @@ it.each([
       expect(response.status).toBe(200);
       const body = await response.text();
       expect(body.includes('name="tmdbid" value="42"')).toBe(verified);
-      expect(body.includes("Beispielfilm.1998.720p.WEB")).toBe(verified);
+      expect(body.includes("Beispielfilm.1998.UNKNOWN.h264")).toBe(verified);
       expect(body).not.toContain("GERMAN");
     }
   }
@@ -186,7 +186,7 @@ it("does not rescan all source videos for every nonmatching film in a large RSS 
   try {
     const response = await GET(new NextRequest("http://localhost/api/newznab?t=movie"));
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("Beispielfilm.1998.720p.WEB");
+    expect(await response.text()).toContain("Beispielfilm.1998.UNKNOWN.h264");
     expect(matcher).toHaveBeenCalledTimes(1);
     expect(matcher.mock.calls[0][0]).toEqual([source]);
   } finally {
