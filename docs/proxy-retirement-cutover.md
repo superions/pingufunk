@@ -110,7 +110,11 @@ Vor separat freigegebenem Rollout neue UNKNOWN-Fälle und Qualitätsauswahl an
 den vorhandenen Consumerprofilen bewerten. Unbekannte Titel erhalten kein WEB-
 Hint, das Arr selbst pauschal als SD lesen würde; automatische Aufnahme hängt
 weiterhin von den tatsächlichen Profilen ab. Mehrfachindexer und historische
-Kontext-/Fassungs-GUID-Übergänge bleiben eigene Doppelgrabrisiken. Neue Sollmaße
+Kontext-/Fassungs-GUID-Übergänge bleiben eigene Doppelgrabrisiken. Korrigierte
+konkrete Auswahl oder `best` kann bislang ausgeblendete URLs sichtbar machen;
+deren unveränderte Identität verhindert kein Upgrade gegenüber einer anderen
+bereits geladenen Fassung. Deshalb Auswahl, Profile und History zusammen prüfen.
+Neue Sollmaße
 werden vor Completed geprüft; Rollbackimage muss diese v1/v2-Erwartungen auf
 dem aktuellen Backend weiter verstehen. Keine Datenbankmigration, erneute
 Bibliotheksbewertung oder neue Aufnahme ist Teil dieses Qualitätsfixes.

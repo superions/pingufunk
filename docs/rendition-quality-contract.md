@@ -81,6 +81,11 @@ keine neuen GUIDs. Bei derselben URL in mehreren Slots bleibt für `all`/`best`
 der erste bisherige Slot-Identifier; weniger identische Veröffentlichungen
 bedeuten keine neu erfundene Identität. Die bekannten Kontext-/Fassungs-GUID-
 Übergänge aus dem Cutover-Runbook bleiben davon unabhängig.
+Eine korrigierte konkrete Qualitätsauswahl oder `best` kann dennoch eine andere,
+bisher ausgeblendete URL sichtbar machen. Deren bestehende Identität ist nicht
+dieselbe wie die bereits geladene Fassung; Consumer können sie als Upgrade oder
+weiteren Kandidaten behandeln. Stabile GUIDs allein verhindern solche Grabs
+nicht. Vor dem Rollout deshalb Auswahl, Profile und History zusammen prüfen.
 
 Es werden weder Altjobs noch gespeicherte Erwartungen, Dateinamen, Importdateien,
 History oder Profile umgeschrieben. Vorhandene Jobs ohne Sollmaße werden nicht
@@ -100,6 +105,10 @@ Radarr-Metadatenanbindung zeigt ausschließlich auf die eigene Testinstanz und
 ergänzt den jahrlosen Quelltreffer aus deren verifizierter Filmidentität; externe
 Metadatendienste oder Accounts werden nicht verwendet. Das ist kein
 vollständiger Sonarr-Importnachweis. Kein produktiver oder echter Mediengrab.
+Der Treiber prüft nach seinem Fixture-Restart die API-Readiness und vor der
+einmaligen Suche einen möglichen nativen Indexer-Cooldown. Er liest nur die
+eigene Testdatenbank bis zur begrenzten Ablaufzeit, löscht keinen Status und
+wiederholt keine fehlgeschlagene Suchassertion.
 
 ```sh
 npm ci

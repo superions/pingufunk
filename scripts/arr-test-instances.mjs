@@ -638,6 +638,12 @@ async function movieSearch(root, manifest, app = "radarr") {
     indexers.some((row) => !owned.includes(row) && row.enableInteractiveSearch)
   )
     throw new Error("Owned two-indexer isolated search scope required");
+  await fixtureIndexersReady(
+    root,
+    manifest,
+    app,
+    owned.map((row) => row.id)
+  );
   try {
     for (const transport of ["direct", "forwarded"]) {
       const indexer = owned.find((row) => row.name === `Pingufunk isolated QA ${transport}`);
@@ -717,6 +723,45 @@ async function movieSearch(root, manifest, app = "radarr") {
     for (const row of owned)
       await api(root, manifest, app, `/api/v3/indexer/${row.id}?forceSave=true`, row, "PUT");
   }
+}
+
+async function fixtureIndexersReady(root, manifest, app, ids) {
+  // The intentional empty-feed test can persist a native indexer cooldown.
+  // Observe its expiry read-only before the one real search; never clear the
+  // status, retest the indexer or retry a failed candidate assertion.
+  const { DatabaseSync } = await import("node:sqlite");
+  const path = join(root, app, `${app}.db`);
+  if (lstatSync(path).isSymbolicLink()) throw new Error("Owned fixture database required");
+  const deadline = Date.now() + 90_000;
+  let observed = false;
+  while (Date.now() < deadline) {
+    const db = new DatabaseSync(path, { readOnly: true });
+    let pending;
+    try {
+      const rows = db
+        .prepare("SELECT ProviderId,DisabledTill FROM IndexerStatus WHERE ProviderId IN (?,?)")
+        .all(...ids);
+      pending = rows.some((row) => {
+        if (row.DisabledTill === null) return false;
+        const raw = String(row.DisabledTill);
+        const time = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : `${raw}Z`);
+        if (!Number.isFinite(time)) throw new Error("Owned indexer cooldown timestamp invalid");
+        return time > Date.now();
+      });
+    } finally {
+      db.close();
+    }
+    if (!pending) {
+      console.log(`${app}: owned indexers outside native cooldown; no status mutation`);
+      return;
+    }
+    if (!observed) {
+      console.log(`${app}: owned native indexer cooldown observed; awaiting expiry read-only`);
+      observed = true;
+    }
+    await delay(500);
+  }
+  throw new Error("Owned native indexer cooldown did not expire within the QA deadline");
 }
 
 async function forwardedSearch(root, manifest) {
