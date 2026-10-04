@@ -4,6 +4,9 @@ set -euo pipefail
 # Only newly allocated internal QA networks and unmonitored synthetic fixtures.
 # The Arr harness verifies owner/image/mount identity before every operation.
 export PINGUFUNK_ARR_QA_SOURCE_AUDIO=1
+# Native ID searches need verified metadata; use only the owned synthetic
+# Radarr library, never an external metadata account or invented source year.
+export PINGUFUNK_ARR_QA_MOVIE_CORRELATION=1
 QA_DIRECTORY=""
 cleanup() {
   if [[ -n "$QA_DIRECTORY" ]]; then node scripts/arr-test-instances.mjs stop "$QA_DIRECTORY"; fi

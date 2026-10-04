@@ -95,7 +95,10 @@ historische GUIDs sowie RSS→NZB→Worker und UI-NZB pro URL. Der disposable
 Mediengate erzeugt eine echte 720p-Datei und prüft passende sowie falsche Breite/
 Höhe auf beiden Backends. Der native Arr-Gate verwendet einen unüberwachten
 synthetischen Film: Radarr-Suche direkt und via Prowlarr, plus Sonarrs echter
-Parser mit dem tatsächlich veröffentlichten Qualitätssuffix. Das ist kein
+Parser mit dem tatsächlich veröffentlichten Qualitätssuffix. Die optionale
+Radarr-Metadatenanbindung zeigt ausschließlich auf die eigene Testinstanz und
+ergänzt den jahrlosen Quelltreffer aus deren verifizierter Filmidentität; externe
+Metadatendienste oder Accounts werden nicht verwendet. Das ist kein
 vollständiger Sonarr-Importnachweis. Kein produktiver oder echter Mediengrab.
 
 ```sh

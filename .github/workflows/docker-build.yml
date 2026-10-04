@@ -49,6 +49,19 @@ jobs:
           load: true
           tags: pingufunk-p11-migrator-qa
 
+      - name: Verify native rendition quality directly and through Prowlarr
+        env:
+          PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+        run: |
+          docker pull "$PINGUFUNK_ARR_QA_SONARR_IMAGE"
+          docker pull "$PINGUFUNK_ARR_QA_RADARR_IMAGE"
+          docker pull "$PINGUFUNK_ARR_QA_PROWLARR_IMAGE"
+          bash scripts/rendition-quality-arr-smoke.sh
+
       - name: Build pinned rollback checkpoints without publishing
         run: |
           git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker build --target runner -t pingufunk-sqlite-source-rollback-qa -
@@ -81,16 +94,3 @@ jobs:
           PINGUFUNK_SMOKE_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_SMOKE_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
         run: bash scripts/media-container-smoke.sh
-
-      - name: Verify native rendition quality directly and through Prowlarr
-        env:
-          PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
-          PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
-        run: |
-          docker pull "$PINGUFUNK_ARR_QA_SONARR_IMAGE"
-          docker pull "$PINGUFUNK_ARR_QA_RADARR_IMAGE"
-          docker pull "$PINGUFUNK_ARR_QA_PROWLARR_IMAGE"
-          bash scripts/rendition-quality-arr-smoke.sh
