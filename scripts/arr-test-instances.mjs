@@ -479,6 +479,23 @@ async function bootstrap(root, manifest) {
   }
 }
 
+async function fixtureRuntimeReady(root, manifest, app) {
+  // docker start confirms process creation, not readiness of the restarted Arr API.
+  // Only this owned fixture runtime is polled; no search, command or grab is retried.
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try {
+      const status = await api(root, manifest, app, "/api/v3/system/status");
+      if (status.version !== manifest.apps[app].version)
+        throw new Error("Owned fixture runtime version changed");
+      return;
+    } catch (error) {
+      if (error.message === "Owned fixture runtime version changed") throw error;
+      await delay(500);
+    }
+  }
+  throw new Error("Owned fixture runtime readiness failed");
+}
+
 async function movieFixture(root, manifest) {
   if ((await api(root, manifest, "radarr", "/api/v3/system/status")).version !== "6.4.4.10685")
     throw new Error("Owned Radarr fixture requires its inspected schema/version");
@@ -538,6 +555,7 @@ async function movieFixture(root, manifest) {
   console.log(
     "radarr: unmonitored offline synthetic movie fixture seeded; backup retained; no Skyhook request or automatic grab"
   );
+  await fixtureRuntimeReady(root, manifest, "radarr");
 }
 
 async function seriesFixture(root, manifest) {
@@ -584,6 +602,7 @@ async function seriesFixture(root, manifest) {
   console.log(
     "sonarr: unmonitored offline synthetic series/episode seeded; backup retained; no external metadata or automatic grab"
   );
+  await fixtureRuntimeReady(root, manifest, "sonarr");
 }
 
 async function fixtureTarget(root, manifest, app) {
