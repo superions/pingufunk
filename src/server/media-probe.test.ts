@@ -140,11 +140,21 @@ it("accepts fresh rendition-bound provider proof with unknown tracks, never fabr
     version: 2 as const,
     audio: null,
     sourceAudio: proof,
+    resolution: { width: 1280, height: 720, provenance: "provider_dimensions" as const },
   };
   const facts = validateMediaProbe(media(), expected, 10, proof);
   expect(facts.audioLanguages).toEqual([]);
   expect(facts.sourceAudioEvidence).toEqual(proof);
   expect(facts.expectedChecks.audio).toBe("passed_provider");
+  expect(facts.expectedChecks.resolution).toBe("passed");
+  for (const dimensions of [
+    { width: 1920, height: 1080 },
+    { width: 1920, height: 720 },
+  ]) {
+    const wrong = media();
+    wrong.streams[0] = { ...wrong.streams[0], ...dimensions };
+    expect(() => validateMediaProbe(wrong, expected, 10, proof)).toThrow();
+  }
   expect(() => validateMediaProbe(media(), expected, 10)).toThrow();
   expect(() => validateMediaProbe(media(), expected, 10, { ...proof, language: "fr" })).toThrow();
   const foreign = media();
