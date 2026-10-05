@@ -1361,3 +1361,29 @@ wiederverwendet, weil kein Payload-/Schema-/Datenbankvertrag geändert wurde.
 [Fork-CI des ersten Checkpoints](https://github.com/superions/pingufunk/actions/runs/37322690901)
 auf `43b619e` bestanden einschließlich separatem PG-Harness. Dieser Beleg
 ersetzt nicht die frisch erforderliche CI/Imageabnahme der CDN-Ergänzung.
+
+## TV-Ergänzungsbefunde — frische Consumerabnahme (05.10.2026)
+
+Für `b189bf2` sind [Fork-CI](https://github.com/superions/pingufunk/actions/runs/37323756642)
+und [Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37323756720)
+erfolgreich. Die separate PG-Integration und native synthetische Consumer-/
+Medienprüfung auf beiden Backends ergänzen die 998 regulären lokalen Tests;
+die 14 bedingten PG-Fälle werden nicht als regulär lokal ausgeführt gezählt.
+Unveränderte Produktinputs erlauben Wiederverwendung von Lint/Types/Format/Build.
+
+Nach gesonderter Homelab-Rolloutfreigabe liefert das tatsächlich servierte neue
+Image in lesenden nativen Sonarr-Staffelsuchen über die bestehende Prowlarr-Route
+alle sechs regulären deutschen ARD-Episoden (WEBDL-1080p) sowie alle vier
+deutschen ARTE-Episoden (WEBDL-720p, mit Untertiteln), jeweils korrekt S01/Enn
+und ohne Rejections. Normale ARD-Fassungen sind für jede Folge vorhanden;
+zusätzliche Audiodeskriptionsfassungen bleiben als solche gekennzeichnet.
+Keine Profile, Consumer-Routen oder Bibliotheksmetadaten wurden dafür geändert;
+kein Grab und kein neuer produktiver Import. Quellenverfügbarkeit ist zeitlich
+begrenzt, kein dauerhafter Verfügbarkeitsvertrag folgt aus diesem Zeitpunkt.
+
+P06.2/P06.3/P07.3 sind für diese Ergänzungsbefunde erneut abgenommen. P03.4
+bleibt insgesamt offen: weder zwei erfolgreich belegte Staffeln noch vier
+bounded MP4-Fenster beweisen sämtliche Film-/Quellen-Sprachen. Unvollständige
+Belege bleiben neutral. Privater Image-/GitOps-/Backup-/Rollbacknachweis und
+laufende Betriebsfreigabe gehören ausschließlich ins private Homelab-Runbook;
+dieser öffentliche Review enthält keine Instanzwerte oder realen APIantworten.

@@ -1136,7 +1136,14 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Gates und isolierten Containerproben aus P11.1 werden für dessen
       unveränderte DB-/Runtimeinputs wiederverwendet; Parser ist noch kein
       integrierter Sonarr-Consumer und benötigt keine neue UI-Abnahme.
-- [ ] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
+- [x] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
+      Ergänzungsbefund erneut abgenommen 05.10.2026 auf `b189bf2`: 998 reguläre
+      Tests, Lint/Types/Format/Build und Fork-CI 37323756642 einschließlich
+      separater PG-Integration grün. Docker-Gate 37323756720 mit nativen
+      Consumer-/Medien-/beiden Backendprüfungen erfolgreich. Lesende native
+      Staffelsuche über unveränderten Sonarr-/Prowlarr-Pfad bestätigt vollständige
+      sechs-/vierteilige deutsche Treffer ohne Rejections. Private Betriebswerte
+      bleiben im privaten Runbook; kein Grab oder neuer Importnachweis.
       Am 05.10.2026 für den Ergänzungsbefund erneut geöffnet: neue Bibliotheks-
       serien dürfen nicht an einem zehn Minuten alten Inventar scheitern.
       Ein gezielter Missing-ID-Refresh im selben Budget, keine negativen
@@ -1213,7 +1220,14 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       API-/RSS-/NZB-/Queue-Regression einschließlich unabhängiger Basistreffer
       bei Sonarr-Ausfall bestanden. Dies ist Entwicklungsabnahme, kein
       Nachweis der Version oder Bibliothek einer produktiven Sonarr-Instanz.
-- [ ] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
+- [x] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
+      Ergänzungsbefund erneut abgenommen 05.10.2026 mit den frischen Gates von
+      P06.2: generische Metadatentitel bei verifizierten Koordinaten/Laufzeiten,
+      eindeutige vollständige ARTE-Staffel und unverändert negative Konfliktfälle.
+      Native sechs-/vierteilige Staffelsuche akzeptiert jede reguläre deutsche
+      Episode mit korrektem S01/Enn; keine Profil- oder Bibliotheksänderung.
+      Quellen-/Workerprüfung und beide Persistenzbackends separat grün;
+      lesende Trefferabnahme ist ausdrücklich keine produktive Importabnahme.
       Am 05.10.2026 für generische Metadatentitel erneut geöffnet: exakte
       Serien-/Aliasbindung, explizite Quellkoordinaten und bekannte passende
       Solllaufzeit gemeinsam verlangen. Konkrete Titelkonflikte nicht lockern.
@@ -1312,7 +1326,13 @@ B04/B05/B06, R3.
       abortieren ohne Quelländerung. Final abgenommen mit Commit `96a570e`:
       Fork-CI `36756864402` und Docker-Buildvalidierung `36756864457` erfolgreich,
       ohne Imagepublikation oder produktive Migration.
-- [ ] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
+- [x] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
+      Ergänzungsbefund erneut abgenommen 05.10.2026 auf `b189bf2`, Fork-CI
+      37323756642 und Docker-Gate 37323756720 erfolgreich. Native Sonarr-Suche
+      über Prowlarr akzeptiert alle vier regulären deutschen ARTE-Folgen mit
+      korrekten Koordinaten und tatsächlich belegtem WEBDL-720p. Keine Wildcard-
+      CDN-Freigabe, HLS-Sprachübertragung oder produktiver Grab. Quellen-/Worker-
+      Konfliktfälle bleiben streng; P03.4s umfassender Sprachbefund bleibt offen.
       Am 05.10.2026 für den HLS-only-Playerbefund erneut geöffnet: vorhandene
       indexierte MP4s nach Player-ID/Titel/Koordinaten/Rechteprüfung erhalten,
       ohne Mehrspur-HLS auf eine MP4-Tonsprache zu übertragen. Exakten HbbTV-
