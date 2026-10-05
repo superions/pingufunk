@@ -103,7 +103,9 @@ export function progressiveUrl(raw: string): boolean {
       !url.username &&
       !url.password &&
       !url.port &&
-      (url.hostname.endsWith(".arte.tv") || url.hostname.endsWith(".akamaized.net")) &&
+      (url.hostname.endsWith(".arte.tv") ||
+        url.hostname.endsWith(".akamaized.net") ||
+        url.hostname === "arteptweb-a.akamaihd.net") &&
       /\.mp4$/i.test(url.pathname)
     );
   } catch {

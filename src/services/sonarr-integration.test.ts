@@ -166,11 +166,11 @@ it.each(["ard", "arte"] as const)(
         url_video:
           provider === "ard"
             ? `https://ctv-videos.daserste.de/synthetic/${n}.mp4`
-            : `https://fixture.akamaized.net/synthetic/${n}.mp4`,
+            : `https://arteptweb-a.akamaihd.net/synthetic/${n}.mp4`,
         url_video_hd:
           provider === "ard"
             ? `https://ctv-videos.daserste.de/synthetic/${n}-hd.mp4`
-            : `https://fixture.akamaized.net/synthetic/${n}-hd.mp4`,
+            : `https://arteptweb-a.akamaihd.net/synthetic/${n}-hd.mp4`,
       };
     });
     const base = fetchMock.getMockImplementation()!;

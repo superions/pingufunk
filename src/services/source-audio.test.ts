@@ -5,6 +5,7 @@ import { unknownMediaExpectations } from "@/lib/media-expectations";
 import type { ApiResultItem } from "@/types";
 import { enrichSourceAudio, mediaSourceIdentity, verifyArteSourceAudio } from "./source-audio";
 import { selectLanguageVariants } from "./language-editions";
+import { progressiveUrl } from "./arte-editions";
 import { buildReleaseGuid, generateMovieRssItems } from "./newznab";
 import { releaseMediaExpectations } from "./release-media-expectations";
 import { decodeMediaExpectations, generateFakeNzb } from "./nzb-release";
@@ -39,6 +40,27 @@ function mock(value: unknown = streams(), status = 200) {
   return fetch;
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it("accepts only the confirmed ARTE legacy CDN and binds its exact HbbTV URL in producer and worker", async () => {
+  const url = "https://arteptweb-a.akamaihd.net/synthetic/episode.mp4";
+  expect(progressiveUrl(url)).toBe(true);
+  for (const host of ["arteptweb-a.akamaihd.net.evil.test", "other.akamaihd.net"])
+    expect(progressiveUrl(url.replace("arteptweb-a.akamaihd.net", host))).toBe(false);
+  const source = { ...item, url_video: url, url_video_hd: "", url_video_low: "" };
+  const fetch = mock({
+    videoStreams: [
+      { programId: "123456-001-A", url: url.replace("https:", "http:"), audioCode: "VA" },
+    ],
+  });
+  const [enriched] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
+  expect(enriched.audioLanguage).toBe("de");
+  const expected = releaseMediaExpectations(enriched);
+  if (expected.version !== 2) throw new Error("Expected exact source proof");
+  await expect(
+    verifyArteSourceAudio(expected.sourceAudio, url, new HttpRequestBudget())
+  ).resolves.toEqual(expected.sourceAudio);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
 
 it.each(["valid", "foreign-id", "selector", "conflict", "missing", "string"])(
   "binds dimension evidence independently of audio only to the exact programme/URL: %s",

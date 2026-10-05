@@ -1318,6 +1318,12 @@ B04/B05/B06, R3.
       ohne Mehrspur-HLS auf eine MP4-Tonsprache zu übertragen. Exakten HbbTV-
       URL-/Programmbeleg vor Sprachwahl nutzen. Positive Staffelfälle und
       unverändert strenge Konfliktfälle grün; frische Consumer-/CI-Abnahme offen.
+      Quellengegencheck fand zusätzlich den bisher ausgeschlossenen offiziellen
+      ARTE-CDN `arteptweb-a.akamaihd.net`. Nur diesen exakten Host ergänzt, kein
+      neues Wildcardnetz; Producer-/Workerbeleg und negative Nachbardomains
+      regressionsgeprüft. Öffentliche reale vierteilige Quelle liefert danach
+      vier normal-deutsche Episoden mit begründetem Staffel-/Sprachbeleg,
+      ohne produktive Suche, Grab oder Import. Native Abnahme bleibt separat.
       ARTE-Kandidatensuche/Providerconsumer über Titel/Alias plus sichere Serie
       und gleiche Video-ID zur passenden DE-Fassung führen; deren Koordinaten
       und tatsächlichen Sprachstatus erneut prüfen. B04-Fallback hat weiterhin

@@ -16,6 +16,9 @@ denselben `/api/newznab`-Vertrag; es gibt keinen zweiten Sprach-Endpunkt.
   belegen. Einzige Normalisierung beim Vergleich: API-HTTP zu HTTPS, wie im
   MediathekView-Crawler. Fremde Parameter, andere Fassungen und widersprüchliche
   Codes sind kein Beleg. Website-Locale und Sendername sind kein Tonsprachbeweis.
+  Neben ARTE-/Akamaiized-URLs ist genau `arteptweb-a.akamaihd.net` als bestätigter
+  Legacy-CDN erlaubt, nicht beliebige Hosts unter `akamaihd.net`. Derselbe
+  exakte Programm-/URL-Beleg gilt für Producer und Worker.
 - ARD: strukturiertes Page-Gateway-JSON für die bereits indexierte, kanonische
   CRID-Video-ID. Genau ein identischer On-Demand-Player, freie/verfügbare Rechte
   und exakt dieselbe MP4-URL in einem `main`-Stream sind nötig. Alle `audios`

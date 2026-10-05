@@ -1342,3 +1342,22 @@ erneutem Schließen nötig. P03.4 bleibt insgesamt offen. Die Unit-/Persistenz-
 Gates beweisen keinen neuen Sonarr-Import, keine vollständige Sprachabdeckung
 und keinen Rollout. Produktive Bibliotheken, Profile, Routen, Services und
 Datenbanken in diesem Implementierungsschritt unverändert.
+
+Nachprüfung desselben Auftrags: Der öffentliche ARTE-Gegencheck zeigte zunächst
+trotz zwölf korrekter Episodenzuordnungen **null** normale Deutsch-Belege.
+Ursache war der in `progressiveUrl` ausgeschlossene tatsächliche CDN-Host
+`arteptweb-a.akamaihd.net`. Exakten Host ergänzt, keine `akamaihd.net`-Wildcard.
+Synthetische vollständige Staffelregression auf diesen Host umgestellt;
+zusätzlicher Producer-/Workercheck mit negativen Nachbardomains. Danach liefert
+der begrenzte öffentliche Gegencheck vier normal-deutsche Episoden mit
+begründeter Staffel; ARD mit demselben Owner sechs normal-deutsche Episoden.
+Das prüft Quelle, Matching und Sprache, nicht einen produktiven Arr-Import.
+Providerdimensionen der geprüften ARTE-HD-Fassung sind tatsächlich 1280×720,
+nicht aus ihrem Slothinweis erfundene 1080p.
+
+Erneute lokale Gates: **998** reguläre Tests, Lint, Typecheck, Formatcheck,
+Produktionsbuild und Diffcheck grün. Backend-Persistenznachweise unverändert
+wiederverwendet, weil kein Payload-/Schema-/Datenbankvertrag geändert wurde.
+[Fork-CI des ersten Checkpoints](https://github.com/superions/pingufunk/actions/runs/37322690901)
+auf `43b619e` bestanden einschließlich separatem PG-Harness. Dieser Beleg
+ersetzt nicht die frisch erforderliche CI/Imageabnahme der CDN-Ergänzung.
