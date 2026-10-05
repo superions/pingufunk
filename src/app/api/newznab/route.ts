@@ -190,7 +190,7 @@ async function handleGet(request: NextRequest) {
       // Search by TVDB ID
       if (context.tvdbId !== null) {
         console.log(`[Newznab] Searching by TVDB ID: ${context.tvdbId}`);
-        const requestBudget = new HttpRequestBudget();
+        const requestBudget = new HttpRequestBudget(32);
         const tvdbData = await getShowInfoByTvdbId(context.tvdbId, requestBudget);
         console.log(
           `[Newznab] TVDB lookup result: ${tvdbData ? `Found "${tvdbData.name}" (German: "${tvdbData.germanName}")` : "Not found"}`

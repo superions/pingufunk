@@ -2,7 +2,11 @@ import { readBoundedProviderBytes } from "./bounded-provider-json";
 import { FetchBudgetError, fetchWithRetry, type HttpRequestBudget } from "./fetch-retry";
 
 const MAX_BYTES = 1024 * 1024;
-const hosts = new Set(["rodlzdf-a.akamaihd.net", "nrodlzdf-a.akamaihd.net"]);
+const hosts = new Set([
+  "rodlzdf-a.akamaihd.net",
+  "nrodlzdf-a.akamaihd.net",
+  "ctv-videos.daserste.de",
+]);
 
 /** Only known public progressive CDNs; no arbitrary URL, redirect or credentials. */
 export function isProbeableMp4(raw: string): boolean {
@@ -87,10 +91,10 @@ export function readMp4AudioLanguage(moov: Buffer): string | null {
 class UnsupportedMetadata extends Error {}
 
 /**
- * Two 1-MiB windows, seeking only by bounded, declared ISO-BMFF box sizes.
+ * Four 1-MiB windows, seeking only by bounded, declared ISO-BMFF box sizes.
  * Sample tables can make moov/trak many MiB long: they are not language evidence
  * and need not be fetched. Every track header still has to be inspected, so a
- * third required window or an incomplete/conflicting track stays unknown.
+ * fifth required window or an incomplete/conflicting track stays unknown.
  */
 export async function probeMp4AudioLanguage(
   url: string,
@@ -109,7 +113,11 @@ export async function probeMp4AudioLanguage(
       (window) => start >= window.start && start + size <= window.start + window.data.length
     );
     if (cached) return cached.data.subarray(start - cached.start, start - cached.start + size);
-    if (requests >= 2 || (total !== undefined && start + size > total))
+    if (
+      requests >= 4 ||
+      budget.remainingAttempts === 0 ||
+      (total !== undefined && start + size > total)
+    )
       throw new UnsupportedMetadata();
     requests++;
     const response = await fetchWithRetry(

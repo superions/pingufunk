@@ -144,7 +144,7 @@ it.each(["deu", "fra"])(
   }
 );
 
-it("does not accept one German header while a further track needs a third window", async () => {
+it("inspects the further conflicting track in a third window, never accepting the first German tag", async () => {
   const data = atom(
     "moov",
     Buffer.concat([
@@ -155,7 +155,45 @@ it("does not accept one German header while a further track needs a third window
   );
   const fetch = stubRanges(data);
   expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBeNull();
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it("reads distant track trailers within four windows but refuses a fifth without a partial language", async () => {
+  const trailer = atom("trgr", Buffer.alloc(8));
+  const withTrailer = (type: string, code: string) => {
+    const track = largeTrack(type, code, 2 * 1024 * 1024);
+    return atom("trak", Buffer.concat([track.subarray(8), trailer]));
+  };
+  const data = atom(
+    "moov",
+    Buffer.concat([withTrailer("vide", "und"), withTrailer("soun", "deu")])
+  );
+  const fetch = stubRanges(data);
+  expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBe("de");
+  expect(fetch).toHaveBeenCalledTimes(4);
+  const more = atom(
+    "moov",
+    Buffer.concat([
+      withTrailer("vide", "und"),
+      withTrailer("soun", "deu"),
+      withTrailer("soun", "deu"),
+      metadata(["fra"]),
+    ])
+  );
+  const capped = stubRanges(more);
+  expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBeNull();
+  expect(capped).toHaveBeenCalledTimes(4);
+});
+
+it("accepts only the explicit ARD CDN and still verifies all tracks", async () => {
+  stubRanges(atom("moov", metadata(["deu"])));
+  expect(
+    await probeMp4AudioLanguage(
+      "https://ctv-videos.daserste.de/synthetic/episode.mp4",
+      new HttpRequestBudget()
+    )
+  ).toBe("de");
+  expect(isProbeableMp4("https://ctv-videos.daserste.de.evil.test/episode.mp4")).toBe(false);
 });
 
 it.each([

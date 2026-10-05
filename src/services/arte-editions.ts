@@ -192,6 +192,23 @@ export async function resolveArteSeriesEditions(
       const sourceCoordinates = coordinates(candidates[0].title);
       if (!sourceCoordinates || coordinates(metadataItem.title) !== sourceCoordinates) continue;
       if (candidates.some((item) => coordinates(item.title) !== sourceCoordinates)) continue;
+      if (
+        !attributes.streams.some(
+          (stream) => stream.protocol === "HTTPS" && progressiveUrl(stream.url)
+        )
+      ) {
+        // A modern HLS-only player does not invalidate the indexed MP4 catalogue.
+        // Keep the verified programme/coordinates, but attach no audio from the
+        // multi-audio playlist. The exact-URL HbbTV owner supplies that separately.
+        output.push(
+          ...candidates.map((candidate) => ({
+            ...candidate,
+            arteVerifiedVideoId: id,
+            duration: metadata.duration.seconds,
+          }))
+        );
+        continue;
+      }
       const knownUrls = () =>
         new Set(
           candidates.flatMap((item) =>

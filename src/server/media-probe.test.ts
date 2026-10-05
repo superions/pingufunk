@@ -128,38 +128,44 @@ it("rejects HTML, absent audio, cover-only video and invalid codecs", () => {
   expect(() => validateMediaProbe(invalid, null, 10)).toThrow();
 });
 
-it("accepts fresh rendition-bound provider proof with unknown tracks, never fabricating track tags", () => {
-  const proof = {
-    provider: "arte_hbbtv" as const,
-    videoId: "123456-001-A",
-    language: "de",
-    mediaIdentity: mediaSourceIdentity("https://fixture.akamaized.net/movie.mp4"),
-  };
-  const expected = {
-    ...unknownMediaExpectations(),
-    version: 2 as const,
-    audio: null,
-    sourceAudio: proof,
-    resolution: { width: 1280, height: 720, provenance: "provider_dimensions" as const },
-  };
-  const facts = validateMediaProbe(media(), expected, 10, proof);
-  expect(facts.audioLanguages).toEqual([]);
-  expect(facts.sourceAudioEvidence).toEqual(proof);
-  expect(facts.expectedChecks.audio).toBe("passed_provider");
-  expect(facts.expectedChecks.resolution).toBe("passed");
-  for (const dimensions of [
-    { width: 1920, height: 1080 },
-    { width: 1920, height: 720 },
-  ]) {
-    const wrong = media();
-    wrong.streams[0] = { ...wrong.streams[0], ...dimensions };
-    expect(() => validateMediaProbe(wrong, expected, 10, proof)).toThrow();
+it.each(["arte_hbbtv", "ard_media"] as const)(
+  "accepts fresh %s proof with unknown tracks, never fabricating track tags",
+  (provider) => {
+    const proof = {
+      provider,
+      videoId:
+        provider === "ard_media"
+          ? Buffer.from("crid://example.invalid/synthetic/one").toString("base64url")
+          : "123456-001-A",
+      language: "de",
+      mediaIdentity: mediaSourceIdentity("https://fixture.akamaized.net/movie.mp4"),
+    };
+    const expected = {
+      ...unknownMediaExpectations(),
+      version: 2 as const,
+      audio: null,
+      sourceAudio: proof,
+      resolution: { width: 1280, height: 720, provenance: "provider_dimensions" as const },
+    };
+    const facts = validateMediaProbe(media(), expected, 10, proof);
+    expect(facts.audioLanguages).toEqual([]);
+    expect(facts.sourceAudioEvidence).toEqual(proof);
+    expect(facts.expectedChecks.audio).toBe("passed_provider");
+    expect(facts.expectedChecks.resolution).toBe("passed");
+    for (const dimensions of [
+      { width: 1920, height: 1080 },
+      { width: 1920, height: 720 },
+    ]) {
+      const wrong = media();
+      wrong.streams[0] = { ...wrong.streams[0], ...dimensions };
+      expect(() => validateMediaProbe(wrong, expected, 10, proof)).toThrow();
+    }
+    expect(() => validateMediaProbe(media(), expected, 10)).toThrow();
+    expect(() => validateMediaProbe(media(), expected, 10, { ...proof, language: "fr" })).toThrow();
+    const foreign = media();
+    foreign.streams[1].tags = { language: "fra" };
+    expect(() => validateMediaProbe(foreign, expected, 10, proof)).toThrow();
+    const noAudio = { ...media(), streams: [media().streams[0]] };
+    expect(() => validateMediaProbe(noAudio, expected, 10, proof)).toThrow();
   }
-  expect(() => validateMediaProbe(media(), expected, 10)).toThrow();
-  expect(() => validateMediaProbe(media(), expected, 10, { ...proof, language: "fr" })).toThrow();
-  const foreign = media();
-  foreign.streams[1].tags = { language: "fra" };
-  expect(() => validateMediaProbe(foreign, expected, 10, proof)).toThrow();
-  const noAudio = { ...media(), streams: [media().streams[0]] };
-  expect(() => validateMediaProbe(noAudio, expected, 10, proof)).toThrow();
-});
+);

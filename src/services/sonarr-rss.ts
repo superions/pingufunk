@@ -81,11 +81,24 @@ export async function getSonarrRssMatches(
       const candidates = await queryContent(
         [{ fields: ["topic", "title"], query: show.germanName || show.name }],
         5000,
-        { requestBudget: budget, progressiveOnly: !hlsEnabled, arteSeries: show }
+        {
+          requestBudget: budget,
+          progressiveOnly: !hlsEnabled,
+          arteSeries: show,
+          deferLanguageSelection: true,
+        }
       );
       if (candidates === null) throw new SonarrUnavailableError();
       matches.push(
-        ...matchSonarrEpisodes(show, candidates, minimum, tolerance, languagePolicy, hlsEnabled)
+        ...matchSonarrEpisodes(
+          show,
+          candidates,
+          minimum,
+          tolerance,
+          languagePolicy,
+          hlsEnabled,
+          true
+        )
       );
     }
     if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())

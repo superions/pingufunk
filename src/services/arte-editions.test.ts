@@ -145,7 +145,6 @@ describe("ARTE source and edition contracts", () => {
     "foreign-id",
     "coordinates",
     "unknown-code",
-    "hls",
     "conflicting-versions",
     "geoblocked",
     "expired",
@@ -155,7 +154,6 @@ describe("ARTE source and edition contracts", () => {
     if (kind === "foreign-id") value.data.attributes.metadata.providerId = "654321-001-A";
     if (kind === "coordinates") value.data.attributes.metadata.subtitle = "(2/6)";
     if (kind === "unknown-code") value.data.attributes.streams = [stream("VA-UNKNOWN")];
-    if (kind === "hls") value.data.attributes.streams[0].protocol = "HLS";
     if (kind === "conflicting-versions")
       value.data.attributes.streams[0].versions.push({ eStat: { ml5: "VF" } });
     if (kind === "geoblocked")
@@ -168,6 +166,22 @@ describe("ARTE source and edition contracts", () => {
     expect(
       result === null ? null : selectLanguageVariants(result, readLanguagePolicy(null))
     ).toEqual(kind === "foreign-id" ? null : []);
+  });
+  it("preserves indexed MP4 renditions when the verified player exposes only a multi-audio HLS stream", async () => {
+    mockPlayer(
+      config([
+        {
+          ...stream("VA"),
+          protocol: "API_HLS_NG_MA",
+          url: "https://fixture.akamaized.net/master.m3u8",
+        },
+      ])
+    );
+    const result = await resolveArteSeriesEditions([item], show, new HttpRequestBudget());
+    expect(result).toEqual([{ ...item, arteVerifiedVideoId: "123456-001-A" }]);
+    expect(result![0]).not.toHaveProperty("audioLanguage");
+    expect(result![0]).not.toHaveProperty("sourceAudioEvidence");
+    expect(selectLanguageVariants(result!, readLanguagePolicy(null))).toHaveLength(1);
   });
   it("distinguishes absent editions from provider outage without partial results", async () => {
     mockPlayer(config(), 404);

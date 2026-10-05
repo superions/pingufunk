@@ -389,6 +389,17 @@ B05/B07, A2/A3, R4.
       prüfen; operatorseitige Einzelquellenprüfung ist keine automatische
       Produktabnahme. Frühere grüne Entwicklungs-Gates bleiben gültige Evidenz
       ihres beschriebenen Scopes, schließen diese neue Lücke aber nicht.
+      Ergänzung unter ausdrücklicher Nutzerfreigabe 05.10.2026: MP4-Proben
+      maximal vier 1-MiB-Fenster statt zwei, ohne ausgelassene Track-/Grenzprüfung;
+      fünftes Fenster bleibt Unknown. Explizite TV-Suchen maximal 32 Versuche
+      bei unveränderter 15s-Deadline; RSS und Filme weiterhin zehn. Gemeinsamen
+      Tonsprachenowner auf TV-ID/Text/RSS erweitern; vorhandene strukturierte
+      ARD-Player-Audiodeklarationen nur für identische CRID und exakte indexierte
+      MP4-URL verwenden. Kein HTML-Scraping, Account oder Sprachdefault.
+      Neue v2-Providerkennung `ard_media` benötigt kompatiblen Worker/Rollback.
+      Staffelfixtures, negative Quellenbindung, SQLite-/PG-Persistenz und
+      Worker-Neuprüfung implementiert. Frische native Consumer-/Imageabnahme
+      und getrennte produktive Prüfung bleiben offen; keine Vollabnahme.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
@@ -1125,7 +1136,13 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Gates und isolierten Containerproben aus P11.1 werden für dessen
       unveränderte DB-/Runtimeinputs wiederverwendet; Parser ist noch kein
       integrierter Sonarr-Consumer und benötigt keine neue UI-Abnahme.
-- [x] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
+- [ ] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
+      Am 05.10.2026 für den Ergänzungsbefund erneut geöffnet: neue Bibliotheks-
+      serien dürfen nicht an einem zehn Minuten alten Inventar scheitern.
+      Ein gezielter Missing-ID-Refresh im selben Budget, keine negativen
+      Seriencaches und validierte globale Aliasse sind implementiert und
+      kausal regressionsgeprüft. Frühere Abnahme unten bleibt historisch;
+      neue Fork-CI/Consumerprüfung vor erneutem Schließen nachweisen.
       Neuen Sonarradapter in `shows.ts`/TV-Suchowner anschließen, P05-Secret-/
       Budget-/Cachegrundlagen nutzen, nur GET und Base-URL-Unterpfade. Serien-ID,
       Instanz und Episode verifizieren; veralteter Bestand ohne gewünschte Folge
@@ -1196,7 +1213,13 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       API-/RSS-/NZB-/Queue-Regression einschließlich unabhängiger Basistreffer
       bei Sonarr-Ausfall bestanden. Dies ist Entwicklungsabnahme, kein
       Nachweis der Version oder Bibliothek einer produktiven Sonarr-Instanz.
-- [x] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
+- [ ] **P06.3 — Titelkandidaten auf sichere Identität begrenzen.**
+      Am 05.10.2026 für generische Metadatentitel erneut geöffnet: exakte
+      Serien-/Aliasbindung, explizite Quellkoordinaten und bekannte passende
+      Solllaufzeit gemeinsam verlangen. Konkrete Titelkonflikte nicht lockern.
+      ARTE-Bruchteile nur bei geprüftem Programm und vollständigem eindeutigem
+      Einzelstaffelbestand; nie pauschal S01. Synthetische sechs-/vierteilige
+      Staffelsuche bis RSS/NZB/Queue geprüft; frische Consumer-/CI-Abnahme offen.
       TV-Suche/`newznab.ts` mit vollständigem Episodentitel oder letztem
       Separatorsegment ≥3 Zeichen nur innerhalb gesicherter Serie, Jahr/
       Serienpräfix, Quellkoordinaten und beschlossener Dauerpolitik matchen.
@@ -1289,7 +1312,12 @@ B04/B05/B06, R3.
       abortieren ohne Quelländerung. Final abgenommen mit Commit `96a570e`:
       Fork-CI `36756864402` und Docker-Buildvalidierung `36756864457` erfolgreich,
       ohne Imagepublikation oder produktive Migration.
-- [x] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
+- [ ] **P07.3 — ARTE-Varianten über gesicherte Quelle auflösen.**
+      Am 05.10.2026 für den HLS-only-Playerbefund erneut geöffnet: vorhandene
+      indexierte MP4s nach Player-ID/Titel/Koordinaten/Rechteprüfung erhalten,
+      ohne Mehrspur-HLS auf eine MP4-Tonsprache zu übertragen. Exakten HbbTV-
+      URL-/Programmbeleg vor Sprachwahl nutzen. Positive Staffelfälle und
+      unverändert strenge Konfliktfälle grün; frische Consumer-/CI-Abnahme offen.
       ARTE-Kandidatensuche/Providerconsumer über Titel/Alias plus sichere Serie
       und gleiche Video-ID zur passenden DE-Fassung führen; deren Koordinaten
       und tatsächlichen Sprachstatus erneut prüfen. B04-Fallback hat weiterhin

@@ -6,7 +6,7 @@ import { isGermanLanguageCode } from "@/lib/language-policy";
 import { parseMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
 import { verifiedDurationCheck } from "@/lib/verified-duration";
 import { type SourceAudioEvidence } from "@/lib/media-expectations";
-import { verifyArteSourceAudio } from "@/services/source-audio";
+import { verifySourceAudio } from "@/services/source-audio";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 export class MediaProbeError extends Error {
@@ -193,11 +193,7 @@ export async function probeJobMedia(
     const output = await readLocalProbe(binary, file);
     const proof =
       expected?.version === 2
-        ? await verifyArteSourceAudio(
-            expected.sourceAudio,
-            sourceUrl ?? "",
-            new HttpRequestBudget(1)
-          )
+        ? await verifySourceAudio(expected.sourceAudio, sourceUrl ?? "", new HttpRequestBudget(1))
         : undefined;
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);

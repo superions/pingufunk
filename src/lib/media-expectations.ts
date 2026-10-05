@@ -33,7 +33,7 @@ const v1Schema = z
     resolution: resolutionSchema.nullable(),
   })
   .strict();
-export const sourceAudioSchema = z
+const arteAudioSchema = z
   .object({
     provider: z.literal("arte_hbbtv"),
     videoId: z.string().regex(/^\d{6}-\d{3}-[AF]$/),
@@ -41,6 +41,16 @@ export const sourceAudioSchema = z
     language: audioSchema.shape.language,
   })
   .strict();
+const ardAudioSchema = arteAudioSchema
+  .extend({
+    provider: z.literal("ard_media"),
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{16,2048}$/),
+  })
+  .strict();
+export const sourceAudioSchema = z.discriminatedUnion("provider", [
+  arteAudioSchema,
+  ardAudioSchema,
+]);
 const v2Schema = v1Schema
   .extend({ version: z.literal(2), audio: z.null(), sourceAudio: sourceAudioSchema })
   .strict();

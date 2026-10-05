@@ -36,9 +36,10 @@ afterEach(async () => {
 });
 
 for (const provider of ["sqlite", "postgresql"] as const) {
-  for (const version of [1, 2] as const) {
+  for (const evidence of ["legacy", "arte_hbbtv", "ard_media"] as const) {
+    const version = evidence === "legacy" ? 1 : 2;
     it.skipIf(provider === "postgresql" && !enabled)(
-      `retains v${version} expectations through real ${provider} queue writes, restart and retry`,
+      `retains ${evidence} expectations through real ${provider} queue writes, restart and retry`,
       async () => {
         directory = mkdtempSync(path.join(tmpdir(), "pingufunk-p09-contract-"));
         let url = `file:${path.join(directory, "database.sqlite")}`;
@@ -65,7 +66,10 @@ for (const provider of ["sqlite", "postgresql"] as const) {
         vi.resetModules();
         let { prisma } = await import("@/lib/db");
         disconnect = () => prisma.$disconnect();
-        const sourceUrl = "https://fixture.akamaized.net/media.mp4";
+        const sourceUrl =
+          evidence === "ard_media"
+            ? "https://ctv-videos.daserste.de/synthetic/media.mp4"
+            : "https://fixture.akamaized.net/media.mp4";
         const expectations = parseMediaExpectations({
           ...unknownMediaExpectations(),
           version,
@@ -74,8 +78,11 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           ...(version === 2
             ? {
                 sourceAudio: {
-                  provider: "arte_hbbtv",
-                  videoId: "123456-001-A",
+                  provider: evidence,
+                  videoId:
+                    evidence === "ard_media"
+                      ? Buffer.from("crid://example.invalid/synthetic/one").toString("base64url")
+                      : "123456-001-A",
                   language: "de",
                   mediaIdentity: mediaSourceIdentity(sourceUrl),
                 },

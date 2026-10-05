@@ -7,6 +7,15 @@ their independent migration, writer, routing, and proxy-removal gates.
 
 ## RSS GUID transition
 
+Ergänzung 05.10.2026: TV-Quellenbelege erweitern `MediaExpectations` v2 um
+`ard_media`. Auch ein früheres v2-fähiges Image ist danach nicht automatisch
+queuekompatibel. Vor dem ersten neuen ARD-Job einen kompatiblen Rückweg prüfen;
+neue Erwartungen weder löschen noch als Legacy/v1 umschreiben. Die bestehende
+Datenbankauswahl bleibt unverändert, PostgreSQL nicht auf einen alten SQLite-
+Stand zurücksetzen. Neuer Deutsch-/Dimensionsbeleg kann bisher abgelehnte
+TV-Releases sichtbar machen: Queue/History/aktive Downloads vor gesondertem
+Rollout abgleichen, ohne automatische neue Grabs als Smoke-Test auszulösen.
+
 P03 changes Newznab GUIDs from the old website-plus-quality value to a stable
 identity that includes source, edition, rendition, and search context. Previously
 consumed releases can consequently reappear as new feed entries and cause duplicate

@@ -3,7 +3,7 @@ import { cacheContextEpoch, mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
-import { enrichSourceAudio } from "./source-audio";
+import { enrichSourceAudio, enrichTvMatches, enrichTvCandidates } from "./source-audio";
 import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
@@ -55,7 +55,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v11-rendition-dimensions";
+const CONTENT_SEARCH_CACHE_VERSION = "v12-tv-source-audio";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -862,7 +862,9 @@ async function resolveArteCatalogueCandidates(
     if (resolved === null) return null;
     ordinary.push(...resolved);
   }
-  return selectLanguageVariants(ordinary, await getConfiguredLanguagePolicy());
+  // Evidence enrichment and final language selection belong to the publishing
+  // owner. Filtering here would discard editions before their audio is known.
+  return ordinary;
 }
 
 async function queryTvSearchCandidates(
@@ -943,7 +945,7 @@ export async function fetchSearchResultsById(
   searchContext: TvSearchContext,
   limit: number,
   offset: number,
-  requestBudget = new HttpRequestBudget()
+  requestBudget = new HttpRequestBudget(32)
 ): Promise<string> {
   const context: TvSearchContext = {
     ...searchContext,
@@ -1063,7 +1065,8 @@ export async function fetchSearchResultsById(
     minDuration,
     tolerance,
     await getConfiguredLanguagePolicy(),
-    hlsEnabled
+    hlsEnabled,
+    true
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
     [...matchedEpisodes, ...supplementalMatches],
@@ -1072,9 +1075,15 @@ export async function fetchSearchResultsById(
   );
   console.log(`[Mediathek] Matched desired episodes: ${matchedDesiredEpisodes.length}`);
 
-  const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
-    generateRssItems(info, quality, hlsEnabled)
-  );
+  const newznabItems: NewznabItem[] = (
+    await enrichTvMatches(
+      matchedDesiredEpisodes,
+      requestBudget,
+      await getConfiguredLanguagePolicy(),
+      quality,
+      hlsEnabled
+    )
+  ).flatMap((info) => generateRssItems(info, quality, hlsEnabled));
   // The Sonarr matcher clones rows while removing ineligible URLs. Compare
   // source metadata, not object references or its sanitized rendition list.
   const supplementalSourceKey = (item: ApiResultItem) =>
@@ -1082,13 +1091,18 @@ export async function fetchSearchResultsById(
   const supplementalSources = new Set(
     supplementalMatches.map(({ item }) => supplementalSourceKey(item))
   );
-  const sourceCandidates = selectLanguageVariants(
-    unmatchedItems.filter(
-      (item) =>
-        !supplementalSources.has(supplementalSourceKey(item)) &&
-        matchesUnknownTvCandidate(item, context, tvdbData)
-    ),
-    await getConfiguredLanguagePolicy()
+  const sourceCandidates = (
+    await enrichTvCandidates(
+      unmatchedItems.filter(
+        (item) =>
+          !supplementalSources.has(supplementalSourceKey(item)) &&
+          matchesUnknownTvCandidate(item, context, tvdbData)
+      ),
+      requestBudget,
+      await getConfiguredLanguagePolicy(),
+      quality,
+      hlsEnabled
+    )
   ).flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "tv"));
   console.log(`[Mediathek] Generated ${newznabItems.length} Newznab items (quality: ${quality})`);
 
@@ -1106,7 +1120,7 @@ export async function fetchSearchResultsByString(
   searchContext: TvSearchContext,
   limit: number,
   offset: number,
-  budget = new HttpRequestBudget()
+  budget = new HttpRequestBudget(32)
 ): Promise<string> {
   const context: TvSearchContext = {
     ...searchContext,
@@ -1152,21 +1166,41 @@ export async function fetchSearchResultsByString(
     budget
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(matchedEpisodes, null, context);
-  const newznabItems: NewznabItem[] = matchedDesiredEpisodes.flatMap((info) =>
-    generateRssItems(info, quality, hlsEnabled)
-  );
+  const newznabItems: NewznabItem[] = (
+    await enrichTvMatches(
+      matchedDesiredEpisodes,
+      budget,
+      await getConfiguredLanguagePolicy(),
+      quality,
+      hlsEnabled
+    )
+  ).flatMap((info) => generateRssItems(info, quality, hlsEnabled));
 
   // Coordinate-only candidates may span unrelated shows, so publish only items
   // tied to a ruleset unless the caller also supplied a text query.
   const hasTextQuery = !!trimmedQ;
+  const enrichedCandidates = hasTextQuery
+    ? await enrichTvCandidates(
+        unmatchedItems.filter(
+          (item) =>
+            matchesGenericSearchContext(item, context) ||
+            ((hasEpisodeCoordinates(context) || context.tvdbId !== null) &&
+              matchesUnknownTvCandidate(item, context))
+        ),
+        budget,
+        await getConfiguredLanguagePolicy(),
+        quality,
+        hlsEnabled
+      )
+    : [];
   const genericItems: NewznabItem[] = hasTextQuery
-    ? unmatchedItems
+    ? enrichedCandidates
         .filter((item) => matchesGenericSearchContext(item, context))
         .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled))
     : [];
   const unknownCandidates =
     hasTextQuery && (hasEpisodeCoordinates(context) || context.tvdbId !== null)
-      ? unmatchedItems
+      ? enrichedCandidates
           .filter((item) => matchesUnknownTvCandidate(item, context))
           .flatMap((item) => generateGenericRssItems(item, quality, hlsEnabled, "tv"))
       : [];
@@ -1234,9 +1268,16 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
     budget
   );
   if (sonarrUnavailable && matchedEpisodes.length === 0) throw new SonarrUnavailableError();
-  const newznabItems: NewznabItem[] = [...matchedEpisodes, ...supplementalMatches].flatMap((info) =>
-    generateRssItems(info, quality, hlsEnabled)
-  );
+  const newznabItems: NewznabItem[] = (
+    await enrichTvMatches(
+      [...matchedEpisodes, ...supplementalMatches],
+      budget,
+      await getConfiguredLanguagePolicy(),
+      quality,
+      hlsEnabled,
+      false
+    )
+  ).flatMap((info) => generateRssItems(info, quality, hlsEnabled));
   const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
 
   if (!sonarrUnavailable) mediathekCache.set(cacheKey, { response });

@@ -233,7 +233,7 @@ describe("Newznab indexer validation", () => {
 
     expect(response.status).toBe(200);
     const budget = showMocks.getShowInfoByTvdbId.mock.calls[0][1];
-    expect(budget.remainingAttempts).toBe(10);
+    expect(budget.remainingAttempts).toBe(32);
     expect(showMocks.getShowInfoByTvdbId).toHaveBeenCalledWith(12345, budget);
     expect(mediathekMocks.fetchSearchResultsById).toHaveBeenCalledWith(
       show,

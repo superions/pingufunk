@@ -26,7 +26,7 @@ export class HttpRequestBudget {
     if (
       !Number.isSafeInteger(attempts) ||
       attempts < 1 ||
-      attempts > 10 ||
+      attempts > 32 ||
       !Number.isSafeInteger(timeoutMs) ||
       timeoutMs < 1 ||
       timeoutMs > 15_000

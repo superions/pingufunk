@@ -1282,3 +1282,63 @@ erfolgreich; Dockerlauf `37130113176` noch nicht abschließend bestätigt.
 Auch die neue SQLite-Containerprobe bestand: Fresh Install, Bootstrap-Baseline,
 gespeicherte Settings, Restart/Persistenz und fail-closed Negativfälle. Keine
 produktive SQLite-Datei angesprochen und keine Testdatenbank beibehalten.
+
+## TV-Identität und renditionsgebundene Sprache (05.10.2026)
+
+Unter ausdrücklich freigegebenem Implementierungsauftrag wurden gemeinsame
+Owner korrigiert, keine serienbezogene Titel-Allowlist angelegt:
+
+- Sonarr: globale validierte Aliasse übernehmen, fehlendes Inventarelement
+  nach frischem gefiltertem Lookup einmal nachladen, Nichtfunde nicht negativ
+  cachen. Instanz-/ID-Konflikte bleiben gesperrt. Generische `Episode N`-Titel
+  erfordern weiterhin exakte Serienbindung, explizite Koordinaten und belegte
+  passende Soll-/Quelllaufzeit. Ein Bruchteil allein impliziert niemals S01.
+- ARTE: HLS-only im geprüften Player verwirft indexierte MP4s nicht. Player-
+  Identität, Titel, Koordinaten und Rechte bleiben nötig; die MP4-Tonsprache
+  stammt erst aus exakten HbbTV-Programm-/URL-/Audiocode-Deklarationen.
+- ARD: keine HTML-Parser, Seriencrawler oder Account-Fallbacks. Strukturierte
+  Audiodeklarationen für die indexierte CRID und exakte MP4-URL sind ein
+  unabhängiger Beleg, auch bei unbekannten Container-Tracktags. `main`-Stream,
+  eindeutiger identischer Player, freie Rechte und übereinstimmende bekannte
+  Audioarten sind nötig. Originalsprache/Locale sind kein Deutsch-Default.
+  Providerstatus kann veraltete Text-Fassungsmarker ersetzen; rohe Katalogdaten
+  dürfen diese internen Felder weiterhin nicht einschleusen.
+- Explizit genehmigtes Budget: TV-Suche 32 Versuche, RSS/Filme zehn, überall
+  15 Sekunden. MP4 höchstens vier 1-MiB-Fenster, vollständige Grenz-/Trackprüfung;
+  benötigtes fünftes Fenster bleibt neutral. TV-Belegprüfung vor Sprachwahl,
+  Dedupe/Pagination. Renditionsplit erhält die Bedeutung von `best`.
+- `ard_media` erweitert v2; frische Workerprüfung gegen dieselbe URL/Video-ID
+  und unverändert strenge lokale Medienprüfung. Kein Schema-/Backendwechsel.
+  Ein altes v2-Image ohne neuen Provider ist kein kompatibler Rückweg.
+
+Review von Parsergrenzen, Einheiten, Identität, Cachefrische, Request-/Body-
+Deadline, Selektionsreihenfolge, GUIDs, Medienprobe und Persistenz durchgeführt.
+Upstream `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` erneut geprüft: kein
+entsprechender Sonarr-/Quellenbelegowner vorhanden; nicht ungeprüft gemergt.
+
+Neue Evidenz: `npm ci` (Audit null), **997 reguläre Tests** in 89 Dateien;
+14 bedingte PG-Gates in der normalen Suite separat. Lint, Typecheck,
+Formatcheck und Produktionsbuild bestanden. Build enthält vorhandene Prisma-/
+yt-dlp-Tracingwarnungen, keine neue Kompatibilitätszusage daraus. Separater
+vollständiger disposable PostgreSQL-Harness erfolgreich, darunter sechs reale
+Legacy-/ARTE-/ARD-Persistenzfälle auf beiden Backends samt Queue/Restart/Retry.
+Keine produktive Datenbank verwendet. Zwei synthetische Staffeln (sechs ARD-
+Folgen und vier ARTE-Teile der zweiten Staffel) durch tatsächliche Newznab-
+Handler bis RSS/NZB/Queue geprüft, inklusive Pagination und genauer Rendition.
+Fremde IDs/URLs, gesperrte/mehrdeutige Player, gemischte/unbekannte Audios,
+Auxiliary-Streams sowie falsche lokale Tracktags bleiben abgewiesen.
+
+Kausaler Gegencheck: dieselben neuen Regressionen gegen unveränderte Owner
+von `8c3b6c3` in separater Baseline-Kopie: zehn konkrete Fehlverhalten in fünf
+Suites; bestehende 114 Fälle weiter grün. Keine Imports künstlich abgeschaltet.
+Öffentliches strukturiertes ARD-JSON zusätzlich begrenzt lesend geprüft; reale
+Antworten/URLs nicht als Fixtures persistiert. Der ARD-Extractor von yt-dlp
+bestätigt den Strukturvertrag, dessen permissiven Deutsch-Default übernehmen
+wir nicht.
+
+**Noch keine produktive Abnahme.** P06.2/P06.3/P07.3 für die neuen Befunde
+wieder geöffnet; frische Fork-CI und native Consumer-/Imageprüfung bleiben vor
+erneutem Schließen nötig. P03.4 bleibt insgesamt offen. Die Unit-/Persistenz-
+Gates beweisen keinen neuen Sonarr-Import, keine vollständige Sprachabdeckung
+und keinen Rollout. Produktive Bibliotheken, Profile, Routen, Services und
+Datenbanken in diesem Implementierungsschritt unverändert.

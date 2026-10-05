@@ -40,6 +40,7 @@ import { POST as addfile } from "@/app/api/route";
 import { parseNzbContent } from "./download";
 import { clearMetadataCaches, mediathekCache } from "@/lib/cache";
 import { clearSettingsCache } from "@/lib/settings";
+import { mediaSourceIdentity } from "./source-audio";
 
 let fetchMock: ReturnType<typeof vi.fn<(value: string) => Promise<Response>>>;
 const source: ApiResultItem = {
@@ -134,6 +135,208 @@ afterEach(() => {
   clearMetadataCaches();
   mediathekCache.clear();
 });
+
+it.each(["ard", "arte"] as const)(
+  "finds a complete unbundled %s season with generic metadata and exact source audio through RSS/NZB/queue",
+  async (provider) => {
+    state.settings.set("download.quality", "best");
+    const count = provider === "ard" ? 6 : 4;
+    const tvdbId = 98765;
+    const season = provider === "ard" ? 1 : 2;
+    const name = "Synthetic Harbour";
+    const alias = "Stille Bucht - Toedliches Schweigen";
+    const sourceName = "Stille Bucht - Tödliches Schweigen";
+    const rows = Array.from({ length: count }, (_, index): ApiResultItem => {
+      const n = index + 1;
+      const id =
+        provider === "ard"
+          ? Buffer.from(`crid://example.invalid/synthetic/${n}`).toString("base64url")
+          : `123456-${String(n).padStart(3, "0")}-A`;
+      return {
+        ...source,
+        topic: provider === "ard" ? sourceName : "Fernsehfilme und Serien - Serien",
+        title:
+          provider === "ard"
+            ? `Folge ${n} | ${sourceName} (S01/E${String(n).padStart(2, "0")})`
+            : `${name} (${n}/${count}) - Synthetischer Titel`,
+        url_website:
+          provider === "ard"
+            ? `https://www.ardmediathek.de/video/synthetic/${id}`
+            : `https://www.arte.tv/de/videos/${id}/synthetic/`,
+        url_video:
+          provider === "ard"
+            ? `https://ctv-videos.daserste.de/synthetic/${n}.mp4`
+            : `https://fixture.akamaized.net/synthetic/${n}.mp4`,
+        url_video_hd:
+          provider === "ard"
+            ? `https://ctv-videos.daserste.de/synthetic/${n}-hd.mp4`
+            : `https://fixture.akamaized.net/synthetic/${n}-hd.mp4`,
+      };
+    });
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (value: string) => {
+      const url = new URL(value);
+      if (url.pathname.endsWith("/series"))
+        return Response.json([
+          {
+            id: 67,
+            tvdbId,
+            title: name,
+            monitored: true,
+            alternateTitles: [{ title: alias, seasonNumber: -1 }],
+          },
+        ]);
+      if (url.pathname.endsWith("/episode"))
+        return Response.json(
+          rows.map((_, index) => ({
+            id: 700 + index,
+            seriesId: 67,
+            seasonNumber: season,
+            episodeNumber: index + 1,
+            title: `Episode ${index + 1}`,
+            runtime: 2,
+            airDateUtc: new Date(Date.now() - 3600_000).toISOString(),
+          }))
+        );
+      if (url.hostname === "mediathekviewweb.de")
+        return Response.json({ result: { results: rows }, err: null });
+      if (url.hostname === "api.ardmediathek.de") {
+        const id = url.pathname.split("/").at(-1)!;
+        const row = rows.find((row) => row.url_website.endsWith(id))!;
+        return Response.json({
+          widgets: [
+            {
+              id,
+              type: "player_ondemand",
+              blockedByLoginOnly: false,
+              blockedByFsk: false,
+              geoblocked: false,
+              availableTo: "2099-01-01T00:00:00Z",
+              mediaCollection: {
+                embedded: {
+                  meta: { ovLanguageCode: "eng" },
+                  streams: [
+                    {
+                      kind: "main",
+                      media: [row.url_video, row.url_video_hd].map((mediaUrl, index) => ({
+                        url: mediaUrl,
+                        mimeType: "video/mp4",
+                        audios: [{ kind: "standard", languageCode: "deu" }],
+                        maxHResolutionPx: index === 0 ? 960 : 1280,
+                        maxVResolutionPx: index === 0 ? 540 : 720,
+                      })),
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        });
+      }
+      if (url.hostname === "api.arte.tv") {
+        const id = url.pathname.split("/").at(-1)!;
+        const n = Number(id.split("-")[1]);
+        return Response.json({
+          data: {
+            attributes: {
+              rights: { begin: "2020-01-01T00:00:00Z", end: "2099-01-01T00:00:00Z" },
+              metadata: {
+                providerId: id,
+                title: name,
+                subtitle: `(${n}/${count})`,
+                link: { url: rows[n - 1].url_website },
+                duration: { seconds: 120 },
+              },
+              streams: [
+                {
+                  protocol: "API_HLS_NG_MA",
+                  url: "https://fixture.akamaized.net/master.m3u8",
+                  versions: [{ eStat: { ml5: "VOF-STA" } }],
+                },
+              ],
+            },
+          },
+        });
+      }
+      if (url.hostname === "www.arte.tv") {
+        const id = /streams\/([^/]+)/.exec(url.pathname)![1];
+        const row = rows[Number(id.split("-")[1]) - 1];
+        return Response.json({
+          videoStreams: [row.url_video, row.url_video_hd].map((mediaUrl, index) => ({
+            programId: id,
+            url: mediaUrl,
+            audioCode: "VA",
+            width: index === 0 ? 960 : 1280,
+            height: index === 0 ? 540 : 720,
+          })),
+        });
+      }
+      return base(value);
+    });
+    const response = await GET(
+      new NextRequest(`http://localhost/api/newznab?t=tvsearch&tvdbid=${tvdbId}&season=${season}`)
+    );
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: String(count) });
+    expect(channel.item).toHaveLength(count);
+    for (const [index, release] of channel.item.entries()) {
+      const n = index + 1;
+      expect(release.title[0]).toContain(
+        `S${String(season).padStart(2, "0")}E${String(n).padStart(2, "0")}`
+      );
+      expect(release.title[0]).toContain("GERMAN.720p");
+      expect(release.title[0]).not.toMatch(/\.OV\.|SUBBED/);
+      expect(release.link[0]).toBe(rows[index].url_video_hd);
+      const nzbResponse = await downloadNzb(
+        new NextRequest(new URL(release.enclosure[0].$.url, "http://localhost"))
+      );
+      const nzb = await nzbResponse.text();
+      const parsed = parseNzbContent(nzb);
+      if (!parsed) throw new Error("Expected a valid NZB release");
+      expect(parsed).toMatchObject({
+        url: rows[index].url_video_hd,
+        mediaExpectations: {
+          version: 2,
+          audio: null,
+          duration: { seconds: 120, provenance: "episode_metadata" },
+          sourceAudio: {
+            provider: provider === "ard" ? "ard_media" : "arte_hbbtv",
+            language: "de",
+            mediaIdentity: mediaSourceIdentity(rows[index].url_video_hd),
+          },
+        },
+      });
+      expect(
+        (
+          await addfile(
+            new NextRequest("http://localhost/api?mode=addfile&cat=sonarr", {
+              method: "POST",
+              body: nzb,
+            })
+          )
+        ).status
+      ).toBe(200);
+      expect(state.addToQueue).toHaveBeenLastCalledWith(
+        rows[index].url_video_hd,
+        release.title[0],
+        "sonarr",
+        parsed.mediaExpectations
+      );
+    }
+    const page = await GET(
+      new NextRequest(
+        `http://localhost/api/newznab?t=tvsearch&tvdbid=${tvdbId}&season=${season}&limit=1&offset=1`
+      )
+    );
+    const second = (await parseStringPromise(await page.text())).rss.channel[0];
+    expect(second["newznab:response"][0].$).toEqual({ offset: "1", total: String(count) });
+    expect(second.item[0].guid).toEqual(channel.item[1].guid);
+    expect(fetchMock.mock.calls.every(([url]) => !new URL(url).pathname.includes("/command"))).toBe(
+      true
+    );
+  }
+);
 
 it.each([false, true])(
   "supplements and round-trips exact, season and RSS through NZB to the queue with HLS enabled=%s",

@@ -8,22 +8,30 @@ nicht die Originalsprache des Films oder die vermutete Nutzerpräferenz. Radarr
 wendet danach seine eigenen Profile an. Direkte Anbindung und Prowlarr benutzen
 denselben `/api/newznab`-Vertrag; es gibt keinen zweiten Sprach-Endpunkt.
 
-`src/services/source-audio.ts` ergänzt Filme in ID-, Text- und überwachten
-RSS-Suchen vor Sprachselektion, Deduplikation und Pagination:
+`src/services/source-audio.ts` ergänzt Filme und TV-Treffer in ID-, Text- und
+überwachten RSS-Suchen vor Sprachselektion, Deduplikation und Pagination:
 
 - ARTE: strukturiertes HbbTV-JSON, ohne Account oder kopierten Token. Nur gleiche
   Programm-ID und exakt gleiche progressive Medien-URL dürfen `audioCode`
   belegen. Einzige Normalisierung beim Vergleich: API-HTTP zu HTTPS, wie im
   MediathekView-Crawler. Fremde Parameter, andere Fassungen und widersprüchliche
   Codes sind kein Beleg. Website-Locale und Sendername sind kein Tonsprachbeweis.
-- ZDF: ISO-BMFF-`mdhd` ausschließlich auf Sound-Tracks vorhandener MP4-URLs der
-  beiden explizit erlaubten CDN-Hosts. Höchstens zwei Bereiche mit jeweils
+- ARD: strukturiertes Page-Gateway-JSON für die bereits indexierte, kanonische
+  CRID-Video-ID. Genau ein identischer On-Demand-Player, freie/verfügbare Rechte
+  und exakt dieselbe MP4-URL in einem `main`-Stream sind nötig. Alle `audios`
+  müssen Sprache und bekannten Fassungsstatus übereinstimmend deklarieren.
+  `meta.ovLanguageCode` ist nur Originalsprachenkontext, kein Tonsprachbeleg.
+  Fremde/unklare Auxiliary-Streams werden nicht als normale Fassung ausgegeben.
+  Kein HTML, Senderseiten-Abgrasen, Login oder zusätzliches Medieninventar.
+- MP4: ISO-BMFF-`mdhd` ausschließlich auf Sound-Tracks vorhandener MP4-URLs der
+  beiden explizit erlaubten ZDF-CDN-Hosts sowie `ctv-videos.daserste.de`.
+  Höchstens vier Bereiche mit jeweils
   1 MiB, keine vollständigen Medien, Remote-ffprobe oder Senderseiten. Nur eine
   einheitliche, bekannte Sprache aller Audiotracks gilt als Beleg. `und`,
   gemischte oder unvollständige Metadaten bleiben unbekannt.
   Große Sampletabellen werden über deklarierte Boxgrößen übersprungen, nicht
   vollständig geladen. Alle Track-/Containergrenzen und Audiotrackheader müssen
-  im Zwei-Fenster-Budget geprüft werden; ein benötigtes drittes Fenster bleibt
+  im Vier-Fenster-Budget geprüft werden; ein benötigtes fünftes Fenster bleibt
   unbekannt. Keine Suche nach vermeintlichen Headerzeichenketten in Medienbytes.
 
 Die drei Qualitäts-URLs einer Quellzeile werden getrennt behandelt. Deutsch in
@@ -37,40 +45,45 @@ Sprachbeleg; aktuelle Download-URLs bleiben erhalten.
 ## Grenzen und Fehler
 
 Die Ergänzung teilt das bestehende HTTP-Budget und dessen Deadline mit Suche
-und Metadaten: höchstens vier Probeidentitäten pro Anfrage, keine neuen Retries.
-Ein ARTE-Programm verbraucht eine Identität; eine ZDF-URL benötigt bis zu zwei
-HTTP-Versuche. Nicht untersuchte Treffer bleiben unbekannt. Das ist keine
-Behauptung vollständiger Sprachabdeckung großer RSS-Fenster. HLS und andere
-Sender erhalten durch diese Änderung keinen neuen Beleg. Vorhandene TV-/P07-
-Verträge bleiben bestehen; der neue Owner ist zunächst an die Filmpfade gebunden.
+und Metadaten: RSS/Filme höchstens vier Probeidentitäten, explizite TV-Suchen
+höchstens sechzehn; keine neuen Retries. Auf ausdrückliche Nutzerfreigabe vom
+05.10.2026 teilen TV-Suchen maximal 32 HTTP-Versuche, RSS/Filme weiterhin zehn.
+Alle haben unverändert eine gemeinsame 15-Sekunden-Deadline. ARTE-/ARD-Programm
+verbraucht eine Identität und wird innerhalb der Ergänzung wiederverwendet;
+eine MP4-URL benötigt bis zu vier HTTP-Versuche. HD-Fassungen aller Kandidaten
+werden vor Standard-/Low-Alternativen geprüft. Nicht untersuchte Treffer bleiben
+unbekannt. Keine vollständige Sprachabdeckung großer Staffeln/RSS-Fenster oder
+neuer HLS-Sprachbeleg. `best` bleibt nach dem Aufteilen eine Rendition je
+Episode/Fassung, nicht versehentlich alle Qualitäts-URLs.
 
 Nicht unterstütztes MP4/Range-Verhalten und ARTE 404/410 liefern keine Evidenz.
-Transport-/Deadline-/Bodylimit-Fehler sowie ungültiges ARTE-JSON brechen die
+Transport-/Deadline-/Bodylimit-Fehler sowie ungültiges Provider-JSON brechen die
 Anfrage ab; keine erfolgreiche Teilantwort oder deren Antwortcache. Redirects
 sind nicht erlaubt, alle Antwortkörper sind begrenzt, Fehlermeldungen enthalten
 keine Quell-URLs oder Credentials.
 
 Audiosprache beweist keine Bildauflösung. Die getrennte Korrektur P09.3 bindet
-optionale Maße aus dem bereits gelesenen strukturierten ARTE-JSON an die exakte
+optionale Maße aus dem bereits gelesenen strukturierten ARTE-/ARD-JSON an die exakte
 URL; `url_video_hd` allein ist kein 1080p-Beleg. Ohne Maße bleibt die Auflösung
 unbekannt. Umfang, historische GUIDs und Rolloutgrenzen stehen im
 [Auflösungsvertrag](rendition-quality-contract.md). Die offene MP4-Sprachgrenze
-P03.4 wird dadurch nicht behoben.
-Die strukturierte ARTE-Schnittstelle ist kein von Pingufunk kontrollierter
+P03.4 wird dadurch nicht allein behoben.
+Die strukturierten Provider-Schnittstellen sind keine von Pingufunk kontrollierten
 Dienst mit zugesicherter Verfügbarkeit. Vertragsänderungen werden nicht durch
 einen HTML-Fallback kaschiert, sondern verlangen Providerprüfung und Regression.
 
 ## Download und Speicherung
 
 `MediaExpectations` v1 bleibt für vorhandene Jobs unverändert. Bei MP4-Sprach-
-Tags wird weiterhin der strenge v1-Trackvertrag geprüft. ARTE-Providerbelege
+Tags wird weiterhin der strenge v1-Trackvertrag geprüft. ARTE-/ARD-Providerbelege
 verwenden v2: `audio` bleibt null, `sourceAudio` enthält Provider, Programm-ID,
 SHA-256 der stabilen URL-Identität und Sprache. Es werden keine fehlenden
 Container-Tracktags erfunden. RSS, NZB, Queue, Retry und Persistenz tragen den
 versionierten Vertrag mit; keine Datenbankschemaänderung ist nötig.
 
 Der Worker prüft die lokale Datei mit ffprobe und holt den ARTE-Beleg frisch
-gegen die tatsächlich heruntergeladene URL. Andere URL, fehlende/veränderte
+gegen die tatsächlich heruntergeladene URL (Dispatcher für `arte_hbbtv` und
+`ard_media`). Andere URL, fehlende/veränderte
 Sprache, fremder Programmbeleg oder bekannte widersprechende lokale Audiotracks
 verhindern `Completed`. Bei belegtem Provider und unbekannten Tracktags bleibt
 `audioLanguages` leer; separat steht `expectedChecks.audio=passed_provider`.
@@ -92,7 +105,8 @@ Keys, echte Medien und echte API-Antworten gehören nicht in öffentliche Fixtur
 Vor Aufnahme von v2-Jobs das neue Image isoliert prüfen. Laufende produktive
 Downloads nicht durch einen ungeprüften Imagewechsel unterbrechen.
 **Ein älteres Image ohne v2-Unterstützung ist nach neuen v2-Writes kein sicherer
-Rollback.** Aufnahme pausieren, Queue/History abgleichen und einen v2-kompatiblen
+Rollback. Auch bisherige v2-Images ohne `ard_media` verstehen neue ARD-Jobs nicht.**
+Aufnahme pausieren, Queue/History abgleichen und einen provider-kompatiblen
 Rollback verwenden. Alte Sicherungen nicht über neue Jobs/History schreiben;
 Erwartungen nicht entfernen oder auf v1 umetikettieren. Keine automatische
 DB-Umschaltung, Migration oder Deploymentfreigabe aus diesem Dokument ableiten.
@@ -140,3 +154,7 @@ keine Abnahme. Eigene Testinstanzen stoppen, Konfiguration zur Diagnose erhalten
 - [FFmpeg MOV-Demuxer](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/mov.c):
   `mov_read_mdhd`, versionierte Zeitfelder und gepacktes Sprachfeld. Implementiert
   wird ein begrenzter eigenständiger Metadatenparser, kein kopierter Demuxer.
+- [ARD-Extractor von yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/ard.py):
+  Page-Gateway, Player-/Streamstruktur und URL-gebundene Audiodeklarationen.
+  Gegen tatsächliches begrenztes öffentliches JSON geprüft; dessen permissiver
+  Deutsch-Default bei fehlendem Sprachfeld wird ausdrücklich **nicht** übernommen.

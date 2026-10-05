@@ -20,6 +20,25 @@ const episode = {
 };
 
 describe("Sonarr metadata boundary (not yet connected to lookup/RSS)", () => {
+  it("retains only validated series-wide aliases, never a season title or private alias payload", () => {
+    expect(
+      parseSonarrSeries([
+        {
+          ...series,
+          alternateTitles: [
+            { title: "  Deutscher Titel  ", seasonNumber: -1, path: "/private" },
+            { title: "Deutscher Titel", seasonNumber: -1 },
+            { title: "Andere Staffel", seasonNumber: 2 },
+          ],
+        },
+      ])[0].aliases
+    ).toEqual(["Deutscher Titel"]);
+    expect(() =>
+      parseSonarrSeries([
+        { ...series, alternateTitles: [{ title: "Example", seasonNumber: "-1" }] },
+      ])
+    ).toThrow(SonarrMetadataError);
+  });
   it.each(["3.0.10.1567", "4.0.17.2952"])("accepts supported application version %s", (version) => {
     expect(parseSonarrVersion({ version })).toBe(version);
   });

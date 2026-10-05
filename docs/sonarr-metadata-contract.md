@@ -54,6 +54,22 @@ Adapter ist kein Nachweis einer read-only Sonarr-Rolle.
 
 ## Lookup, Merge und Matching
 
+Ergänzung vom 05.10.2026: validierte globale `alternateTitles` mit
+`seasonNumber=-1` werden als Aliasse unbekannter Sprache übernommen; Staffel-
+Titel nicht. Eng begrenzte Umlauttransliteration ermöglicht `ö`/`oe`, ist aber
+kein Fuzzy-Alias. Ein frisch gefilterter Serienlookup darf ein im Inventarcache
+noch fehlendes Element einmal im selben Budget nachladen. Falsche lokale IDs
+bleiben Fehler; echte Nichtfunde werden nicht zehn Minuten negativ gecacht.
+
+Generische Metadatentitel `Episode N`/`Folge N` dürfen bei gesicherter Serie,
+explizit übereinstimmenden Quellkoordinaten und belegter positiver Solllaufzeit
+zugeordnet werden. Konkrete widersprechende Episodentitel bleiben abgewiesen.
+Ein ARTE-Bruchteil `(N/Gesamt)` erhält **keine** pauschale Staffel 1: nur identische
+geprüfte Player-ID/-Koordinaten und ein vollständiger, eindeutiger, einzelner
+Sonarr-Staffelbestand 1…Gesamt können die Staffel bestimmen. Mehrstaffel- und
+unvollständige Bestände bleiben unsicher. HLS-only im Player verwirft die
+bereits indexierte MP4-Fassung nicht; Tonsprachenbeleg erst über deren exakte URL.
+
 Basislookup unverändert lokale Shows → TVDB → TMDB, soweit konfiguriert.
 Danach optional Sonarr-Ergänzung. Ein früher lokaler Treffer darf diesen Schritt
 nicht überspringen. Merge-Schlüssel `(Staffel, Folge)`; vorhandene IDs, Titel,
@@ -109,6 +125,12 @@ Die genehmigten technischen Startwerte stehen im TODO; keine Sonarr-Zusagen:
   keine zusätzlichen TVDB-/TMDB-/Full-Library-Netzwerkabfragen.
   Änderung von Fenster/Budget/Instanz/Secret invalidiert Cache und inFlight-
   Epoche; spät eintreffende alte Antworten dürfen nicht die neue Epoche füllen.
+
+Explizite TV-Suchen teilen seit der gesonderten Nutzerfreigabe vom 05.10.2026
+maximal **32** Versuche für Sonarr, Quellen, Folgeseiten und Sprachbelege; dieselbe
+15-Sekunden-Deadline. RSS bleibt beim Zehn-Versuche-Budget. Tonsprachenauswahl
+folgt der Belegprüfung, vor Dedupe/Limit/total; unbekannte Belege werden nicht
+zu Deutsch. Weitere Beleg-/Workergrenzen im [Tonsprachenvertrag](source-audio-contract.md).
 
 ## Review und verbleibende Abnahme
 
