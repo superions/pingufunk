@@ -1453,3 +1453,14 @@ und Post-write-Rollback grün; keine Image-Publikation. P06.4/P09.5 geschlossen,
 P03.4 und die Vorabfolgen-/Produktiventscheidung unverändert getrennt offen.
 Abschließende Dokumentationsänderungen ändern keine getesteten Produktinputs;
 Produkt-CI-Evidenz wird deshalb wiederverwendet, nicht als neuer Lauf ausgegeben.
+
+Nutzerklarstellung zum separat freigegebenen Rollout (06.10.2026): Die frühere
+Formulierung einer noch offenen Vorabfolgen-Entscheidung war für Einzel-/Staffel-
+suchen unnötig. Diese übernehmen bereits den gesamten validierten Episodenbestand
+ohne Airdate-Fenster; der Matcher verlangt konkrete Medien-/Identitätsbelege,
+keinen bereits vergangenen TV-Termin. Der RSS-Owner hat dagegen sein eigenes
+Vergangenheitsfenster. Das ist keine Voraussetzung für eine explizite Suche
+bereits verfügbarer Mediathek-Folgen. Kein zusätzlicher RSS-Grab oder zweiter
+Endpunkt wird implementiert; keine automatische Download-/Importabnahme aus
+der Rolloutfreigabe abgeleitet. Der Vertrag und P06.4 unterscheiden das nun
+ausdrücklich. Unveränderte Produktinputs: dieselben grünen Gates wiederverwendet.

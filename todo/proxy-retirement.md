@@ -1272,9 +1272,12 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       budgetierte RSS-/Cachetests, native Sonarr-TBA-Suche direkt und über
       Prowlarr gegen eigene unüberwachte Fixture ohne Grab, Vollsuite/Lint/
       Typecheck/Format/Build, Fork-CI und beide bestehenden Backendgates grün.
-      Vertrag `docs/tv-search-contract.md`; Vorabfolgen-RSS ist eine getrennte
-      noch offene Nutzerentscheidung. Produktionsrollout und echte Importe
-      bleiben separat freizugeben; keine Profil-, Bibliotheks- oder DB-Änderung.
+      Vertrag `docs/tv-search-contract.md`; Nutzerklarstellung 06.10.2026:
+      Einzel-/Staffelsuche für tatsächlich verfügbare Mediathek-Vorabfolgen
+      ohne Sperre anhand des späteren TV-Termins, zusätzliche RSS-Grabs sind
+      dafür nicht erforderlich. Das getrennte RSS-Datumsfenster bleibt erhalten.
+      Produktionsrollout ist nun separat freigegeben; echte Grabs/Importabnahme
+      sind damit nicht beauftragt. Keine Profil-, Bibliotheks- oder DB-Änderung.
       Entwicklungsabnahme 06.10.2026 auf `aefa709`: 1018 reguläre Tests,
       Lint/Typecheck/Format/Build grün. Fork-CI 37380855999 mit separatem PG-Gate
       und Docker-Validierung 37380856018 vollständig bestanden. Native Sonarr-

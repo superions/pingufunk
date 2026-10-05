@@ -1,7 +1,8 @@
 # Breite TV-Suche ohne erfundene Identität
 
 Stand: 06.10.2026. Technischer Vertrag; ausführbare Abnahme ausschließlich
-in [P06.4/P09.5](../todo/proxy-retirement.md). Kein Produktionsrollout.
+in [P06.4/P09.5](../todo/proxy-retirement.md). Instanzbezogene Rollout-Abnahme
+und Sicherungen werden ausschließlich im privaten Betriebsrunbook geführt.
 
 ## Mehr Kandidaten finden, danach dieselben strengen Belege verlangen
 
@@ -59,13 +60,27 @@ Upstream `rundfunkarr/rundfunkarr` wurde auf `4ebaa8e8` erneut geprüft; dessen
 Regel-Themenabfragen ersetzen nicht die hier benötigten Sonarr-, TBA- und
 quellenbelegten Dimensionsverträge.
 
-## Getrennte offene Entscheidung und Betriebsabnahme
+## Vorabveröffentlichungen und getrennte Betriebsabnahme
 
-Das Sonarr-RSS-Fenster enthält weiterhin nur bereits ausgestrahlte Episoden mit
-gültigem UTC-Datum. Vorab in der Mediathek veröffentlichte, erst später im TV
-ausgestrahlte Folgen sind explizit suchbar, werden dadurch aber nicht automatisch
-ins RSS-Fenster aufgenommen. Eine Änderung dieser Politik braucht die noch
-offene Nutzerentscheidung und eigene Regressionen.
+Nutzerklarstellung 06.10.2026: Bereits in der Mediathek verfügbare Folgen dürfen
+in der Einzel-/Staffelsuche nicht wegen eines zukünftigen TV-Termins fehlen.
+Die vorhandene explizite Suche übernimmt den validierten Episodenbestand ohne
+Filter auf bereits vergangene Ausstrahlungsdaten. Sie sucht die Medien im
+Mediathek-Katalog und prüft die konkreten Quellen; ein zukünftiger TV-Termin ist
+für sich kein Ausschlussgrund. Der Katalogzeitstempel wird nicht als identisch
+mit TV-Ausstrahlung oder als erfundenes Veröffentlichungsdatum ausgegeben.
+Identitäts-, Laufzeit-, Sprach- und Renditionsbelege bleiben erforderlich.
+
+Ein zusätzlicher RSS-Grab, ein zweiter Endpunkt oder ein Bibliotheks-/Titel-
+Override sind dafür nicht nötig. Ein Indexer liefert Treffer auf Anfragen;
+er startet nicht selbständig Sonarr-Suchen oder Downloads. Ob Sonarr eine
+Suche auslöst und einen Treffer akzeptiert, bleibt Sonarrs Entscheidung.
+
+Das getrennte Sonarr-RSS-Fenster enthält weiterhin nur bereits ausgestrahlte
+Episoden mit gültigem UTC-Datum. Diese bestehende Fensterpolitik ist kein
+Blocker der expliziten Suche und wird durch diesen Rollout nicht verändert.
+Eine weitergehende RSS-Erweiterung wäre ein eigener Auftrag mit Regressionen,
+nicht Voraussetzung für bereits verfügbare Vorabfolgen in der Staffelsuche.
 
 Entwicklungsprüfungen verwenden ausschließlich synthetische Metadaten und Medien.
 Echte Trefferprüfung, Produktivrollout, neue Grabs und Importabnahme sind eigene
