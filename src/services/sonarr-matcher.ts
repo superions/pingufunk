@@ -1,4 +1,5 @@
 import { parseEpisodeFromTitle } from "./newznab";
+import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { isStreamingUrl } from "@/lib/stream-url";
 import { classifyLanguageEdition, isLanguageEditionVisible } from "./language-editions";
 import { DEFAULT_LANGUAGE_POLICY, type LanguagePolicy } from "@/lib/language-policy";
@@ -43,15 +44,24 @@ export function matchSonarrEpisodes(
   tolerancePercent: number,
   languagePolicy: LanguagePolicy = DEFAULT_LANGUAGE_POLICY,
   hlsEnabled = false,
-  deferLanguageSelection = false
+  deferLanguageSelection = false,
+  ruleTopics: readonly string[] = []
 ): MatchedEpisodeInfo[] {
-  const names = [show.name, show.germanName, ...show.aliases.map((alias) => alias.name)]
+  const names = [
+    show.name,
+    show.germanName,
+    ...show.aliases.map((alias) => alias.name),
+    ...ruleTopics,
+  ]
     .filter((name): name is string => !!name)
     .map(normalized);
   const blocked = new Set(show.sonarrBlockedCoordinates ?? []);
+  const verified = new Set(show.sonarrVerifiedCoordinates ?? []);
   const episodes = show.episodes.filter(
     (episode) =>
-      episode.metadataSource === "sonarr" &&
+      (episode.metadataSource === "sonarr" ||
+        (verified.has(`${episode.seasonNumber}:${episode.episodeNumber}`) &&
+          isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber))) &&
       !blocked.has(`${episode.seasonNumber}:${episode.episodeNumber}`)
   );
   const matches: MatchedEpisodeInfo[] = [];
@@ -132,10 +142,7 @@ export function matchSonarrEpisodes(
         );
       // An explicit source coordinate with verified series identity and runtime
       // is stronger than translated/generic metadata titles (e.g. "Episode 3").
-      const genericMetadataTitle = new RegExp(
-        `^(?:Episode|Folge)\\s+0*${episode.episodeNumber}$`,
-        "i"
-      ).test(episode.name.trim());
+      const genericMetadataTitle = isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber);
       const coordinateMatches =
         genericMetadataTitle &&
         sourceSeason !== null &&
@@ -144,7 +151,7 @@ export function matchSonarrEpisodes(
         Number.isFinite(episode.runtime) &&
         episode.runtime > 0;
       return (
-        (titleMatches || coordinateMatches) &&
+        ((!genericMetadataTitle && titleMatches) || coordinateMatches) &&
         sonarrDurationCheck(
           item.duration,
           episode.runtime === null ? null : episode.runtime * 60,

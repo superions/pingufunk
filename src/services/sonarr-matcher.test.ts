@@ -57,6 +57,68 @@ describe("supplemental duration policy", () => {
 });
 
 describe("identity before duration/identity stamping", () => {
+  it("requires supplemental coordinate verification for a preserved base TBA episode", () => {
+    const base = {
+      ...show,
+      episodes: [{ ...show.episodes[0], name: "TBA", metadataSource: undefined }],
+    };
+    const source = { ...item, title: "Actual title (S02/E03)" };
+    expect(matchSonarrEpisodes(base, [source], 300, 10)).toEqual([]);
+    expect(
+      matchSonarrEpisodes({ ...base, sonarrVerifiedCoordinates: ["2:3"] }, [source], 300, 10)
+    ).toHaveLength(1);
+    expect(
+      matchSonarrEpisodes(
+        { ...base, sonarrVerifiedCoordinates: ["2:3"] },
+        [{ ...source, title: "TBA" }],
+        300,
+        10
+      )
+    ).toEqual([]);
+  });
+  it.each(["TBA", "TBD", "To be announced", "Episode 3", "Folge 3"])(
+    "accepts %s only with explicit complete coordinates, series and runtime",
+    (name) => {
+      const placeholder = { ...show, episodes: [{ ...show.episodes[0], name }] };
+      const source = { ...item, title: "Actual source title (S02/E03)" };
+      expect(matchSonarrEpisodes(placeholder, [source], 300, 10)).toHaveLength(1);
+      for (const override of [
+        { topic: "Foreign series" },
+        { title: "Actual source title (S01/E03)" },
+        { title: "Actual source title (S02/E04)" },
+        { title: "Actual source title" },
+        { duration: 200 },
+      ])
+        expect(matchSonarrEpisodes(placeholder, [{ ...source, ...override }], 300, 10)).toEqual([]);
+      expect(
+        matchSonarrEpisodes(
+          { ...placeholder, episodes: [{ ...placeholder.episodes[0], runtime: null }] },
+          [source],
+          300,
+          10
+        )
+      ).toEqual([]);
+      expect(
+        matchSonarrEpisodes(
+          { ...placeholder, sonarrBlockedCoordinates: ["2:3"] },
+          [source],
+          300,
+          10
+        )
+      ).toEqual([]);
+      expect(
+        matchSonarrEpisodes(
+          {
+            ...placeholder,
+            episodes: [{ ...placeholder.episodes[0], name: "Concrete different title" }],
+          },
+          [source],
+          300,
+          10
+        )
+      ).toEqual([]);
+    }
+  );
   it("uses verified umlaut aliases and explicit coordinates for generic metadata titles", () => {
     const generic = {
       ...show,

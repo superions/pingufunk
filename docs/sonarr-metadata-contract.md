@@ -61,7 +61,8 @@ kein Fuzzy-Alias. Ein frisch gefilterter Serienlookup darf ein im Inventarcache
 noch fehlendes Element einmal im selben Budget nachladen. Falsche lokale IDs
 bleiben Fehler; echte Nichtfunde werden nicht zehn Minuten negativ gecacht.
 
-Generische Metadatentitel `Episode N`/`Folge N` dürfen bei gesicherter Serie,
+Generische Metadatentitel `Episode N`/`Folge N` und genaue Platzhalter
+`TBA`/`TBD`/`To be announced`/`To be determined` dürfen bei gesicherter Serie,
 explizit übereinstimmenden Quellkoordinaten und belegter positiver Solllaufzeit
 zugeordnet werden. Konkrete widersprechende Episodentitel bleiben abgewiesen.
 Ein ARTE-Bruchteil `(N/Gesamt)` erhält **keine** pauschale Staffel 1: nur identische
@@ -73,7 +74,11 @@ bereits indexierte MP4-Fassung nicht; Tonsprachenbeleg erst über deren exakte U
 Basislookup unverändert lokale Shows → TVDB → TMDB, soweit konfiguriert.
 Danach optional Sonarr-Ergänzung. Ein früher lokaler Treffer darf diesen Schritt
 nicht überspringen. Merge-Schlüssel `(Staffel, Folge)`; vorhandene IDs, Titel,
-Daten und Laufzeiten bleiben unverändert. Widersprüchlicher Titel/Airdate
+Daten und Laufzeiten bleiben unverändert. Nur ein konkreter Titelwiderspruch
+auf beiden Seiten ist ein Titelkonflikt; TBA wird weder überschrieben noch als
+konkreter Gegenbeweis behandelt. Eine Basis-Platzhalterepisode benötigt transient
+bestätigte Sonarr-Koordinaten; RSS verwendet dann den tatsächlichen Quelltitel.
+Widersprüchliche konkrete Titel/Airdate
 sperrt die betreffenden Koordinaten; kein Fuzzy-„Auflösen“. Mehrere Serien zur
 TVDB-ID verhindern automatische Ergänzung. Ohne Basisbestand ist ein vollständig
 verifizierter Sonarr-Bestand möglich. Ein Fehler lässt unabhängige Bestandstreffer
@@ -131,6 +136,11 @@ maximal **32** Versuche für Sonarr, Quellen, Folgeseiten und Sprachbelege; dies
 15-Sekunden-Deadline. RSS bleibt beim Zehn-Versuche-Budget. Tonsprachenauswahl
 folgt der Belegprüfung, vor Dedupe/Limit/total; unbekannte Belege werden nicht
 zu Deutsch. Weitere Beleg-/Workergrenzen im [Tonsprachenvertrag](source-audio-contract.md).
+
+Seit 06.10.2026 verbreitern bis zu sechs alternative Namens-/Regel-Themenabfragen
+die explizite Suche; RSS nutzt dafür nur frei bleibendes Budget. Keine Erweiterung
+der Deadline, keine Suchwörter als Identitätsbeweis, keine Vorabfolge im bisherigen
+RSS-Datumsfenster. Details und Konfliktgrenzen im [TV-Suchvertrag](tv-search-contract.md).
 
 ## Review und verbleibende Abnahme
 

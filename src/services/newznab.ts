@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { Builder } from "xml2js";
 import { selectRenditions, type QualityPreference } from "./rendition-quality";
 export type { QualityPreference } from "./rendition-quality";
@@ -311,18 +312,22 @@ function generateTitle(
   episodeType: EpisodeType
 ): string {
   const episode = info.episode;
+  // Render the actual source title for placeholders; never mutate stored metadata.
+  const episodeTitle = isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber)
+    ? parseEpisodeFromTitle(info.item.title).episodeName || episode.name
+    : episode.name;
 
   if (episodeType === "daily") {
     const aired = episode.aired ? new Date(episode.aired) : new Date();
     const dateStr = aired.toISOString().split("T")[0]; // yyyy-MM-dd
     return applyLanguageEdition(
-      `${withoutSourceResolution(info.showName)}.${dateStr}.${withoutSourceResolution(episode.name)}.${renditionSuffix(quality)}`,
+      `${withoutSourceResolution(info.showName)}.${dateStr}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
       info.item
     ).replace(/ /g, ".");
   }
 
   return applyLanguageEdition(
-    `${withoutSourceResolution(info.showName)}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${withoutSourceResolution(episode.name)}.${renditionSuffix(quality)}`,
+    `${withoutSourceResolution(info.showName)}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
     info.item
   ).replace(/ /g, ".");
 }

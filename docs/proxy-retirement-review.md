@@ -1387,3 +1387,46 @@ bounded MP4-Fenster beweisen sämtliche Film-/Quellen-Sprachen. Unvollständige
 Belege bleiben neutral. Privater Image-/GitOps-/Backup-/Rollbacknachweis und
 laufende Betriebsfreigabe gehören ausschließlich ins private Homelab-Runbook;
 dieser öffentliche Review enthält keine Instanzwerte oder realen APIantworten.
+
+## Breite TV-Suche, TBA und ZDF-MP4-Maße (06.10.2026)
+
+Neue Befunde in P06.4/P09.5 getrennt erfasst; ältere Abnahmen nicht als Beweis
+dieser Ergänzung wiederverwendet. Ein genauer TBA-Platzhalter wurde bisher als
+konkreter Titel behandelt; ein bereits geladener Basis-Platzhalter konnte zudem
+die sichere Sonarr-Koordinatenzuordnung verhindern. Neue Regressionen reproduzierten
+den TBA-/TBD-/To-be-announced-Fehler vor der Korrektur. Der Merge erhält Basiswerte
+und markiert bestätigte Koordinaten transient; der Matcher verlangt gesicherte
+Serie, vollständige Quellkoordinaten und bekannte passende Dauer. Konkrete
+Titel-/Datumskonflikte bleiben gesperrt. RSS rendert den tatsächlichen Quelltitel.
+
+Der neue TV-Abfrageowner verwendet begrenzte OR-Abfragen über verifizierte Namen
+und eindeutig seriengebundene Regel-Themen. Suchtext wird nicht als Alias gespeichert;
+Sammelthemen und mehrfach gebundene Themen werden nicht Identitätsbeweis. Review
+ergänzte RSS-Dedupe und Regel-Fingerprint einschließlich late-response-Abbruch,
+damit breitere Abfragen weder Duplikate noch alte Regelentscheidungen publizieren.
+Ein benötigter fehlgeschlagener Lookup liefert keine Teilmenge. RSS-Datumsfenster
+bleibt unverändert; Vorabfolgen erfordern eine separate Nutzerentscheidung.
+
+Der bestehende ISO-BMFF-Probeowner liest kodierte Maße aus einem unterstützten
+VisualSampleEntry ohne Voll-Download, Senderseitenparser oder zusätzliche Hosts.
+Genau eine Videospur/Beschreibung und vollständige Grenzen sind Pflicht; Maße
+und kohärente Audiosprache sind unabhängig. Vier 1-MiB-Fenster/Deadline bleiben;
+Audio-only-Worker ohne neue Videoseeks. Der bestehende v1/v2-/SQLite-/PG-Vertrag,
+historische GUIDs und Altjobs ändern sich nicht.
+
+Eine synthetische ZDF-Staffel mit englischem kanonischem Namen, deutschem
+Regel-Thema und zwei TBA-Episoden wird ausschließlich über das Thema gefunden.
+Der tatsächliche Newznab-Handler, RSS, Pagination, NZB und Queue-Parser bestätigen
+belegte S/E, deutschen Ton und echte 720p-Metadaten trotz HD-Slot. Negative
+Koordinaten-/Serien-/Dauer-/konkrete Titelkonflikte, Mehrvideo, unbekannter Codec,
+verschlüsselte/beschädigte Videobeschreibung und gemischte Audios bleiben geschützt.
+
+Lokale Abnahme: Node 26.10.0, reguläres `npm ci`, **1017** Tests in 90 Suites grün;
+14 bedingte PostgreSQL-Fälle nicht als lokal ausgeführt gezählt. Lint, Typecheck,
+Formatcheck, Produktionsbuild und Diffcheck grün. Bestehende 14 Turbopack-Tracing-
+Warnungen bleiben sichtbar. Lokal kein Docker-Daemon; frisch erforderliche native
+Sonarr-TBA-Suche direkt/via Prowlarr sowie Container-/Backendgates werden durch
+den Forkworkflow ausgeführt und sind vor dem Schließen der TODOs abzuwarten.
+Neue QA-Fixture bleibt unüberwacht, Quellen synthetisch und externes Netz blockiert;
+keine Grabs, Produktivdienste, Profile, Metadaten oder produktive DB verändert.
+Kein Rollout und keine vollständige Sprach-/Importabnahme behauptet.

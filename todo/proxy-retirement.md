@@ -1256,6 +1256,26 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
+- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+      Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
+      `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
+      abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
+      Bis sechs OR-Abfragen über Namen/Aliasse/eindeutig gebundene Regel-Themen
+      im bestehenden 32-/10-Versuche- und 15s-Budget. Sammel-/Mehrserienthemen
+      nicht als Identität verwenden. RSS-Duplikate und Regel-Cacheinvalidierung
+      prüfen; erfolglose Folgesuche liefert keine Teilmenge/Empty-Erfolg.
+      TBA/TBD und passende generische Titel verlangen gesicherte Serie, explizite
+      vollständige S/E, validierten Sonarr-Bestand und bekannte passende Dauer.
+      Bestehende Metadaten bleiben unverändert; RSS übernimmt den Quelltitel.
+      Abnahme: kausale positive/negative Matcher- und Merge-Regressionen,
+      Alias-/Regel-Themenabfrage bis RSS/NZB/Queue einschließlich Pagination,
+      budgetierte RSS-/Cachetests, native Sonarr-TBA-Suche direkt und über
+      Prowlarr gegen eigene unüberwachte Fixture ohne Grab, Vollsuite/Lint/
+      Typecheck/Format/Build, Fork-CI und beide bestehenden Backendgates grün.
+      Vertrag `docs/tv-search-contract.md`; Vorabfolgen-RSS ist eine getrennte
+      noch offene Nutzerentscheidung. Produktionsrollout und echte Importe
+      bleiben separat freizugeben; keine Profil-, Bibliotheks- oder DB-Änderung.
+
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
 Ergebnis: identitätsgesicherte Mehrserien-/Sprachzuordnung. Abhängigkeit P06;
@@ -1764,6 +1784,21 @@ Abhängigkeit P08; B10/R7.
       mit Node 24 einschließlich separater PostgreSQL-Integration erfolgreich.
       Dokumentationsabnahme verändert die Produktinputs nicht; diese Evidenz
       bleibt gültig. Keine Produktivursache oder produktive Installation behauptet.
+
+- [ ] **P09.5 — ZDF-/ARD-MP4-Dimensionen aus begrenzten Quellenproben.**
+      Nutzerauftrag 06.10.2026; Owner `mp4-audio-language.ts`, `source-audio.ts`,
+      bestehender Rendition-/RSS-/NZB-/Workervertrag; abhängig von P09.2/P09.3.
+      Im vorhandenen höchstens viermal 1-MiB-/Deadlinebudget kodierte Maße aus
+      genau einer unterstützten Videobeschreibung lesen, nicht HD-Slot stempeln.
+      Audio-only-Worker ohne zusätzliche Videoproben. Maße pro exakter URL,
+      mehrdeutige/kaputte/verschlüsselte Beschreibungen neutral; Sprache und
+      Bildmaße unabhängig. Keine neuen Hosts, Accounts oder Senderseitenparser.
+      Abnahme: positive 720/1080p und negative Mehrvideo-/Codec-/Grenzfälle,
+      synthetische ZDF-Suche mit TBA/Regel-Thema bis RSS/NZB/Queue und tatsächlichen
+      720p im HD-Slot, bestehende native Qualitäts-/Worker-/SQLite-/PG-Gates,
+      Vollsuite/Lint/Typecheck/Format/Build und Fork-CI grün. Historische GUIDs,
+      Schemas und Altjobs erhalten. `docs/rendition-quality-contract.md` ergänzt;
+      P03.4 und Produktivabnahme bleiben unabhängig offen.
 
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und

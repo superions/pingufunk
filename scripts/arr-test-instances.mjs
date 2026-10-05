@@ -116,6 +116,7 @@ async function up() {
     process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
   const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
   const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
+  const placeholderEpisode = process.env.PINGUFUNK_ARR_QA_TBA === "1";
   const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
   if (
     renditionQuality &&
@@ -143,6 +144,7 @@ async function up() {
     migrator,
     movieCorrelation,
     sourceAudio,
+    placeholderEpisode,
     renditionQuality,
     apps: {},
   };
@@ -184,6 +186,8 @@ async function up() {
   mkdirSync(dir, { mode: 0o700 });
   if (movieCorrelation)
     writeFileSync(join(dir, "radarr-api-key"), apiKey(root, "radarr"), { mode: 0o600 });
+  if (placeholderEpisode)
+    writeFileSync(join(dir, "sonarr-api-key"), apiKey(root, "sonarr"), { mode: 0o600 });
   // Initialize only this newly allocated SQLite test file, using the schema runner.
   docker([
     "run",
@@ -230,6 +234,7 @@ async function up() {
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
     ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
+    ...(placeholderEpisode ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"] : []),
     ...(renditionQuality ? ["-e", `PINGUFUNK_ARR_QA_RENDITION_QUALITY=${renditionQuality}`] : []),
     ...(movieCorrelation
       ? [
@@ -591,6 +596,11 @@ async function seriesFixture(root, manifest) {
           `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
         VALUES (?,1,1,'Synthetic Episode',0,0,'2024-01-01 20:00:00','2024-01-01',0,?,10,'[]')`
         ).run(series.Id, 2147483003);
+      if (manifest.placeholderEpisode)
+        db.prepare("UPDATE Episodes SET Title='TBA' WHERE SeriesId=? AND TvdbId=?").run(
+          series.Id,
+          2147483003
+        );
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -618,7 +628,10 @@ async function fixtureTarget(root, manifest, app) {
   );
   if (!series) throw new Error("Owned unmonitored series fixture required");
   return (await api(root, manifest, app, `/api/v3/episode?seriesId=${series.id}`)).find(
-    (row) => row.tvdbId === 2147483003 && row.title === "Synthetic Episode" && !row.monitored
+    (row) =>
+      row.tvdbId === 2147483003 &&
+      row.title === (manifest.placeholderEpisode ? "TBA" : "Synthetic Episode") &&
+      !row.monitored
   );
 }
 
@@ -626,6 +639,9 @@ async function movieSearch(root, manifest, app = "radarr") {
   await api(root, manifest, "pingufunk", "/api/settings", {
     "matching.minDuration": "0",
     "download.quality": "all",
+    ...(app === "sonarr" && manifest.placeholderEpisode
+      ? { "integration.sonarr.enabled": "true", "integration.sonarr.url": "http://sonarr:8989" }
+      : {}),
   });
   const movie = await fixtureTarget(root, manifest, app);
   if (!movie || movie.monitored) throw new Error("Owned unmonitored synthetic movie required");
@@ -675,6 +691,28 @@ async function movieSearch(root, manifest, app = "radarr") {
         );
       if (!candidates[0].guid || !candidates[0].downloadUrl)
         throw new Error("Owned Radarr candidate transport identity missing");
+      if (app === "sonarr" && manifest.placeholderEpisode) {
+        const release = candidates[0];
+        if (
+          !release.title.includes(".S01E01.") ||
+          !release.title.includes("Synthetic.Episode") ||
+          release.title.includes(".TBA.") ||
+          !release.title.includes(".GERMAN.") ||
+          release.quality?.quality?.name !== "WEBDL-720p" ||
+          release.rejections.some((reason) =>
+            /unable to parse|unknown series|episode.*not found/i.test(reason)
+          )
+        )
+          throw new Error(
+            "Owned TBA source coordinates/title/language/quality not natively accepted"
+          );
+        const fresh = await fixtureTarget(root, manifest, app);
+        if (fresh?.title !== "TBA" || fresh.episodeFileId)
+          throw new Error("Owned TBA search changed fixture metadata or imported a file");
+        console.log(
+          `sonarr: ${transport} TBA source accepted as S01E01/German/720p; metadata preserved; no grab`
+        );
+      }
       if (app === "radarr" && manifest.renditionQuality) {
         const expected = manifest.renditionQuality === "720p" ? "WEBDL-720p" : "Unknown";
         if (

@@ -58,6 +58,8 @@ export interface TvdbData {
   episodes: TvdbEpisode[];
   /** Transient provenance only; never persisted as authoritative base metadata. */
   sonarrBlockedCoordinates?: string[];
+  /** Validated instance coordinates; base episode values themselves stay untouched. */
+  sonarrVerifiedCoordinates?: string[];
   sonarrUnavailable?: boolean;
 }
 

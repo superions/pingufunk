@@ -90,17 +90,24 @@ export function readMp4AudioLanguage(moov: Buffer): string | null {
 
 class UnsupportedMetadata extends Error {}
 
+export interface Mp4MediaFacts {
+  audioLanguage: string | null;
+  videoDimensions: { width: number; height: number } | null;
+}
+const unknownFacts = (): Mp4MediaFacts => ({ audioLanguage: null, videoDimensions: null });
+
 /**
  * Four 1-MiB windows, seeking only by bounded, declared ISO-BMFF box sizes.
  * Sample tables can make moov/trak many MiB long: they are not language evidence
  * and need not be fetched. Every track header still has to be inspected, so a
  * fifth required window or an incomplete/conflicting track stays unknown.
  */
-export async function probeMp4AudioLanguage(
+export async function probeMp4MediaFacts(
   url: string,
-  budget: HttpRequestBudget
-): Promise<string | null> {
-  if (!isProbeableMp4(url)) return null;
+  budget: HttpRequestBudget,
+  includeDimensions = true
+): Promise<Mp4MediaFacts> {
+  if (!isProbeableMp4(url)) return unknownFacts();
   let total: number | undefined;
   const windows: Array<{ start: number; data: Buffer }> = [];
   let requests = 0;
@@ -181,6 +188,34 @@ export async function probeMp4AudioLanguage(
     return result;
   }
 
+  async function videoDimensions(metadata: Awaited<ReturnType<typeof fields>>) {
+    try {
+      const minf = metadata.filter((b) => b.type === "minf");
+      if (minf.length !== 1) return null;
+      const stbl = (await fields(minf[0].start, minf[0].end)).filter((b) => b.type === "stbl");
+      if (stbl.length !== 1) return null;
+      const stsd = (await fields(stbl[0].start, stbl[0].end)).filter((b) => b.type === "stsd");
+      if (stsd.length !== 1 || stsd[0].end - stsd[0].start < 8) return null;
+      const description = await read(stsd[0].start, 8);
+      // FullBox v0, one VisualSampleEntry. Multiple/changing descriptions are unknown.
+      if (description.readUInt32BE(0) !== 0 || description.readUInt32BE(4) !== 1) return null;
+      const entry = await headerAt(stsd[0].start + 8, stsd[0].end);
+      if (
+        entry.end !== stsd[0].end ||
+        !["avc1", "avc3", "hvc1", "hev1", "vp09", "av01", "mp4v"].includes(entry.type) ||
+        entry.end - entry.start < 78
+      )
+        return null;
+      const dimensions = await read(entry.start + 24, 4);
+      const width = dimensions.readUInt16BE(0),
+        height = dimensions.readUInt16BE(2);
+      return width > 0 && height > 0 ? { width, height } : null;
+    } catch (error) {
+      if (!(error instanceof UnsupportedMetadata)) throw error;
+      return null;
+    }
+  }
+
   try {
     await read(0, 8);
     for (let offset = 0; offset < total!; ) {
@@ -188,43 +223,62 @@ export async function probeMp4AudioLanguage(
       offset = current.end;
       if (current.type !== "moov") continue;
       const languages: Array<string | null> = [];
+      const videos: Array<{ width: number; height: number } | null> = [];
       for (const track of (await fields(current.start, current.end)).filter(
         (b) => b.type === "trak"
       )) {
         const media = (await fields(track.start, track.end)).filter((b) => b.type === "mdia");
-        if (media.length !== 1) return null;
+        if (media.length !== 1) return unknownFacts();
         const metadata = await fields(media[0].start, media[0].end);
         const handlers = metadata.filter((b) => b.type === "hdlr");
-        if (handlers.length !== 1 || handlers[0].end - handlers[0].start < 12) return null;
-        if ((await read(handlers[0].start + 8, 4)).toString("ascii") !== "soun") continue;
+        if (handlers.length !== 1 || handlers[0].end - handlers[0].start < 12)
+          return unknownFacts();
+        const handler = (await read(handlers[0].start + 8, 4)).toString("ascii");
+        if (handler === "vide") {
+          if (includeDimensions) videos.push(await videoDimensions(metadata));
+          continue;
+        }
+        if (handler !== "soun") continue;
         const headers = metadata.filter((b) => b.type === "mdhd");
-        if (headers.length !== 1 || headers[0].end === headers[0].start) return null;
+        if (headers.length !== 1 || headers[0].end === headers[0].start) return unknownFacts();
         const version = (await read(headers[0].start, 1))[0];
         const languageOffset = version === 0 ? 20 : version === 1 ? 32 : -1;
         if (languageOffset < 0 || headers[0].end - headers[0].start < languageOffset + 4)
-          return null;
+          return unknownFacts();
         const packed = (await read(headers[0].start + languageOffset, 2)).readUInt16BE(0);
         const letters = [10, 5, 0].map((shift) => (packed >> shift) & 31);
-        if (packed & 0x8000 || letters.some((letter) => letter < 1 || letter > 26)) return null;
+        if (packed & 0x8000 || letters.some((letter) => letter < 1 || letter > 26))
+          return unknownFacts();
         const code = String.fromCharCode(...letters.map((letter) => letter + 96));
         let language: string | null = null;
         if (!["und", "mul", "zxx"].includes(code)) {
           try {
             language = new Intl.Locale(code).language;
           } catch {
-            return null;
+            return unknownFacts();
           }
         }
         languages.push(language);
       }
       if (Date.now() >= budget.deadlineAt) throw new FetchBudgetError();
-      return languages.length &&
-        languages.every((language) => language && language === languages[0])
-        ? languages[0]
-        : null;
+      return {
+        audioLanguage:
+          languages.length && languages.every((language) => language && language === languages[0])
+            ? languages[0]
+            : null,
+        videoDimensions: videos.length === 1 ? videos[0] : null,
+      };
     }
   } catch (error) {
     if (!(error instanceof UnsupportedMetadata)) throw error;
   }
-  return null;
+  return unknownFacts();
+}
+
+/** Audio-only callers retain their established budget, without optional dimension seeks. */
+export async function probeMp4AudioLanguage(
+  url: string,
+  budget: HttpRequestBudget
+): Promise<string | null> {
+  return (await probeMp4MediaFacts(url, budget, false)).audioLanguage;
 }

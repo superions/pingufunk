@@ -33,6 +33,7 @@ import {
 import { matchMovieItems, movieSourceTitle, normalizeMovieTitle } from "./movie-matcher";
 import { movieSearchTerms } from "./movie-search-terms";
 import { titleSearchTerms } from "@/lib/title-search-terms";
+import { tvSearchQueries, verifiedRuleTopics } from "./tv-search-terms";
 import { getRadarrMonitoredMovies } from "./radarr-provider";
 import type {
   ApiResultItem,
@@ -55,7 +56,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v12-tv-source-audio";
+const CONTENT_SEARCH_CACHE_VERSION = "v13-tv-source-facts";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -1001,16 +1002,14 @@ export async function fetchSearchResultsById(
     const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
       (episode) => episode.metadataSource === "sonarr"
     );
-    const searchTerms = titleSearchTerms([
+    const searchQueries = tvSearchQueries(
+      tvdbData,
       searchQuery,
-      ...(desiredEpisodes?.length === 1 ? [desiredEpisodes[0].name] : []),
-      tvdbData.germanName || tvdbData.name,
-      tvdbData.name,
-      ...tvdbData.aliases.map((alias) => alias.name),
-    ]);
+      desiredEpisodes?.length === 1 ? desiredEpisodes[0].name : undefined
+    );
     const windows = await Promise.all(
-      searchTerms.map((query) =>
-        queryContent([{ fields: QUERY_FIELDS, query }], TV_SEARCH_CANDIDATE_LIMIT, {
+      searchQueries.map((query) =>
+        queryContent([query], TV_SEARCH_CANDIDATE_LIMIT, {
           arteSeries: tvdbData,
           deferLanguageSelection: true,
           ...(supplemented
@@ -1066,7 +1065,8 @@ export async function fetchSearchResultsById(
     tolerance,
     await getConfiguredLanguagePolicy(),
     hlsEnabled,
-    true
+    true,
+    verifiedRuleTopics(tvdbData)
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
     [...matchedEpisodes, ...supplementalMatches],

@@ -305,6 +305,20 @@ describe("non-destructive episode supplementation", () => {
     expect(result.sonarrBlockedCoordinates).toEqual(["1:1"]);
   });
 
+  it("treats a placeholder as missing title evidence without replacing base metadata", async () => {
+    const show = (await (await openSonarrSession())!.show(123))!;
+    show.episodes[0].seasonNumber = 1;
+    show.episodes[0].episodeNumber = 1;
+    show.episodes[0].title = "TBA";
+    show.episodes[0].aired = base.episodes[0].aired;
+    const result = mergeSonarrShow(base, show)!;
+    expect(result.episodes[0]).toBe(base.episodes[0]);
+    expect(result.sonarrBlockedCoordinates).toEqual([]);
+    expect(result.sonarrVerifiedCoordinates).toEqual(["1:1"]);
+    show.episodes[0].aired = new Date("2027-01-01T12:00:00Z");
+    expect(mergeSonarrShow(base, show)!.sonarrBlockedCoordinates).toEqual(["1:1"]);
+  });
+
   it("permits a fully verified Sonarr-only show and rejects mismatched base identity", async () => {
     const show = await (await openSonarrSession())!.show(123);
     expect(mergeSonarrShow(null, show)).toMatchObject({

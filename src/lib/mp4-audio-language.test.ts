@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { HttpRequestBudget } from "./fetch-retry";
 import { isProbeableMp4, probeMp4AudioLanguage, readMp4AudioLanguage } from "./mp4-audio-language";
+import { probeMp4MediaFacts } from "./mp4-audio-language";
+import { syntheticMp4 } from "./__fixtures__/mp4";
 
 function atom(type: string, payload: Buffer) {
   const header = Buffer.alloc(8);
@@ -126,6 +128,40 @@ function stubRanges(data: Buffer) {
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
+
+it.each([
+  [1920, 1080],
+  [1280, 720],
+])(
+  "reads coded %i x %i from the actual video sample entry, not slot hints",
+  async (width, height) => {
+    const fetch = stubRanges(syntheticMp4(width, height));
+    expect(await probeMp4MediaFacts(url, new HttpRequestBudget())).toEqual({
+      audioLanguage: "de",
+      videoDimensions: { width, height },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  }
+);
+
+it.each(["zero", "multi-video", "mixed-audio", "unsupported-description", "truncated"])(
+  "keeps independent or missing facts honest: %s",
+  async (kind) => {
+    const data = syntheticMp4(
+      kind === "zero" ? 0 : 1920,
+      1080,
+      kind === "mixed-audio" ? ["deu", "fra"] : ["deu"],
+      kind === "multi-video" ? 2 : 1
+    );
+    if (kind === "unsupported-description") data.write("encv", data.indexOf(Buffer.from("avc1")));
+    stubRanges(kind === "truncated" ? data.subarray(0, data.length - 1) : data);
+    const result = await probeMp4MediaFacts(url, new HttpRequestBudget());
+    expect(result.videoDimensions).toEqual(
+      kind === "mixed-audio" ? { width: 1920, height: 1080 } : null
+    );
+    expect(result.audioLanguage).toBe(["mixed-audio", "truncated"].includes(kind) ? null : "de");
+  }
+);
 
 it.each(["deu", "fra"])(
   "reads %s sound headers across large sample tables without fetching the tables",

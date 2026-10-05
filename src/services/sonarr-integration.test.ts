@@ -41,6 +41,7 @@ import { parseNzbContent } from "./download";
 import { clearMetadataCaches, mediathekCache } from "@/lib/cache";
 import { clearSettingsCache } from "@/lib/settings";
 import { mediaSourceIdentity } from "./source-audio";
+import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
 
 let fetchMock: ReturnType<typeof vi.fn<(value: string) => Promise<Response>>>;
 const source: ApiResultItem = {
@@ -136,13 +137,13 @@ afterEach(() => {
   mediathekCache.clear();
 });
 
-it.each(["ard", "arte"] as const)(
+it.each(["ard", "arte", "zdf"] as const)(
   "finds a complete unbundled %s season with generic metadata and exact source audio through RSS/NZB/queue",
   async (provider) => {
     state.settings.set("download.quality", "best");
-    const count = provider === "ard" ? 6 : 4;
+    const count = provider === "ard" ? 6 : provider === "arte" ? 4 : 2;
     const tvdbId = 98765;
-    const season = provider === "ard" ? 1 : 2;
+    const season = provider === "arte" ? 2 : 1;
     const name = "Synthetic Harbour";
     const alias = "Stille Bucht - Toedliches Schweigen";
     const sourceName = "Stille Bucht - Tödliches Schweigen";
@@ -154,27 +155,62 @@ it.each(["ard", "arte"] as const)(
           : `123456-${String(n).padStart(3, "0")}-A`;
       return {
         ...source,
-        topic: provider === "ard" ? sourceName : "Fernsehfilme und Serien - Serien",
+        topic:
+          provider === "ard"
+            ? sourceName
+            : provider === "arte"
+              ? "Fernsehfilme und Serien - Serien"
+              : "Lokales Polizeirevier",
         title:
           provider === "ard"
             ? `Folge ${n} | ${sourceName} (S01/E${String(n).padStart(2, "0")})`
-            : `${name} (${n}/${count}) - Synthetischer Titel`,
+            : provider === "arte"
+              ? `${name} (${n}/${count}) - Synthetischer Titel`
+              : `Synthetischer Titel ${n} (S01/E${String(n).padStart(2, "0")})`,
         url_website:
           provider === "ard"
             ? `https://www.ardmediathek.de/video/synthetic/${id}`
-            : `https://www.arte.tv/de/videos/${id}/synthetic/`,
+            : provider === "arte"
+              ? `https://www.arte.tv/de/videos/${id}/synthetic/`
+              : `https://www.zdf.de/video/serien/synthetic/${n}`,
         url_video:
           provider === "ard"
             ? `https://ctv-videos.daserste.de/synthetic/${n}.mp4`
-            : `https://arteptweb-a.akamaihd.net/synthetic/${n}.mp4`,
+            : provider === "arte"
+              ? `https://arteptweb-a.akamaihd.net/synthetic/${n}.mp4`
+              : `https://rodlzdf-a.akamaihd.net/synthetic/${n}.mp4`,
         url_video_hd:
           provider === "ard"
             ? `https://ctv-videos.daserste.de/synthetic/${n}-hd.mp4`
-            : `https://arteptweb-a.akamaihd.net/synthetic/${n}-hd.mp4`,
+            : provider === "arte"
+              ? `https://arteptweb-a.akamaihd.net/synthetic/${n}-hd.mp4`
+              : `https://rodlzdf-a.akamaihd.net/synthetic/${n}-hd.mp4`,
       };
     });
+    if (provider === "zdf")
+      state.rulesets = [
+        {
+          id: 1,
+          mediaId: 1,
+          topic: "Lokales Polizeirevier",
+          priority: 0,
+          filters: "[]",
+          titleRegexRules: "[]",
+          seasonRegex: null,
+          episodeRegex: null,
+          matchingStrategy: "SeasonAndEpisodeNumber" as Ruleset["matchingStrategy"],
+          media: {
+            media_id: 1,
+            media_name: name,
+            media_type: "show",
+            media_tvdbId: tvdbId,
+            media_tmdbId: null,
+            media_imdbId: null,
+          },
+        },
+      ];
     const base = fetchMock.getMockImplementation()!;
-    fetchMock.mockImplementation(async (value: string) => {
+    fetchMock.mockImplementation(async (value: string, init?: RequestInit) => {
       const url = new URL(value);
       if (url.pathname.endsWith("/series"))
         return Response.json([
@@ -183,7 +219,7 @@ it.each(["ard", "arte"] as const)(
             tvdbId,
             title: name,
             monitored: true,
-            alternateTitles: [{ title: alias, seasonNumber: -1 }],
+            alternateTitles: provider === "zdf" ? [] : [{ title: alias, seasonNumber: -1 }],
           },
         ]);
       if (url.pathname.endsWith("/episode"))
@@ -193,13 +229,24 @@ it.each(["ard", "arte"] as const)(
             seriesId: 67,
             seasonNumber: season,
             episodeNumber: index + 1,
-            title: `Episode ${index + 1}`,
+            title: provider === "zdf" ? "TBA" : `Episode ${index + 1}`,
             runtime: 2,
             airDateUtc: new Date(Date.now() - 3600_000).toISOString(),
           }))
         );
       if (url.hostname === "mediathekviewweb.de")
-        return Response.json({ result: { results: rows }, err: null });
+        return Response.json({
+          result: {
+            results:
+              provider !== "zdf" ||
+              JSON.parse(String(init?.body)).queries[0].query === "Lokales Polizeirevier"
+                ? rows
+                : [],
+          },
+          err: null,
+        });
+      if (url.hostname === "rodlzdf-a.akamaihd.net")
+        return mp4RangeResponse(syntheticMp4(1280, 720), init!);
       if (url.hostname === "api.ardmediathek.de") {
         const id = url.pathname.split("/").at(-1)!;
         const row = rows.find((row) => row.url_website.endsWith(id))!;
@@ -297,14 +344,18 @@ it.each(["ard", "arte"] as const)(
       expect(parsed).toMatchObject({
         url: rows[index].url_video_hd,
         mediaExpectations: {
-          version: 2,
-          audio: null,
+          version: provider === "zdf" ? 1 : 2,
+          audio: provider === "zdf" ? { language: "de", provenance: "provider_audio" } : null,
           duration: { seconds: 120, provenance: "episode_metadata" },
-          sourceAudio: {
-            provider: provider === "ard" ? "ard_media" : "arte_hbbtv",
-            language: "de",
-            mediaIdentity: mediaSourceIdentity(rows[index].url_video_hd),
-          },
+          ...(provider === "zdf"
+            ? { resolution: { width: 1280, height: 720, provenance: "provider_dimensions" } }
+            : {
+                sourceAudio: {
+                  provider: provider === "ard" ? "ard_media" : "arte_hbbtv",
+                  language: "de",
+                  mediaIdentity: mediaSourceIdentity(rows[index].url_video_hd),
+                },
+              }),
         },
       });
       expect(

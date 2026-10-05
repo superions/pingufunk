@@ -13,6 +13,7 @@ cleanup() {
 }
 trap cleanup EXIT
 for quality in 720p unknown conflicting; do
+  if [[ "$quality" == 720p ]]; then export PINGUFUNK_ARR_QA_TBA=1; else unset PINGUFUNK_ARR_QA_TBA; fi
   export PINGUFUNK_ARR_QA_RENDITION_QUALITY="$quality"
   output="$(node scripts/arr-test-instances.mjs up)"
   QA_DIRECTORY="$(sed -n 's/^QA_DIRECTORY=//p' <<< "$output")"
@@ -21,6 +22,10 @@ for quality in 720p unknown conflicting; do
   node scripts/arr-test-instances.mjs bootstrap "$QA_DIRECTORY"
   node scripts/arr-test-instances.mjs movie-fixture "$QA_DIRECTORY"
   node scripts/arr-test-instances.mjs movie-search "$QA_DIRECTORY"
+  if [[ "$quality" == 720p ]]; then
+    node scripts/arr-test-instances.mjs series-fixture "$QA_DIRECTORY"
+    node scripts/arr-test-instances.mjs episode-search "$QA_DIRECTORY"
+  fi
   node scripts/arr-test-instances.mjs boundaries "$QA_DIRECTORY"
   node scripts/arr-test-instances.mjs stop "$QA_DIRECTORY"
   QA_DIRECTORY=""

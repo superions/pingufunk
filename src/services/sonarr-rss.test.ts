@@ -2,12 +2,18 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ApiResultItem, TvdbData } from "@/types";
 import type { MediathekQueryOptions } from "@/lib/mediathek-client";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+vi.mock("./rulesets", () => ({
+  getAllTopics: () => [],
+  getRulesetsForTopic: () => [],
+  getRulesetContext: () => state.rules,
+}));
 
 const state = vi.hoisted(() => ({
   epoch: 0,
   settings: new Map<string, string>(),
   pending: new Map<string, Promise<unknown>>(),
   query: vi.fn(),
+  rules: "initial-rules",
 }));
 vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn(async (key: string) => state.settings.get(key) ?? null),
@@ -45,6 +51,7 @@ const base = vi.fn(async (): Promise<TvdbData | null> => null);
 
 beforeEach(() => {
   state.epoch++;
+  state.rules = "initial-rules";
   state.settings.clear();
   state.settings.set("integration.sonarr.enabled", "true");
   state.settings.set("integration.sonarr.url", "https://example.invalid/sonarr");
@@ -107,6 +114,35 @@ it("default-off performs no inventory or content requests", async () => {
   expect(await getSonarrRssMatches(base)).toEqual([]);
   expect(fetchMock).not.toHaveBeenCalled();
   expect(state.query).not.toHaveBeenCalled();
+});
+
+it("deduplicates OR retrieval and invalidates snapshots on a rule-context change", async () => {
+  fetchMock.mockImplementation(async (value: string) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/system/status")) return Response.json({ version: "4.0.1" });
+    if (url.pathname.endsWith("/series")) return Response.json([inventory[0]]);
+    return Response.json(episodes.get(1));
+  });
+  base.mockResolvedValue({
+    id: 101,
+    name: "Synthetic 1",
+    germanName: null,
+    aliases: [{ name: "German alias", language: "de" }],
+    episodes: [],
+  });
+  const original = state.query.getMockImplementation()!;
+  state.query.mockImplementation(async (_queries, size, options) =>
+    original([{ query: "Synthetic 1" }], size, options)
+  );
+  const matches = await getSonarrRssMatches(base);
+  expect(matches).toHaveLength(1);
+  expect(state.query.mock.calls.some((call) => call[0][0].query === "German alias")).toBe(true);
+  const calls = state.query.mock.calls.length;
+  expect(await getSonarrRssMatches(base)).toEqual(matches);
+  expect(state.query).toHaveBeenCalledTimes(calls);
+  state.rules = "changed-rules";
+  expect(await getSonarrRssMatches(base)).toEqual(matches);
+  expect(state.query.mock.calls.length).toBeGreaterThan(calls);
 });
 
 it("publishes supplemental HLS only when the existing HLS option is explicitly enabled", async () => {

@@ -57,11 +57,21 @@ nicht nachträglich zu einer globalen Best-Qualitätsauswahl zusammengeführt.
 HLS bleibt unverändert opt-in; Größenmultiplikatoren bleiben bisherige
 Katalog-Schätzungen, keine neu bewiesenen Dateigrößen.
 
-Die Dimensionsabdeckung ist ausdrücklich begrenzt: nur bereits gelesene,
-passende strukturierte ARTE-Deklarationen liefern in diesem Fix neue Maße.
-Andere Sender, allgemeine TV-Suchen ohne solchen Providerbeleg, HLS und
-übersprungene Probeidentitäten bleiben unbekannt. P03.4s begrenzter MP4-
-Tonsprachparser wurde nicht erweitert und liefert keine Dimensionszusage.
+Ergänzung 06.10.2026: Der vorhandene begrenzte ISO-BMFF-Probeowner liest bei
+bekannten ZDF-/ARD-MP4-CDNs zusätzlich die kodierte Breite/Höhe aus genau einem
+unterstützten VisualSampleEntry (`vide/minf/stbl/stsd`). Genau eine Videospur,
+eine Beschreibung und positive Maße sind erforderlich. Unbekannter Codec,
+verschlüsselte Beschreibung, mehrere Videos oder beschädigte Grenzen liefern
+keine Dimensionszusage. Keine Ableitung aus `tkhd`-Anzeigemaßen, Slot oder URL.
+Die höchstens vier 1-MiB-Fenster und die gemeinsame Deadline bleiben unverändert;
+eine benötigte fünfte Probe oder unvollständige Tracks liefern keine Teilbelege.
+Audio-only-Workerproben lesen weiterhin keine zusätzlichen Videobeschreibungen.
+
+Bildmaße und kohärente Tonsprachen sind unabhängig: gemischte Audiospuren bleiben
+sprachlich neutral, können aber belegte Bildmaße haben. Die exakte URL ist die
+Bindung beider Fakten. Andere Hosts, HLS und übersprungene Probeidentitäten
+bleiben ohne passenden bestehenden Providerbeleg unbekannt. P03.4s darüber
+hinaus offene Sprach-/Abdeckungsbefunde werden dadurch nicht pauschal geschlossen.
 
 ## NZB, Worker und historische Identität
 

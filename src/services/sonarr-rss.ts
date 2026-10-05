@@ -4,6 +4,8 @@ import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { openSonarrSession, mergeSonarrShow, SonarrUnavailableError } from "./sonarr-provider";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
+import { tvSearchQueries, verifiedRuleTopics } from "./tv-search-terms";
+import { getRulesetContext } from "./rulesets";
 import { queryContent, searchCacheContext, getConfiguredLanguagePolicy } from "./content-search";
 import type { MatchedEpisodeInfo, TvdbData } from "@/types";
 
@@ -22,6 +24,7 @@ export async function getSonarrRssMatches(
   const session = await openSonarrSession();
   if (!session) return [];
   const epoch = cacheContextEpoch();
+  const rulesContext = getRulesetContext();
   const window = Number((await getSetting("integration.sonarr.windowDays")) ?? "14");
   const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
   const minimum = await getMinDurationSeconds();
@@ -38,7 +41,7 @@ export async function getSonarrRssMatches(
     throw new SonarrUnavailableError();
   const key = metadataCacheKey(
     "sonarr-rss",
-    [window, tolerance, minimum, await searchCacheContext()],
+    [window, tolerance, minimum, await searchCacheContext(), rulesContext],
     session.cacheIdentity
   );
   const cached = snapshots.get(key);
@@ -78,30 +81,41 @@ export async function getSonarrRssMatches(
       examined++;
       episodeCount += episodes.length;
       if (!show.episodes.some((episode) => episode.metadataSource === "sonarr")) continue;
-      const candidates = await queryContent(
-        [{ fields: ["topic", "title"], query: show.germanName || show.name }],
-        5000,
-        {
+      const candidates = [];
+      // Reserve the remaining series lookups and primary RSS window. Broader
+      // retrieval never resets the ten-attempt budget or starves its cursor.
+      const maxQueries = Math.max(
+        1,
+        budget.remainingAttempts - (callerBudget ? 5 : 0) - (count - index - 1) * 2
+      );
+      for (const query of tvSearchQueries(show).slice(0, maxQueries)) {
+        const page = await queryContent([query], 5000, {
           requestBudget: budget,
           progressiveOnly: !hlsEnabled,
           arteSeries: show,
           deferLanguageSelection: true,
-        }
-      );
-      if (candidates === null) throw new SonarrUnavailableError();
+        });
+        if (page === null) throw new SonarrUnavailableError();
+        candidates.push(...page);
+      }
       matches.push(
         ...matchSonarrEpisodes(
           show,
-          candidates,
+          [...new Map(candidates.map((item) => [JSON.stringify(item), item])).values()],
           minimum,
           tolerance,
           languagePolicy,
           hlsEnabled,
-          true
+          true,
+          verifiedRuleTopics(show)
         )
       );
     }
-    if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
+    if (
+      Date.now() >= budget.deadlineAt ||
+      epoch !== cacheContextEpoch() ||
+      rulesContext !== getRulesetContext()
+    )
       throw new SonarrUnavailableError();
     // No publication, cache write or cursor movement may precede this boundary.
     snapshots.set(key, { matches: structuredClone(matches), expiresAt: Date.now() + 60_000 });

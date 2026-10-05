@@ -7,7 +7,7 @@ import { ardVideoId, getArdMedia, ardEdition } from "./ard-source-audio";
 import type { SourceAudioEvidence } from "@/lib/media-expectations";
 import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
-import { isProbeableMp4, probeMp4AudioLanguage } from "@/lib/mp4-audio-language";
+import { isProbeableMp4, probeMp4MediaFacts, type Mp4MediaFacts } from "@/lib/mp4-audio-language";
 import { arteVideoId, parseArteVersion, progressiveUrl } from "./arte-editions";
 import {
   classifyLanguageEdition,
@@ -129,7 +129,7 @@ export async function enrichSourceAudio(
 ): Promise<Map<ApiResultItem, ApiResultItem[]>> {
   const arte = new Map<string, ArteStreams>();
   const ard = new Map<string, Awaited<ReturnType<typeof getArdMedia>>>();
-  const mp4 = new Map<string, string | null>();
+  const mp4 = new Map<string, Mp4MediaFacts>();
   const output = new Map<ApiResultItem, ApiResultItem[]>();
   let probes = 0;
   const ordered = [...items].sort(
@@ -230,9 +230,12 @@ export async function enrichSourceAudio(
       } else if (isProbeableMp4(url)) {
         if (!mp4.has(url) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
-          mp4.set(url, await probeMp4AudioLanguage(url, budget));
+          mp4.set(url, await probeMp4MediaFacts(url, budget));
         }
-        language = mp4.get(url) ?? null;
+        const facts = mp4.get(url);
+        language = facts?.audioLanguage ?? null;
+        if (facts?.videoDimensions)
+          split.sourceVideoDimensions = [{ url, ...facts.videoDimensions }];
       }
       if (language) {
         split.releaseVariantKey =
