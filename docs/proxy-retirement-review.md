@@ -1,6 +1,7 @@
 # Review des Proxy-Ablöseplans
 
-Stand: 28.09.2026. Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
+Stand: 06.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
+Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
 Dies ist ein zweiter, quellen- und testgestützter **Selbstreview**, kein
 unabhängiger Peer-Review und keine Freigabe für produktive Änderungen.
 Der nachfolgende R9-Abschnitt dokumentiert die damalige Pflichtentscheidung
@@ -9,7 +10,7 @@ unterstützt, PostgreSQL ist optional und kein Proxy-Ablösegate. Aktuell gilt
 ausschließlich der [Phasenvertrag](../todo/proxy-retirement.md); frühere
 Pflicht-, HAProxy- und RPO-Aussagen in diesem Review sind nicht operativ.
 
-## Urteil
+## Historisches Urteil vom 28.09.2026
 
 Der Plan beschreibt einen tragfähigen Weg zur vollständigen Ablösung, wenn
 alle Abnahmegates geschlossen werden. **Heute ist die Ablösung nicht sicher.**
@@ -1464,3 +1465,212 @@ bereits verfügbarer Mediathek-Folgen. Kein zusätzlicher RSS-Grab oder zweiter
 Endpunkt wird implementiert; keine automatische Download-/Importabnahme aus
 der Rolloutfreigabe abgeleitet. Der Vertrag und P06.4 unterscheiden das nun
 ausdrücklich. Unveränderte Produktinputs: dieselben grünen Gates wiederverwendet.
+
+## Architektur-Folgeauftrag (06.10.2026)
+
+### Auftrag, Basis und Aussagegrenze
+
+Nutzerauftrag: größte Verbesserungen codegestützt priorisieren und ausführbare
+TODOs erstellen; getrennte GUI-Regler für Film-/Serien-Laufzeit sowie das
+Erscheinungsjahr sind Pflicht. **Keine Implementierung oder Betriebsänderung**
+dieses Folgepakets. Aktiver Ausgangsstand `7b03d3e` mit unverändertem Produkt
+`aefa709`. Frisch abgerufenes Upstream-main:
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49`. Dessen Settings-/UI-Suchpfade
+enthalten ebenfalls nicht den hier benötigten atomaren Settings- und gemeinsamen
+Renditionvertrag; kein ungeprüfter Merge. Upstreams zusätzliche automatische
+Such-/Downloadfunktionen sind kein Auftrag für einen zweiten Arr-Scheduler.
+
+Geprüft: Settings-API/-Context/-GUI und ihre Validatoren, Filmziel-/Quellmatcher,
+TV-/Mediathekkoordination, Quellen-/Provideradapter, Rendition-/Audio-/MP4-Belege,
+NZB-Erwartungen, Queue-/SAB-Consumer, Abschlussprobe, Startup/Entrypoint,
+System-/Logs-/Downloadoberfläche sowie bestehende Tests/CI-Owner. Gegen die
+Nutzerentscheidungen, den bisherigen Phasenvertrag und die relevanten datierten
+Reviews abgeglichen. Dies ist ein codegestützter Selbstreview, kein unabhängiger
+Peerreview, keine aktuelle Produktionsverifikation und kein vollständiger
+Security-/Dependency-Audit. Fehlerszenarien unten sind aus dem Code abgeleitet;
+dieser Dokumentationsauftrag hat sie nicht neu in einer Runtime reproduziert.
+
+### Größte Hebel und Priorität
+
+| Priorität | Verbesserung                                                               | Nutzen / Aufwand                                                     | Ausführbarer Owner  |
+| --------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------- |
+| 1         | Einheitliche, getrennte Laufzeit-/Jahresregeln und drei GUI-Regler         | Sehr hoher Alltagsnutzen; GUI klein, Jobvertrag mittel               | P12.1–P12.3         |
+| 1         | Atomare Settingswrites und kanonischer Readback                            | Verhindert inkonsistente Policy-/Cachezustände; klein–mittel         | P12.1 / P05.2       |
+| 1         | GUI verliert keine nutzbare Rendition bei Standard-HLS                     | Konkrete Suchlücke, hoher Nutzen; klein–mittel                       | P14.1 / P10.1       |
+| 2         | Fachlich sichere Gründe statt „nicht gefunden“                             | Verkürzt Diagnose erheblich, keine neuen Sprachheuristiken; mittel   | P13.1–P13.2         |
+| 2         | Gemeinsame Quellenfakten, Frische und Probe-Coalescing                     | Weniger wiederholte Arbeit, weniger Budgetabbrüche; mittel           | P14.2 / P03.4       |
+| 2         | Exklusiver Einzelworkerbesitz und kontrollierter Shutdown                  | Schutz gegen versehentlichen Doppelstart/Recoveryrace; mittel–größer | P15.1               |
+| 3         | Radarr-GUI, paginierte History, Runtime-/Volumechecks, Enqueue-Bestätigung | Bedienbarkeit und wachsende Installationen; je klein–mittel          | P12.4 / P15.2–P15.4 |
+| 3         | Ownerweise Extraktion und Vertragsbereinigung                              | Weniger Hotfix-Sonderpfade, leichterer Upstreamabgleich; mittel      | P14.3 / P16.1       |
+
+Aufwand ist eine relative Einschätzung, keine Zeitzusage. Der zentrale Hebel
+ist **eine nachvollziehbare Pipeline mit gemeinsamen Fakten und Regeln**,
+nicht mehr Senderparser, ein größerer Fuzzywert oder ein Gesamt-Rewrite.
+
+### AR1 — Toleranzen sind vorhanden, aber nicht durchgehend derselbe Vertrag
+
+- `src/lib/radarr-settings.ts` bietet `matching.movie.tolerancePercent` (10 %,
+  ganze 0–25 %). Die GUI hat dafür kein Feld; auch die übrige optionale
+  Radarr-Konfiguration ist dort nicht vollständig bedienbar.
+- `src/app/settings/page.tsx` hat den Serienwert nur innerhalb der optionalen
+  Sonarr-Karte; dessen Speichervalidierung ist mit URL-/RSS-Feldern gekoppelt.
+  Fachliche Matchingregeln gehören unabhängig davon in Matching.
+- `src/services/movie-matcher.ts::MOVIE_YEAR_TOLERANCE` ist statisch 1.
+  `movie-search-context.ts` benutzt denselben Wert bereits in Parser/Zielprüfung.
+  Nur eine Stelle konfigurierbar zu machen wäre ein neuer Widerspruch;
+  Requestjahr, Titeljahr und Quelljahr dürfen Abweichungen nicht verketten.
+- `download-manager.ts::completeValidatedDownload` liest bei jedem Job den
+  **aktuellen Serienwert**. Medienerwartungen v1/v2 enthalten weder Medienart
+  noch gespeicherten Toleranzsnapshot. Ein Settingswechsel kann daher die
+  spätere Abschlussprüfung eines bereits wartenden Jobs verändern.
+
+Wichtige Abgrenzung: Der Filmmatcher vergleicht Quelle gegen Filmmetadaten,
+die Abschlussprobe häufig die tatsächliche Datei gegen die **Quelldauer**.
+Diese Referenzen sind nicht austauschbar. Einfach jeden Filmjob mit dem
+Filmprozentwert zu probieren wäre keine vollständige Reparatur. P12.2 trennt
+Identitätsregel, Assetabschluss, Herkunft und Jobpolicy; generische Jobs werden
+nicht anhand von Kategorien oder Dateinamen zu Filmen/Serien erklärt.
+Alte unversionierte/v1/v2-Jobs und bestehende GUIDs bleiben kompatibel.
+Für neue Jobs wird die Katalogreferenz mit festgehaltenen 10 % separat geprüft;
+die Serien-Metadatenreferenz verwendet die festgehaltene Serienregel. Beide
+bekannten Referenzen bleiben erhalten. Das sind unterschiedliche Prüfzwecke,
+kein vierter Matchingregler. Die bisher dynamische Altjob-Regel bleibt als
+Legacygrenze transparent; neue Payloads benötigen einen kompatiblen Rückweg.
+
+Konkrete Planannahmen: vorhandene Film-/Serienwerte behalten; Produktdefaults
+jeweils 10 %, nicht jede Installation ungefragt auf 15 % setzen. Jahrdefault
+±1 und Minimum ±1 erhalten, zunächst 1–5 Jahre konfigurierbar. GUI-Feld heißt
+**Film-Erscheinungsjahr**, weil genau dieser fachliche Vergleich im Code
+existiert. Serien-Airdate/Vorabverfügbarkeit bleibt davon unabhängig. Unknown
+wird durch keinen Regler zu einem positiven Identitäts-/Sprachbeweis.
+
+### AR2 — Batch-Speichern kann einen Teilstand hinterlassen
+
+`src/app/api/settings/route.ts::POST` validiert den Batch vorab, führt Upserts
+dann aber mit `Promise.all` ohne Gesamttransaktion aus. Consumerinvalidierung
+folgt erst nach vollständig erfolgreichem Await. Commit eines Upserts plus
+Fehler eines anderen kann deshalb gespeicherte Teilwerte **und** alte Caches
+hinterlassen. Das ist ein codebelegtes Fehlerszenario, kein hier nachgewiesener
+Live-Datenverlust. Für einige andere Keys akzeptiert der Validator weiterhin
+`String(value)` statt eines fachlichen Typs.
+
+Der Settingscontext übernimmt nach HTTP-Erfolg das eigene Submitobjekt, nicht
+den kanonisch gespeicherten Wert; beispielsweise kann `015` gespeichert als
+`15` zunächst anders angezeigt werden. P12.1 behandelt atomaren Write,
+gemeinsame Validatoren, bestätigten Readback und Generation als einen Vertrag.
+P05.2 deshalb eng wieder geöffnet, historische Cache-Nachweise erhalten.
+Gezielte Invalidation ist sinnvoll, aber erst nach verlässlichen Abhängigkeiten;
+kein vorschnelles Entfernen heute sicherer globaler Invalidierungen.
+
+### AR3 — GUI und Indexer verlieren/interpretieren unterschiedliche Kandidaten
+
+`src/app/api/search/route.ts::handleDefaultSearch` filtert den ganzen Eintrag
+nach `url_video`, während Newznab inzwischen Renditions einzeln prüft.
+Standard-m3u8 mit nutzbarem HD-MP4 verschwindet so bei deaktiviertem HLS aus
+der GUI. `url_video_hd || url_video` füllt zusätzlich einen HD-Slot ohne
+HD-Nachweis auf. Das ist nicht automatisch ein falscher 1080p-NZB-Stempel,
+aber ein falsches/verwirrendes Auswahlmodell.
+
+Der alternative `providers=true`-/`provider`-Pfad nutzt die Registry ohne
+denselben mitgegebenen Gesamtversuchszähler; sie begrenzt Resultate und behandelt
+Sourcefehler anders. `limit` wird dort nur per `parseInt` geparst. Adaptertypen
+können keine URL-gebundenen Dimensions-/Providerbelege durchgängig ausdrücken;
+der SRF→`ApiResultItem`-Adapter übernimmt selbst das optionale Audiofeld nicht.
+Das ist keine Behauptung, SRF liefere heute bereits jeden gewünschten Beleg.
+
+P14.1 vereinheitlicht Abruf, Budget und konkrete Renditionfakten. Fachlich
+darf generisches UI-Browsing weiterhin ohne sichere Arr-Zielidentität stattfinden;
+Indexeridentität bleibt streng. Partial-GUI-Ergebnis muss als unvollständig
+sichtbar sein, kein erfolgreich leeres/partielles Indexerresultat bei benötigtem
+Sourcefehler. P10.1 für diese neue Verbraucherlücke gezielt wieder geöffnet.
+
+### AR4 — Fehlende Treffer sind schlecht erklärbar; Abdeckung ist nicht Wahrheit
+
+Matcher/Quellenproben geben meist Treffer oder Unknown zurück, nicht einen
+durchgängigen fachlichen Grund. `/logs` ist ein „Coming Soon“-Platzhalter.
+Die sichere progressive Transferdiagnose ist bereits vorhanden und wertvoll;
+sie ersetzt aber keine Erklärung für Identitätskonflikt, unbekannte Sprache,
+Laufzeitabweichung, ausgeschöpftes Quellfenster oder fehlenden Folgeabruf.
+
+P13 nutzt typisierte geschlossene Gründe mit Kapazitäts-/TTL-Grenzen und
+Redaction statt roher Docker-/Providerlogs. Ein großer Matchscore bedeutet
+keine gesicherte Identität. Completed bedeutet geprüfter Download, nicht
+Arr-Import. Optionale lesende Importdiagnose darf nur belegte Zuordnung anzeigen;
+ohne Arr-Verbindung bleibt der Importstatus unbekannt.
+
+P03.4 bleibt offen. Weitere Parametererhöhungen oder Hostwildcards sind kein
+struktureller Sprachfix. `source-audio.ts` coalesced derzeit innerhalb einer
+Anfrage, nicht dauerhaft über Suchanfragen. Der bounded MP4-Owner kontrolliert
+Rangegrenzen und gleiche Gesamtlänge, aber keine Assetversion via ETag/If-Range;
+eine gleich große Änderung zwischen Fenstern kann so nicht erkannt werden.
+P14.2 macht Frische und Cachefähigkeit explizit, ohne vier 1-MiB-Fenster oder
+32-/10-Versuche/15-Sekunden zu erhöhen. Fehlender Beleg bleibt neutral.
+
+### AR5 — Prozesslokale Queuekoordination ist keine dauerhafte Besitzgrenze
+
+`download-manager.ts` schützt einen Prozess mit Semaphore/`processingPromise`.
+`instrumentation.ts` ruft beim autorisierten Start Recovery für aktive Jobs
+auf; es gibt keinen DB-weiten Besitzer/Fencingclaim. Zwei Prozesse können
+deshalb dieselbe Queue berühren bzw. aktive Nachbarjobs als unterbrochen markieren.
+Das ist ein Architektur-/Fehlstartrisiko, kein belegter aktueller Doppelworker.
+`application-entrypoint.mjs` leitet SIGINT/SIGTERM bereits weiter; eine gezielte
+Drain-/Leasekoordination des Workers ist damit noch nicht nachgewiesen.
+
+P15.1 härtet ausdrücklich den **Einzelworker**, keine horizontale Skalierung.
+PostgreSQL allein löst Ownership, Crash-/Commit-Ungewissheit und Filesystem-
+Seiteneffekte nicht. P15.4 behandelt einen zweiten konkreten Randfall:
+`addToQueue` erstellt je Aufruf eine UUID, ohne stabilen Auftragsschlüssel;
+verlorene Bestätigung plus UI-Wiederholung kann einen zweiten Job erzeugen.
+Idempotenz gilt nur für belegte gleiche Aufträge, nicht ähnliche Filmtitel.
+
+### AR6 — Betriebsoberfläche wächst und misst teilweise die falschen Dinge
+
+- `download.ts::getHistory` liest alle completed/failed-Zeilen;
+  `/downloads` holt Queue und gesamte History alle fünf Sekunden. Größerer
+  Bestand erhöht Query-/Payload-/Browserkosten, auch ohne aktive Downloads.
+  P15.2 darf native SAB-Consumer nicht durch blindes Abschneiden gefährden.
+- `/api/system` führt zwei synchrone Toolchecks bis je fünf Sekunden aus:
+  das kann den Node-Eventloop blockieren und prüft PATH statt zwingend der vom
+  Worker benutzten Binary. Historische TVDB-Tabellen sind kein aktiver Cache.
+  P15.3 trennt Readiness, Capabilities und alte Datenstatistik.
+- `entrypoint.sh` führt bei schreibendem Boot rekursiv `chown/chmod 755`
+  auf Download-/Tempvolumes aus. Maintenance ist bereits geschützt; regulärer
+  Boot sollte vorhandene Medien-/Nachbarrechte ebenfalls nicht umschreiben.
+
+### Bereinigung, Ausbau und bewusst kein Ausbau
+
+Die großen Owner (`mediathek.ts`, `newznab.ts`, `download-manager.ts`,
+Settings-GUI) mischen Koordination und Detailentscheidungen. P16 extrahiert
+erst nach gesicherten Policy-/Faktenverträgen, nicht nach einer Zeilenquota.
+Typed Cache-/Provider-/Decisionwerte und unabhängige Serializer sind hilfreicher
+als ein neues universelles Framework. P14.3 trennt Datumsarten und Unknown;
+explizite Vorabfolgensuche bleibt ohne vorgelagerten RSS-Grab möglich.
+
+Nicht vorgesehen: weitere HTML-Mediathekcrawler, private Titelpatches, eigener
+automatischer Arr-Scheduler, zwei manuell/automatisch getrennte Endpoints,
+generischer Sprachdefault als angeblicher Trackbeleg, Redis/Microservices,
+automatische DB-Fallbacks, höhere Replikazahl oder neue Produktpflicht zu PG.
+SQLite/PG bleiben gleichwertig; P11.9 bleibt optional. Produktivrollout,
+DB-Migration, reale Grabs und physische Proxyentfernung brauchen weiterhin
+ihre konkrete Freigabe. Keine privaten Betriebsdaten in diesen Dokumenten.
+
+### Vertragsnachreview und Evidenz
+
+Nach Überführung die neuen TODOs gegen jeden Befund, bestehende Erhaltungsregeln,
+aktuelle Code-Owner, Defaults/Units, Consumer, Abhängigkeiten und Abnahmegates
+erneut geprüft. Einzige ausführbare Folgeaufträge: P12–P16 im bestehenden
+Phasenvertrag; P05.2/P09.2/P10.1 referenzieren ihre engen Folgepakete, keine
+doppelten Implementierungslisten. P03.4/P11.9/P10.6/P10.7 bleiben ehrlich offen.
+Bestehende datierte Abnahmen und IDs erhalten; veraltete globale Vollabnahme
+im TODO-Kopf und das vermeintlich aktuelle historische Reviewurteil korrigiert.
+
+Neu geprüft: Prettier für beide Dokumente, 14 lokale Links einschließlich
+des neuen Abschnittsankers, 31 vorhandene Codeanker, 14 eindeutige offene neue
+Paket-IDs, genau drei gezielte Wiederöffnungen, Scope und `git diff --check`.
+Keine Produktgates bei reinem
+TODO-Authoring gemäß Skill. Die zuletzt dokumentierten 1.018 Tests sowie
+Produkt-CI/Container-/Backendnachweise werden für unveränderten Code lediglich
+wiederverwendet; sie beweisen die **noch offenen** Folgeanforderungen nicht.
+Neue GUI-Abnahmen müssen das tatsächlich servierte disposable Desktopbundle
+bedienen; neue Persistenzverträge beide disposable Backends. Keine Tests,
+Screenshots, Produktionsabnahme oder Deployment dieser neuen Pakete behauptet.
