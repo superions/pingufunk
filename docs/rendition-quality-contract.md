@@ -13,7 +13,8 @@ ARTE-HbbTV-JSON nur bei gleicher Programm-ID und exakt gleicher Medien-URL.
 Die bestehende HTTP→HTTPS-Normalisierung bleibt die einzige Ausnahme. Der
 TV-Fassungsowner `arte-editions.ts` übernimmt optional deklarierte Maße aus
 dem bereits abgefragten Player-JSON, ebenfalls pro exakter Stream-URL.
-Es gibt keine zusätzlichen Abfragen, Accountpflicht, Senderseitenparser,
+Für diese strukturierten ARTE-Belege gibt es keine zusätzlichen Abfragen,
+Accountpflicht, Senderseitenparser,
 Remote-ffprobe oder Voll-Downloads bei Suchen. Die HbbTV-Felder sind auch im
 [MediathekView-Crawler](https://github.com/mediathekview/MServer/blob/master/src/main/java/mServer/crawler/sender/arte/json/ArteVideoLinkDeserializer.java)
 dokumentiert. Die Rohantwort-Whitelist des MediathekView-Clients übernimmt
@@ -63,8 +64,10 @@ unterstützten VisualSampleEntry (`vide/minf/stbl/stsd`). Genau eine Videospur,
 eine Beschreibung und positive Maße sind erforderlich. Unbekannter Codec,
 verschlüsselte Beschreibung, mehrere Videos oder beschädigte Grenzen liefern
 keine Dimensionszusage. Keine Ableitung aus `tkhd`-Anzeigemaßen, Slot oder URL.
-Die höchstens vier 1-MiB-Fenster und die gemeinsame Deadline bleiben unverändert;
-eine benötigte fünfte Probe oder unvollständige Tracks liefern keine Teilbelege.
+Die höchstens vier 1-MiB-Fenster und die gemeinsame Deadline bleiben unverändert.
+Optionales Lesen der Videobeschreibung kann weitere dieser Fenster benötigen;
+eine nicht vollständig gelesene Beschreibung liefert keine Maße. Unvollständige
+zwingende Trackheader liefern insgesamt keine Teilbelege.
 Audio-only-Workerproben lesen weiterhin keine zusätzlichen Videobeschreibungen.
 
 Bildmaße und kohärente Tonsprachen sind unabhängig: gemischte Audiospuren bleiben

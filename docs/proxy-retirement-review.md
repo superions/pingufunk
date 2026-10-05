@@ -1430,3 +1430,26 @@ den Forkworkflow ausgeführt und sind vor dem Schließen der TODOs abzuwarten.
 Neue QA-Fixture bleibt unüberwacht, Quellen synthetisch und externes Netz blockiert;
 keine Grabs, Produktivdienste, Profile, Metadaten oder produktive DB verändert.
 Kein Rollout und keine vollständige Sprach-/Importabnahme behauptet.
+
+Review-Nachtrag: Auch der TV-Quellkandidatencache muss den Regel-Fingerprint
+enthalten, weil neue Themen bereits die Abfrage ändern. Der kausale Cachetest
+verlangt Wiederverwendung bei gleichem Kontext und einen echten neuen Lookup
+nach Kontextwechsel. Nach dieser Korrektur **1018** lokale Tests, Lint, Typecheck,
+Format und Build erneut grün. [Fork-CI auf `aefa709`](https://github.com/superions/pingufunk/actions/runs/37380855999)
+inklusive separater PostgreSQL-Integration bestanden; Containerabnahme noch offen.
+
+Begrenzter öffentlicher Quellengegencheck mit demselben neuen MP4-Probeowner:
+zwei aktuelle reguläre ZDF-Folgen liefern jeweils kohärentes Deutsch und kodierte
+1920×1080. Nur Range-Metadaten gelesen, keine Voll-Downloads; reale Katalog-
+und Medienantworten weder persistiert noch als öffentliche Fixtures übernommen.
+Das ist kein produktiver Sonarr-Treffer-, Grab- oder Importnachweis.
+
+Finale Entwicklungsabnahme auf unverändertem Produktstand `aefa709`:
+[Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37380856018)
+vollständig bestanden. Native Sonarr-TBA-Suche direkt/via Prowlarr bewahrt
+Metadaten, ordnet Quelle zu S01E01/German/720p zu und löst keinen Grab aus.
+Native 720p-/UNKNOWN-/Konfliktvarianten, beide Backend-/Mediengates, TLS-Migration
+und Post-write-Rollback grün; keine Image-Publikation. P06.4/P09.5 geschlossen,
+P03.4 und die Vorabfolgen-/Produktiventscheidung unverändert getrennt offen.
+Abschließende Dokumentationsänderungen ändern keine getesteten Produktinputs;
+Produkt-CI-Evidenz wird deshalb wiederverwendet, nicht als neuer Lauf ausgegeben.

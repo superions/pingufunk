@@ -1256,7 +1256,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1275,6 +1275,12 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Vertrag `docs/tv-search-contract.md`; Vorabfolgen-RSS ist eine getrennte
       noch offene Nutzerentscheidung. Produktionsrollout und echte Importe
       bleiben separat freizugeben; keine Profil-, Bibliotheks- oder DB-Änderung.
+      Entwicklungsabnahme 06.10.2026 auf `aefa709`: 1018 reguläre Tests,
+      Lint/Typecheck/Format/Build grün. Fork-CI 37380855999 mit separatem PG-Gate
+      und Docker-Validierung 37380856018 vollständig bestanden. Native Sonarr-
+      TBA-Suche direkt und via Prowlarr, 720p/UNKNOWN-/Konfliktvarianten,
+      SQLite-/PG-Persistenz, echte synthetische Medien und Rollback geprüft;
+      keine Image-Publikation, Grabs oder produktive Mutationen.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
@@ -1785,7 +1791,7 @@ Abhängigkeit P08; B10/R7.
       Dokumentationsabnahme verändert die Produktinputs nicht; diese Evidenz
       bleibt gültig. Keine Produktivursache oder produktive Installation behauptet.
 
-- [ ] **P09.5 — ZDF-/ARD-MP4-Dimensionen aus begrenzten Quellenproben.**
+- [x] **P09.5 — ZDF-/ARD-MP4-Dimensionen aus begrenzten Quellenproben.**
       Nutzerauftrag 06.10.2026; Owner `mp4-audio-language.ts`, `source-audio.ts`,
       bestehender Rendition-/RSS-/NZB-/Workervertrag; abhängig von P09.2/P09.3.
       Im vorhandenen höchstens viermal 1-MiB-/Deadlinebudget kodierte Maße aus
@@ -1799,6 +1805,11 @@ Abhängigkeit P08; B10/R7.
       Vollsuite/Lint/Typecheck/Format/Build und Fork-CI grün. Historische GUIDs,
       Schemas und Altjobs erhalten. `docs/rendition-quality-contract.md` ergänzt;
       P03.4 und Produktivabnahme bleiben unabhängig offen.
+      Entwicklungsabnahme 06.10.2026 mit den frischen Produktgates von P06.4
+      (`aefa709`, CI 37380855999, Container 37380856018). Zwei öffentliche
+      reguläre ZDF-Quellen zusätzlich begrenzt lesend als Deutsch/1920×1080
+      geprüft; keine realen Antworten als Fixture oder Gitinhalt persistiert.
+      Dieser Quellengegencheck ersetzt keinen produktiven Treffer/Import.
 
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und
