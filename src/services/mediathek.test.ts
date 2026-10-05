@@ -142,6 +142,21 @@ describe("Sonarr supplemental search consumer", () => {
       },
     ],
   };
+  it("refreshes TV source retrieval when bound rule topics change", async () => {
+    mockApi([
+      makeItem({ topic: supplemental.name, title: "Missing episode (S02/E03)", duration: 120 }),
+    ]);
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("before-topic-change");
+    const context = makeTvSearchContext({ tvdbId: supplemental.id, season: "2" });
+    await fetchSearchResultsById(supplemental, context, 100, 0);
+    const initialCalls = mockedFetch.mock.calls.length;
+    expect(initialCalls).toBeGreaterThan(0);
+    await fetchSearchResultsById(supplemental, context, 100, 0);
+    expect(mockedFetch).toHaveBeenCalledTimes(initialCalls);
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("after-topic-change");
+    await fetchSearchResultsById(supplemental, context, 100, 0);
+    expect(mockedFetch.mock.calls.length).toBeGreaterThan(initialCalls);
+  });
 
   it("finds an exact supplemental episode via its real title on the same caller budget", async () => {
     mockedGetSetting.mockImplementation(async (key) =>

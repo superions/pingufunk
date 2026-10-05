@@ -990,7 +990,8 @@ export async function fetchSearchResultsById(
   }
 
   // Check for cached API response
-  const apiCacheKey = `mediathekapi_tvdb_arte-v1_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}_${metadataContext}`;
+  // Bound rule topics change retrieval itself, not only the final identity filter.
+  const apiCacheKey = `mediathekapi_tvdb_arte-v1_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}_${metadataContext}_${rulesetContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
