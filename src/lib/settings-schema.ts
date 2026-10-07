@@ -39,7 +39,9 @@ export const SETTING_DEFINITIONS = {
   "download.enableHLS": bool(false),
   "provider.mediathekview.enabled": bool(true),
   "provider.orf.enabled": bool(false),
-  "provider.srf.enabled": bool(false),
+  // Historically SRF is eligible without this row only when credentials and
+  // HLS are configured. Its provider still enforces both gates independently.
+  "provider.srf.enabled": bool(true),
   "matching.strategy": { kind: "enum", defaultValue: "fuzzy", choices: ["fuzzy", "strict"] },
   "matching.threshold": { kind: "decimal", defaultValue: "0.7", min: 0, max: 1 },
   "matching.minDuration": integer(300, 0, Number.MAX_SAFE_INTEGER, "seconds"),

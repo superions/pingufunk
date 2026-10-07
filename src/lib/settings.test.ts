@@ -19,6 +19,7 @@ import {
   isMkvConversionEnabled,
   withSettingsSnapshot,
 } from "./settings";
+import { SrfProvider } from "@/providers/srf";
 
 beforeEach(() => {
   clearSettingsCache();
@@ -26,7 +27,10 @@ beforeEach(() => {
   findMany.mockReset();
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 describe("bounded setting lookups", () => {
   it("coalesces concurrent reads and briefly caches a missing key", async () => {
@@ -103,6 +107,39 @@ describe("getMinDurationSeconds", () => {
 });
 
 describe("request-scoped settings snapshots", () => {
+  it("preserves SRF's credential/HLS opt-in without inventing an explicit disable", async () => {
+    for (const name of ["PINGUFUNK_SRGSSR_CONSUMER_KEY", "PINGUFUNK_SRGSSR_CONSUMER_SECRET"]) {
+      vi.stubEnv(name, undefined);
+      vi.stubEnv(`${name}_FILE`, undefined);
+    }
+    const provider = new SrfProvider();
+    findMany.mockResolvedValue([{ key: "download.enableHLS", value: "true" }]);
+    findUnique.mockImplementation(async ({ where }: { where: { key: string } }) =>
+      where.key.startsWith("api.srgssr.") ? { value: "synthetic-fixture" } : null
+    );
+    await withSettingsSnapshot(async () => {
+      expect(await provider.isEnabled()).toBe(true);
+    });
+    clearSettingsCache();
+    findMany.mockResolvedValue([
+      { key: "download.enableHLS", value: "true" },
+      { key: "provider.srf.enabled", value: "false" },
+    ]);
+    await withSettingsSnapshot(async () => {
+      expect(await provider.isEnabled()).toBe(false);
+    });
+    clearSettingsCache();
+    findMany.mockResolvedValue([]);
+    await withSettingsSnapshot(async () => {
+      expect(await provider.isEnabled()).toBe(false);
+    });
+    clearSettingsCache();
+    findMany.mockResolvedValue([{ key: "download.enableHLS", value: "true" }]);
+    findUnique.mockResolvedValue(null);
+    await withSettingsSnapshot(async () => {
+      expect(await provider.isEnabled()).toBe(false);
+    });
+  });
   it("reads one atomic policy and reuses it in nested owners", async () => {
     findMany.mockResolvedValue([{ key: "matching.sonarr.tolerancePercent", value: "015" }]);
     await withSettingsSnapshot(async () => {

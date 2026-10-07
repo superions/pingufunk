@@ -1713,7 +1713,7 @@ Vertrag und Rückweggrenze: [Settings-/Jobpolicy-Referenz](settings-contract.md)
 ### Neue lokale Evidenz und noch ausstehendes Gate
 
 - `npm ci`, danach **1073 bestandene reguläre Tests / 100 Dateien**;
-  18 providerabhängige Runtimefälle regulär übersprungen. Lint, Typecheck,
+  18 backendabhängige Runtimefälle regulär übersprungen. Lint, Typecheck,
   Formatcheck, Productionbuild und Diffcheck bestanden auf Node 26.10.0.
 - Zusätzlich **14/14 echte disposable SQLite-/PG-Runtimefälle** für Settings
   und Joberwartungen: DB-native Fehler beim zweiten Write, kein Teilstand,
@@ -1745,3 +1745,19 @@ Das ist keine nachgewiesene Runtimeausnutzbarkeit und kein behobener Befund.
 Dependencies wurden in diesem Settingspaket nicht geändert; keine behauptete
 Securityvollabnahme. Review durch denselben Implementierer, kein unabhängiger
 Peerreview. Keine Secrets, privaten APIantworten oder Topologie in Fixtures/Git.
+
+Nachreview vor Abnahme: Die zunächst inventarisierte SRF-Enablevoreinstellung
+war zu streng gegenüber dem ausgelieferten Consumer. Fehlender Enable-Key
+bedeutete dort bereits „mit Credentials und HLS nutzbar“, nicht Disabled.
+Der Snapshotdefault erhält jetzt genau das; explizites false, fehlende
+Credentials und deaktiviertes HLS bleiben gesperrt. Eine kausale Regression
+verwendet den echten SRF-Owner innerhalb des echten Settingssnapshotowners,
+ohne externe API oder Credentialdatei. Voriger Produkt-CI-Lauf ist damit nur
+historische Zwischenstandevidenz, finale Fork-/Containergates neu erforderlich.
+Nach der SRF-Korrektur alle lokalen regulären Gates erneut bestanden:
+**1074 Tests**, Lint, Typecheck, Format und Build. UI-/DB-Evidenz für unveränderte
+Formulare und Transaktionen wird wiederverwendet, nicht als neuer Lauf ausgegeben.
+Die erste PG-CI fand außerdem noch eine alte Runtimefixture, die einen neuen
+unbekannten Key per API schreiben wollte. Dieser muss nach P12 korrekt 400
+liefern; Fixture auf unveränderten Legacy-Read plus kanonischen typisierten
+Write umgestellt, negative Unknown-Writeprüfung ergänzt. Kein Entfernen des Gates.

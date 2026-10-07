@@ -202,7 +202,10 @@ it.skipIf(!run)(
     const { prisma } = await import("@/lib/db");
     const id = randomUUID();
     const topic = `qa-${id}`;
-    const settingKey = `qa.${id}`;
+    const legacyKey = `qa.${id}`;
+    const settingKey = "matching.movie.yearTolerance";
+    // This gate owns an empty disposable schema, never an installation config.
+    expect(await prisma.config.findUnique({ where: { key: settingKey } })).toBeNull();
     try {
       await prisma.download.create({
         data: {
@@ -217,19 +220,36 @@ it.skipIf(!run)(
         data: { id, topic, tvdbId: 7123, showName: "Synthetic" },
       });
       await prisma.topicCategory.create({ data: { id, topic, category: "tv" } });
+      await prisma.config.create({ data: { key: legacyKey, value: "synthetic-setting" } });
       const { POST: settingsPost, GET: settingsGet } = await import("@/app/api/settings/route");
+      const rejected = await settingsPost(
+        new NextRequest("http://localhost/api/settings", {
+          method: "POST",
+          body: JSON.stringify({ key: legacyKey, value: "must-not-replace" }),
+        })
+      );
+      expect(rejected.status).toBe(400);
       const saved = await settingsPost(
         new NextRequest("http://localhost/api/settings", {
           method: "POST",
-          body: JSON.stringify({ key: settingKey, value: "synthetic-setting" }),
+          body: JSON.stringify({ key: settingKey, value: "02" }),
         })
       );
       expect(saved.status).toBe(200);
+      expect(await saved.json()).toMatchObject({
+        success: true,
+        updated: 1,
+        settings: { [settingKey]: "2" },
+      });
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
       const readback = await settingsGet(
         new NextRequest(`http://localhost/api/settings?key=${settingKey}`)
       );
-      expect((await readback.json()).value).toBe("synthetic-setting");
+      expect((await readback.json()).value).toBe("2");
+      const legacyReadback = await settingsGet(
+        new NextRequest(`http://localhost/api/settings?key=${legacyKey}`)
+      );
+      expect((await legacyReadback.json()).value).toBe("synthetic-setting");
       const { getQueue, getHistory } = await import("@/services/download");
       const { getCategoryForTopic } = await import("@/services/category");
       const { GET: rulesetsGet } = await import("@/app/api/rulesets/route");
@@ -259,7 +279,7 @@ it.skipIf(!run)(
       await prisma.download.deleteMany({ where: { id } });
       await prisma.generatedRuleset.deleteMany({ where: { id } });
       await prisma.topicCategory.deleteMany({ where: { id } });
-      await prisma.config.deleteMany({ where: { key: settingKey } });
+      await prisma.config.deleteMany({ where: { key: { in: [settingKey, legacyKey] } } });
       await prisma.$disconnect();
     }
   }

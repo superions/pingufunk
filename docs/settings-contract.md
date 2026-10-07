@@ -9,6 +9,9 @@ historische Configzeilen bleiben lesbar und unverändert, sind aber keine neuen
 schreibbaren Produktsettings. `null`, Objekte und unbekannte Keys werden nicht
 in Strings verwandelt. Such-TTL ist auf einen Tag, Metadaten-TTL auf sieben Tage
 begrenzt; `0` deaktiviert den jeweiligen Cache.
+SRF behält den historischen impliziten Enablezustand bei fehlendem Enable-Key;
+verwendbar bleibt es nur mit serverseitigen Credentials und aktiviertem HLS.
+Ein explizites `false` bleibt ein Disable. ORF bleibt ausdrücklich opt-in.
 
 Unter `/settings` → Matching sind unabhängig von einer Arr-Anbindung einstellbar:
 
