@@ -1674,3 +1674,74 @@ wiederverwendet; sie beweisen die **noch offenen** Folgeanforderungen nicht.
 Neue GUI-Abnahmen müssen das tatsächlich servierte disposable Desktopbundle
 bedienen; neue Persistenzverträge beide disposable Backends. Keine Tests,
 Screenshots, Produktionsabnahme oder Deployment dieser neuen Pakete behauptet.
+
+## P12-Implementierungsreview (08.10.2026)
+
+Auftrag jetzt ausdrücklich Umsetzung des Folgepakets, zunächst zusammenhängender
+P12-Checkpoint auf `codex/matching-settings-contract`. Upstream
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49` nochmals abgeglichen; kein passender
+atomarer Settings-/Jobpolicy-Ersatz übernommen. Kein Produktionszugriff,
+Deployment, Imagepublish, Main-/Upstreampush oder reale Bibliotheksoperation.
+
+### Reparierte Verträge
+
+AR1/AR2 werden gemeinsam durch `settings-schema.ts`, die transaktionale API,
+bestätigte Clientresponseordnung und einen serverseitigen Suchsnapshot behoben.
+24 nichtsecret Produktkeys haben einen gemeinsamen Typ-/Default-/Grenzowner.
+Unbekannte historische Zeilen bleiben unverändert lesbar; neue unbekannte,
+Null-/Objekt- und ungültige Werte werden vor dem Write abgelehnt. Keine stille
+Reparatur vorhandener ungültiger Matchingwerte. Der Commitfehlerpfad sagt
+ausdrücklich „unbestätigt“, statt einen verlorenen Commit-Ack als Rollback zu
+behaupten. Kontrollierter Readback und Cacheinvalidierung sind kausal getestet;
+späte GETs und konkurrierende Formularwrites überschreiben keine Bestätigung.
+
+Die drei unabhängigen Matchingregler sind unabhängig von optionalen Arr-URLs
+bedienbar. Die neue Radarr-Karte ergänzt nur vorhandene öffentliche Controls;
+HTTP/HTTPS mit Unterpfad bleibt möglich. Credentialstatus ist vorhanden/fehlend/
+ungültig, ohne Key oder Pfad. Auch historische credentialhaltige Arr-URLs
+werden nicht an den Browser ausgegeben. Keine neue Secretverwaltung.
+
+Neue `MediaExpectations` v3 trennen Medienart, technische Katalogreferenz mit
+festen 10 % und belegte Serienmetadaten mit eingefrorener Serienregel. Beide
+bekannten Referenzen bleiben erhalten und werden unabhängig geprüft. Source-
+Audio-/Dimensionsbindung, Sample-/HLS-/EXDEV-/Byte-/Datei-/Exitguards bleiben
+erhalten. Alte v1/v2/unversionierte Jobs werden nicht umgeschrieben; ihre
+dynamische Altregel bleibt dokumentiert. Kein Schemawechsel; **nach einem v3-Job
+ist ein v3-inkompatibles Image trotzdem kein sicherer App-Rollback**.
+Vertrag und Rückweggrenze: [Settings-/Jobpolicy-Referenz](settings-contract.md).
+
+### Neue lokale Evidenz und noch ausstehendes Gate
+
+- `npm ci`, danach **1073 bestandene reguläre Tests / 100 Dateien**;
+  18 providerabhängige Runtimefälle regulär übersprungen. Lint, Typecheck,
+  Formatcheck, Productionbuild und Diffcheck bestanden auf Node 26.10.0.
+- Zusätzlich **14/14 echte disposable SQLite-/PG-Runtimefälle** für Settings
+  und Joberwartungen: DB-native Fehler beim zweiten Write, kein Teilstand,
+  kanonischer Readback, Unknown-/Null-/Objekt-/Rangeablehnung und Neustart;
+  v1/v2/v3-Erwartungen über Einreihung, Retry und Settingswechsel. Das ersetzt
+  weder die vollständige PG-CI noch die neue reale Mediencontainerkette.
+- Tatsächlich serviertes Desktopbundle (1440×1100), Light/Dark, Pointer/Keyboard,
+  Save/Reload/API-/DB-Readback auf beiden Backends. SQLitetrigger und PG-Constraint
+  reproduzieren den zweiten Writefehler: keine Erfolgsmeldung, alte DB-Werte,
+  ungespeicherte Eingaben bleiben. Leere, gebrochene und übergroße Werte gesperrt;
+  andere Dirty-Karten und Matchingtab bleiben beim Readback erhalten.
+- Gematchte Vorher-/Nachherbilder in beiden Themes. Dark verwendet eine temporäre
+  Root-Themefixture im tatsächlich servierten Bundle, kein Produkt-Themewechsel
+  oder DOM-Nachbearbeiten; die Fixture ist entfernt. Frische stabile Light-
+  Produktions- und Dark-Testtabs haben keine Consoleerrors/-warnings.
+  Frühere HMR-Hydrationmeldungen während laufender Quelländerungen sind kein
+  behaupteter fehlerfreier Gesamtverlauf; die Abnahme nutzt frische stabile Tabs.
+
+Die Containerharnesses sichern weiterhin unbekannte Originalsettings, schreiben
+für den Persistenztest jetzt den typisierten Filmjahreskey und bestätigen den
+kanonischen Wert. Neue v3-Worker-Matrix ergänzt (nicht ersetzt) Legacy/HLS/
+Truncation/Audio/Auflösung/Retry/Restart. **Fork-CI und Dockervalidierung müssen
+diesen Produktstand noch ausführen; P12 und P05.2/P09.2 bleiben bis dahin offen.**
+P13–P16 sowie P03.4 sind durch diese Arbeit nicht abgenommen.
+
+Separate bestehende Befunde: 14 Build-Tracingwarnungen; `npm ci`/Audit meldet
+einen High-Hinweis in transitivem `source-map-js` 1.2.1 (GHSA-68fv-2mgg-jv7q).
+Das ist keine nachgewiesene Runtimeausnutzbarkeit und kein behobener Befund.
+Dependencies wurden in diesem Settingspaket nicht geändert; keine behauptete
+Securityvollabnahme. Review durch denselben Implementierer, kein unabhängiger
+Peerreview. Keine Secrets, privaten APIantworten oder Topologie in Fixtures/Git.

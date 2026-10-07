@@ -54,9 +54,71 @@ export const sourceAudioSchema = z.discriminatedUnion("provider", [
 const v2Schema = v1Schema
   .extend({ version: z.literal(2), audio: z.null(), sourceAudio: sourceAudioSchema })
   .strict();
-export const mediaExpectationsSchema = z.discriminatedUnion("version", [v1Schema, v2Schema]);
+const toleranceSchema = z.number().int().min(0).max(25);
+const v3Schema = z
+  .object({
+    version: z.literal(3),
+    mediaKind: z.enum(["movie", "series", "unknown"]),
+    durations: z
+      .object({
+        source: durationSchema
+          .extend({ provenance: z.literal("source_catalogue"), tolerancePercent: z.literal(10) })
+          .strict()
+          .nullable(),
+        metadata: durationSchema
+          .extend({ provenance: z.literal("episode_metadata"), tolerancePercent: toleranceSchema })
+          .strict()
+          .nullable(),
+      })
+      .strict(),
+    audio: audioSchema.nullable(),
+    sourceAudio: sourceAudioSchema.nullable(),
+    resolution: resolutionSchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.durations.metadata && value.mediaKind !== "series")
+      context.addIssue({
+        code: "custom",
+        message: "Episode reference requires verified series context",
+      });
+    if (value.audio && value.sourceAudio)
+      context.addIssue({ code: "custom", message: "Provider evidence is not a container tag" });
+  });
+export type NewMediaExpectations = z.infer<typeof v3Schema>;
+export const mediaExpectationsSchema = z.discriminatedUnion("version", [
+  v1Schema,
+  v2Schema,
+  v3Schema,
+]);
 export type SourceAudioEvidence = z.infer<typeof sourceAudioSchema>;
 export type MediaExpectations = z.infer<typeof mediaExpectationsSchema>;
+
+export function sourceAudioExpectation(
+  value: MediaExpectations | null
+): SourceAudioEvidence | null {
+  return value?.version === 2 || value?.version === 3 ? value.sourceAudio : null;
+}
+
+/** v1/v2 keep their shipped dynamic tolerance; v3 carries each frozen reference. */
+export function durationExpectations(value: MediaExpectations | null, legacyTolerance: number) {
+  return value?.version === 3
+    ? [value.durations.source, value.durations.metadata].filter((reference) => reference !== null)
+    : value?.duration
+      ? [{ ...value.duration, tolerancePercent: legacyTolerance }]
+      : [];
+}
+
+export function unknownJobMediaExpectations(): NewMediaExpectations {
+  return {
+    version: 3,
+    mediaKind: "unknown",
+    durations: { source: null, metadata: null },
+    audio: null,
+    sourceAudio: null,
+    resolution: null,
+  };
+}
 
 export class MediaExpectationsError extends Error {
   constructor() {

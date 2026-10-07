@@ -45,6 +45,7 @@ export async function searchCacheContext(): Promise<string> {
     "integration.radarr.url",
     "integration.radarr.inventoryMaxMiB",
     "matching.movie.tolerancePercent",
+    "matching.movie.yearTolerance",
     "api.radarr.key",
   ];
   const sonarrEnabled = (await getSetting("integration.sonarr.enabled")) === "true";

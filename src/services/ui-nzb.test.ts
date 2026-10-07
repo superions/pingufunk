@@ -17,7 +17,7 @@ const item: ApiResultItem = {
   url_video_hd: "https://example.invalid/hd.mp4",
   url_video_low: "https://example.invalid/low.mp4",
 };
-it("keeps server-authored UI filenames, current URLs and v1 facts in all renditions", () => {
+it("keeps server-authored UI filenames, current URLs and v3 facts in all renditions", () => {
   const releases = createUiNzbDownloads(item, false);
   expect(Object.keys(releases)).toEqual(["hd", "sd", "low"]);
   for (const [key, url] of [
@@ -29,18 +29,25 @@ it("keeps server-authored UI filenames, current URLs and v1 facts in all renditi
       title: "Example & Topic - Film _Title_ -- S02E03",
       url,
       mediaExpectations: {
-        version: 1,
-        duration: { seconds: 120, provenance: "source_catalogue" },
+        version: 3,
+        mediaKind: "unknown",
+        durations: {
+          source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+          metadata: null,
+        },
+        sourceAudio: null,
         audio: null,
         resolution: null,
       },
     });
 });
-it("declares unknown v1 facts rather than a browser-authored legacy NZB", () => {
+it("declares unknown v3 facts rather than inferring media kind from a UI title", () => {
   const releases = createUiNzbDownloads({ ...item, duration: 0 }, false);
   expect(parseNzbContent(releases.sd!)?.mediaExpectations).toEqual({
-    version: 1,
-    duration: null,
+    version: 3,
+    mediaKind: "unknown",
+    durations: { source: null, metadata: null },
+    sourceAudio: null,
     audio: null,
     resolution: null,
   });

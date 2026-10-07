@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn(async ({ where }: { where: { key: string } }) =>
         state.settings.has(where.key) ? { value: state.settings.get(where.key) } : null
       ),
-      findMany: vi.fn(async () => []),
+      findMany: vi.fn(async () => [...state.settings].map(([key, value]) => ({ key, value }))),
     },
   },
 }));
@@ -223,8 +223,13 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
   );
   const content = await nzb.text();
   const mediaExpectations = {
-    version: 1,
-    duration: { seconds: 5400, provenance: "source_catalogue" },
+    version: 3,
+    mediaKind: "movie",
+    durations: {
+      source: { seconds: 5400, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata: null,
+    },
+    sourceAudio: null,
     audio: null,
     resolution: null,
   };
@@ -300,8 +305,13 @@ it("uses an explicit public URL including its deployment prefix without altering
     title: release.title[0],
     url: source.url_video,
     mediaExpectations: {
-      version: 1,
-      duration: { seconds: 5400, provenance: "source_catalogue" },
+      version: 3,
+      mediaKind: "movie",
+      durations: {
+        source: { seconds: 5400, provenance: "source_catalogue", tolerancePercent: 10 },
+        metadata: null,
+      },
+      sourceAudio: null,
       audio: null,
       resolution: null,
     },

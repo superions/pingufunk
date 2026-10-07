@@ -77,6 +77,11 @@ einen HTML-Fallback kaschiert, sondern verlangen Providerprüfung und Regression
 
 ## Download und Speicherung
 
+P12 ergänzt für neue eigene Jobs v3, siehe [Settings-/Jobvertrag](settings-contract.md).
+Die folgenden v1/v2-Ausführungen dokumentieren den erhaltenen Altvertrag.
+v3 behält denselben Audio-/Providerbelegschutz und trennt zusätzlich eingefrorene
+Quellen- und Episodendauer. Keine neue Sprachheuristik oder vollständige P03.4-Abnahme.
+
 `MediaExpectations` v1 bleibt für vorhandene Jobs unverändert. Bei MP4-Sprach-
 Tags wird weiterhin der strenge v1-Trackvertrag geprüft. ARTE-/ARD-Providerbelege
 verwenden v2: `audio` bleibt null, `sourceAudio` enthält Provider, Programm-ID,

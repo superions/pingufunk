@@ -14,7 +14,7 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn(async ({ where }: { where: { key: string } }) =>
         state.settings.has(where.key) ? { value: state.settings.get(where.key) } : null
       ),
-      findMany: vi.fn(async () => []),
+      findMany: vi.fn(async () => [...state.settings].map(([key, value]) => ({ key, value }))),
     },
   },
 }));
@@ -344,9 +344,13 @@ it.each(["ard", "arte", "zdf"] as const)(
       expect(parsed).toMatchObject({
         url: rows[index].url_video_hd,
         mediaExpectations: {
-          version: provider === "zdf" ? 1 : 2,
+          version: 3,
+          mediaKind: "series",
           audio: provider === "zdf" ? { language: "de", provenance: "provider_audio" } : null,
-          duration: { seconds: 120, provenance: "episode_metadata" },
+          durations: {
+            source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+            metadata: { seconds: 120, provenance: "episode_metadata", tolerancePercent: 10 },
+          },
           ...(provider === "zdf"
             ? { resolution: { width: 1280, height: 720, provenance: "provider_dimensions" } }
             : {
@@ -428,8 +432,13 @@ it.each([false, true])(
       expect(nzbResponse.status).toBe(200);
       const nzb = await nzbResponse.text();
       const mediaExpectations = {
-        version: 1,
-        duration: { seconds: 120, provenance: "episode_metadata" },
+        version: 3,
+        mediaKind: "series",
+        durations: {
+          source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+          metadata: { seconds: 120, provenance: "episode_metadata", tolerancePercent: 10 },
+        },
+        sourceAudio: null,
         audio: null,
         resolution: null,
       };

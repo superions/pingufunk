@@ -144,7 +144,7 @@ it("carries exact rendition evidence through RSS/NZB and requires fresh worker v
   const { decodeMediaExpectations } = await import("./nzb-release");
   const expected = decodeMediaExpectations(query.get("encodedExpectations")!);
   expect(expected).toMatchObject({
-    version: 2,
+    version: 3,
     audio: null,
     sourceAudio: {
       provider: "ard_media",
@@ -156,7 +156,7 @@ it("carries exact rendition evidence through RSS/NZB and requires fresh worker v
   });
   const nzb = generateFakeNzb({ title: rss.title, url, mediaExpectations: expected });
   expect(parseNzbContent(nzb)).toEqual({ title: rss.title, url, mediaExpectations: expected });
-  if (expected.version !== 2) throw new Error("Expected source evidence");
+  if (expected.version !== 3 || !expected.sourceAudio) throw new Error("Expected source evidence");
   await expect(
     verifySourceAudio(expected.sourceAudio, url, new HttpRequestBudget())
   ).resolves.toEqual(expected.sourceAudio);

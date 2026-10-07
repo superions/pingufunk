@@ -69,6 +69,36 @@ describe("matchMovieItems – HLS eligibility", () => {
 
 describe("source candidates are not canonical movie proof", () => {
   it.each([
+    [2024, true],
+    [2028, true],
+    [2023, false],
+    [2029, false],
+  ])(
+    "uses the configurable year boundary directly against canonical metadata: %s",
+    async (year, verified) => {
+      vi.mocked(getSetting).mockImplementation(async (key) =>
+        key === "matching.movie.yearTolerance" ? "2" : null
+      );
+      const [match] = await matchMovieItems(
+        [{ ...makeItem(2700, "configured-year"), title: `Documentary (${year})` }],
+        movie,
+        300
+      );
+      expect(match.identityVerified).toBe(verified);
+    }
+  );
+  it.each(["0", "6", "2.5", "invalid", ""])(
+    "does not silently default malformed stored year policy: %s",
+    async (value) => {
+      vi.mocked(getSetting).mockImplementation(async (key) =>
+        key === "matching.movie.yearTolerance" ? value : null
+      );
+      await expect(
+        matchMovieItems([makeItem(2700, "configured-year")], movie, 300)
+      ).rejects.toThrow("Invalid stored setting");
+    }
+  );
+  it.each([
     [4859, false],
     [4860, true],
     [5400, true],

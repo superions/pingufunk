@@ -5,11 +5,19 @@ import { fileURLToPath } from "node:url";
 
 const configured = new URL(process.env.DATABASE_URL ?? "invalid:");
 const file = configured.protocol === "file:" ? fileURLToPath(configured) : "";
+const qaDirectory = file ? dirname(file) : (process.env.PINGUFUNK_UI_QA_DIRECTORY ?? "");
+const disposablePostgres =
+  ["postgres:", "postgresql:"].includes(configured.protocol) &&
+  ["localhost", "127.0.0.1"].includes(configured.hostname) &&
+  configured.pathname === "/pingufunk_qa" &&
+  configured.username === "pingufunk_qa_runtime" &&
+  configured.searchParams.get("schema") === "p12_ui";
 if (
   process.env.PINGUFUNK_DISPOSABLE_UI_QA !== "1" ||
-  !isAbsolute(file) ||
-  !dirname(file).includes("ui-qa.") ||
-  !existsSync(join(dirname(file), "synthetic-only.marker"))
+  (!file && !disposablePostgres) ||
+  !isAbsolute(qaDirectory) ||
+  !qaDirectory.includes("ui-qa.") ||
+  !existsSync(join(qaDirectory, "synthetic-only.marker"))
 )
   throw new Error("Explicit disposable UI fixture required");
 const nativeFetch = globalThis.fetch;

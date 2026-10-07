@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 06.10.2026. **Architekturreview und Folgeauftrag P12–P16 ergänzt, noch nicht implementiert. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **P12 ist implementiert und lokal geprüft; die neue Container-/Fork-Abnahme steht noch aus. P13–P16 sind noch offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -2185,6 +2185,11 @@ wird damit aufgeweicht.
       Cache-Readback nach Erfolg/Rollback getestet. API-/Settingscontext-
       Regressionen kausal; P05.2 erst danach erneut schließen. Keine neue DB
       oder Backendumschaltung zum Speichern von Settings.
+      Entwicklungscheckpoint 08.10.2026: gemeinsamer typisierter Owner,
+      Gesamttransaktion und bestätigte Responseordnung umgesetzt. Echte
+      SQLite-/PG-Fehler beim zweiten Write hinterlassen keinen Teilstand;
+      verlorene Commitbestätigung wird als ungewiss mit kontrolliertem Readback
+      behandelt. Lokale Gates grün, Fork-/Containerabnahme noch ausstehend.
 - [ ] **P12.2 — Ein Policy-Snapshot pro Suche und expliziter Job-Dauervertrag.**
       Abhängigkeit P12.1. Owner: `movie-matcher.ts`, `movie-search-context.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `content-search.ts`,
@@ -2227,6 +2232,11 @@ wird damit aufgeweicht.
       möglichst im vorhandenen versionierten Textfeld; nur bei tatsächlichem
       Schemabedarf append-only Migrationen beider Provider. P09.2 danach erneut
       abnehmen; kein vorzeitiges Completed und kein Test gegen Produktionsjobs.
+      Entwicklungscheckpoint 08.10.2026: ein Suchsnapshot einschließlich
+      Filmjahr und neue v3-Joberwartungen in Producer/Parser/Persistenz/Retry/
+      Worker. Keine DDL. Beide realen disposable Backends sichern Restart,
+      Retry und Settingswechsel; neue v3-Mediencontainerprobe vor Abnahme
+      noch auszuführen. Legacygrenze und v3-kompatibler Rollback dokumentiert.
 - [ ] **P12.3 — Drei unabhängige Toleranzregler in Matching bedienbar machen.**
       Abhängigkeit P12.1/P12.2. Owner: `src/app/settings/page.tsx`,
       Settingscontext und bestehende UI-Komponenten. Film-Laufzeit ±%,
@@ -2244,6 +2254,12 @@ wird damit aufgeweicht.
       Matchingconsumer verwenden exakt die angezeigten bestätigten Werte.
       Gematchte Screenshots und Konsole nach `pingufunk-visual-qa`, beide
       Backend-Persistenzketten; keine produktiven Settingsänderungen.
+      Entwicklungscheckpoint 08.10.2026: drei getrennte Regler bedient,
+      normalisiert gespeichert, neu geladen und gegen SQLite/PG gelesen.
+      Desktop-Light/Dark samt echten DB-Fehlern, ungültigen Werten, erhaltenen
+      unabhängigen Dirty-Formularen und sauberer frischer Konsole geprüft.
+      Dark über temporäre reine Root-Themefixture, danach entfernt; keine
+      browserseitige DOM-Manipulation. P12.2-Containerabnahme bleibt vorgelagert.
 - [ ] **P12.4 — Optionale Radarr-Konfiguration ohne Secretfelder vervollständigen.**
       Abhängigkeit P12.1, unabhängig von P12.2/P12.3. Owner: Settings-GUI,
       `radarr-settings.ts`, `src/services/radarr-provider.ts` und GET-only-Arr-Client.
@@ -2254,6 +2270,10 @@ wird damit aufgeweicht.
       keine zweite Suchroute. Abnahme: deaktiviert ohne Key nutzbar, validierte
       Save/Reload-/Fehlerjourney und gemockte lesende Verbindung mit Unterpfad;
       keine Keys/Dateipfade/URLs mit Credentials in Browserantworten oder Bildern.
+      Entwicklungscheckpoint 08.10.2026: optionale Radarr-Karte mit URL-
+      Unterpfad, Inventarlimit und ausschließlich Credentialstatus umgesetzt;
+      deaktiviert ohne Key sowie ungültige serverseitige Quelle geprüft.
+      Save/Reload auf beiden Backends und bestehende GET-only-Consumerfälle grün.
 
 ## Phase P13 — Erklären können, warum ein Treffer oder Import fehlt
 

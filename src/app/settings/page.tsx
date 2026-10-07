@@ -36,6 +36,30 @@ import {
   type LanguagePolicy,
 } from "@/lib/language-policy";
 import packageJson from "../../../package.json";
+import {
+  SETTING_DEFINITIONS,
+  DEFAULT_PRODUCT_SETTINGS,
+  normalizeSetting,
+  type WritableSettingKey,
+} from "@/lib/settings-schema";
+
+const TOLERANCE_CONTROLS = [
+  {
+    key: "matching.movie.tolerancePercent",
+    id: "movie-tolerance",
+    label: "Film-Laufzeittoleranz (%)",
+  },
+  {
+    key: "matching.sonarr.tolerancePercent",
+    id: "series-tolerance",
+    label: "Serien-Laufzeittoleranz (%)",
+  },
+  {
+    key: "matching.movie.yearTolerance",
+    id: "movie-year-tolerance",
+    label: "Film-Erscheinungsjahr (± Jahre)",
+  },
+] as const;
 
 const LANGUAGE_PREFERENCES: {
   key: Exclude<keyof LanguagePolicy, "version">;
@@ -94,7 +118,15 @@ function formatUptime(seconds: number): string {
 }
 
 export default function SettingsPage() {
-  const { settings, isLoading, updateSettings, refreshSettings } = useSettings();
+  const {
+    settings,
+    isLoading,
+    error,
+    invalidKeys,
+    arrCredentials,
+    updateSettings,
+    refreshSettings,
+  } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<{ error: boolean; message: string } | null>(
     null
@@ -142,33 +174,22 @@ export default function SettingsPage() {
     setFormState((prev) => ({ ...prev, [key]: value }));
   };
 
-  const sonarrFormError = (() => {
-    const window = getFieldValue("integration.sonarr.windowDays");
-    const tolerance = getFieldValue("matching.sonarr.tolerancePercent");
-    if (!/^\d+$/.test(window) || Number(window) < 1 || Number(window) > 90)
-      return "RSS-Fenster: ganze Tage zwischen 1 und 90 eingeben.";
-    if (!/^\d+$/.test(tolerance) || Number(tolerance) < 0 || Number(tolerance) > 25)
-      return "Laufzeittoleranz: ganze Prozent zwischen 0 und 25 eingeben.";
-    const value = getFieldValue("integration.sonarr.url").trim();
-    if (!value)
-      return getFieldValue("integration.sonarr.enabled") === "true"
-        ? "Zum Aktivieren eine Sonarr-Basis-URL eingeben."
-        : null;
-    try {
-      const url = new URL(value);
-      if (
-        !["http:", "https:"].includes(url.protocol) ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash
-      )
-        throw new Error();
-    } catch {
-      return "Basis-URL: HTTP(S) ohne Zugangsdaten, Query oder Fragment eingeben.";
-    }
+  const formError = (keys: readonly WritableSettingKey[]) =>
+    keys.some((key) => normalizeSetting(key, getFieldValue(key)) === null);
+  const integrationFormError = (app: "sonarr" | "radarr") => {
+    const urlKey = `integration.${app}.url` as WritableSettingKey;
+    const enabledKey = `integration.${app}.enabled` as WritableSettingKey;
+    const sizeKey =
+      app === "sonarr" ? "integration.sonarr.windowDays" : "integration.radarr.inventoryMaxMiB";
+    if (formError([enabledKey, urlKey, sizeKey]))
+      return "Ungültige Eingabe: Grenzen und HTTP(S)-URL ohne Zugangsdaten, Query oder Fragment prüfen.";
+    if (getFieldValue(enabledKey) === "true" && !getFieldValue(urlKey).trim())
+      return "Zum Aktivieren eine Basis-URL eingeben.";
     return null;
-  })();
+  };
+  const sonarrFormError = integrationFormError("sonarr");
+  const radarrFormError = integrationFormError("radarr");
+  const toleranceFormError = formError(TOLERANCE_CONTROLS.map((control) => control.key));
 
   const getLanguagePolicy = () =>
     readLanguagePolicy(getFieldValue(LANGUAGE_POLICY_SETTING_KEY) || DEFAULT_LANGUAGE_POLICY);
@@ -202,12 +223,17 @@ export default function SettingsPage() {
           return remaining;
         });
       }
-      setSaveFeedback({ error: false, message: "Einstellungen gespeichert." });
+      setSaveFeedback({
+        error: false,
+        message: Object.keys(updates).length
+          ? "Einstellungen gespeichert."
+          : "Keine Änderungen zum Speichern.",
+      });
     } catch {
       setSaveFeedback({
         error: true,
         message:
-          "Speichern fehlgeschlagen. Eingaben und Wartungsstatus prüfen; Änderungen bleiben zur Korrektur erhalten.",
+          "Speichern nicht bestätigt. Gespeicherten Stand neu laden, bevor du erneut speicherst. Eingaben bleiben zur Korrektur erhalten.",
       });
     } finally {
       setIsSaving(false);
@@ -250,7 +276,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !settings) {
     return (
       <div className="p-4 md:p-6 lg:p-8 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin" />
@@ -277,6 +303,20 @@ export default function SettingsPage() {
         <p className="text-muted-foreground text-sm">Konfiguriere RundfunkArr</p>
       </div>
 
+      {invalidKeys.length > 0 && (
+        <p role="alert" className="text-sm text-destructive">
+          Ungültiger gespeicherter Stand: {invalidKeys.join(", ")}. Die Daten bleiben erhalten.
+          Betroffene Werte ausdrücklich korrigieren; Matching verwendet keine stillen Ersatzregeln.
+        </p>
+      )}
+      {error && !saveFeedback?.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <Button variant="outline" onClick={refreshSettings} disabled={isSaving || isLoading}>
+        Gespeicherten Stand neu laden
+      </Button>
       {saveFeedback && (
         <p
           role={saveFeedback.error ? "alert" : "status"}
@@ -629,6 +669,73 @@ export default function SettingsPage() {
 
               <Card>
                 <CardHeader>
+                  <CardTitle>Identitäts-Toleranzen</CardTitle>
+                  <CardDescription>
+                    Film, Serie und Filmjahr getrennt prüfen – unabhängig von optionalen
+                    Arr-Anbindungen.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {TOLERANCE_CONTROLS.map(({ key, id, label }) => {
+                    const definition = SETTING_DEFINITIONS[key];
+                    const invalid = normalizeSetting(key, getFieldValue(key)) === null;
+                    return (
+                      <div key={key}>
+                        <label htmlFor={id} className="text-sm font-medium">
+                          {label}
+                        </label>
+                        <Input
+                          id={id}
+                          type="number"
+                          min={definition.min}
+                          max={definition.max}
+                          step="1"
+                          value={getFieldValue(key)}
+                          aria-invalid={invalid}
+                          aria-describedby={`${id}-help`}
+                          onChange={(event) => setFieldValue(key, event.target.value)}
+                          className="mt-1"
+                        />
+                        <p id={`${id}-help`} className="text-xs text-muted-foreground mt-1">
+                          Ganze Werte {definition.min}–{definition.max}; Produktdefault{" "}
+                          {DEFAULT_PRODUCT_SETTINGS[key]}
+                          {definition.unit === "percent" ? " %" : " Jahr"}.
+                          {formState[key] !== undefined && formState[key] !== settings[key]
+                            ? ` Gespeichert: ${settings[key]}.`
+                            : ""}
+                        </p>
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-muted-foreground">
+                    Laufzeit: 0 % verlangt exakte Dauer. Sonst gilt ein 5-Sekunden-Boden, gedeckelt
+                    auf 25 % der belegten Solldauer. Die Mindestdauer oben ist eine andere Regel.
+                    Jedes belegte Filmjahr wird direkt gegen das kanonische Filmjahr geprüft, nicht
+                    gegen ein bereits toleriertes anderes Jahr.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Neue Downloadaufträge halten ihre Regeln fest. Die technische Prüfung gegen die
+                    Quelldauer bleibt unabhängig davon bei 10 %. Bereits gespeicherte v1/v2- und
+                    unversionierte Aufträge behalten ihren dynamischen Altvertrag.
+                  </p>
+                  <Button
+                    onClick={() => handleSave(TOLERANCE_CONTROLS.map(({ key }) => key))}
+                    disabled={isSaving || toleranceFormError}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Toleranzen speichern
+                  </Button>
+                  {toleranceFormError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      Ganze Werte innerhalb der angegebenen Grenzen eingeben; leere Felder wählen
+                      keinen Default.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle>Optionale Sonarr-Metadaten</CardTitle>
                   <CardDescription>
                     Ergänzt fehlende Episoden aus einer Sonarr-3/4-Instanz, ohne vorhandene
@@ -667,9 +774,14 @@ export default function SettingsPage() {
                   <p className="text-xs text-muted-foreground">
                     API-Key ausschließlich serverseitig über <code>PINGUFUNK_SONARR_API_KEY</code>
                     oder <code>PINGUFUNK_SONARR_API_KEY_FILE</code> konfigurieren. Status:{" "}
-                    {settings?.["api.sonarr.key"]
-                      ? "konfiguriert (verborgen)"
-                      : "nicht konfiguriert"}
+                    {
+                      {
+                        present: "vorhanden (verborgen)",
+                        missing: "fehlend",
+                        invalid: "ungültige serverseitige Konfiguration",
+                        unknown: "unbekannt",
+                      }[arrCredentials.sonarr]
+                    }
                     . Speichern führt keine Sonarr-Abfrage aus.
                   </p>
                   <div>
@@ -692,35 +804,13 @@ export default function SettingsPage() {
                       1–90 Tage; nur überwachte Serien. Snapshots sind zeit- und mengenbegrenzt.
                     </p>
                   </div>
-                  <div>
-                    <label htmlFor="sonarr-tolerance" className="text-sm font-medium">
-                      Episoden-Laufzeittoleranz (%)
-                    </label>
-                    <Input
-                      id="sonarr-tolerance"
-                      type="number"
-                      min="0"
-                      max="25"
-                      step="1"
-                      value={getFieldValue("matching.sonarr.tolerancePercent")}
-                      onChange={(event) =>
-                        setFieldValue("matching.sonarr.tolerancePercent", event.target.value)
-                      }
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      0–25 %; 0 verlangt exakte Laufzeit. Kurze Folgen werden nur mit belegter
-                      Identität und Laufzeit zugelassen. Ohne Solllaufzeit gilt weiterhin die oben
-                      eingestellte Mindestdauer.
-                    </p>
-                  </div>
+
                   <Button
                     onClick={() =>
                       handleSave([
                         "integration.sonarr.enabled",
                         "integration.sonarr.url",
                         "integration.sonarr.windowDays",
-                        "matching.sonarr.tolerancePercent",
                       ])
                     }
                     disabled={isSaving || sonarrFormError !== null}
@@ -735,6 +825,98 @@ export default function SettingsPage() {
                   {sonarrFormError && (
                     <p role="alert" className="text-sm text-destructive">
                       {sonarrFormError}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Optionale Radarr-Metadaten</CardTitle>
+                  <CardDescription>
+                    Ergänzt belegte Filmidentität aus einer Radarr-Instanz. Keine zweite Suchroute;
+                    ausschließlich lesende API-Anbindung.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={getFieldValue("integration.radarr.enabled") === "true"}
+                      onChange={(event) =>
+                        setFieldValue("integration.radarr.enabled", String(event.target.checked))
+                      }
+                    />
+                    <span className="text-sm font-medium">Radarr-Ergänzung aktivieren</span>
+                  </label>
+                  <div>
+                    <label htmlFor="radarr-url" className="text-sm font-medium">
+                      Radarr-Basis-URL
+                    </label>
+                    <Input
+                      id="radarr-url"
+                      type="url"
+                      value={getFieldValue("integration.radarr.url")}
+                      onChange={(event) =>
+                        setFieldValue("integration.radarr.url", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      HTTP(S), optional mit Unterpfad. Keine Zugangsdaten, API-Keys, Query oder
+                      Fragment.
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    API-Key ausschließlich serverseitig über <code>PINGUFUNK_RADARR_API_KEY</code>{" "}
+                    oder <code>PINGUFUNK_RADARR_API_KEY_FILE</code> konfigurieren. Status:{" "}
+                    {
+                      {
+                        present: "vorhanden (verborgen)",
+                        missing: "fehlend",
+                        invalid: "ungültige serverseitige Konfiguration",
+                        unknown: "unbekannt",
+                      }[arrCredentials.radarr]
+                    }
+                    . Speichern führt keine Radarr-Abfrage aus.
+                  </p>
+                  <div>
+                    <label htmlFor="radarr-inventory" className="text-sm font-medium">
+                      Maximales Radarr-Inventar (MiB)
+                    </label>
+                    <Input
+                      id="radarr-inventory"
+                      type="number"
+                      step="1"
+                      min={SETTING_DEFINITIONS["integration.radarr.inventoryMaxMiB"].min}
+                      max={SETTING_DEFINITIONS["integration.radarr.inventoryMaxMiB"].max}
+                      value={getFieldValue("integration.radarr.inventoryMaxMiB")}
+                      onChange={(event) =>
+                        setFieldValue("integration.radarr.inventoryMaxMiB", event.target.value)
+                      }
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      1–64 MiB; Produktdefault 10 MiB. Obergrenze für die API-Antwort, keine Anzahl
+                      von Filmen.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() =>
+                      handleSave([
+                        "integration.radarr.enabled",
+                        "integration.radarr.url",
+                        "integration.radarr.inventoryMaxMiB",
+                      ])
+                    }
+                    disabled={isSaving || radarrFormError !== null}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Radarr-Einstellungen speichern
+                  </Button>
+                  {radarrFormError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {radarrFormError}
                     </p>
                   )}
                 </CardContent>

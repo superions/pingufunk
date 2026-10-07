@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCategoriesForTopics, CategoryType } from "@/services/category";
-import { getMinDurationSeconds, getSetting } from "@/lib/settings";
+import { getMinDurationSeconds, getSetting, withSettingsSnapshot } from "@/lib/settings";
 import { providerRegistry, initializeProviders } from "@/providers";
 import type { ProviderContentItem } from "@/types/provider";
 
@@ -81,13 +81,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [], error: "Query too short" });
   }
 
-  // Use new provider system if requested
-  if (useProviders || providerId) {
-    return handleProviderSearch(q, limit, type, providerId);
+  try {
+    return await withSettingsSnapshot(() =>
+      useProviders || providerId
+        ? handleProviderSearch(q, limit, type, providerId)
+        : handleDefaultSearch(q, limit, type)
+    );
+  } catch {
+    return NextResponse.json(
+      { results: [], error: "Search temporarily unavailable" },
+      { status: 503 }
+    );
   }
-
-  // UI searches and Newznab use the same enabled sources.
-  return handleDefaultSearch(q, limit, type);
 }
 
 /**

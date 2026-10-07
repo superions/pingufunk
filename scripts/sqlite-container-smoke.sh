@@ -95,12 +95,16 @@ for variant in fresh bootstrap; do
       --mount "type=bind,src=${SMOKE_ROOT}/${variant},dst=/qa" "$RUNNER_IMAGE" >/dev/null
     APP_STARTED=1
     ready
-    expected=original
-    if [[ "$cycle" == restart ]]; then expected=persisted; fi
+    # Unknown historical settings remain readable but cannot be newly written.
     docker exec "$APP_CONTAINER" curl -fsS 'http://localhost:6767/api/settings?key=smoke' \
+      | node -e 'let s=""; process.stdin.on("data",c=>s+=c); process.stdin.on("end",()=>{if(JSON.parse(s).value!=="original")process.exit(1)})'
+    expected=1
+    if [[ "$cycle" == restart ]]; then expected=2; fi
+    docker exec "$APP_CONTAINER" curl -fsS 'http://localhost:6767/api/settings?key=matching.movie.yearTolerance' \
       | EXPECTED="$expected" node -e 'let s=""; process.stdin.on("data",c=>s+=c); process.stdin.on("end",()=>{if(JSON.parse(s).value!==process.env.EXPECTED)process.exit(1)})'
     docker exec "$APP_CONTAINER" curl -fsS -X POST -H 'Content-Type: application/json' \
-      -d '{"key":"smoke","value":"persisted"}' http://localhost:6767/api/settings >/dev/null
+      -d '{"key":"matching.movie.yearTolerance","value":"02"}' http://localhost:6767/api/settings \
+      | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(r.success!==true||r.updated!==1||r.settings["matching.movie.yearTolerance"]!=="2")process.exit(1)})'
     docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/system >/dev/null
     stop_app
   done
@@ -109,6 +113,7 @@ for variant in fresh bootstrap; do
     try {
       const query=db.prepare("SELECT id,size,filePath,status FROM Download");query.setReadBigInts(true);const rows=query.all();
       if(rows.length!==1||rows[0].id!=="original-id"||rows[0].size!==BigInt("9007199254741115")||rows[0].filePath!=="/synthetic/original.mkv"||rows[0].status!=="failed")throw Error("SQLite data changed");
+      if(db.prepare("SELECT value FROM Config WHERE key=?").get("smoke").value!=="original"||db.prepare("SELECT value FROM Config WHERE key=?").get("matching.movie.yearTolerance").value!=="2")throw Error("SQLite settings preservation or persistence failed");
       if(db.prepare("SELECT count(*) AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL").get().n!==5)throw Error("Current ledger incomplete");
     }finally{db.close();}
   '

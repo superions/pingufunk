@@ -116,6 +116,7 @@ const syntheticProbe = {
 };
 
 import { clearSettingsCache } from "@/lib/settings";
+import { unknownJobMediaExpectations } from "@/lib/media-expectations";
 import {
   processDownload,
   recoverInterruptedDownloads,
@@ -624,6 +625,45 @@ it("passes the persisted v1 expectations and configured P06 tolerance to the com
     audio: "unknown",
     resolution: "unknown",
   });
+});
+
+it("uses frozen v3 references without reading or repairing current series policy", async () => {
+  const expectations = {
+    ...unknownJobMediaExpectations(),
+    mediaKind: "series" as const,
+    durations: {
+      source: {
+        seconds: 120,
+        provenance: "source_catalogue" as const,
+        tolerancePercent: 10 as const,
+      },
+      metadata: { seconds: 120, provenance: "episode_metadata" as const, tolerancePercent: 15 },
+    },
+  };
+  const job = progressiveJob("frozen-v3", JSON.stringify(expectations));
+  const lookup = configFindUnique.getMockImplementation()!;
+  configFindUnique.mockImplementation(async (args) =>
+    args.where.key === "matching.sonarr.tolerancePercent" ? { value: "invalid" } : lookup(args)
+  );
+  probeJobMedia.mockImplementation(async (_file, _dir, expected, tolerance) =>
+    validateMediaProbe(syntheticProbe, expected, tolerance)
+  );
+  await processDownload(job.id);
+  expect(
+    configFindUnique.mock.calls.some(
+      ([args]) => args.where.key === "matching.sonarr.tolerancePercent"
+    )
+  ).toBe(false);
+  expect(probeJobMedia).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expectations,
+    0
+  );
+  expect(
+    downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")?.[0].data
+      .mediaValidation
+  ).toContain('"version":3');
 });
 
 it.each(["mkv", "mp4"])(

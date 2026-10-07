@@ -1,40 +1,14 @@
-import { arrApiUrl } from "./read-only-arr-client";
-import { MAX_PROVIDER_RESPONSE_BYTES } from "./bounded-provider-json";
+import { DEFAULT_PRODUCT_SETTINGS, normalizeSetting } from "./settings-schema";
 
 export const RADARR_DEFAULT_SETTINGS: Record<string, string> = {
-  "integration.radarr.enabled": "false",
-  "integration.radarr.url": "",
-  "integration.radarr.inventoryMaxMiB": "10",
-  "matching.movie.tolerancePercent": "10",
+  "integration.radarr.enabled": DEFAULT_PRODUCT_SETTINGS["integration.radarr.enabled"],
+  "integration.radarr.url": DEFAULT_PRODUCT_SETTINGS["integration.radarr.url"],
+  "integration.radarr.inventoryMaxMiB":
+    DEFAULT_PRODUCT_SETTINGS["integration.radarr.inventoryMaxMiB"],
+  "matching.movie.tolerancePercent": DEFAULT_PRODUCT_SETTINGS["matching.movie.tolerancePercent"],
 };
 
 /** Credentials are external; only nonsecret integration/matching settings are writable. */
 export function validateRadarrSetting(key: string, value: unknown): string | null | undefined {
-  if (key === "integration.radarr.enabled")
-    return typeof value === "string" && ["true", "false"].includes(value) ? value : null;
-  if (key === "integration.radarr.url") {
-    if (typeof value !== "string" || value.length > 4096) return null;
-    if (!value.trim()) return "";
-    try {
-      arrApiUrl(value.trim(), "api/v3/system/status");
-      return value.trim();
-    } catch {
-      return null;
-    }
-  }
-  if (key === "matching.movie.tolerancePercent") {
-    if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
-    const number = Number(value);
-    return Number.isSafeInteger(number) && number <= 25 ? String(number) : null;
-  }
-  if (key === "integration.radarr.inventoryMaxMiB") {
-    if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
-    const number = Number(value);
-    return Number.isSafeInteger(number) &&
-      number >= 1 &&
-      number <= MAX_PROVIDER_RESPONSE_BYTES / (1024 * 1024)
-      ? String(number)
-      : null;
-  }
-  return undefined;
+  return Object.hasOwn(RADARR_DEFAULT_SETTINGS, key) ? normalizeSetting(key, value) : undefined;
 }

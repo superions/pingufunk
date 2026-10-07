@@ -239,7 +239,8 @@ done
 [[ "$ready" == 1 ]] || { echo "Disposable PG writer start failed" >&2; exit 1; }
 docker exec "$APP_CONTAINER" test ! -e /app/prisma/data/rundfunkarr.db
 docker exec "$APP_CONTAINER" curl -fsS -X POST -H 'Content-Type: application/json' \
-  -d '{"key":"smoke","value":"postgresql"}' http://localhost:6767/api/settings >/dev/null
+  -d '{"key":"matching.movie.yearTolerance","value":"02"}' http://localhost:6767/api/settings \
+  | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(r.success!==true||r.updated!==1||r.settings["matching.movie.yearTolerance"]!=="2")process.exit(1)})'
 if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   'SELECT count(*) FROM "MigrationCheckpoint" WHERE key = '\''first_application_write'\''' )" != "1" ]]; then
   echo "First application write checkpoint missing" >&2
@@ -300,7 +301,9 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   done
   [[ "$ready" == 1 ]] || { echo "PG-compatible rollback image did not become ready" >&2; exit 1; }
   docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/settings?key=smoke \
-    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="postgresql")process.exit(1)})'
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="source")process.exit(1)})'
+  docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/settings?key=matching.movie.yearTolerance \
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="2")process.exit(1)})'
   docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/download?mode=history \
     | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(!JSON.parse(s).history.slots.some(x=>x.nzo_id==="smoke-download"))process.exit(1)})'
   docker exec "$APP_CONTAINER" test ! -e /app/prisma/data/rundfunkarr.db

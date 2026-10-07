@@ -10,7 +10,7 @@ import {
 export interface NzbRelease {
   title: string;
   url: string;
-  /** Absence is reserved for saved legacy NZBs; explicit unknown facts use v1. */
+  /** Absence is reserved for saved legacy NZBs; current producers declare v3. */
   mediaExpectations?: MediaExpectations;
 }
 

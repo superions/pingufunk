@@ -1,15 +1,17 @@
 import { LRUCache } from "lru-cache";
 import { prisma } from "@/lib/db";
 import { createHash } from "node:crypto";
+import { productSettingsContext } from "./product-settings-context";
+import { SETTING_DEFINITIONS } from "./settings-schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CacheValue = Record<string, any>;
 
 // Default TTL values (in seconds)
-const DEFAULT_SEARCH_TTL = 3600; // 1 hour
-const DEFAULT_METADATA_TTL = 86400; // 24 hours
-const MAX_SEARCH_TTL = 86400;
-const MAX_METADATA_TTL = 604800;
+const DEFAULT_SEARCH_TTL = Number(SETTING_DEFINITIONS["cache.ttl.search"].defaultValue);
+const DEFAULT_METADATA_TTL = Number(SETTING_DEFINITIONS["cache.ttl.metadata"].defaultValue);
+const MAX_SEARCH_TTL = SETTING_DEFINITIONS["cache.ttl.search"].max!;
+const MAX_METADATA_TTL = SETTING_DEFINITIONS["cache.ttl.metadata"].max!;
 
 function boundedTTL(value: string | undefined, fallback: number, maximum: number): number {
   if (value === undefined) return fallback;
@@ -58,10 +60,14 @@ async function fetchTTLSettings(): Promise<{ searchTTL: number; metadataTTL: num
 
 // Synchronous TTL getters (use cached values)
 export function getSearchTTL(): number {
+  const snapshot = productSettingsContext.getStore();
+  if (snapshot) return Number(snapshot.values["cache.ttl.search"]);
   return cachedSearchTTL ?? DEFAULT_SEARCH_TTL;
 }
 
 export function getMetadataTTL(): number {
+  const snapshot = productSettingsContext.getStore();
+  if (snapshot) return Number(snapshot.values["cache.ttl.metadata"]);
   return cachedMetadataTTL ?? DEFAULT_METADATA_TTL;
 }
 
@@ -108,6 +114,7 @@ class DynamicTTLCache {
   }
 
   set(key: string, value: CacheValue): void {
+    if (productSettingsContext.getStore()?.isCurrent() === false) return;
     const ttlMs = this.getTTL() * 1000;
     if (ttlMs <= 0) {
       this.cache.delete(key);

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { readLanguagePolicy } from "@/lib/language-policy";
-import { unknownMediaExpectations } from "@/lib/media-expectations";
+import { unknownJobMediaExpectations } from "@/lib/media-expectations";
 import type { ApiResultItem } from "@/types";
 import { enrichSourceAudio, mediaSourceIdentity, verifyArteSourceAudio } from "./source-audio";
 import { selectLanguageVariants } from "./language-editions";
@@ -55,7 +55,8 @@ it("accepts only the confirmed ARTE legacy CDN and binds its exact HbbTV URL in 
   const [enriched] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
   expect(enriched.audioLanguage).toBe("de");
   const expected = releaseMediaExpectations(enriched);
-  if (expected.version !== 2) throw new Error("Expected exact source proof");
+  if (expected.version !== 3 || !expected.sourceAudio)
+    throw new Error("Expected exact source proof");
   await expect(
     verifyArteSourceAudio(expected.sourceAudio, url, new HttpRequestBudget())
   ).resolves.toEqual(expected.sourceAudio);
@@ -89,8 +90,8 @@ it.each(["valid", "foreign-id", "selector", "conflict", "missing", "string"])(
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(item).not.toHaveProperty("sourceVideoDimensions");
     if (!["foreign-id", "selector"].includes(kind)) {
-      expect(contract.version).toBe(2);
-      expect(contract.version === 2 && contract.sourceAudio.language).toBe("de");
+      expect(contract.version).toBe(3);
+      expect(contract.version === 3 && contract.sourceAudio?.language).toBe("de");
     }
   }
 );
@@ -117,7 +118,7 @@ it("binds each rendition before selection without inferring German from source l
   expect(fetch.mock.calls[0][1]).toMatchObject({ redirect: "error" });
 });
 
-it("preserves source GUID while German RSS/NZB and v2 worker expectations use the selected URL", async () => {
+it("preserves source GUID while German RSS/NZB and v3 worker expectations use the selected URL", async () => {
   mock();
   const [proved] = selectLanguageVariants(
     (await enrichSourceAudio([item], new HttpRequestBudget())).get(item)!,
@@ -143,9 +144,12 @@ it("preserves source GUID while German RSS/NZB and v2 worker expectations use th
   const query = new URL(rss[0].enclosure.url, "http://localhost").searchParams;
   const contract = decodeMediaExpectations(query.get("encodedExpectations")!);
   expect(contract).toEqual({
-    ...unknownMediaExpectations(),
-    version: 2,
-    duration: { seconds: 7200, provenance: "source_catalogue" },
+    ...unknownJobMediaExpectations(),
+    mediaKind: "movie",
+    durations: {
+      source: { seconds: 7200, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata: null,
+    },
     sourceAudio: {
       provider: "arte_hbbtv",
       videoId: "123456-001-A",
@@ -180,7 +184,8 @@ it.each(["foreign-id", "different-selector", "unknown-code", "conflicting-code"]
     const hd = output.find((i) => i.url_video_hd)!;
     expect(hd.audioLanguage).toBeUndefined();
     expect(releaseMediaExpectations(hd).audio).toBeNull();
-    expect(releaseMediaExpectations(hd).version).toBe(1);
+    expect(releaseMediaExpectations(hd).version).toBe(3);
+    expect(releaseMediaExpectations(hd).sourceAudio).toBeNull();
   }
 );
 

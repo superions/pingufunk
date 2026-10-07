@@ -1,6 +1,7 @@
 import { externalCredential, CredentialConfigurationError } from "./credential-settings";
 import { fetchWithRetry, requestDeadline, type RetryOptions } from "./fetch-retry";
 import { readBoundedProviderJson } from "./bounded-provider-json";
+import { parseArrBaseUrl } from "./arr-base-url";
 
 export class ArrRequestError extends Error {
   constructor() {
@@ -11,16 +12,8 @@ export class ArrRequestError extends Error {
 /** Keep reverse-proxy subpaths; never accept userinfo, a query, or redirects. */
 export function arrApiUrl(baseUrl: string, route: string, query?: URLSearchParams): string {
   try {
-    const base = new URL(baseUrl);
-    if (
-      !["http:", "https:"].includes(base.protocol) ||
-      base.username ||
-      base.password ||
-      base.search ||
-      base.hash ||
-      !/^[a-zA-Z0-9/_-]+$/.test(route) ||
-      route.includes("//")
-    ) {
+    const base = parseArrBaseUrl(baseUrl);
+    if (!/^[a-zA-Z0-9/_-]+$/.test(route) || route.includes("//")) {
       throw new ArrRequestError();
     }
     base.pathname = `${base.pathname.replace(/\/+$/, "")}/${route.replace(/^\/+/, "")}`;

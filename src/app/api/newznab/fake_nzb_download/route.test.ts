@@ -77,8 +77,13 @@ it("keeps a release GUID stable across access-token rotation but downloads the c
     title: renewedRelease.title,
     url: renewedUrl,
     mediaExpectations: {
-      version: 1,
-      duration: { seconds: 2700, provenance: "source_catalogue" },
+      version: 3,
+      mediaKind: "unknown",
+      durations: {
+        source: { seconds: 2700, provenance: "source_catalogue", tolerancePercent: 10 },
+        metadata: null,
+      },
+      sourceAudio: null,
       audio: null,
       resolution: null,
     },

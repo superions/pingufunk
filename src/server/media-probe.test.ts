@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { unknownMediaExpectations } from "@/lib/media-expectations";
+import { unknownMediaExpectations, unknownJobMediaExpectations } from "@/lib/media-expectations";
 import { validateMediaProbe } from "./media-probe";
 import { mediaSourceIdentity } from "@/services/source-audio";
 
@@ -25,6 +25,65 @@ const media = (): { format: { format_name: string; duration: string }; streams: 
     },
     { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 2 },
   ],
+});
+
+it("checks both frozen v3 references independently and ignores later GUI/legacy tolerance", () => {
+  const expected = {
+    ...unknownJobMediaExpectations(),
+    mediaKind: "series" as const,
+    durations: {
+      source: {
+        seconds: 120,
+        provenance: "source_catalogue" as const,
+        tolerancePercent: 10 as const,
+      },
+      metadata: { seconds: 120, provenance: "episode_metadata" as const, tolerancePercent: 15 },
+    },
+  };
+  const probe = (duration: string) => ({ ...media(), format: { ...media().format, duration } });
+  expect(validateMediaProbe(probe("130"), expected, 0).durationChecks).toEqual([
+    { ...expected.durations.source, result: "passed" },
+    { ...expected.durations.metadata, result: "passed" },
+  ]);
+  expect(() => validateMediaProbe(probe("134"), expected, 25)).toThrow(); // Episode passes, asset fails.
+  expect(() =>
+    validateMediaProbe(
+      probe("122"),
+      {
+        ...expected,
+        durations: {
+          ...expected.durations,
+          metadata: { ...expected.durations.metadata, tolerancePercent: 0 },
+        },
+      },
+      25
+    )
+  ).toThrow(); // Asset passes, exact episode fails.
+});
+
+it("never applies the current series slider to a frozen v3 film or unknown source", () => {
+  for (const mediaKind of ["movie", "unknown"] as const) {
+    const expected = {
+      ...unknownJobMediaExpectations(),
+      mediaKind,
+      durations: {
+        source: {
+          seconds: 120,
+          provenance: "source_catalogue" as const,
+          tolerancePercent: 10 as const,
+        },
+        metadata: null,
+      },
+    };
+    expect(() =>
+      validateMediaProbe(
+        { ...media(), format: { ...media().format, duration: "134" } },
+        expected,
+        25
+      )
+    ).toThrow();
+    expect(validateMediaProbe(media(), expected, 0).expectedChecks.duration).toBe("passed");
+  }
 });
 
 it("allows a valid legacy or explicitly unknown-v1 file without claiming expected checks", () => {

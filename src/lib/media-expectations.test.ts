@@ -4,7 +4,51 @@ import {
   readPersistedMediaExpectations,
   serializeMediaExpectations,
   unknownMediaExpectations,
+  unknownJobMediaExpectations,
 } from "./media-expectations";
+
+it("keeps independent frozen source and episode references in v3", () => {
+  const value = {
+    ...unknownJobMediaExpectations(),
+    mediaKind: "series" as const,
+    durations: {
+      source: {
+        seconds: 123,
+        provenance: "source_catalogue" as const,
+        tolerancePercent: 10 as const,
+      },
+      metadata: { seconds: 120, provenance: "episode_metadata" as const, tolerancePercent: 15 },
+    },
+  };
+  expect(parseMediaExpectations(serializeMediaExpectations(value))).toEqual(value);
+  for (const malformed of [
+    { ...value, version: 4 },
+    { ...value, mediaKind: "unknown" },
+    {
+      ...value,
+      durations: {
+        ...value.durations,
+        source: { ...value.durations.source, tolerancePercent: 15 },
+      },
+    },
+    {
+      ...value,
+      durations: {
+        ...value.durations,
+        metadata: { ...value.durations.metadata, tolerancePercent: 26 },
+      },
+    },
+    {
+      ...value,
+      durations: {
+        ...value.durations,
+        metadata: { ...value.durations.metadata, tolerancePercent: 1.5 },
+      },
+    },
+    { ...value, duration: null },
+  ])
+    expect(() => parseMediaExpectations(malformed)).toThrow("Invalid media expectations");
+});
 
 it("retains nullable unknown facts through a versioned serialization round trip", () => {
   const unknown = unknownMediaExpectations();

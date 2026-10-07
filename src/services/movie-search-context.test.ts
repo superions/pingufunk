@@ -18,6 +18,15 @@ const movie: TmdbMovieData = {
 };
 
 describe("one movie search context", () => {
+  it("uses the same configurable boundary for both query years without compounding it", () => {
+    const valid = parseMovieSearchContext(new URLSearchParams("q=Beispielfilm+2000&year=1999"), 2);
+    expect(() => assertMovieSearchGoal(valid, movie, 2)).not.toThrow();
+    const compounded = parseMovieSearchContext(
+      new URLSearchParams("q=Beispielfilm+2001&year=2000"),
+      2
+    );
+    expect(() => assertMovieSearchGoal(compounded, movie, 2)).toThrow(MovieSearchContextError);
+  });
   it("does not compound the year tolerance across the query, explicit parameter and metadata", () => {
     const context = parseMovieSearchContext(new URLSearchParams("q=Beispielfilm+2000&year=1999"));
     expect(() => assertMovieSearchGoal(context, movie)).toThrow(MovieSearchContextError);

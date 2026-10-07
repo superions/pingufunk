@@ -6,7 +6,11 @@ const { getMinDurationSeconds, getCategoriesForTopics } = vi.hoisted(() => ({
   getCategoriesForTopics: vi.fn(),
 }));
 
-vi.mock("@/lib/settings", () => ({ getMinDurationSeconds, getSetting: vi.fn(async () => null) }));
+vi.mock("@/lib/settings", () => ({
+  getMinDurationSeconds,
+  getSetting: vi.fn(async () => null),
+  withSettingsSnapshot: vi.fn(async (operation: () => Promise<unknown>) => operation()),
+}));
 vi.mock("@/services/category", () => ({
   getCategoriesForTopics,
 }));
@@ -107,8 +111,13 @@ it("preserves explicit provider audio in server-authored UI releases", async () 
     title: "Example - Episode",
     url: "https://example.invalid/hd.mp4",
     mediaExpectations: {
-      version: 1,
-      duration: { seconds: 120, provenance: "source_catalogue" },
+      version: 3,
+      mediaKind: "unknown",
+      durations: {
+        source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+        metadata: null,
+      },
+      sourceAudio: null,
       audio: { language: "de", provenance: "provider_audio" },
       resolution: null,
     },

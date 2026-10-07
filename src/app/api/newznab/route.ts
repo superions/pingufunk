@@ -20,6 +20,8 @@ import type { TmdbMovieData, TvSearchContext } from "@/types";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { getRadarrMovie } from "@/services/radarr-provider";
 import { withIndexerUrl } from "@/lib/indexer-url";
+import { getSetting, withSettingsSnapshot } from "@/lib/settings";
+import { configuredSetting } from "@/lib/settings-schema";
 import {
   parseMovieSearchContext,
   assertMovieSearchGoal,
@@ -89,8 +91,6 @@ async function handleGet(request: NextRequest) {
   const t = searchParams.get("t");
   const limit = parsePaginationParameter(searchParams, "limit", 100, 1, 5000);
   const offset = parsePaginationParameter(searchParams, "offset", 0, 0, 2_147_483_647);
-  const imdbid = searchParams.get("imdbid");
-  const tmdbid = searchParams.get("tmdbid");
   const categoryIds = parseNewznabCategoryIds(searchParams.get("cat"));
 
   // Handle capabilities request
@@ -126,11 +126,31 @@ async function handleGet(request: NextRequest) {
   if (limit === null || offset === null || searchParams.getAll("t").length > 1)
     return NextResponse.json({ error: "Invalid search pagination or type" }, { status: 400 });
 
+  return withSettingsSnapshot(() => handleSearch(request, limit, offset, categoryIds));
+}
+
+async function handleSearch(
+  request: NextRequest,
+  limit: number,
+  offset: number,
+  categoryIds: ReturnType<typeof parseNewznabCategoryIds>
+) {
+  const searchParams = request.nextUrl.searchParams;
+  const t = searchParams.get("t");
+  const imdbid = searchParams.get("imdbid");
+  const tmdbid = searchParams.get("tmdbid");
+
   // One contract for direct and Prowlarr-forwarded requests. No invented
   // manual/automatic detection; RSS has no concrete search goal.
   if (t === "movie" || (t === "search" && isMovieCategoryRequest(categoryIds))) {
     try {
-      const context = parseMovieSearchContext(searchParams);
+      const yearTolerance = Number(
+        configuredSetting(
+          "matching.movie.yearTolerance",
+          await getSetting("matching.movie.yearTolerance")
+        )
+      );
+      const context = parseMovieSearchContext(searchParams, yearTolerance);
       if (!context.query && context.tmdbId === null && context.imdbId === null) {
         return new NextResponse(await fetchMovieSearchForRssSync(limit, offset), {
           headers: { "Content-Type": "application/xml; charset=utf-8" },
@@ -151,7 +171,7 @@ async function handleGet(request: NextRequest) {
         if (!context.query) throw new Error("Movie metadata unavailable");
         budget.assertAvailable();
       }
-      if (movie) assertMovieSearchGoal(context, movie);
+      if (movie) assertMovieSearchGoal(context, movie, yearTolerance);
       const body = movie
         ? await fetchMovieSearchResults(movie, limit, offset, budget)
         : context.query

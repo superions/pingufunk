@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findUnique } = vi.hoisted(() => ({
+const { findUnique, findMany } = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  findMany: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    config: { findUnique },
+    config: { findUnique, findMany },
   },
 }));
 
@@ -16,11 +17,13 @@ import {
   getSetting,
   getSettings,
   isMkvConversionEnabled,
+  withSettingsSnapshot,
 } from "./settings";
 
 beforeEach(() => {
   clearSettingsCache();
   findUnique.mockReset();
+  findMany.mockReset();
 });
 
 afterEach(() => vi.useRealTimers());
@@ -87,14 +90,47 @@ describe("getMinDurationSeconds", () => {
     await expect(getMinDurationSeconds()).resolves.toBe(0);
   });
 
-  it.each([null, { value: "invalid" }, { value: "-1" }])(
-    "falls back to 300 seconds for %j",
-    async (config) => {
-      findUnique.mockResolvedValue(config);
+  it("defaults only missing settings to 300 seconds", async () => {
+    findUnique.mockResolvedValue(null);
+    await expect(getMinDurationSeconds()).resolves.toBe(300);
+  });
+  it.each(["invalid", "-1", "300suffix", ""])("fails closed for stored %s", async (value) => {
+    findUnique.mockResolvedValue({ value });
+    await expect(getMinDurationSeconds()).rejects.toThrow(
+      "Invalid stored setting: matching.minDuration"
+    );
+  });
+});
 
-      await expect(getMinDurationSeconds()).resolves.toBe(300);
-    }
-  );
+describe("request-scoped settings snapshots", () => {
+  it("reads one atomic policy and reuses it in nested owners", async () => {
+    findMany.mockResolvedValue([{ key: "matching.sonarr.tolerancePercent", value: "015" }]);
+    await withSettingsSnapshot(async () => {
+      expect(await getSetting("matching.sonarr.tolerancePercent")).toBe("15");
+      expect(await getSetting("matching.movie.tolerancePercent")).toBe("10");
+      await withSettingsSnapshot(async () => {
+        expect(await getMinDurationSeconds()).toBe(300);
+      });
+    });
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+  it("does not return a late response after a settings commit", async () => {
+    findMany.mockResolvedValue([{ key: "matching.sonarr.tolerancePercent", value: "15" }]);
+    await expect(
+      withSettingsSnapshot(async () => {
+        clearSettingsCache();
+        expect(await getSetting("matching.sonarr.tolerancePercent")).toBe("15");
+        return "stale";
+      })
+    ).rejects.toThrow("Settings changed during search");
+  });
+  it("never defaults corrupt stored matching settings or executes the search", async () => {
+    const operation = vi.fn();
+    findMany.mockResolvedValue([{ key: "matching.movie.yearTolerance", value: "0" }]);
+    await expect(withSettingsSnapshot(operation)).rejects.toThrow("Invalid stored setting");
+    expect(operation).not.toHaveBeenCalled();
+  });
 });
 
 describe("isMkvConversionEnabled", () => {

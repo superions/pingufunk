@@ -19,6 +19,7 @@ const { settings } = vi.hoisted(() => ({ settings: new Map<string, string>() }))
 vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn(async (key: string) => settings.get(key) ?? null),
   getMinDurationSeconds: vi.fn(async () => 300),
+  withSettingsSnapshot: vi.fn(async (operation: () => Promise<unknown>) => operation()),
 }));
 vi.mock("@/services/category", () => ({ getCategoriesForTopics: vi.fn(async () => new Map()) }));
 vi.mock("@/lib/mediathek-client", () => ({
@@ -93,8 +94,13 @@ describe("configured providers in normal search flows", () => {
       title: rssItem.title,
       url: result.url_video,
       mediaExpectations: {
-        version: 1,
-        duration: { seconds: 1800, provenance: "source_catalogue" },
+        version: 3,
+        mediaKind: "unknown",
+        durations: {
+          source: { seconds: 1800, provenance: "source_catalogue", tolerancePercent: 10 },
+          metadata: null,
+        },
+        sourceAudio: null,
         audio: null,
         resolution: null,
       },

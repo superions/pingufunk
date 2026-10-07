@@ -1,6 +1,7 @@
 import { LRUCache } from "lru-cache";
 import { cacheContextEpoch, coalesceMetadata, metadataCacheKey } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
+import { configuredSetting } from "@/lib/settings-schema";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { openSonarrSession, mergeSonarrShow, SonarrUnavailableError } from "./sonarr-provider";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
@@ -25,8 +26,18 @@ export async function getSonarrRssMatches(
   if (!session) return [];
   const epoch = cacheContextEpoch();
   const rulesContext = getRulesetContext();
-  const window = Number((await getSetting("integration.sonarr.windowDays")) ?? "14");
-  const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
+  const window = Number(
+    configuredSetting(
+      "integration.sonarr.windowDays",
+      await getSetting("integration.sonarr.windowDays")
+    )
+  );
+  const tolerance = Number(
+    configuredSetting(
+      "matching.sonarr.tolerancePercent",
+      await getSetting("matching.sonarr.tolerancePercent")
+    )
+  );
   const minimum = await getMinDurationSeconds();
   const languagePolicy = await getConfiguredLanguagePolicy();
   const hlsEnabled = (await getSetting("download.enableHLS")) === "true";

@@ -1,11 +1,8 @@
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { verifiedDurationCheck } from "@/lib/verified-duration";
 import { getSetting } from "@/lib/settings";
+import { configuredSetting } from "@/lib/settings-schema";
 import type { ApiResultItem, TmdbMovieData } from "@/types";
-
-// Production/premiere metadata commonly differs by one calendar year. Never
-// derive a production year from the broadcast timestamp or loose description text.
-export const MOVIE_YEAR_TOLERANCE = 1;
 
 export function movieSourceTitle(value: string): { title: string; year: number | null } {
   let title = value.trim();
@@ -57,10 +54,18 @@ export async function matchMovieItems(
   hlsEnabledOverride?: boolean
 ): Promise<MovieMatchResult[]> {
   const hlsEnabled = hlsEnabledOverride ?? (await getSetting("download.enableHLS")) === "true";
-  const configured = await getSetting("matching.movie.tolerancePercent");
-  const tolerance = configured === null ? 10 : Number(configured);
-  if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance > 25)
-    throw new Error("Invalid movie duration policy");
+  const tolerance = Number(
+    configuredSetting(
+      "matching.movie.tolerancePercent",
+      await getSetting("matching.movie.tolerancePercent")
+    )
+  );
+  const yearTolerance = Number(
+    configuredSetting(
+      "matching.movie.yearTolerance",
+      await getSetting("matching.movie.yearTolerance")
+    )
+  );
   const names = [movieData.title, movieData.germanTitle, ...(movieData.aliases ?? [])]
     .filter(Boolean)
     .map(normalizeMovieTitle);
@@ -101,7 +106,7 @@ export async function matchMovieItems(
       exact &&
       year !== null &&
       source.year !== null &&
-      Math.abs(source.year - year) <= MOVIE_YEAR_TOLERANCE &&
+      Math.abs(source.year - year) <= yearTolerance &&
       duration.expectedVerified &&
       !/\b(?:trailer|teaser|clip|preview|outtakes)\b/i.test(item.title);
     if (item.duration < minDurationSeconds && !qualifiedShortFilm) continue;
@@ -114,7 +119,7 @@ export async function matchMovieItems(
       year !== null &&
       Number.isSafeInteger(year) &&
       year >= 1800 &&
-      (source.year === null || Math.abs(source.year - year) <= MOVIE_YEAR_TOLERANCE) &&
+      (source.year === null || Math.abs(source.year - year) <= yearTolerance) &&
       !/\b(?:trailer|teaser|clip|preview|outtakes)\b/i.test(item.title);
     results.push({
       item,

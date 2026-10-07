@@ -1,7 +1,17 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { maskSetting } from "@/lib/settings-redaction";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactNode,
+} from "react";
+import { confirmedSettings } from "@/lib/settings-confirmation";
+import { invalidSettingKeys, isWritableSettingKey } from "@/lib/settings-schema";
+import { SettingsResponseOrder } from "@/lib/settings-response-order";
 
 interface Settings {
   // General
@@ -34,6 +44,8 @@ interface SettingsContextType {
   settings: Settings | null;
   isLoading: boolean;
   error: string | null;
+  invalidKeys: string[];
+  arrCredentials: Record<"sonarr" | "radarr", "present" | "missing" | "invalid" | "unknown">;
   updateSetting: (key: string, value: string) => Promise<void>;
   updateSettings: (updates: Partial<Settings>) => Promise<void>;
   refreshSettings: () => Promise<void>;
@@ -45,19 +57,44 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [storedInvalidKeys, setStoredInvalidKeys] = useState<string[]>([]);
+  const [arrCredentials, setArrCredentials] = useState<SettingsContextType["arrCredentials"]>({
+    sonarr: "unknown",
+    radarr: "unknown",
+  });
+  const responseOrder = useRef(new SettingsResponseOrder());
 
   const fetchSettings = useCallback(async () => {
+    const epoch = responseOrder.current.beginRead();
     try {
       setIsLoading(true);
       setError(null);
-      const res = await fetch("/api/settings");
+      const res = await fetch("/api/settings", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch settings");
       const data = await res.json();
-      setSettings(data);
+      if (responseOrder.current.isCurrent(epoch)) {
+        setSettings(data);
+        setStoredInvalidKeys(
+          (res.headers.get("X-Pingufunk-Invalid-Settings") ?? "")
+            .split(",")
+            .filter(isWritableSettingKey)
+        );
+        const states = Object.fromEntries(
+          (res.headers.get("X-Pingufunk-Arr-Credentials") ?? "")
+            .split(",")
+            .map((row) => row.split("="))
+        );
+        const state = (app: "sonarr" | "radarr") =>
+          ["present", "missing", "invalid"].includes(states[app])
+            ? (states[app] as "present" | "missing" | "invalid")
+            : "unknown";
+        setArrCredentials({ sonarr: state("sonarr"), radarr: state("radarr") });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      if (responseOrder.current.isCurrent(epoch))
+        setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setIsLoading(false);
+      if (responseOrder.current.isCurrent(epoch)) setIsLoading(false);
     }
   }, []);
 
@@ -65,46 +102,41 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     fetchSettings();
   }, [fetchSettings]);
 
-  const updateSetting = useCallback(async (key: string, value: string) => {
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, value }),
-      });
-      if (!res.ok) throw new Error("Failed to update setting");
-
-      setSettings((prev) => (prev ? { ...prev, [key]: maskSetting(key, value) } : null));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-      throw err;
-    }
+  const updateSettings = useCallback((updates: Partial<Settings>): Promise<void> => {
+    // Preserve response order, including successive writes of the same key.
+    // A failed batch does not poison the queue and is never retried automatically.
+    const submitted = { ...updates };
+    return responseOrder.current.enqueueWrite(async () => {
+      setIsLoading(false);
+      try {
+        const res = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submitted),
+        });
+        if (!res.ok)
+          throw new Error(
+            "Speichern nicht bestätigt; Einstellungen neu laden, bevor du erneut speicherst"
+          );
+        const confirmed = confirmedSettings(await res.json(), submitted);
+        setError(null);
+        setSettings((prev) => (prev ? { ...prev, ...confirmed } : null));
+        setStoredInvalidKeys((previous) =>
+          previous.filter((key) => !Object.hasOwn(confirmed, key))
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    });
   }, []);
 
-  const updateSettings = useCallback(async (updates: Partial<Settings>) => {
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-      if (!res.ok) throw new Error("Failed to update settings");
-
-      setSettings((prev) => {
-        if (!prev) return null;
-        const updated = { ...prev };
-        for (const [key, value] of Object.entries(updates)) {
-          if (value !== undefined) {
-            updated[key] = maskSetting(key, value);
-          }
-        }
-        return updated;
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-      throw err;
-    }
-  }, []);
+  const updateSetting = useCallback(
+    (key: string, value: string) => updateSettings({ [key]: value }),
+    [updateSettings]
+  );
 
   return (
     <SettingsContext.Provider
@@ -112,6 +144,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         settings,
         isLoading,
         error,
+        arrCredentials,
+        invalidKeys: [
+          ...new Set([...storedInvalidKeys, ...(settings ? invalidSettingKeys(settings) : [])]),
+        ],
         updateSetting,
         updateSettings,
         refreshSettings: fetchSettings,

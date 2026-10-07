@@ -1,6 +1,7 @@
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { cacheContextEpoch, mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
+import { configuredSetting } from "@/lib/settings-schema";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
 import { enrichSourceAudio, enrichTvMatches, enrichTvCandidates } from "./source-audio";
@@ -325,16 +326,11 @@ async function getMatchingSettings(): Promise<{
     getSetting("matching.threshold"),
   ]);
 
-  const strategy: MatchingStrategyPreference = strategySetting === "strict" ? "strict" : "fuzzy";
-
-  let threshold = 0.7;
-  if (thresholdSetting) {
-    // Handle both "0.7" and "0,7" formats
-    const parsed = parseFloat(thresholdSetting.replace(",", "."));
-    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
-      threshold = parsed;
-    }
-  }
+  const strategy = configuredSetting(
+    "matching.strategy",
+    strategySetting
+  ) as MatchingStrategyPreference;
+  const threshold = Number(configuredSetting("matching.threshold", thresholdSetting));
 
   return { strategy, threshold };
 }
@@ -1057,8 +1053,12 @@ export async function fetchSearchResultsById(
   );
   console.log(`[Mediathek] Matched episodes after ruleset filtering: ${matchedEpisodes.length}`);
 
-  const toleranceSetting = await getSetting("matching.sonarr.tolerancePercent");
-  const tolerance = toleranceSetting === null ? 10 : Number(toleranceSetting);
+  const tolerance = Number(
+    configuredSetting(
+      "matching.sonarr.tolerancePercent",
+      await getSetting("matching.sonarr.tolerancePercent")
+    )
+  );
   const supplementalMatches = matchSonarrEpisodes(
     tvdbData,
     results,

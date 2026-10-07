@@ -7,6 +7,13 @@ their independent migration, writer, routing, and proxy-removal gates.
 
 ## RSS GUID transition
 
+Ergänzung P12 (Entwicklungsstand): Eigene neue Jobs tragen `MediaExpectations`
+v3 mit getrennten eingefrorenen Quellen-/Metadatenreferenzen. Vor einem separat
+freigegebenen Rollout den [Settings-/Jobvertrag](settings-contract.md) und einen
+v3-kompatiblen Rückweg prüfen. Ein früheres v1/v2-Image ist nach neuen v3-Writes
+kein sicherer Rollback, obwohl das Datenbankschema unverändert ist. Bestehende
+Jobs nicht umschreiben oder Erwartungen löschen; IDs/GUIDs bleiben unverändert.
+
 Ergänzung 05.10.2026: TV-Quellenbelege erweitern `MediaExpectations` v2 um
 `ard_media`. Auch ein früheres v2-fähiges Image ist danach nicht automatisch
 queuekompatibel. Vor dem ersten neuen ARD-Job einen kompatiblen Rückweg prüfen;
@@ -124,7 +131,7 @@ konkrete Auswahl oder `best` kann bislang ausgeblendete URLs sichtbar machen;
 deren unveränderte Identität verhindert kein Upgrade gegenüber einer anderen
 bereits geladenen Fassung. Deshalb Auswahl, Profile und History zusammen prüfen.
 Neue Sollmaße
-werden vor Completed geprüft; Rollbackimage muss diese v1/v2-Erwartungen auf
+werden vor Completed geprüft; Rollbackimage muss die gespeicherten v1/v2/v3-Erwartungen auf
 dem aktuellen Backend weiter verstehen. Keine Datenbankmigration, erneute
 Bibliotheksbewertung oder neue Aufnahme ist Teil dieses Qualitätsfixes.
 

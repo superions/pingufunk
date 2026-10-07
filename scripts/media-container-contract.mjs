@@ -49,6 +49,9 @@ function nzb(filename, duration, resolution = null) {
           resolution:
             resolution === null ? null : { ...resolution, provenance: "provider_dimensions" },
         };
+  return expectedNzb(filename, expected);
+}
+function expectedNzb(filename, expected) {
   const title = `Synthetic.${filename.replaceAll(".", "-")}`;
   const url = `http://127.0.0.1:6767/pingufunk-media-qa/${filename}`;
   return {
@@ -107,9 +110,14 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   const history = request("api?mode=history").history.slots.find((slot) => slot.nzo_id === id);
   if (
     row.status !== "completed" ||
-    expected?.duration?.seconds !== 2 ||
-    expected.duration.provenance !== "source_catalogue" ||
+    expected?.version !== 3 ||
+    expected.mediaKind !== "unknown" ||
+    expected.durations.source?.seconds !== 2 ||
+    expected.durations.source.provenance !== "source_catalogue" ||
+    expected.durations.source.tolerancePercent !== 10 ||
+    expected.durations.metadata !== null ||
     expected.audio !== null ||
+    facts?.version !== 3 ||
     facts?.expectedChecks.duration !== "passed" ||
     history?.status !== "Completed" ||
     history.storage !== row.filePath.slice(0, row.filePath.lastIndexOf("/"))
@@ -118,6 +126,67 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   terminalSnapshots.set(id, row);
 }
 console.log("Both actual Newznab paths to NZB, queue, verified file and SAB history passed");
+
+// Saved v3 references, not the currently configured legacy series tolerance,
+// own completion. Keep the v1/legacy matrix below unchanged.
+request("api/settings", JSON.stringify({ "matching.sonarr.tolerancePercent": "0" }));
+for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
+  ["movie", 2, null, "completed", "valid.mp4"],
+  ["series", 2, 2, "completed", "valid.mp4"],
+  ["unknown", 2, null, "completed", "valid.mp4"],
+  ["unknown", 2, null, "completed", "stream.m3u8"],
+  ["series", 2, 120, "failed", "valid.mp4"],
+  ["series", 120, 2, "failed", "valid.mp4"],
+  ["movie", 120, null, "failed", "valid.mp4"],
+]) {
+  const expected = {
+    version: 3,
+    mediaKind,
+    durations: {
+      source: { seconds: sourceSeconds, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata:
+        metadataSeconds === null
+          ? null
+          : { seconds: metadataSeconds, provenance: "episode_metadata", tolerancePercent: 15 },
+    },
+    audio: null,
+    sourceAudio: null,
+    resolution: null,
+  };
+  const added = request("api?mode=addfile&cat=sonarr", expectedNzb(filename, expected).body);
+  if (added.status !== true || added.nzo_ids.length !== 1)
+    throw new Error("Frozen fixture enqueue failed");
+  const id = added.nzo_ids[0];
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline && !["completed", "failed"].includes(readJob(id).status))
+    await delay(200);
+  const job = readJob(id);
+  if (job.status !== status || job.expectations !== JSON.stringify(expected))
+    throw new Error("Frozen media contract mismatch");
+  const facts = JSON.parse(job.validation ?? "null");
+  if (status === "completed") {
+    const references = Object.values(expected.durations).filter(Boolean);
+    if (
+      facts?.version !== 3 ||
+      JSON.stringify(facts.durationChecks) !==
+        JSON.stringify(references.map((reference) => ({ ...reference, result: "passed" })))
+    )
+      throw new Error("Frozen duration references were not independently confirmed");
+    const physical = run([
+      "exec",
+      container,
+      "node",
+      "-e",
+      'const fs=require("node:fs");const s=fs.lstatSync(process.argv[1]);console.log(s.isFile()&&!s.isSymbolicLink()&&s.size>0)',
+      job.filePath,
+    ]).trim();
+    if (physical !== "true") throw new Error("Frozen completion has no physical file");
+  } else if (facts !== null) throw new Error("Rejected frozen reference exposed completion facts");
+  terminalSnapshots.set(id, job);
+}
+request("api/settings", JSON.stringify({ "matching.sonarr.tolerancePercent": "10" }));
+console.log("Frozen v3 film/series/unknown references, HLS and independent negative gates passed");
+
 for (const [filename, duration, status, convert, resolution] of [
   ["valid.mp4", undefined, "completed", false],
   ["valid.mp4", null, "completed", false],

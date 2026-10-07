@@ -8,15 +8,19 @@ import {
 } from "@/lib/language-policy";
 import { clearSettingsCache } from "@/lib/settings";
 import { mediathekCache } from "@/lib/cache";
+import { CredentialConfigurationError } from "@/lib/credential-settings";
+import { getSetting } from "@/lib/settings";
 
-const { values, upsert, deleteSetting, clearSrfTokenCache } = vi.hoisted(() => ({
+const { values, upsert, transaction, deleteSetting, clearSrfTokenCache } = vi.hoisted(() => ({
   values: new Map<string, string>(),
   upsert: vi.fn(),
+  transaction: vi.fn(),
   deleteSetting: vi.fn(),
   clearSrfTokenCache: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({
   prisma: {
+    $transaction: transaction,
     config: {
       findUnique: vi.fn(async ({ where }: { where: { key: string } }) =>
         values.has(where.key) ? { value: values.get(where.key) } : null
@@ -53,8 +57,22 @@ beforeEach(() => {
   values.set("download.proxyUrl", "http://user:private-password@proxy.invalid");
   values.set("tvdb_token", "legacy-private-token");
   upsert.mockImplementation(
-    async ({ where, update }: { where: { key: string }; update: { value: string } }) =>
-      values.set(where.key, update.value)
+    async ({ where, update }: { where: { key: string }; update: { value: string } }) => {
+      values.set(where.key, update.value);
+      return { key: where.key, value: update.value };
+    }
+  );
+  transaction.mockImplementation(
+    async (run: (tx: { config: { upsert: typeof upsert } }) => Promise<unknown>) => {
+      const before = new Map(values);
+      try {
+        return await run({ config: { upsert } });
+      } catch (error) {
+        values.clear();
+        for (const [key, value] of before) values.set(key, value);
+        throw error;
+      }
+    }
   );
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -113,6 +131,50 @@ it("shows a usable TMDB read token only as presence", async () => {
   const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
   expect(all["api.tmdb.key"]).toBeTruthy();
   expect(JSON.stringify(all)).not.toContain("eyJ.synthetic.read.token");
+});
+
+it("reports invalid Arr credential configuration without disclosing source details or blocking nonsecret settings", async () => {
+  vi.mocked(getSetting).mockImplementation(async (key) => {
+    if (key === "api.radarr.key") throw new CredentialConfigurationError();
+    return values.get(key) ?? null;
+  });
+  const response = await GET(new NextRequest("http://localhost/api/settings"));
+  expect(response.status).toBe(200);
+  expect(response.headers.get("X-Pingufunk-Arr-Credentials")).toBe("sonarr=missing,radarr=invalid");
+  expect((await response.json())["api.radarr.key"]).toBe("");
+  expect((await post({ "matching.movie.yearTolerance": "2" })).status).toBe(200);
+  vi.mocked(getSetting).mockImplementation(async (key) => values.get(key) ?? null);
+});
+
+it("redacts a corrupt credential-bearing legacy Arr URL while retaining it for explicit server repair", async () => {
+  const value = "http://user:private-url-secret@example.invalid/radarr?apikey=private-query";
+  values.set("integration.radarr.url", value);
+  for (const query of ["", "?key=integration.radarr.url"]) {
+    const response = await GET(new NextRequest(`http://localhost/api/settings${query}`));
+    expect(response.headers.get("X-Pingufunk-Invalid-Settings")).toBe("integration.radarr.url");
+    const body = await response.json();
+    expect(query ? body.value : body["integration.radarr.url"]).toBe("");
+    expect(JSON.stringify(body)).not.toContain("private-url-secret");
+    expect(JSON.stringify(body)).not.toContain("private-query");
+  }
+  expect(values.get("integration.radarr.url")).toBe(value);
+  expect(upsert).not.toHaveBeenCalled();
+});
+
+it("requires controlled readback after a lost commit acknowledgement, even when the write committed", async () => {
+  transaction.mockImplementationOnce(async (run) => {
+    await run({ config: { upsert } });
+    throw new Error("synthetic lost acknowledgement");
+  });
+  const response = await post({ "matching.movie.yearTolerance": "02" });
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ committed: "unknown" });
+  expect(clearSettingsCache).toHaveBeenCalled();
+  const readback = await GET(
+    new NextRequest("http://localhost/api/settings?key=matching.movie.yearTolerance")
+  );
+  expect(await readback.json()).toEqual({ key: "matching.movie.yearTolerance", value: "2" });
+  expect(upsert).toHaveBeenCalledTimes(1);
 });
 
 it("defaults Sonarr off and accepts validated nonsecret controls with reload/readback", async () => {
@@ -249,11 +311,75 @@ it("rejects unsafe language-policy updates atomically", async () => {
   expect(values.has("matching.strategy")).toBe(false);
 });
 
-it("fails closed when a stored language policy is corrupt or from a future version", async () => {
+it("exposes corrupt stored policy for repair without overwriting or silently defaulting", async () => {
   values.set(LANGUAGE_POLICY_SETTING_KEY, '{"version":2,"includeOriginalAudio":true}');
-  const settings = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  const response = await GET(new NextRequest("http://localhost/api/settings"));
+  const settings = await response.json();
+  expect(settings[LANGUAGE_POLICY_SETTING_KEY]).toBe(values.get(LANGUAGE_POLICY_SETTING_KEY));
+  expect(response.headers.get("X-Pingufunk-Invalid-Settings")).toBe(LANGUAGE_POLICY_SETTING_KEY);
+  expect(upsert).not.toHaveBeenCalled();
+});
 
-  expect(settings[LANGUAGE_POLICY_SETTING_KEY]).toBe(
-    serializeLanguagePolicy(DEFAULT_LANGUAGE_POLICY)
-  );
+it("confirms canonical persisted values, not the submitted representations", async () => {
+  const response = await post({
+    "matching.sonarr.tolerancePercent": "015",
+    "matching.movie.yearTolerance": "02",
+  });
+  expect(await response.json()).toMatchObject({
+    success: true,
+    updated: 2,
+    settings: {
+      "matching.sonarr.tolerancePercent": "15",
+      "matching.movie.yearTolerance": "2",
+    },
+  });
+  expect(transaction).toHaveBeenCalledTimes(1);
+});
+
+it("rolls back a failed second statement and invalidates uncertain cache state", async () => {
+  values.set("matching.strategy", "fuzzy");
+  upsert.mockImplementationOnce(async () => {
+    values.set("matching.strategy", "strict");
+    return { key: "matching.strategy", value: "strict" };
+  });
+  upsert.mockRejectedValueOnce(new Error("private database connection detail"));
+  const response = await post({
+    "matching.strategy": "strict",
+    "matching.sonarr.tolerancePercent": "15",
+  });
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({
+    error: "Settings commit unconfirmed; refresh before retrying",
+    committed: "unknown",
+  });
+  expect(values.get("matching.strategy")).toBe("fuzzy");
+  expect(values.has("matching.sonarr.tolerancePercent")).toBe(false);
+  expect(clearSettingsCache).toHaveBeenCalled();
+});
+
+it.each([
+  { "matching.strategy": null },
+  { "matching.threshold": { value: 0.7 } },
+  { "matching.threshold": "0.7suffix" },
+  { "matching.movie.yearTolerance": "0" },
+  { "matching.movie.yearTolerance": "6" },
+  { "new.unknown": "true" },
+  { key: {}, value: "true" },
+  { key: "matching.strategy" },
+])("rejects malformed or unknown writes without opening a transaction: %j", async (body) => {
+  expect((await post(body)).status).toBe(400);
+  expect(transaction).not.toHaveBeenCalled();
+  expect(upsert).not.toHaveBeenCalled();
+});
+
+it("preserves readable legacy unknown keys but refuses new writes and resets", async () => {
+  values.set("legacy.setting", "preserved");
+  expect(
+    await (await GET(new NextRequest("http://localhost/api/settings?key=legacy.setting"))).json()
+  ).toEqual({ key: "legacy.setting", value: "preserved" });
+  expect((await post({ "legacy.setting": "changed" })).status).toBe(400);
+  expect(
+    (await DELETE(new NextRequest("http://localhost/api/settings?key=legacy.setting"))).status
+  ).toBe(400);
+  expect(values.get("legacy.setting")).toBe("preserved");
 });

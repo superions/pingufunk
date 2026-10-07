@@ -36,8 +36,16 @@ afterEach(async () => {
 });
 
 for (const provider of ["sqlite", "postgresql"] as const) {
-  for (const evidence of ["legacy", "arte_hbbtv", "ard_media"] as const) {
-    const version = evidence === "legacy" ? 1 : 2;
+  for (const evidence of [
+    "legacy",
+    "arte_hbbtv",
+    "ard_media",
+    "series",
+    "movie",
+    "unknown",
+  ] as const) {
+    const frozen = ["series", "movie", "unknown"].includes(evidence);
+    const version = frozen ? 3 : evidence === "legacy" ? 1 : 2;
     it.skipIf(provider === "postgresql" && !enabled)(
       `retains ${evidence} expectations through real ${provider} queue writes, restart and retry`,
       async () => {
@@ -70,25 +78,72 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           evidence === "ard_media"
             ? "https://ctv-videos.daserste.de/synthetic/media.mp4"
             : "https://fixture.akamaized.net/media.mp4";
-        const expectations = parseMediaExpectations({
-          ...unknownMediaExpectations(),
-          version,
-          duration: { seconds: 120, provenance: "episode_metadata" as const },
-          resolution: { width: 1280, height: 720, provenance: "provider_dimensions" as const },
-          ...(version === 2
-            ? {
-                sourceAudio: {
-                  provider: evidence,
-                  videoId:
-                    evidence === "ard_media"
-                      ? Buffer.from("crid://example.invalid/synthetic/one").toString("base64url")
-                      : "123456-001-A",
-                  language: "de",
-                  mediaIdentity: mediaSourceIdentity(sourceUrl),
-                },
-              }
-            : {}),
-        });
+        let expectations = frozen
+          ? null
+          : parseMediaExpectations({
+              ...unknownMediaExpectations(),
+              version,
+              duration: { seconds: 120, provenance: "episode_metadata" as const },
+              resolution: { width: 1280, height: 720, provenance: "provider_dimensions" as const },
+              ...(version === 2
+                ? {
+                    sourceAudio: {
+                      provider: evidence,
+                      videoId:
+                        evidence === "ard_media"
+                          ? Buffer.from("crid://example.invalid/synthetic/one").toString(
+                              "base64url"
+                            )
+                          : "123456-001-A",
+                      language: "de",
+                      mediaIdentity: mediaSourceIdentity(sourceUrl),
+                    },
+                  }
+                : {}),
+            });
+        if (frozen) {
+          await prisma.config.createMany({
+            data: [
+              { key: "matching.sonarr.tolerancePercent", value: "15" },
+              { key: "matching.movie.tolerancePercent", value: "0" },
+            ],
+          });
+          const { withSettingsSnapshot } = await import("@/lib/settings");
+          const { releaseMediaExpectations } =
+            await import("@/services/release-media-expectations");
+          expectations = await withSettingsSnapshot(async () =>
+            releaseMediaExpectations(
+              {
+                channel: "Synthetic",
+                topic: "Synthetic",
+                title: "Synthetic.S01E01",
+                description: "",
+                duration: 120,
+                size: 1000,
+                filmlisteTimestamp: 1700000000,
+                url_website: "https://example.invalid/page",
+                url_video: sourceUrl,
+                url_video_hd: "",
+                url_video_low: "",
+              },
+              2,
+              sourceUrl,
+              evidence as "series" | "movie" | "unknown"
+            )
+          );
+          expect(expectations).toMatchObject({
+            version: 3,
+            mediaKind: evidence,
+            durations: {
+              source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+              metadata:
+                evidence === "series"
+                  ? { seconds: 120, provenance: "episode_metadata", tolerancePercent: 15 }
+                  : null,
+            },
+          });
+        }
+        if (!expectations) throw new Error("Synthetic expectations were not produced");
         const release = {
           title: "Synthetic.S01E01",
           url: sourceUrl,
@@ -111,6 +166,22 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           mediaExpectations: JSON.stringify(expectations),
           mediaValidation: null,
         });
+        if (frozen) {
+          const { POST: saveSettings } = await import("@/app/api/settings/route");
+          expect(
+            (
+              await saveSettings(
+                new NextRequest("http://localhost/api/settings", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    "matching.sonarr.tolerancePercent": "0",
+                    "matching.movie.tolerancePercent": "25",
+                  }),
+                })
+              )
+            ).status
+          ).toBe(200);
+        }
         const sabPaths = ["/api", "/api/download"];
         const sabHandlers = [
           await import("@/app/api/route"),
@@ -169,6 +240,22 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           mediaExpectations: stored.mediaExpectations,
           mediaValidation: null,
         });
+        if (frozen) {
+          const persisted = parseMediaExpectations(stored.mediaExpectations!);
+          const { validateMediaProbe } = await import("@/server/media-probe");
+          const probe = (duration: string) => ({
+            format: { format_name: "mov,mp4", duration },
+            streams: [
+              { codec_type: "video", codec_name: "h264", width: 1280, height: 720 },
+              { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 2 },
+            ],
+          });
+          // A restart and settings write must not re-evaluate the saved policy.
+          expect(validateMediaProbe(probe("130"), persisted, 0).expectedChecks.duration).toBe(
+            "passed"
+          );
+          expect(() => validateMediaProbe(probe("134"), persisted, 25)).toThrow();
+        }
         const legacy = await addToQueue(release.url, release.title, "sonarr");
         expect(
           (await prisma.download.findUniqueOrThrow({ where: { id: legacy.id } })).mediaExpectations
@@ -225,8 +312,13 @@ for (const provider of ["sqlite", "postgresql"] as const) {
               key === "sd" ? release.url : `https://example.invalid/${key}.mp4`
             );
             expect(JSON.parse(actual.mediaExpectations!)).toEqual({
-              version: 1,
-              duration: { seconds: 120, provenance: "source_catalogue" },
+              version: 3,
+              mediaKind: "unknown",
+              durations: {
+                source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+                metadata: null,
+              },
+              sourceAudio: null,
               audio: null,
               resolution: null,
             });
@@ -251,6 +343,12 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           where: { id: { in: [retried!.id, legacy.id, ...uiIds] } },
         });
         await prisma.config.delete({ where: { key: "matching.minDuration" } });
+        if (frozen)
+          await prisma.config.deleteMany({
+            where: {
+              key: { in: ["matching.sonarr.tolerancePercent", "matching.movie.tolerancePercent"] },
+            },
+          });
       }
     );
   }

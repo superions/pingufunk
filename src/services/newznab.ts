@@ -349,7 +349,7 @@ function createRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime, url),
+    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime, url, "series"),
   });
   const item = info.item;
 
@@ -506,7 +506,7 @@ function createMovieRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(item, null, url),
+    mediaExpectations: releaseMediaExpectations(item, null, url, "movie"),
   });
 
   return {

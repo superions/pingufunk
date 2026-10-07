@@ -2,52 +2,26 @@ import { clearTokenCache as clearSrfTokenCache } from "@/services/srgssr-api";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { writesEnabled } from "@/lib/write-gate";
-import { isDownloadPathInput } from "@/lib/download-path-input";
-import { SONARR_DEFAULT_SETTINGS, validateSonarrSetting } from "@/lib/sonarr-settings";
-import { RADARR_DEFAULT_SETTINGS, validateRadarrSetting } from "@/lib/radarr-settings";
+import { CredentialConfigurationError } from "@/lib/credential-settings";
+import {
+  DEFAULT_PRODUCT_SETTINGS,
+  normalizeSetting,
+  invalidSettingKeys,
+  isWritableSettingKey,
+} from "@/lib/settings-schema";
 import { clearSettingsCache, getSetting } from "@/lib/settings";
 import { clearTTLCache, clearMetadataCaches, mediathekCache, rulesetsCache } from "@/lib/cache";
-import { isTvdbCredentialSettingKey } from "@/lib/tvdb-auth";
-import { clearTvdbTokenCache } from "@/services/tvdb";
 import {
   CREDENTIAL_ENV,
   isCredentialSettingKey,
   isMaskedSetting,
   maskSetting,
 } from "@/lib/settings-redaction";
-import {
-  decodeLanguagePolicy,
-  LANGUAGE_POLICY_SETTING_KEY,
-  serializeLanguagePolicy,
-  DEFAULT_LANGUAGE_POLICY,
-} from "@/lib/language-policy";
 
 // Default settings
 const DEFAULT_SETTINGS: Record<string, string> = {
-  ...SONARR_DEFAULT_SETTINGS,
-  ...RADARR_DEFAULT_SETTINGS,
-  // General
-  "download.path": "/downloads",
-  "download.quality": "all",
-  "download.convertToMkv": "true",
-
-  // API Keys
-  "api.tvdb.key": "",
-  "api.tvdb.pin": "",
-  "api.tmdb.key": "",
-
-  // Matching
-  "matching.strategy": "fuzzy",
-  "matching.threshold": "0.7",
-  "matching.minDuration": "300",
-  [LANGUAGE_POLICY_SETTING_KEY]: serializeLanguagePolicy(DEFAULT_LANGUAGE_POLICY),
-
-  // Cache
-  "cache.ttl.search": "3600",
-  "cache.ttl.metadata": "86400",
-
-  // System
-  "system.setupComplete": "false",
+  ...DEFAULT_PRODUCT_SETTINGS,
+  ...Object.fromEntries(Object.keys(CREDENTIAL_ENV).map((key) => [key, ""])),
 };
 
 function isHiddenSettingKey(key: string): boolean {
@@ -55,6 +29,11 @@ function isHiddenSettingKey(key: string): boolean {
 }
 
 function visibleSetting(key: string, value: string): string {
+  // Legacy malformed integration URLs may contain credentials. Keep the row
+  // untouched, expose only its invalid-key status, never the unsafe URL.
+  if (key === "integration.sonarr.url" || key === "integration.radarr.url") {
+    return normalizeSetting(key, value) ?? "";
+  }
   // A legacy TMDB v3 key is preserved in storage but cannot be used without
   // putting it in a query URL. Do not describe it as an active credential.
   if (key === "api.tmdb.key" && !value.startsWith("eyJ")) return "";
@@ -70,20 +49,25 @@ function invalidateSettingConsumers(keys: string[]): void {
   if (keys.some((key) => key.startsWith("cache."))) clearTTLCache();
 }
 
-function validateSettingValue(key: string, value: unknown): string | null {
-  if (key === "download.path") {
-    // An empty setting explicitly selects the existing environment/default path.
-    return value === "" || isDownloadPathInput(value) ? value : null;
-  }
-  const radarrValue = validateRadarrSetting(key, value);
-  if (radarrValue !== undefined) return radarrValue;
-  const sonarrValue = validateSonarrSetting(key, value);
-  if (sonarrValue !== undefined) return sonarrValue;
-  if (key !== LANGUAGE_POLICY_SETTING_KEY) return String(value);
-  if (typeof value !== "string") return null;
+function settingsHeaders(settings: Record<string, string>): Record<string, string> {
+  return {
+    "Cache-Control": "no-store",
+    "X-Pingufunk-Invalid-Settings": invalidSettingKeys(settings).join(","),
+  };
+}
 
-  const policy = decodeLanguagePolicy(value);
-  return policy ? serializeLanguagePolicy(policy) : null;
+async function credentialPresence(key: string) {
+  try {
+    const value = (await getSetting(key)) ?? "";
+    return { value: visibleSetting(key, value), status: value ? "present" : "missing" };
+  } catch (error) {
+    if (
+      (key === "api.sonarr.key" || key === "api.radarr.key") &&
+      error instanceof CredentialConfigurationError
+    )
+      return { value: "", status: "invalid" };
+    throw error;
+  }
 }
 
 // GET /api/settings - Fetch all settings or specific key
@@ -101,14 +85,27 @@ export async function GET(request: NextRequest) {
         where: { key },
       });
       let value: string | null = config?.value ?? DEFAULT_SETTINGS[key] ?? null;
-      if (key === LANGUAGE_POLICY_SETTING_KEY && value !== null) {
-        value = validateSettingValue(key, value) ?? DEFAULT_SETTINGS[key];
-      }
-      if (isCredentialSettingKey(key)) value = await getSetting(key);
-      return NextResponse.json({
-        key,
-        value: value === null ? null : visibleSetting(key, value),
-      });
+      const credential = isCredentialSettingKey(key) ? await credentialPresence(key) : null;
+      if (credential) value = credential.value;
+      return NextResponse.json(
+        {
+          key,
+          value:
+            value === null
+              ? null
+              : credential
+                ? credential.value
+                : visibleSetting(key, normalizeSetting(key, value) ?? value),
+        },
+        {
+          headers: {
+            ...settingsHeaders(value === null ? {} : { [key]: value }),
+            ...(credential && ["api.sonarr.key", "api.radarr.key"].includes(key)
+              ? { "X-Pingufunk-Arr-Credentials": `${key.split(".")[1]}=${credential.status}` }
+              : {}),
+          },
+        }
+      );
     }
 
     // Fetch all settings
@@ -117,16 +114,31 @@ export async function GET(request: NextRequest) {
 
     for (const config of configs) {
       if (isHiddenSettingKey(config.key)) continue;
-      settings[config.key] = visibleSetting(config.key, config.value);
+      settings[config.key] = config.value;
     }
+    const arrCredentials: string[] = [];
     for (const key of Object.keys(CREDENTIAL_ENV)) {
-      settings[key] = visibleSetting(key, (await getSetting(key)) ?? "");
+      const credential = await credentialPresence(key);
+      settings[key] = credential.value;
+      if (["api.sonarr.key", "api.radarr.key"].includes(key))
+        arrCredentials.push(`${key.split(".")[1]}=${credential.status}`);
     }
-    settings[LANGUAGE_POLICY_SETTING_KEY] =
-      validateSettingValue(LANGUAGE_POLICY_SETTING_KEY, settings[LANGUAGE_POLICY_SETTING_KEY]) ??
-      DEFAULT_SETTINGS[LANGUAGE_POLICY_SETTING_KEY];
-
-    return NextResponse.json(settings);
+    return NextResponse.json(
+      Object.fromEntries(
+        Object.entries(settings).map(([key, value]) => [
+          key,
+          isCredentialSettingKey(key)
+            ? value
+            : visibleSetting(key, normalizeSetting(key, value) ?? value),
+        ])
+      ),
+      {
+        headers: {
+          ...settingsHeaders(settings),
+          "X-Pingufunk-Arr-Credentials": arrCredentials.join(","),
+        },
+      }
+    );
   } catch {
     console.error("Failed to fetch settings");
     return NextResponse.json({ error: "Failed to fetch settings" }, { status: 500 });
@@ -138,84 +150,84 @@ export async function POST(request: NextRequest) {
   if (!writesEnabled()) {
     return NextResponse.json({ error: "Maintenance: writes disabled" }, { status: 503 });
   }
+  let body: unknown;
   try {
-    const body = await request.json();
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
-    }
-
-    // Handle single key-value pair
-    if (body.key && body.value !== undefined) {
-      const key = String(body.key);
-      if (isHiddenSettingKey(key)) {
-        return NextResponse.json({ error: "Setting is not available" }, { status: 404 });
-      }
-      if (isMaskedSetting(key, body.value)) {
-        return NextResponse.json({ success: true, key });
-      }
-      if (isCredentialSettingKey(key)) {
-        return NextResponse.json(
-          { error: "Configure credentials outside the UI" },
-          { status: 400 }
-        );
-      }
-      const value = validateSettingValue(key, body.value);
-      if (value === null) {
-        return NextResponse.json({ error: "Invalid setting value" }, { status: 400 });
-      }
-      await prisma.config.upsert({
-        where: { key },
-        update: { value },
-        create: { key, value },
-      });
-      invalidateSettingConsumers([key]);
-      if (isTvdbCredentialSettingKey(key)) {
-        await clearTvdbTokenCache();
-      }
-      return NextResponse.json({ success: true, key });
-    }
-
-    // Handle multiple settings
-    if (!body.key) {
-      const entries: [string, string][] = [];
-      for (const [key, value] of Object.entries(body)) {
-        if (isHiddenSettingKey(key)) {
-          return NextResponse.json({ error: "Setting is not available" }, { status: 404 });
-        }
-        if (isMaskedSetting(key, value)) continue;
-        if (isCredentialSettingKey(key) && value === "") continue;
-        if (isCredentialSettingKey(key)) {
-          return NextResponse.json(
-            { error: "Configure credentials outside the UI" },
-            { status: 400 }
-          );
-        }
-        const normalizedValue = validateSettingValue(key, value);
-        if (normalizedValue === null) {
-          return NextResponse.json({ error: "Invalid setting value" }, { status: 400 });
-        }
-        entries.push([key, normalizedValue]);
-      }
-      const changedKeys = entries.map(([key]) => key);
-      const updates = entries.map(([key, value]) =>
-        prisma.config.upsert({
-          where: { key },
-          update: { value },
-          create: { key, value },
-        })
-      );
-      await Promise.all(updates);
-      invalidateSettingConsumers(changedKeys);
-      if (changedKeys.some(isTvdbCredentialSettingKey)) {
-        await clearTvdbTokenCache();
-      }
-      return NextResponse.json({ success: true, updated: changedKeys.length });
-    }
-
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    body = await request.json();
   } catch {
-    console.error("Failed to update settings");
-    return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const input = body as Record<string, unknown>;
+  const single = Object.hasOwn(input, "key");
+  if (
+    single &&
+    (typeof input.key !== "string" ||
+      !input.key ||
+      !Object.hasOwn(input, "value") ||
+      Object.keys(input).some((key) => !["key", "value"].includes(key)))
+  ) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const submitted = single ? [[input.key as string, input.value] as const] : Object.entries(input);
+  const entries: [string, string][] = [];
+  for (const [key, value] of submitted) {
+    if (isHiddenSettingKey(key)) {
+      return NextResponse.json({ error: "Setting is not available" }, { status: 404 });
+    }
+    // Legacy masked bulk readback is a no-op, never a credential update.
+    if (isMaskedSetting(key, value) || (!single && isCredentialSettingKey(key) && value === ""))
+      continue;
+    if (isCredentialSettingKey(key)) {
+      return NextResponse.json({ error: "Configure credentials outside the UI" }, { status: 400 });
+    }
+    const normalized = normalizeSetting(key, value);
+    if (normalized === undefined || normalized === null) {
+      return NextResponse.json({ error: "Invalid or unknown setting" }, { status: 400 });
+    }
+    entries.push([key, normalized]);
+  }
+  const changedKeys = entries.map(([key]) => key);
+  try {
+    // Sequential statements in one transaction: a later failure cannot leave a
+    // partially persisted policy. Return the actual rows, not submitted inputs.
+    const confirmed = entries.length
+      ? await prisma.$transaction(async (tx) => {
+          const rows: [string, string][] = [];
+          for (const [key, value] of entries) {
+            const row = await tx.config.upsert({
+              where: { key },
+              update: { value },
+              create: { key, value },
+              select: { key: true, value: true },
+            });
+            if (row.key !== key || normalizeSetting(row.key, row.value) !== row.value)
+              throw new Error("Invalid persisted setting");
+            rows.push([row.key, row.value]);
+          }
+          return Object.fromEntries(rows);
+        })
+      : {};
+    if (changedKeys.length) invalidateSettingConsumers(changedKeys);
+    return NextResponse.json(
+      {
+        success: true,
+        updated: changedKeys.length,
+        ...(single ? { key: input.key } : {}),
+        settings: confirmed,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch {
+    // A lost commit acknowledgement is not a proven rollback. Invalidate even
+    // on uncertainty and require readback; never silently retry a settings write.
+    invalidateSettingConsumers(changedKeys);
+    console.error("Settings commit unconfirmed");
+    return NextResponse.json(
+      { error: "Settings commit unconfirmed; refresh before retrying", committed: "unknown" },
+      { status: 500 }
+    );
   }
 }
 
@@ -234,14 +246,14 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Configure credentials outside the UI" }, { status: 400 });
   }
 
+  if (!isWritableSettingKey(key)) {
+    return NextResponse.json({ error: "Unknown setting is read-only" }, { status: 400 });
+  }
   try {
     await prisma.config.delete({
       where: { key },
     });
     invalidateSettingConsumers([key]);
-    if (isTvdbCredentialSettingKey(key)) {
-      await clearTvdbTokenCache();
-    }
     return NextResponse.json({ success: true, key });
   } catch (error) {
     // Only an absent key is an idempotent success; DB failure is not a reset.
