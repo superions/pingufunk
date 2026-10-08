@@ -2253,3 +2253,47 @@ Backendfälle im dedizierten Gate; Lint/Typecheck/Formatcheck/Productionbuild un
 Diffcheck grün. Die 14 bestehenden Tracingwarnungen bleiben, keine neuen
 Dependencies oder Schemaänderungen. Native kumulative Abnahme dieses letzten
 Extraktionsstands noch ausstehend; P16.1 bleibt offen.
+
+### Finale Architekturabnahme P12–P16
+
+08.10.2026, letzter Quellstand
+`82aef878e5caee9d593972d07909c389b6abe8c5` auf `codex/owner-boundaries`:
+[Fork-CI 37722097108](https://github.com/superions/pingufunk/actions/runs/37722097108)
+einschließlich eigenständiger PostgreSQLintegration und
+[Containerkette 37722097163](https://github.com/superions/pingufunk/actions/runs/37722097163)
+vollständig erfolgreich. 1303 reguläre Tests/119 Dateien; die 21 im regulären
+Lauf separat aktivierbaren Backendfälle sind nicht als dort ausgeführt gezählt.
+Lint/Typecheck/Formatcheck/Productionbuild/Diffcheck bestanden. `npm ci` lokal
+für unveränderten Lock-/Packageinput wiederverwendet, im frischen Forklauf neu
+ausgeführt; lokal Node 26.10.0, Fork Node 24.21.0.
+
+Die Endkette bestätigt tatsächliche Sonarr-/Radarr-/Prowlarr-Qualitäts-/TBA-
+Consumer direkt und weitergeleitet, Tooling, vollständige SQLiteledger,
+TLS-Migration und Receipt-Backup/Restore mit strengem historischen Imagereject
+und kompatibler aktueller Maintenance. Reale progressive/HLS/Mux-/v3-/Legacy-
+Medienabschlüsse und Negativfälle, SAB-Aliase/Retry/Restart, SIGTERM im Mux und
+PG-Ausfall mit Failurewrite-Pause/Reconciliation bestehen auf beiden Backends.
+Kein funktionaler historischer Code-Rollback oder Mehrworkerbetrieb behauptet.
+
+Die unveränderten Desktop-Save-/Reload-/Fokus-/Fehler-/Kartenisolationsnachweise
+des tatsächlich servierten Settings-/Diagnosebundles bleiben gültig; die letzte
+Extraktion verändert ausschließlich Serverowner. Zusätzliche Endbundleprobe
+auf eigener neuer SQLite: echte gehaltene synthetische HTTP-Suche, bestätigter
+Settingswrite währenddessen, alte Antwort 503 ohne Teilergebnis, neue Antwort
+mit der gespeicherten Mindestdauer, kanonischer API-/DBreadback, null Jobs.
+Alle Nichtfixture-Quellen blockiert, keine realen Bibliotheks-/Medienoperationen.
+Die App-Route-Settingsowner teilen den erwarteten Snapshot/Invalidierungszustand;
+mehrfach enthaltene Mapquellen allein beweisen keinen neuen Bundlefehler.
+Eigene QA-Prozessbäume kontrolliert beendet, temporäre Browserseite geschlossen.
+
+Alle 14 Architekturpakete sind nach ihrer unveränderten Abnahme geschlossen;
+31 lokale relative Referenzlinks und Paketvollständigkeit zusätzlich geprüft.
+Review durch Implementierer, keine unabhängige Peerreview. Historische Analysen
+bleiben ausdrücklich Referenzen; nur das bestehende TODO ist ausführbarer Status.
+Keine Credentials, privaten Helpers/Topologie oder QA-Daten staged. Bekannte
+14 Tracingwarnungen und der zuvor dokumentierte transitive `source-map-js`-
+Auditbefund bleiben getrennt. P03.4 ist weiterhin die offene allgemeine
+Tonsprachenabdeckung, kein Produktvollabschluss. Produktion, Main, Upstream und
+Imagepublikation unverändert; Deployment-/Rollbacksicherheitsgrenzen bleiben
+operative Freigabegates. Nach diesem Quellstand folgen nur Abnahmedokumente,
+keine dadurch ungültig gewordenen Produktgates.

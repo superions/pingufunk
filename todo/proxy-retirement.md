@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **P12–P15 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. P16.1 bleibt bis zu seiner letzten Extraktion und Abnahme offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **Alle 14 Architekturpakete P12–P16 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die unabhängige allgemeine Sprachabdeckung P03.4, optionale P11.9-Arbeit und gesonderte Betriebs-/Entfernungsgates bleiben davon getrennt. Keine Produktions-, Mainintegrations- oder Publikationsfreigabe aus dieser Entwicklungsabnahme. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Produktvollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -2732,7 +2732,7 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
 Ergebnis: verständliche gemeinsame Pipeline statt weiterer Sonderpfade und
 leichter überprüfbare künftige Upstreamübernahmen.
 
-- [ ] **P16.1 — Bewiesene Verträge entlang ihrer Owner extrahieren und bereinigen.**
+- [x] **P16.1 — Bewiesene Verträge entlang ihrer Owner extrahieren und bereinigen.**
       Abhängigkeit P12.1/P12.2, P13.1 und P14.1; P14.2/P15.1 nur vor Refactoring
       ihrer konkreten neuen Owner. `mediathek.ts` nach Abrufkoordination,
       fachlicher Zuordnung und Releaseassembly aufteilen; `newznab.ts` bleibt
@@ -2776,3 +2776,23 @@ leichter überprüfbare künftige Upstreamübernahmen.
       Productionbuild/Diffcheck grün. 21 separate Backendfälle laufen im eigenen
       PG-Gate, nicht als lokal ausgeführt gezählt. Finale Fork-/Containerkette
       dieses Extraktionsstands steht noch aus; Checkbox bleibt offen.
+      Finale Abnahme 08.10.2026 auf
+      `82aef878e5caee9d593972d07909c389b6abe8c5`:
+      [Fork-CI 37722097108](https://github.com/superions/pingufunk/actions/runs/37722097108)
+      und [Containerkette 37722097163](https://github.com/superions/pingufunk/actions/runs/37722097163)
+      vollständig erfolgreich. 1303 reguläre Tests sowie eigenständige echte
+      PostgreSQL-/Zweiprozess-/Ausfallgates; native Qualitäts-/TBA-Consumer direkt
+      und via Prowlarr, Tooling, TLS-Migration, Receipt-Backup/Restore, Persistenz
+      und reale progressive/HLS/Mux-/v3-/Legacy-Medienabschlüsse beider Backends.
+      Tatsächlicher Mux-SIGTERM, terminales failed ohne Validierung, Restart/
+      Folgejob und PG-Write-Pause/Reconciliation erneut grün. Desktop-Evidenz
+      des unveränderten Settings-/Diagnosecodes wiederverwendet, keine neue
+      Mobil-/Theme-/Produktionsabnahme behauptet. Zusätzliche APIprobe am
+      wirklich servierten Endbundle: gehaltene synthetische Suche, bestätigter
+      Settingswrite, alte Antwort 503 ohne Treffer, neue Suche mit gespeicherter
+      Regel, kanonischer API-/direkter DBreadback und null Jobs; Fremdtraffic
+      gesperrt, eigene Runtime anschließend kontrolliert beendet. Finaler
+      Owner-/Call-/Write-/Link-/Scopecheck ohne offene P16-Findings. Keine neue
+      Abhängigkeit oder DDL durch die Extraktion; bekannte 14 Tracingwarnungen
+      und transitive Auditfinding nicht als behoben ausgegeben. Nur anschließende
+      Dokumentationsabnahme, unveränderte Produktgates werden wiederverwendet.
