@@ -10,6 +10,8 @@ import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
 import { useContentSearch } from "@/hooks/use-content-search";
 import { SearchCoverageNotice } from "@/components/search-coverage-notice";
+import { enqueueUiNzb, UiEnqueueError, type UiEnqueueRequest } from "@/lib/ui-enqueue";
+import { UncertainEnqueue } from "@/components/uncertain-enqueue";
 
 interface SearchResult {
   id: string;
@@ -25,6 +27,7 @@ interface SearchResult {
   url_website: string;
   category?: "movie" | "tv" | "unknown";
   nzbDownloads: UiNzbDownloads;
+  nzbFingerprints: UiNzbDownloads;
 }
 
 export default function SearchPage() {
@@ -39,6 +42,9 @@ export default function SearchPage() {
   } = useContentSearch<SearchResult>();
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [uncertain, setUncertain] = useState<{ id: string; request: UiEnqueueRequest } | null>(
+    null
+  );
 
   const handleSearch = async () => {
     setDownloadError(null);
@@ -52,34 +58,33 @@ export default function SearchPage() {
   };
 
   const handleDownload = async (result: SearchResult) => {
-    const nzbContent = result.nzbDownloads.hd || result.nzbDownloads.sd || result.nzbDownloads.low;
-    if (!nzbContent) return;
+    const quality = result.nzbDownloads.hd ? "hd" : result.nzbDownloads.sd ? "sd" : "low";
+    const nzb = result.nzbDownloads[quality];
+    if (!nzb) return;
+    const category =
+      result.category === "movie" ? "movie" : result.category === "tv" ? "tv" : "default";
+    await submitDownload(result.id, {
+      nzb,
+      fingerprint: result.nzbFingerprints?.[quality] ?? "",
+      category,
+    });
+  };
+  const submitDownload = async (id: string, request: UiEnqueueRequest, newIntent = false) => {
     setDownloadError(null);
-    setDownloadingIds((prev) => new Set(prev).add(result.id));
-
-    // Use category for download folder: movie -> /movie, tv -> /tv
-    const cat = result.category === "movie" ? "movie" : result.category === "tv" ? "tv" : "default";
+    setDownloadingIds((prev) => new Set(prev).add(id));
 
     try {
-      const res = await fetch(`/api/download?mode=addfile&cat=${cat}`, {
-        method: "POST",
-        body: nzbContent,
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      if (!data.status) {
-        throw new Error("Download rejected");
-      }
-    } catch {
+      await enqueueUiNzb(request, newIntent);
+      setUncertain(null);
+    } catch (error) {
+      setUncertain({ id, request });
       setDownloadError(
-        "Der Download wurde nicht bestätigt. Queue prüfen, bevor du erneut einreihst."
+        error instanceof UiEnqueueError ? error.message : "Auftrag nicht bestätigt. Queue prüfen."
       );
     } finally {
       setDownloadingIds((prev) => {
         const next = new Set(prev);
-        next.delete(result.id);
+        next.delete(id);
         return next;
       });
     }
@@ -121,6 +126,13 @@ export default function SearchPage() {
         <p role="alert" className="text-sm text-destructive">
           {searchError || downloadError}
         </p>
+      )}
+      {downloadError && uncertain && (
+        <UncertainEnqueue
+          busy={downloadingIds.has(uncertain.id)}
+          retry={() => submitDownload(uncertain.id, uncertain.request)}
+          startNew={() => submitDownload(uncertain.id, uncertain.request, true)}
+        />
       )}
 
       {/* Search Results */}

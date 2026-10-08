@@ -10,7 +10,13 @@ import {
   validatePostgresqlStructure,
 } from "./check-postgresql-schema.mjs";
 
-import { modelNames, schemaShape, knownShapes, validateSourceLedger } from "./sqlite-schema.mjs";
+import {
+  modelNames,
+  schemaShape,
+  knownShapes,
+  validateSourceLedger,
+  sourceRows,
+} from "./sqlite-schema.mjs";
 export const sourceFieldContract = {
   TvdbSeries: {
     int: ["id"],
@@ -52,6 +58,11 @@ export const sourceFieldContract = {
       "speed",
       "createdAt",
     ],
+  },
+  EnqueueIntent: {
+    text: ["id", "payloadHash", "downloadId"],
+    date: ["expiresAt"],
+    required: ["id", "payloadHash", "downloadId", "expiresAt"],
   },
   Config: { text: ["key", "value"], required: ["key", "value"] },
   GeneratedRuleset: {
@@ -122,7 +133,7 @@ function inspectValues(db) {
   const dateRepresentations = {};
   for (const [model, contract] of Object.entries(sourceFieldContract)) {
     const columns = new Set(Object.values(contract).flat());
-    for (const row of db.prepare(`SELECT * FROM "${model}"`).iterate()) {
+    for (const row of sourceRows(db, model)) {
       for (const [field, value] of Object.entries(row)) {
         if (!columns.has(field)) fail("Uncontracted source field");
         if (value === null) {
@@ -206,7 +217,10 @@ export function inspectSource(sourcePath) {
     const counts = Object.fromEntries(
       modelNames.map((name) => [
         name,
-        db.prepare(`SELECT COUNT(*) AS count FROM "${name}"`).get().count.toString(),
+        name === "EnqueueIntent" &&
+        !db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name)
+          ? "0"
+          : db.prepare(`SELECT COUNT(*) AS count FROM "${name}"`).get().count.toString(),
       ])
     );
     const ledger = db

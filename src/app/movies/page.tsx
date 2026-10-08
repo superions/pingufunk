@@ -10,6 +10,8 @@ import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
 import { useContentSearch } from "@/hooks/use-content-search";
 import { SearchCoverageNotice } from "@/components/search-coverage-notice";
+import { enqueueUiNzb, UiEnqueueError, type UiEnqueueRequest } from "@/lib/ui-enqueue";
+import { UncertainEnqueue } from "@/components/uncertain-enqueue";
 
 interface SearchResult {
   id: string;
@@ -25,6 +27,7 @@ interface SearchResult {
   url_video_low: string;
   url_website: string;
   nzbDownloads: UiNzbDownloads;
+  nzbFingerprints: UiNzbDownloads;
 }
 
 type QualityOption = {
@@ -45,6 +48,9 @@ export default function MoviesPage() {
   } = useContentSearch<SearchResult>("movie");
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [uncertain, setUncertain] = useState<{ id: string; request: UiEnqueueRequest } | null>(
+    null
+  );
 
   const handleSearch = async () => {
     setDownloadError(null);
@@ -73,24 +79,27 @@ export default function MoviesPage() {
 
   const handleDownload = async (result: SearchResult, nzbContent: string, qualityKey: string) => {
     const downloadKey = `${result.id}-${qualityKey}`;
+    await submitDownload(downloadKey, {
+      nzb: nzbContent,
+      fingerprint: result.nzbFingerprints?.[qualityKey as keyof UiNzbDownloads] ?? "",
+      category: "default",
+    });
+  };
+  const submitDownload = async (
+    downloadKey: string,
+    request: UiEnqueueRequest,
+    newIntent = false
+  ) => {
     setDownloadError(null);
     setDownloadingIds((prev) => new Set(prev).add(downloadKey));
 
     try {
-      const res = await fetch("/api/download?mode=addfile&cat=default", {
-        method: "POST",
-        body: nzbContent,
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      if (!data.status) {
-        throw new Error("Download rejected");
-      }
-    } catch {
+      await enqueueUiNzb(request, newIntent);
+      setUncertain(null);
+    } catch (error) {
+      setUncertain({ id: downloadKey, request });
       setDownloadError(
-        "Der Download wurde nicht bestätigt. Queue prüfen, bevor du erneut einreihst."
+        error instanceof UiEnqueueError ? error.message : "Auftrag nicht bestätigt. Queue prüfen."
       );
     } finally {
       setDownloadingIds((prev) => {
@@ -145,6 +154,13 @@ export default function MoviesPage() {
         <p role="alert" className="text-sm text-destructive">
           {searchError || downloadError}
         </p>
+      )}
+      {downloadError && uncertain && (
+        <UncertainEnqueue
+          busy={downloadingIds.has(uncertain.id)}
+          retry={() => submitDownload(uncertain.id, uncertain.request)}
+          startNew={() => submitDownload(uncertain.id, uncertain.request, true)}
+        />
       )}
 
       {/* Search Results */}

@@ -1,4 +1,5 @@
 import { convertRow, importOrder } from "./postgresql-row-transform.mjs";
+import { sourceRows } from "./sqlite-schema.mjs";
 
 function equalValue(left, right) {
   if (left instanceof Date && right instanceof Date) return left.getTime() === right.getTime();
@@ -12,7 +13,7 @@ export async function verifyRows(sqlite, pg, sourceCounts) {
     if (BigInt(count).toString() !== sourceCounts[table])
       throw new Error(`Row count mismatch in ${table}`);
     const primaryKey = table === "Config" ? "key" : "id";
-    for (const row of sqlite.prepare(`SELECT * FROM "${table}"`).iterate()) {
+    for (const row of sourceRows(sqlite, table)) {
       const expected = convertRow(table, row);
       const actual = await pg[delegate].findUnique({
         where: { [primaryKey]: expected[primaryKey] },

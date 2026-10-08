@@ -5,6 +5,7 @@ export const importOrder = [
   ["TvdbEpisode", "tvdbEpisode"],
   ["Config", "config"],
   ["Download", "download"],
+  ["EnqueueIntent", "enqueueIntent"],
   ["GeneratedRuleset", "generatedRuleset"],
   ["TopicCategory", "topicCategory"],
 ];
@@ -19,9 +20,13 @@ export function convertRow(model, row) {
   if (!contract) throw new Error("Unknown source model");
   const expected = new Set(Object.values(contract).flat());
   if (model === "Download") {
-    // Historical shapes have neither nullable P09 field; absence alone maps to NULL.
+    // Historical shapes lack these append-only nullable fields; absence alone maps to NULL.
     // Malformed existing text remains intact for the runtime to reject, not rewrite.
-    row = { mediaExpectations: null, mediaValidation: null, ...row };
+    row = {
+      mediaExpectations: null,
+      mediaValidation: null,
+      ...row,
+    };
   }
   const output = {};
   for (const [field, value] of Object.entries(row)) {

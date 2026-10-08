@@ -2425,7 +2425,7 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
       geprüft; die letzte Leerantwort nennt ausdrücklich das abgerufene Fenster.
       Keine DDL, öffentliche Images, Main-Integration, produktive Grabs oder
       Liveänderung. Ausschließlich der enge P10.1-Folgeauftrag ebenfalls geschlossen.
-- [ ] **P14.2 — Frische URL-gebundene Quellenbelege mit begrenztem Cache.**
+- [x] **P14.2 — Frische URL-gebundene Quellenbelege mit begrenztem Cache.**
       Abhängigkeit P13.1. Owner: `source-audio.ts`, `mp4-audio-language.ts`,
       ARTE-/ARD-Belegowner, `cache.ts` und ihre Such-/Workerconsumer.
       Katalogantwort, Identitätsmetadaten und konkrete Assetbelege typisiert
@@ -2467,7 +2467,14 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
       Backendtests nicht lokal aktiv), übrige Produktgates grün; neue Fork-/
       Backend-/Containergates vor finaler Abnahme offen. Keine DDL/UIlayout-
       änderung, neuen Grabs oder Produktionsmutationen.
-- [ ] **P14.3 — Verfügbarkeit und verschiedene Datumsarten explizit modellieren.**
+      Finale Abnahme auf `2f98a1a25c3c42002fd09428652d793c7a30b9f8`:
+      [Fork-CI 37713227718](https://github.com/superions/pingufunk/actions/runs/37713227718)
+      inklusive PostgreSQL und
+      [Containerkette 37713227755](https://github.com/superions/pingufunk/actions/runs/37713227755)
+      erfolgreich. SQLite/PG-Medien- und Arr-Consumerketten sowie Restart/
+      Rollback bestanden; Frischefälle über kausale synthetische Range-/RSS-
+      Regressionen geprüft, nicht als Produktionsmessung dargestellt.
+- [x] **P14.3 — Verfügbarkeit und verschiedene Datumsarten explizit modellieren.**
       Abhängigkeit P13.1/P14.1. Owner: Provider-/`ApiResultItem`-Adapter,
       TV-Matcher, `mediathek.ts` und Search-/RSS-Serializer. Filmproduktionsjahr,
       Episoden-Airdate, Katalogtimestamp und belegte Medienverfügbarkeit nicht
@@ -2496,6 +2503,10 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
       Lint, Typecheck, Formatcheck, Productionbuild und Diffcheck erfolgreich.
       Neue Beobachtungszeit im Order-Invariant-Test auf gleichen Moment
       fixiert; Edition-/URL-/Rechteassertions nicht abgeschwächt.
+      Finale kumulative Abnahme auf dem unverändert enthaltenen Datumsvertrag
+      in `2f98a1a25c3c42002fd09428652d793c7a30b9f8`: dieselben oben verlinkten
+      Fork-/PG-/Containergates erfolgreich. P14.2 entfernt den beschriebenen
+      Whole-RSS-Frischeumweg; keine automatische RSS-Vorabfreigabe eingeführt.
 
 ## Phase P15 — Robuster Einzelworker und begrenzte Betriebsoberfläche
 
@@ -2619,6 +2630,22 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       SQLite/PG; exakt eine Einreihung pro belegtem Schlüssel. Malformer/
       übergroßer Body erzeugt keinen Job; bestehende native addfile-Clients
       und Legacy/v1/v2/neue Erwartungen bleiben kompatibel.
+      Entwicklungscheckpoint 08.10.2026: optionale UI-Auftragsschlüssel mit
+      sieben Tagen Gültigkeit, maximal 64 pending Browserkeys ohne URLs/NZBs;
+      kanonischer Payloadfingerprint bleibt über NZB-Transportzeitstempel stabil.
+      Atomic Receipt-/Jobtransaktion auf beiden append-only Ketten, unabhängige
+      Bestätigung überlebt History-Delete/Retry; keine native URL-/Titeldedupe.
+      Body-/Query-/UTF8-/Deadlinegrenzen vor Parsing; 409 bei Payloadkonflikt,
+      keine automatische Retrymutation. Desktop 1280×720 Light Suche/Filme:
+      Pointer/Keyboard, HD/SD/Low, verlorene Antwort/Reload/same-ID-Readback,
+      Cancel/Confirm des neuen Auftragsdialogs; Konsole leer, keine realen Jobs.
+      1257 lokale Tests, Lint/Typecheck/Format/Build erfolgreich; separate PG-
+      und Container-Restart-/Rollbackgates noch ausstehend, Checkbox bleibt offen.
+      Review korrigierte Receiptverlust bei History-Delete und zeitabhängige
+      XML-Fingerprints. Historisches Image ist nach neuer DDL nicht kompatibel:
+      sichere Ablehnung, vollständiges Backup/Restore und kompatible Maintenance
+      werden geprüft, kein behaupteter historischer Code-Rollback.
+      Vertrag `docs/enqueue-intent-contract.md`; P15.1-Workerbesitz separat.
 
 ## Phase P16 — Ownergrenzen bereinigen, ohne das Produkt neu zu schreiben
 

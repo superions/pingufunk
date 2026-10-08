@@ -2,6 +2,7 @@ import { prisma, databaseProvider } from "@/lib/db";
 import type { Prisma } from "../../generated/sqlite";
 import { allDownloads, type DownloadRead } from "@/lib/download-read";
 import { randomUUID } from "crypto";
+import { createEnqueueIntent } from "./enqueue-intent";
 import { assertWritesEnabled } from "@/lib/write-gate";
 import path from "node:path";
 import {
@@ -132,27 +133,30 @@ export async function addToQueue(
   url: string,
   title: string,
   category: string,
-  mediaExpectations?: MediaExpectations
+  mediaExpectations?: MediaExpectations,
+  enqueueKey?: string
 ): Promise<{ id: string }> {
   assertWritesEnabled();
   validateCategory(category);
   validateReleaseTitle(title);
-  const download = await prisma.download.create({
-    data: {
-      id: randomUUID(),
-      title,
-      url,
-      category,
-      status: "queued",
-      progress: 0,
-      mediaExpectations:
-        mediaExpectations === undefined ? null : serializeMediaExpectations(mediaExpectations),
-    },
-  });
+  const data = {
+    id: randomUUID(),
+    title,
+    url,
+    category,
+    status: "queued" as const,
+    progress: 0,
+    mediaExpectations:
+      mediaExpectations === undefined ? null : serializeMediaExpectations(mediaExpectations),
+  };
+  const download =
+    enqueueKey !== undefined
+      ? await createEnqueueIntent(data, enqueueKey)
+      : await prisma.download.create({ data });
 
   // Trigger download processing asynchronously
   // Import dynamically to avoid circular dependencies and ensure server-side only
-  triggerDownloadProcessing();
+  if (!("created" in download) || download.created) triggerDownloadProcessing();
 
   return { id: download.id };
 }
@@ -210,7 +214,11 @@ async function readDownloads(kind: "queue" | "history", options: DownloadRead) {
       kind === "queue"
         ? [{ createdAt: "asc" }, { id: "asc" }]
         : [{ completedAt: { sort: "desc", nulls: "last" } }, { id: "asc" }],
-    omit: { url: true, mediaExpectations: true, mediaValidation: true },
+    omit: {
+      url: true,
+      mediaExpectations: true,
+      mediaValidation: true,
+    },
   };
   if (
     options.limit === 0 &&

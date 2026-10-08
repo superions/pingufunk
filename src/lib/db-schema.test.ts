@@ -29,7 +29,7 @@ it("keeps generated domain contracts equal across both clients", () => {
   expect(domain(SqlitePrisma.dmmf.datamodel.models)).toEqual(
     domain(PgPrisma.dmmf.datamodel.models)
   );
-  expect(SqlitePrisma.dmmf.datamodel.models).toHaveLength(6);
+  expect(SqlitePrisma.dmmf.datamodel.models).toHaveLength(7);
 });
 
 function modelNames(schema: string): string[] {
@@ -37,7 +37,7 @@ function modelNames(schema: string): string[] {
 }
 
 describe("PostgreSQL schema lineage", () => {
-  it("keeps six business models and a PostgreSQL-only checkpoint in native migrations", () => {
+  it("keeps shared models and a PostgreSQL-only checkpoint in native migrations", () => {
     const root = process.cwd();
     const schema = readFileSync(path.join(root, "prisma", "schema.prisma"), "utf-8");
     const migration = readFileSync(
@@ -57,9 +57,15 @@ describe("PostgreSQL schema lineage", () => {
     expect(schema).toContain('provider = "postgresql"');
     expect(lock).toContain('provider = "postgresql"');
     expect(legacy).toContain('provider = "sqlite"');
-    expect(modelNames(schema)).toHaveLength(7);
+    const enqueueMigration = readFileSync(
+      path.join(root, "prisma/migrations/20261008000000_enqueue_intent/migration.sql"),
+      "utf8"
+    );
+    expect(modelNames(schema)).toHaveLength(8);
     for (const model of modelNames(schema)) {
-      expect(migration + checkpointMigration).toContain(`CREATE TABLE "${model}"`);
+      expect(migration + checkpointMigration + enqueueMigration).toContain(
+        `CREATE TABLE "${model}"`
+      );
     }
     expect(migration).not.toContain("sqlite_sequence");
   });
@@ -104,6 +110,7 @@ it.skipIf(!required)("checks the applied PostgreSQL catalog, types and relations
         "TvdbSeries",
         "TvdbEpisode",
         "Download",
+        "EnqueueIntent",
         "Config",
         "GeneratedRuleset",
         "TopicCategory",

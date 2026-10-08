@@ -8,11 +8,22 @@ const legacy = resolve(dirname(fileURLToPath(import.meta.url)), "../prisma/legac
 export const modelNames = [
   "Config",
   "Download",
+  "EnqueueIntent",
   "GeneratedRuleset",
   "TopicCategory",
   "TvdbEpisode",
   "TvdbSeries",
 ];
+
+/** Only this append-only model is absent from accepted historical sources. */
+export function sourceRows(db, model) {
+  if (!modelNames.includes(model)) throw new Error("Unknown source model");
+  const present = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+    .get(model);
+  if (!present && model === "EnqueueIntent") return [];
+  return db.prepare(`SELECT * FROM "${model}"`).iterate();
+}
 function fail(reason) {
   throw new Error(reason);
 }
@@ -29,7 +40,7 @@ export function validateSourceLedger(db, variant) {
     .sort();
   if (rows.some((row) => !known.includes(row.migration_name)))
     fail("Unknown SQLite migration ledger entry");
-  const prefixLength = { migrated: 3, seriesTopic: 4, current: 5 }[variant];
+  const prefixLength = { migrated: 3, seriesTopic: 4, mediaValidation: 5, current: 6 }[variant];
   const expected = known.slice(0, prefixLength);
   const names = rows.map((row) => row.migration_name).sort();
   if (!prefixLength || JSON.stringify(names) !== JSON.stringify(expected))
@@ -54,6 +65,11 @@ export function schemaShape(db) {
     if (!["table", "index"].includes(object.type)) fail("Unknown source schema object");
   }
   return modelNames.map((name) => {
+    if (
+      name === "EnqueueIntent" &&
+      !objects.some((object) => object.name === name && object.type === "table")
+    )
+      return [name, [], [], []];
     if (!objects.some((object) => object.name === name && object.type === "table"))
       fail("Source model missing");
     const columns = db
@@ -97,6 +113,7 @@ export function knownShapes() {
   const migrated = new DatabaseSync(":memory:");
   const current = new DatabaseSync(":memory:");
   const seriesTopic = new DatabaseSync(":memory:");
+  const mediaValidation = new DatabaseSync(":memory:");
   try {
     bootstrap.exec(readFileSync(resolve(legacy, "init-db.sql"), "utf8"));
     const migrationNames = [
@@ -109,10 +126,23 @@ export function knownShapes() {
       migrated.exec(sql);
       current.exec(sql);
       seriesTopic.exec(sql);
+      mediaValidation.exec(sql);
     }
     current.exec(
       readFileSync(
         resolve(legacy, "migrations/20260930002000_series_topic_identity/migration.sql"),
+        "utf8"
+      )
+    );
+    mediaValidation.exec(
+      readFileSync(
+        resolve(legacy, "migrations/20260930002000_series_topic_identity/migration.sql"),
+        "utf8"
+      )
+    );
+    mediaValidation.exec(
+      readFileSync(
+        resolve(legacy, "migrations/20261001000000_media_validation/migration.sql"),
         "utf8"
       )
     );
@@ -128,10 +158,17 @@ export function knownShapes() {
         "utf8"
       )
     );
+    current.exec(
+      readFileSync(
+        resolve(legacy, "migrations/20261008000000_enqueue_intent/migration.sql"),
+        "utf8"
+      )
+    );
     return {
       bootstrap: schemaShape(bootstrap),
       migrated: schemaShape(migrated),
       seriesTopic: schemaShape(seriesTopic),
+      mediaValidation: schemaShape(mediaValidation),
       current: schemaShape(current),
     };
   } finally {
@@ -139,5 +176,6 @@ export function knownShapes() {
     migrated.close();
     current.close();
     seriesTopic.close();
+    mediaValidation.close();
   }
 }

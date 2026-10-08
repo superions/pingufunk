@@ -11,6 +11,7 @@ import {
   assertConnectedTarget,
 } from "./postgresql-preflight.mjs";
 import { convertRow, importOrder } from "./postgresql-row-transform.mjs";
+import { sourceRows } from "./sqlite-schema.mjs";
 import { verifyRows } from "./postgresql-verify.mjs";
 import { hasRunManifest, prepareRunManifest } from "./postgresql-run-manifest.mjs";
 import { postgresqlRequiresTls } from "./postgresql-transport.mjs";
@@ -135,13 +136,13 @@ export async function importSnapshot({
         // rows after the empty-target check. The operator must still keep the
         // application in maintenance for the whole handoff.
         await tx.$executeRawUnsafe(
-          'LOCK TABLE "TvdbSeries", "TvdbEpisode", "Config", "Download", "GeneratedRuleset", "TopicCategory" IN ACCESS EXCLUSIVE MODE'
+          'LOCK TABLE "TvdbSeries", "TvdbEpisode", "Config", "Download", "EnqueueIntent", "GeneratedRuleset", "TopicCategory" IN ACCESS EXCLUSIVE MODE'
         );
         let existingRows = 0;
         for (const [, delegate] of importOrder) existingRows += await tx[delegate].count();
         if (existingRows === 0) {
           for (const [table, delegate] of importOrder) {
-            const rows = sqlite.prepare(`SELECT * FROM "${table}"`).iterate();
+            const rows = sourceRows(sqlite, table);
             let batch = [];
             for (const row of rows) {
               batch.push(convertRow(table, row));

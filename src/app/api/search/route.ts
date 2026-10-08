@@ -9,7 +9,7 @@ import {
 } from "@/services/content-search";
 import { selectLanguageVariants } from "@/services/language-editions";
 import { eligibleRenditionItem, selectRenditions } from "@/services/rendition-quality";
-import { createUiNzbDownloads } from "@/services/ui-nzb";
+import { createUiNzbDownloads, uiNzbFingerprints } from "@/services/ui-nzb";
 import type { ApiResultItem, UiNzbDownloads, UiSearchCoverage } from "@/types";
 import { recordDecision, withDecisionDiagnostics } from "@/server/decision-diagnostics";
 
@@ -29,6 +29,7 @@ export interface SearchResult {
   category?: CategoryType;
   providerId?: SearchProviderId;
   nzbDownloads: UiNzbDownloads;
+  nzbFingerprints: UiNzbDownloads;
 }
 
 const PROVIDERS = ["mediathekview", "orf", "srf"] as const;
@@ -50,6 +51,7 @@ function searchResult(
   category?: CategoryType
 ): SearchResult {
   const defaultId = `${item.channel}-${item.topic}-${item.title}-${item.filmlisteTimestamp}`;
+  const nzbDownloads = createUiNzbDownloads(item, hlsEnabled);
   return {
     // The two shipped forms retain their IDs; neither source-row hashes nor
     // better rendition facts manufacture a new GUI identity.
@@ -67,7 +69,8 @@ function searchResult(
     url_website: item.url_website,
     category,
     ...(providerForm ? { providerId: itemProvider(item) } : {}),
-    nzbDownloads: createUiNzbDownloads(item, hlsEnabled),
+    nzbDownloads,
+    nzbFingerprints: uiNzbFingerprints(nzbDownloads),
   };
 }
 

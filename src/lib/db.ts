@@ -35,7 +35,7 @@ function createClient() {
     config.provider === "postgresql"
       ? new PostgresqlClient({ log: [], datasourceUrl: config.url })
       : null;
-  // Only the six shared domain models are exposed. Generated DMMF parity and
+  // Only shared application models are exposed. Generated DMMF parity and
   // real CRUD tests protect this structural boundary; the PG checkpoint stays
   // private to its owner and cannot be called against SQLite.
   const base = pg

@@ -3,7 +3,7 @@ import { closeSync, openSync, readFileSync, readdirSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 
-/** Synthetic six-model source only; exclusive creation never adopts a real DB. */
+/** Synthetic source only; exclusive creation never adopts a real DB. */
 export function createSmokeSource(path, variant = "bootstrap") {
   if (!path || !isAbsolute(path)) throw new Error("An absolute disposable source path is required");
   if (!["bootstrap", "current"].includes(variant)) throw new Error("Unknown synthetic variant");
@@ -42,13 +42,17 @@ export function createSmokeSource(path, variant = "bootstrap") {
         VALUES ('smoke-rule','Synthetic topic',7123,'Synthetic',1780228800123,1780228800123);
       INSERT INTO TopicCategory(id,topic,category,cachedAt) VALUES ('smoke-category','Synthetic topic','tv',1780228800123);
     `);
-    if (variant === "current")
+    if (variant === "current") {
       db.prepare(
         "UPDATE Download SET mediaExpectations=?,mediaValidation=? WHERE id='smoke-download'"
       ).run(
         '{ "version":1, "duration":null, "audio":null, "resolution":null }',
         '{"version":1,"durationSeconds":2,"video":[{"width":320,"height":180}],"audioLanguages":[],"expectedChecks":{"duration":"unknown","audio":"unknown","resolution":"unknown"}}'
       );
+      db.prepare(
+        "INSERT INTO EnqueueIntent(id,payloadHash,downloadId,expiresAt) VALUES (?,?,?,?)"
+      ).run("synthetic-intent", "synthetic-hash", "smoke-download", 1790769600123);
+    }
   } finally {
     db.close();
   }

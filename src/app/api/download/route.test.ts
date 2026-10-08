@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { InvalidDownloadInputError, UnsafeDownloadPathError } from "@/lib/download-paths";
 import { MediaExpectationsError } from "@/lib/media-expectations";
+import { ENQUEUE_KEY_HEADER, EnqueueConflictError, MAX_NZB_BYTES } from "@/lib/enqueue-request";
 
 const {
   addToQueue,
@@ -44,6 +45,67 @@ describe.each([
   { path: "/api", ...root },
   { path: "/api/download", ...alias },
 ])("SAB $path", ({ path, GET, POST }) => {
+  it("binds the optional UI key without changing unkeyed native calls; conflict is not success", async () => {
+    const key = `7dc162f6-177c-4c4a-a8bb-bb425af0c159:${Date.now()}`;
+    parseNzbContent.mockReturnValue({ title: "Synthetic", url: "https://example.invalid" });
+    addToQueue.mockResolvedValue({ id: "original-job" });
+    const make = () =>
+      new NextRequest(`http://localhost${path}?mode=addfile&cat=tv`, {
+        method: "POST",
+        body: "synthetic",
+        headers: { [ENQUEUE_KEY_HEADER]: key },
+      });
+    const response = await POST(make());
+    expect(await response.json()).toEqual({ status: true, nzo_ids: ["original-job"] });
+    expect(addToQueue).toHaveBeenCalledWith(
+      "https://example.invalid",
+      "Synthetic",
+      "tv",
+      undefined,
+      key
+    );
+    addToQueue.mockRejectedValue(new EnqueueConflictError());
+    expect((await POST(make())).status).toBe(409);
+  });
+  it.each([
+    { body: "x", headers: { "content-length": String(MAX_NZB_BYTES + 1) } },
+    { body: "x".repeat(MAX_NZB_BYTES + 1), headers: {} },
+    { body: "x", headers: { [ENQUEUE_KEY_HEADER]: "invalid" } },
+  ])(
+    "rejects bounded request violations before parsing or inserting",
+    async ({ body, headers }) => {
+      expect(
+        (
+          await POST(
+            new NextRequest(`http://localhost${path}?mode=addfile`, {
+              method: "POST",
+              body,
+              headers: headers as HeadersInit,
+            })
+          )
+        ).status
+      ).toBeGreaterThanOrEqual(400);
+      expect(parseNzbContent).not.toHaveBeenCalled();
+      expect(addToQueue).not.toHaveBeenCalled();
+    }
+  );
+  it("does not enqueue a malformed NZB or duplicate/oversized query", async () => {
+    parseNzbContent.mockReturnValue(null);
+    for (const query of [
+      "mode=addfile",
+      "mode=addfile&cat=tv&cat=movie",
+      "mode=addfile&cat=" + "x".repeat(16385),
+    ]) {
+      expect(
+        (
+          await POST(
+            new NextRequest(`http://localhost${path}?${query}`, { method: "POST", body: "invalid" })
+          )
+        ).status
+      ).toBe(400);
+    }
+    expect(addToQueue).not.toHaveBeenCalled();
+  });
   it.each(["queue", "fullstatus", "history", "get_config"])(
     "bounds a hung %s read without claiming healthy empty data",
     async (mode) => {

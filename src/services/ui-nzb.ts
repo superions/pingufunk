@@ -3,6 +3,37 @@ import { selectRenditions } from "./rendition-quality";
 import { mediaSourceIdentity } from "./source-audio";
 import { generateFakeNzb } from "./nzb-release";
 import { releaseMediaExpectations } from "./release-media-expectations";
+import { createHash } from "node:crypto";
+import { parseNzbContent } from "./download";
+import { serializeMediaExpectations } from "@/lib/media-expectations";
+
+/** Canonical enqueue payload, not NZB transport timestamps. A fresh search after
+ * reload can acknowledge the same intent when the actual job payload is unchanged.
+ * Hashing stays server-side so HTTP UI needs no SubtleCrypto or second parser.
+ */
+export function uiNzbFingerprints(downloads: UiNzbDownloads): UiNzbDownloads {
+  return Object.fromEntries(
+    Object.entries(downloads).map(([quality, body]) => {
+      const release = parseNzbContent(body);
+      if (!release) throw new Error("Invalid server-authored NZB");
+      return [
+        quality,
+        createHash("sha256")
+          .update(
+            JSON.stringify([
+              1,
+              release.url,
+              release.title,
+              release.mediaExpectations === undefined
+                ? null
+                : serializeMediaExpectations(release.mediaExpectations),
+            ])
+          )
+          .digest("hex"),
+      ];
+    })
+  );
+}
 
 /** Opaque server-authored releases; the browser never invents an expectation or XML. */
 export function createUiNzbDownloads(item: ApiResultItem, hlsEnabled: boolean): UiNzbDownloads {

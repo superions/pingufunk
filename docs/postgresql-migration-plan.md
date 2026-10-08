@@ -271,3 +271,25 @@ konkreter Endpoint oder Secret in dieses öffentliche Repository.
 Artefakte, Entscheidungen und Status werden nur in den Phasen-TODOs geführt.
 Bis zu implementiertem Runner und geprobtem Runbook gibt es hier keine
 vermeintlich fertigen Deploymentbefehle.
+
+## Append-only Erweiterung P15.4 (08.10.2026)
+
+Zusätzlich zu den sechs ursprünglichen fachlichen Modellen gehört die
+providerübergreifende `EnqueueIntent`-Tabelle zum vollständig zu erhaltenden
+Anwendungsbestand. Beide Ketten führen `20261008000000_enqueue_intent`.
+Current-Sources übernehmen Schlüssel-/Payloadhash, ursprüngliche Download-ID
+und millisekundengenaue Ablaufzeit unverändert; historische Sources ohne
+Tabelle haben null Rows, keine erfundenen Bestätigungen. Keine FK-Cascade bei
+History-Retry/-Delete; die Empfangsbestätigung ist nicht der aktuelle Jobstatus.
+
+Import, Baselinetransition, Sourceprüfung und semantische Verification beziehen
+diese Tabelle ein. Der bereits ausgelieferte P09-Shape bleibt als historische
+Quelle gesondert erkannt, dessen SQL/Checksums bleiben unverändert.
+Ein Image vor dieser Erweiterung ist kein nachgewiesen kompatibles post-write
+Rollbackimage. Der neue Harness verlangt die sichere Ablehnung des alten
+Schemas am historischen Image und prüft Backup/Restore aller Werte sowie
+Maintenance mit dem exakten kompatiblen aktuellen Image. Das ist kein
+funktionaler Code-Downgrade. Vor einem später genehmigten Rollout muss ein
+passender schema-/receipt-kompatibler Rollbackbuild geprüft werden; niemals
+Receipt-/Ledger-/Jobdaten löschen, um einen alten Build starten zu können.
+Details im [Enqueue-Vertrag](enqueue-intent-contract.md), Status nur im TODO.

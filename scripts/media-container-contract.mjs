@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseStringPromise } from "xml2js";
+import { randomUUID } from "node:crypto";
 
 const container = process.argv[2];
 const owner = process.env.PINGUFUNK_MEDIA_QA_OWNER;
@@ -21,7 +22,7 @@ if (
   ]).trim() !== owner
 )
   throw new Error("Exact harness-owned media application required");
-function request(endpoint, body) {
+function request(endpoint, body, enqueueKey) {
   const args = [
     "exec",
     ...(body === undefined ? [] : ["-i"]),
@@ -32,6 +33,7 @@ function request(endpoint, body) {
     "5",
   ];
   if (body !== undefined) args.push("-X", "POST", "--data-binary", "@-");
+  if (enqueueKey !== undefined) args.push("-H", `X-Pingufunk-Enqueue-Key: ${enqueueKey}`);
   return JSON.parse(run([...args, `http://localhost:6767/${endpoint}`], body));
 }
 function rawRequest(url) {
@@ -74,6 +76,7 @@ request(
   })
 );
 let previousGuid;
+let keyedReceipt;
 for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   const rss = rawRequest(`http://localhost:6767/${endpoint}?t=search&q=Synthetic&limit=1`);
   // Parse the actual producer with the same XML library used by this product;
@@ -97,10 +100,16 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   )
     throw new Error("Unexpected source enclosure");
   const body = rawRequest(nzbUrl.href);
-  const added = request("api/download?mode=addfile&cat=sonarr", body);
+  const key = endpoint === "api/newznab" ? `${randomUUID()}:${Date.now()}` : undefined;
+  const added = request("api/download?mode=addfile&cat=sonarr", body, key);
   if (added.status !== true || added.nzo_ids.length !== 1)
     throw new Error("RSS NZB enqueue failed");
   const id = added.nzo_ids[0];
+  if (key) {
+    keyedReceipt = { key, body, id };
+    if (request("api?mode=addfile&cat=sonarr", body, key).nzo_ids[0] !== id)
+      throw new Error("Lost-response acknowledgement created another transfer");
+  }
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline && !["completed", "failed"].includes(readJob(id).status))
     await delay(200);
@@ -273,6 +282,27 @@ for (const [id, before] of terminalSnapshots) {
   if (JSON.stringify(readJob(id)) !== JSON.stringify(before))
     throw new Error("Restart changed persisted terminal media facts");
 }
+if (!keyedReceipt) throw new Error("Keyed enqueue fixture missing");
+const totalJobs = () =>
+  request("api?mode=history").history.noofslots_total +
+  request("api?mode=queue").queue.noofslots_total;
+const beforeRepeat = totalJobs();
+for (const endpoint of ["api", "api/download"]) {
+  if (
+    request(`${endpoint}?mode=addfile&cat=sonarr`, keyedReceipt.body, keyedReceipt.key)
+      .nzo_ids[0] !== keyedReceipt.id
+  )
+    throw new Error("Container restart lost durable enqueue receipt");
+}
+if (
+  totalJobs() !== beforeRepeat ||
+  JSON.stringify(readJob(keyedReceipt.id)) !==
+    JSON.stringify(terminalSnapshots.get(keyedReceipt.id))
+)
+  throw new Error("Acknowledgement changed completed job/history");
+console.log(
+  "Durable keyed acknowledgement survived real container restart without another transfer"
+);
 console.log(
   "Real progressive/mux/HLS probe, negative media, queue continuation and SAB history passed"
 );

@@ -149,7 +149,7 @@ docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_smo
   -c 'GRANT CONNECT ON DATABASE pingufunk_smoke TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
-  -c 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "TvdbSeries", "TvdbEpisode", "Download", "Config", "GeneratedRuleset", "TopicCategory" TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
+  -c 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "TvdbSeries", "TvdbEpisode", "Download", "EnqueueIntent", "Config", "GeneratedRuleset", "TopicCategory" TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   -c 'GRANT SELECT ON TABLE "MigrationCheckpoint" TO pingufunk_smoke_import' \
   -c 'GRANT SELECT, INSERT ON TABLE "MigrationCheckpoint" TO pingufunk_smoke_runtime' \
   -c 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
@@ -305,6 +305,7 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
           (SELECT jsonb_agg(t ORDER BY key) FROM "Config" t),
           (SELECT jsonb_agg(t ORDER BY id) FROM "GeneratedRuleset" t),
           (SELECT jsonb_agg(t ORDER BY id) FROM "TopicCategory" t),
+          (SELECT jsonb_agg(t ORDER BY id) FROM "EnqueueIntent" t),
           (SELECT jsonb_agg(t ORDER BY key) FROM "MigrationCheckpoint" t)
         )' | node -e '
           const {createHash}=require("node:crypto"); const hash=createHash("sha256");
@@ -329,10 +330,21 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   [[ "$(domain_fingerprint pingufunk_smoke_restore)" == "$before_rollback" ]] || {
     echo "Restored PostgreSQL backup differs from the post-write state" >&2; exit 1;
   }
-  docker run -d --name "$APP_CONTAINER" --network "$SMOKE_NETWORK" \
+  # The historical image is intentionally pinned. New append-only DDL makes
+  # its strict schema/ledger gate incompatible: prove rejection, never bypass
+  # the gate or restore a stale SQLite snapshot after PostgreSQL writes.
+  if docker run --rm --network "$SMOKE_NETWORK" \
     -e DATABASE_URL_FILE=/run/secrets/database_url \
     --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
-    "$ROLLBACK_IMAGE" >/dev/null
+    --entrypoint node "$ROLLBACK_IMAGE" /app/scripts/check-database-schema.mjs >/dev/null 2>&1; then
+    echo 'Historical rollback image unexpectedly accepted newer schema' >&2; exit 1;
+  fi
+  COMPATIBLE_MAINTENANCE_IMAGE="$(docker image inspect "$RUNNER_IMAGE" --format '{{.Id}}')"
+  docker run -d --name "$APP_CONTAINER" --network "$SMOKE_NETWORK" \
+    -e PINGUFUNK_WRITES_ENABLED=0 \
+    -e DATABASE_URL_FILE=/run/secrets/database_url \
+    --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
+    "$COMPATIBLE_MAINTENANCE_IMAGE" >/dev/null
   SMOKE_APP_STARTED=1
   ready=0
   for ((attempt = 0; attempt < 30; attempt++)); do
@@ -352,6 +364,6 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   [[ "$(domain_fingerprint pingufunk_smoke)" == "$before_rollback" ]] || {
     echo "Rollback maintenance reads changed PostgreSQL data" >&2; exit 1;
   }
-  echo "Disposable post-write backup restore and immutable PG-compatible application rollback passed"
+  echo "Disposable post-write backup restore, incompatible old-image rejection and compatible maintenance rollback passed"
 fi
 echo "Disposable TLS container migration, maintenance read and first-write checkpoint passed"

@@ -1,6 +1,8 @@
 # Review des Proxy-Ablöseplans
 
 Stand: 06.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
+Aktueller Implementierungsstatus ausschließlich im Phasen-TODO; die datierten
+folgenden Bewertungen sind keine konkurrierende Abnahme-/Deploymentfreigabe.
 Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
 Dies ist ein zweiter, quellen- und testgestützter **Selbstreview**, kein
 unabhängiger Peer-Review und keine Freigabe für produktive Änderungen.
@@ -2048,3 +2050,64 @@ drei Requests/2.097.168 Bytes gespart, keine Provider-Vollabdeckungsbehauptung.
 1228 lokale Tests/übrige Produktgates grün. Finale neue Fork-/Backend-/Container-
 ketten noch offen; P14.2/P14.3 nicht vorzeitig geschlossen, P03.4 weiterhin
 separat. Keine neue UIlayout-/Schema-/Deploymentänderung.
+
+### Finale P14.2/P14.3-Abnahme
+
+08.10.2026: kumulativer Produktstand
+`2f98a1a25c3c42002fd09428652d793c7a30b9f8`,
+[Fork-CI 37713227718](https://github.com/superions/pingufunk/actions/runs/37713227718)
+und [Containerkette 37713227755](https://github.com/superions/pingufunk/actions/runs/37713227755)
+vollständig erfolgreich, einschließlich PostgreSQL, beider Medienbackends,
+nativer Arr-Consumer, TLS-Migration, Persistenz/Restart und damaligem Rollback.
+Frischegrenze beseitigt den Whole-RSS-Cacheumweg aus P14.3; beide Punkte im TODO
+geschlossen. Keine Aussage, alle Sprach-/Quellenvarianten seien nun beweisbar.
+
+## Implementierungsreview P15.4 — dauerhafte Auftragsbestätigung
+
+08.10.2026 auf `codex/enqueue-idempotency`: vollständiger Header→Bodylimit→
+NZBparser→Payloadnormalisierung→DBtransaktion→Workertrigger→ACK→GUIstorage-
+Pfad erneut durch Implementierer geprüft. Upstream-main
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49` erneut abgerufen; kein entsprechender
+Receiptowner. Kein Peer-Review oder Produktionsnachweis.
+
+Zwei ursprüngliche Reviewfindings behoben: Ein nur am Job gespeicherter Key
+ginge bei History-Delete/Retry verloren; nun unabhängige Empfangsbestätigung
+ohne FK/Cascade, atomar mit dem Job. Ein Fingerprint des ganzen NZB änderte
+sich mit dessen Transporttimestamp; nun kanonischer Jobpayload. Idempotenz
+ist explizit optional, keine native Titel-/URL-Dedupe. Unique-Race liest ACK,
+ungewisser Commit wird nicht erneut ausgeführt. Trigger nur für einen neuen
+Job, Recovery/Workerbesitz bleibt P15.1.
+
+Retention: sieben Tage, danach alter Timestampkey abgelehnt, maximal 100
+Receipt-Cleanups je Anfrage. Löscht keine Jobs/History/Dateien. Browser maximal
+64 pending opaque Keys ohne payloadhaltigen Storage, vor POST persistiert;
+kein stilles Entfernen/automatischer Retry, kein SSL/SubtleCrypto-Zwang.
+409-Konflikt, Storagefehler, Timeout und fehlende ACK werden getrennt von einem
+bewusst neuen Auftrag behandelt. Die UI-Warnung für Doppelgrab wurde mit
+Cancel/Keyboard-Confirm auf dem tatsächlich gebauten Desktopbundle geprüft.
+
+DB-/Migrationsreview: beide Clients per Generator, historische SQL unverändert,
+neue eigene Tabelle in beiden Ketten, P09-Shape separat erkannt. Vollständige
+Current-Receipts über SQLitebaseline/PGimport exakt erhalten, alte Sources
+haben leere Receipts. Erstwrite-Checkpoint vor interaktivem Transactionpool-
+Claim; Receipt und Job bleiben gemeinsam atomar. Failed-Insert-Regression,
+acht parallele Requests, verlorene Antwort und Clientrestart, anderer Payload,
+expliziter neuer Auftrag, Legacy/v1/v2/v3 und Expiry/Cleanup/Maintenance kausal
+gegen reale SQLite; dasselbe PG-Gate im Fork, plus tatsächlicher Container-
+Restart auf beiden Backends. Keine Probeläufe gegen produktive DBs.
+
+Rollbackgrenze: das historische Image kennt die neue DDL und ACK nicht.
+Seine strikte Ablehnung ist erforderlich; kein lockererer Schema-/Ledgercheck.
+Harness erweitert um Receipt-Backup-/Restoregleichheit, historische Ablehnung
+und kompatiblen Maintenance-Rollback mit exaktem aktuellem Image. Das ersetzt
+keinen noch nicht gebauten funktionalen historischen Code-Rollback. Kein
+Produktivupdate ohne eigenes kompatibles Rollbackimage/Runbook; vor Writes
+bleibt unveränderter Source mit passendem alten Image möglich.
+
+1257 lokale Tests (20 separat aktivierbare Backendtests hier nicht ausgeführt),
+Lint/Typecheck/Formatcheck/Productionbuild erfolgreich. Vorher-/Nachher-Suche/
+Filme 1280×720 Light, simulierte verlorene ACK, Reload, HD/SD/Low und Dialog
+bedient; neun Transportanforderungen ergeben fünf bewusste Simulatoraufträge,
+Wiederholungen dieselbe ID. App schreibt dabei keine Jobs, Browser-Konsole leer.
+Kein Live-Importnachweis aus diesem Simulator. Neue Fork-/PG-/Containerabnahme
+steht noch aus; P15.4 bleibt offen. [Vertrag](enqueue-intent-contract.md).

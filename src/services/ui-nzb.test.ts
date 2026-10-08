@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import type { ApiResultItem } from "@/types";
-import { createUiNzbDownloads } from "./ui-nzb";
+import { createUiNzbDownloads, uiNzbFingerprints } from "./ui-nzb";
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 import { parseNzbContent } from "./download";
 import { mediaSourceIdentity } from "./source-audio";
@@ -18,6 +18,25 @@ const item: ApiResultItem = {
   url_video_hd: "https://example.invalid/hd.mp4",
   url_video_low: "https://example.invalid/low.mp4",
 };
+it("keeps reload fingerprints stable across NZB transport dates but binds actual payload changes", () => {
+  const first = createUiNzbDownloads(item, false);
+  const later = Object.fromEntries(
+    Object.entries(first).map(([quality, body]) => [
+      quality,
+      body.replace(/date="\d+"/, 'date="123"'),
+    ])
+  );
+  expect(uiNzbFingerprints(later)).toEqual(uiNzbFingerprints(first));
+  expect(
+    uiNzbFingerprints(createUiNzbDownloads({ ...item, audioLanguage: "de" }, false))
+  ).not.toEqual(uiNzbFingerprints(first));
+  expect(
+    uiNzbFingerprints(
+      createUiNzbDownloads({ ...item, url_video: "https://example.invalid/rotated.mp4" }, false)
+    ).sd
+  ).not.toEqual(uiNzbFingerprints(first).sd);
+  expect(new Set(Object.values(uiNzbFingerprints(first))).size).toBe(3);
+});
 it("keeps server-authored UI filenames, current URLs and v3 facts in all renditions", () => {
   const releases = createUiNzbDownloads(item, false);
   expect(Object.keys(releases)).toEqual(["hd", "sd", "low"]);

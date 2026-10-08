@@ -32,7 +32,7 @@ if (enabled) {
 
 for (const sourceVariant of ["bootstrap", "current"] as const) {
   it.skipIf(!enabled)(
-    `imports all six models from ${sourceVariant} atomically and refuses a nonempty repeat`,
+    `imports all supported models from ${sourceVariant} atomically and refuses a nonempty repeat`,
     async () => {
       process.env.DATABASE_URL = url;
       const dir = mkdtempSync(join(tmpdir(), "pingufunk-import-test-"));
@@ -65,10 +65,16 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
     `);
         const expectedPayload = '{ "version":1, "duration":null, "audio":null, "resolution":null }';
         const validationPayload = '{"version":1,"durationSeconds":120,"audioLanguages":[]}';
-        if (sourceVariant === "current")
+        if (sourceVariant === "current") {
           sqlite
             .prepare("UPDATE Download SET mediaExpectations=?,mediaValidation=?")
             .run(expectedPayload, validationPayload);
+          sqlite
+            .prepare(
+              "INSERT INTO EnqueueIntent(id,payloadHash,downloadId,expiresAt) VALUES (?,?,?,?)"
+            )
+            .run("synthetic-intent", "synthetic-hash", "synthetic-download", 1780228800123);
+        }
         sqlite.close();
         sqliteOpen = false;
         const snapshot = await createSnapshot(sourcePath, join(dir, "backup"));
@@ -107,6 +113,18 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
         expect(await pg.tvdbEpisode.count()).toBe(1);
         expect(await pg.config.count()).toBe(1);
         expect(await pg.download.count()).toBe(1);
+        expect(await pg.enqueueIntent.findMany()).toEqual(
+          sourceVariant === "current"
+            ? [
+                {
+                  id: "synthetic-intent",
+                  payloadHash: "synthetic-hash",
+                  downloadId: "synthetic-download",
+                  expiresAt: new Date(1780228800123),
+                },
+              ]
+            : []
+        );
         expect(await pg.download.findUnique({ where: { id: "synthetic-download" } })).toMatchObject(
           {
             mediaExpectations: sourceVariant === "current" ? expectedPayload : null,
@@ -228,6 +246,7 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
         await pg.tvdbEpisode.deleteMany({ where: { id: 37 } });
         await pg.tvdbSeries.deleteMany({ where: { id: 7123 } });
         await pg.download.deleteMany({ where: { id: "synthetic-download" } });
+        await pg.enqueueIntent.deleteMany({ where: { id: "synthetic-intent" } });
         await pg.config.deleteMany({ where: { key: "qa-secret" } });
         await pg.config.deleteMany({ where: { key: "qa-foreign" } });
         await pg.generatedRuleset.deleteMany({ where: { id: "synthetic-rule" } });

@@ -4,7 +4,13 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { knownShapes, modelNames, schemaShape, validateSourceLedger } from "./sqlite-schema.mjs";
+import {
+  knownShapes,
+  modelNames,
+  schemaShape,
+  validateSourceLedger,
+  sourceRows,
+} from "./sqlite-schema.mjs";
 import { checkSqliteSchema } from "./check-sqlite-schema.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,7 +32,13 @@ export function sqliteDataFingerprint(db) {
   for (const model of modelNames) {
     const key = model === "Config" ? "key" : "id";
     digest.update(model);
-    for (const row of db.prepare(`SELECT * FROM "${model}" ORDER BY "${key}"`).iterate()) {
+    const present = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+      .get(model);
+    const rows = present
+      ? db.prepare(`SELECT * FROM "${model}" ORDER BY "${key}"`).iterate()
+      : sourceRows(db, model);
+    for (const row of rows) {
       // Only these append-only nullable columns are absent in accepted historical shapes.
       // Present payloads are retained byte-for-byte, never normalized or discarded.
       if (model === "Download") {
@@ -167,9 +179,15 @@ export function transitionSqliteSnapshot({ snapshotPath, expectedHash, targetPat
         "TvdbEpisode",
         "Config",
         "Download",
+        "EnqueueIntent",
         "GeneratedRuleset",
         "TopicCategory",
       ]) {
+        if (
+          model === "EnqueueIntent" &&
+          !source.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(model)
+        )
+          continue;
         const columns = source
           .prepare(`PRAGMA table_info("${model}")`)
           .all()
