@@ -1710,7 +1710,7 @@ dynamische Altregel bleibt dokumentiert. Kein Schemawechsel; **nach einem v3-Job
 ist ein v3-inkompatibles Image trotzdem kein sicherer App-Rollback**.
 Vertrag und Rückweggrenze: [Settings-/Jobpolicy-Referenz](settings-contract.md).
 
-### Neue lokale Evidenz und noch ausstehendes Gate
+### Lokaler Entwicklungscheckpoint vor Forkabnahme
 
 - `npm ci`, danach **1073 bestandene reguläre Tests / 100 Dateien**;
   18 backendabhängige Runtimefälle regulär übersprungen. Lint, Typecheck,
@@ -1735,8 +1735,9 @@ Vertrag und Rückweggrenze: [Settings-/Jobpolicy-Referenz](settings-contract.md)
 Die Containerharnesses sichern weiterhin unbekannte Originalsettings, schreiben
 für den Persistenztest jetzt den typisierten Filmjahreskey und bestätigen den
 kanonischen Wert. Neue v3-Worker-Matrix ergänzt (nicht ersetzt) Legacy/HLS/
-Truncation/Audio/Auflösung/Retry/Restart. **Fork-CI und Dockervalidierung müssen
-diesen Produktstand noch ausführen; P12 und P05.2/P09.2 bleiben bis dahin offen.**
+Truncation/Audio/Auflösung/Retry/Restart. **Zu diesem Zwischencheckpoint waren
+Fork-CI und Dockervalidierung noch ausstehend; P12 und P05.2/P09.2 blieben bis
+zu deren unten dokumentierter finaler Abnahme offen.**
 P13–P16 sowie P03.4 sind durch diese Arbeit nicht abgenommen.
 
 Separate bestehende Befunde: 14 Build-Tracingwarnungen; `npm ci`/Audit meldet
@@ -1753,7 +1754,8 @@ Der Snapshotdefault erhält jetzt genau das; explizites false, fehlende
 Credentials und deaktiviertes HLS bleiben gesperrt. Eine kausale Regression
 verwendet den echten SRF-Owner innerhalb des echten Settingssnapshotowners,
 ohne externe API oder Credentialdatei. Voriger Produkt-CI-Lauf ist damit nur
-historische Zwischenstandevidenz, finale Fork-/Containergates neu erforderlich.
+historische Zwischenstandevidenz; finale Fork-/Containergates wurden erneut
+erforderlich und sind in der folgenden Abnahme aufgeführt.
 Nach der SRF-Korrektur alle lokalen regulären Gates erneut bestanden:
 **1074 Tests**, Lint, Typecheck, Format und Build. UI-/DB-Evidenz für unveränderte
 Formulare und Transaktionen wird wiederverwendet, nicht als neuer Lauf ausgegeben.
@@ -1761,3 +1763,27 @@ Die erste PG-CI fand außerdem noch eine alte Runtimefixture, die einen neuen
 unbekannten Key per API schreiben wollte. Dieser muss nach P12 korrekt 400
 liefern; Fixture auf unveränderten Legacy-Read plus kanonischen typisierten
 Write umgestellt, negative Unknown-Writeprüfung ergänzt. Kein Entfernen des Gates.
+
+### Abschließende P12-Abnahme
+
+Finaler Produktstand `4dc280c89db2a5d34e07bc1aed3d61bc99f561bf`:
+[Fork-CI 37704788531](https://github.com/superions/pingufunk/actions/runs/37704788531)
+mit Lint/Build und vollständiger PostgreSQL-Integration erfolgreich;
+[Dockervalidierung 37704788439](https://github.com/superions/pingufunk/actions/runs/37704788439)
+ebenfalls erfolgreich, einschließlich nativer Arr-Renditionconsumer direkt/via
+Prowlarr, Runtimewerkzeugen, TLS-Migrations-/post-write-Rollbackprobe,
+SQLite-Start-/Restartpersistenz und realer Medienworker-Matrix auf beiden
+disposable Backends. Die neue v3-Matrix prüft Film/Serie/Unknown, beide
+Dauerreferenzen unabhängig, HLS und Retry; die Legacy-Matrix bleibt erhalten.
+Die Zwischenstandevidenz aus Dockerlauf 37704528509 ersetzt diesen finalen
+Lauf nicht. Der zunächst fehlgeschlagene CI-Lauf 37704528522 bleibt als
+Fixturefinding dokumentiert, nicht als bestandener Lauf ausgegeben.
+
+P12.1–P12.4 sowie ausschließlich die engen Wiederöffnungen P05.2/P09.2 sind
+damit abgeschlossen. Die unveränderten Desktop-/Datenbankjourneys werden
+wiederverwendet; neue reguläre lokale Tests nach SRF-Korrektur und neue finale
+Fork-/Containergates sind gesondert benannt. Eigene lokale Testserver,
+SSH-Tunnel und markierter disposable PG-Container sind beendet; keine fremden
+Prozesse, Volumes oder Datenbanken bereinigt. Produktstand bleibt auf dem
+eigenen Topicbranch; weder Main-Integration, Deployment noch Imagepublikation.
+Die separaten Warnungen sowie P13–P16 und P03.4 bleiben ausdrücklich offen.

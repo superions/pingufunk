@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **P12 ist implementiert und lokal geprüft; die neue Container-/Fork-Abnahme steht noch aus. P13–P16 sind noch offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **P12 ist implementiert und einschließlich Desktop-/Backend-/Fork-/Containerketten abgenommen. P13–P16 sind noch offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -481,7 +481,7 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Größen-, JSON-/Schema- und Cache-Recovery-Regressionen bestanden. Node
       24.15.0: 305 Tests in 30 Dateien, Lint, Typecheck, Formatcheck und Build
       erfolgreich; kein produktiver Request ausgeführt.
-- [ ] **P05.2 — Kontextgebundene bounded Caches.**
+- [x] **P05.2 — Kontextgebundene bounded Caches.**
       `src/lib/cache.ts`, `src/lib/settings.ts`, die Cache-API und Providerconsumer auf
       begrenzte Positiv-/Negativcaches, Coalescing und passende TTLs bringen.
       Identität, Instanz, Staffel/Folge/Daily, Sprache/Qualität/HLS und relevante
@@ -516,6 +516,12 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       späteren Fehler die Consumerinvalidierung ausbleibt. Atomaren Commit,
       kanonischen Readback und Cachegeneration nach Erfolg/Fehler kausal prüfen;
       frühere Kapazitäts-/TTL-/Kontextnachweise bleiben erhalten.
+      Engen Folgeauftrag erneut abgenommen 08.10.2026 mit P12.1:
+      atomare Batches auf beiden realen disposable Backends, kein Teilstand
+      nach Fehler beim zweiten Write; kanonischer Readback, verlorener
+      Commit-Ack, späte GETs sowie generationensichere Consumerinvalidierung
+      nach Erfolg/ungewissem Fehler kausal geschützt. Finale CI 37704788531
+      und Containerkette 37704788439 auf `4dc280c` bestanden.
 - [x] **P05.3 — Eine serverseitige Secret-/Base-URL-Grenze.**
       `src/lib/settings.ts`, `src/lib/settings-redaction.ts`, Settings-API/-UI
       einschließlich der bisherigen SRF-Maskierung,
@@ -1707,7 +1713,7 @@ Abhängigkeit P08; B10/R7.
       separat mit 15 Ausführungen (darunter eine SQLite-Runtimeprobe) abgedeckt.
       Desktop-UI-Consumer für Suche und HD/SD/Low einschließlich abgefangener
       v1-POSTs und gematchter Light-/Dark-Screenshots bestanden.
-- [ ] **P09.2 — Fertigmeldung nur nach verifiziertem Medienabschluss.**
+- [x] **P09.2 — Fertigmeldung nur nach verifiziertem Medienabschluss.**
       Manager-/FFmpeg-/yt-dlp-Owner nach Download/Mux per lokaler Probe tatsächliche
       Dauer, Audio/Video, Sprache soweit beweisbar, Auflösung und Abschluss prüfen.
       HTTP-200-HTML, nachweisbare Samples, Abbruch, fehlende Audiospur und kaputte Artefakte
@@ -1761,6 +1767,14 @@ Abhängigkeit P08; B10/R7.
       Vertrag für separat konfigurierbare Film-/Serienregeln. Identitätsvergleich
       gegen Metadaten und Dateiabschluss gegen die konkrete Quelldauer getrennt
       behandeln; alte Jobs nicht still neu klassifizieren oder umschreiben.
+      Engen Folgeauftrag erneut abgenommen 08.10.2026 mit P12.2:
+      neue v3-Jobs halten beide bekannten Dauerreferenzen mit Herkunft und
+      jeweiliger Regel fest; spätere Matchingänderungen verändern sie nicht.
+      Reale synthetische Medienworker auf SQLite/PG prüfen unabhängige
+      Metadaten-/Assetabweichung, Film/Serie/Unknown, HLS, Restart und Retry;
+      Legacyprüfungen bleiben erhalten. CI 37704788531 und Containerkette
+      37704788439 auf `4dc280c` bestanden. Keine historischen Jobs umgeschrieben,
+      keine Inhalts-/Sprachvollabnahme oder echte Arr-Importabnahme behauptet.
 
 - [x] **P09.3 — Katalog-Qualitätsfeld von belegter Auflösung trennen.**
       Separater Befund beim P03.4-Review: `newznab.ts` behandelt `url_video_hd`
@@ -2160,7 +2174,7 @@ Konfigurationsbereich, keine pauschale Erweiterung des Defaults. Das Filmjahr
 ist kein Serien-Ausstrahlungsdatum; weder Vorabverfügbarkeit noch S/E-Bindung
 wird damit aufgeweicht.
 
-- [ ] **P12.1 — Typisierter, atomarer Settingsvertrag mit bestätigtem Readback.**
+- [x] **P12.1 — Typisierter, atomarer Settingsvertrag mit bestätigtem Readback.**
       Owner: `src/app/api/settings/route.ts`, `src/lib/settings.ts`,
       `sonarr-settings.ts`, `radarr-settings.ts`, `language-policy.ts`,
       `src/contexts/settings-context.tsx`
@@ -2189,8 +2203,9 @@ wird damit aufgeweicht.
       Gesamttransaktion und bestätigte Responseordnung umgesetzt. Echte
       SQLite-/PG-Fehler beim zweiten Write hinterlassen keinen Teilstand;
       verlorene Commitbestätigung wird als ungewiss mit kontrolliertem Readback
-      behandelt. Lokale Gates grün, Fork-/Containerabnahme noch ausstehend.
-- [ ] **P12.2 — Ein Policy-Snapshot pro Suche und expliziter Job-Dauervertrag.**
+      behandelt. Abschließende Fork-/Containerabnahme unten bestanden;
+      Settings-/Jobvertrag in `docs/settings-contract.md` dokumentiert.
+- [x] **P12.2 — Ein Policy-Snapshot pro Suche und expliziter Job-Dauervertrag.**
       Abhängigkeit P12.1. Owner: `movie-matcher.ts`, `movie-search-context.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `content-search.ts`,
       `release-media-expectations.ts`, `media-expectations.ts`, `nzb-release.ts`,
@@ -2235,9 +2250,10 @@ wird damit aufgeweicht.
       Entwicklungscheckpoint 08.10.2026: ein Suchsnapshot einschließlich
       Filmjahr und neue v3-Joberwartungen in Producer/Parser/Persistenz/Retry/
       Worker. Keine DDL. Beide realen disposable Backends sichern Restart,
-      Retry und Settingswechsel; neue v3-Mediencontainerprobe vor Abnahme
-      noch auszuführen. Legacygrenze und v3-kompatibler Rollback dokumentiert.
-- [ ] **P12.3 — Drei unabhängige Toleranzregler in Matching bedienbar machen.**
+      Retry und Settingswechsel; neue v3-Mediencontainerprobe auf beiden
+      Backends ebenfalls bestanden. Legacygrenze und v3-kompatibler Rollback
+      dokumentiert; keine zusätzliche Schemaänderung.
+- [x] **P12.3 — Drei unabhängige Toleranzregler in Matching bedienbar machen.**
       Abhängigkeit P12.1/P12.2. Owner: `src/app/settings/page.tsx`,
       Settingscontext und bestehende UI-Komponenten. Film-Laufzeit ±%,
       Serien-Laufzeit ±% und Film-Erscheinungsjahr ±Jahre als getrennte,
@@ -2259,8 +2275,8 @@ wird damit aufgeweicht.
       Desktop-Light/Dark samt echten DB-Fehlern, ungültigen Werten, erhaltenen
       unabhängigen Dirty-Formularen und sauberer frischer Konsole geprüft.
       Dark über temporäre reine Root-Themefixture, danach entfernt; keine
-      browserseitige DOM-Manipulation. P12.2-Containerabnahme bleibt vorgelagert.
-- [ ] **P12.4 — Optionale Radarr-Konfiguration ohne Secretfelder vervollständigen.**
+      browserseitige DOM-Manipulation. P12.2-Containerabnahme ebenfalls bestanden.
+- [x] **P12.4 — Optionale Radarr-Konfiguration ohne Secretfelder vervollständigen.**
       Abhängigkeit P12.1, unabhängig von P12.2/P12.3. Owner: Settings-GUI,
       `radarr-settings.ts`, `src/services/radarr-provider.ts` und GET-only-Arr-Client.
       Bereits unterstützte Aktivierung, Base-URL mit Unterpfad und Inventarlimit
@@ -2274,6 +2290,23 @@ wird damit aufgeweicht.
       Unterpfad, Inventarlimit und ausschließlich Credentialstatus umgesetzt;
       deaktiviert ohne Key sowie ungültige serverseitige Quelle geprüft.
       Save/Reload auf beiden Backends und bestehende GET-only-Consumerfälle grün.
+
+Gemeinsame Entwicklungsabnahme P12.1–P12.4 am 08.10.2026, Produktstand
+`4dc280c89db2a5d34e07bc1aed3d61bc99f561bf`: 1.074 reguläre Tests,
+Lint/Typecheck/Format/Productionbuild bestanden; zusätzlich 14/14 echte
+disposable SQLite-/PG-Settings-/Erwartungsfälle. Tatsächlich servierte
+Desktop-Light-/Dark-Journeys mit Pointer/Keyboard, Save/Reload/Readback,
+DB-Fehlern, gematchten Screenshots und sauberer frischer Konsole bestanden.
+[Fork-CI 37704788531](https://github.com/superions/pingufunk/actions/runs/37704788531)
+einschließlich vollständiger PostgreSQL-Integration und
+[Containerkette 37704788439](https://github.com/superions/pingufunk/actions/runs/37704788439)
+grün: native Arr-Consumer direkt/via Prowlarr, Runtimewerkzeuge, TLS-Migration
+und post-write-Rollback in Wegwerfumgebung, SQLite-Persistenz sowie tatsächliche
+Legacy-/v3-Medienabschlüsse auf beiden Backends. Keine Imagepublikation,
+Produktion, realen Bibliotheksoperationen oder Main-/Upstreamänderungen.
+Die alten Jobversionen bleiben unverändert; v3 verlangt ein kompatibles
+Rollbackimage. P13–P16 und P03.4 bleiben offen. Review durch den Implementierer,
+keine unabhängige Peerreview oder pauschale Sicherheitsabnahme behauptet.
 
 ## Phase P13 — Erklären können, warum ein Treffer oder Import fehlt
 
