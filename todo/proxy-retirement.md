@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **P12 und P14.1 sind implementiert und einschließlich Desktop-/Backend-/Fork-/Containerketten abgenommen. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **P12, P13.1, P14.1 und P15.3 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -2320,7 +2320,7 @@ keine unabhängige Peerreview oder pauschale Sicherheitsabnahme behauptet.
 Ergebnis: begrenzte fachliche Diagnose statt Dockerlogs, pauschalem „nicht
 gefunden“ oder vermuteter Ursache. P03.4-Abdeckung bleibt eigenständig.
 
-- [ ] **P13.1 — Gemeinsame typisierte Entscheidungsgründe und Belegstatus.**
+- [x] **P13.1 — Gemeinsame typisierte Entscheidungsgründe und Belegstatus.**
       Owner: bestehende Film-/TV-Matcher, `content-search.ts`, `source-audio.ts`,
       `mp4-audio-language.ts`, `rendition-quality.ts`, `media-probe.ts` und
       `download-failure.ts`. Geschlossenen Diagnosevertrag mit Stage, Reason,
@@ -2349,6 +2349,15 @@ gefunden“ oder vermuteter Ursache. P03.4-Abdeckung bleibt eigenständig.
       und lokale Gates grün; finale Fork-/Backendcontainerabnahme noch offen.
       Vertrag `docs/decision-diagnostics-contract.md`; UI-/Logs-/Zugriffschutz
       und Arr-Importdiagnose bleiben vollständig P13.2, Checkbox noch offen.
+      Finale Abnahme auf `9ed044aa1f2f32a834702a3f1a7d5d30277d3e9d`:
+      [Fork-CI 37709955459](https://github.com/superions/pingufunk/actions/runs/37709955459)
+      samt PG-Gate und
+      [Containerkette 37709955519](https://github.com/superions/pingufunk/actions/runs/37709955519)
+      vollständig erfolgreich: native Arr direkt/via Prowlarr, Tooling,
+      TLS-Migration/post-write-Rollback, SQLitepersistenz und reale
+      Medienconsumer beider Backends. 1152 lokale Tests, Lint, Typecheck,
+      Formatcheck, Build und Diffcheck grün. Keine UIänderung dieses Pakets;
+      P13.2 weiterhin offen, kein öffentlicher Reader, keine Gesamt-/Sprachabnahme.
 - [ ] **P13.2 — Sichere Diagnose in Suche, Downloads und Logs bedienbar machen.**
       Abhängigkeit P13.1. Owner: `/search`, `/movies`, `/shows`, `/downloads`,
       bisheriger `/logs`-Platzhalter und zugehörige API-Owner. Relevante Gründe
@@ -2491,7 +2500,22 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       paralleler neuer Abschluss, gezielte alte Download-ID und Arr-Consumer
       verlieren keinen Import-/Failed-Eintrag. Reale Desktopfilter/Paging,
       stale/error-Zustände und gemessene Query-/Antwortgrenzen; keine Löschung.
-- [ ] **P15.3 — Nichtblockierende Runtimeprüfung und schonender Volume-Start.**
+      Entwicklungscheckpoint 08.10.2026: validierte SAB-Seiten-/Kategorie-/
+      Status-/Such-/ID-Parameter, ausdrückliches `limit=0`/fehlendes Limit
+      weiterhin alle passenden Jobs; keine neue Defaultabschneidung.
+      Gemeinsamer Snapshot für Counts/Zeilen, stabile Timestamp-/ID-Sortierung,
+      historische NULL-Abschlüsse zuletzt. GUI höchstens 50 Zeilen pro Seite,
+      generationensichere Reads, sichtbarkeits-/aktivitätsabhängiges Polling,
+      explizite stale/error-Zustände. Desktop 1280×720 Light im tatsächlich
+      servierten Bundle: 1050→50 Zeilen, Seite zwei, Keyboard-/Pointerfilter,
+      alter Treffer, Kategorie/Failed, Leerantwort und nativer DB-Fehler/Recovery.
+      Konsole sauber; IAB meldet Vergleichtabs weiterhin visible, daher keine
+      tatsächliche hidden-Tab-Abnahme behauptet. Pollentscheidung kausal getestet.
+      Native SQLiteprobe mit 1050 History-/60 Queuezeilen und gleichzeitigem
+      Abschluss grün; Antwort am GUI-Testserver 176798→8499 Bytes, alte ID
+      weiter gezielt lesbar. Finale PG-/Fork-/Containerabnahme bleibt offen.
+      Vertrag in `docs/download-read-contract.md`; kein Job/History gelöscht.
+- [x] **P15.3 — Nichtblockierende Runtimeprüfung und schonender Volume-Start.**
       Owner: `/api/system`, vorhandener Healthvertrag, tatsächliche FFmpeg/
       ffprobe-/yt-dlp-Auflösung und `entrypoint.sh`. Synchrone bis zu zweimal
       fünf Sekunden lange Toolchecks im Request durch begrenzte asynchrone,
@@ -2520,6 +2544,18 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       entfernt alte gesunde Anzeige; langsame ffprobe zeigt Timeout, Konsole
       sauber und keine Jobs. Vertrag `docs/runtime-readiness-contract.md`.
       Finale Fork-/PG-/Containerabnahme noch offen, daher Checkbox unverändert.
+      Finale Abnahme auf `c8ccdcc91f8bb42c2d99d8790c12c6b5c3f90853`:
+      [Fork-CI 37709293171](https://github.com/superions/pingufunk/actions/runs/37709293171)
+      samt vollständigem PG-Gate und
+      [Containerkette 37709293111](https://github.com/superions/pingufunk/actions/runs/37709293111)
+      erfolgreich. Eigene gemountete Owner-/Mode-/Inhaltssentinels über
+      Start/Restart/Maintenance, Readonlywriter-Abbruch vor Queue sowie reale
+      Medienabschlüsse beider Backends nachgewiesen; native Arr-Consumer,
+      Tooling und TLS-Migrations-/PG-post-write-Rollback ebenfalls grün.
+      1141 finale lokale Tests, Lint/Typecheck/Format/Diff grün; Build für
+      unveränderten Quellstand wiederverwendet. Die zuvor fehlende explizite
+      `.dockerignore`-Helperfreigabe korrigiert; gescheiterter erster Build
+      bleibt als Befund dokumentiert. P15.1-Besitzgrenze hierdurch nicht erledigt.
 - [ ] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
       Owner: `sab-api.ts::POST`, `download.ts::addToQueue`, UI-NZB-Consumer und
       bei Bedarf beide append-only DB-Ketten. Requestbody/Parameter vor Parsing

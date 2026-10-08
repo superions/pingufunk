@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/db";
+import { prisma, databaseProvider } from "@/lib/db";
+import type { Prisma } from "../../generated/sqlite";
+import { allDownloads, type DownloadRead } from "@/lib/download-read";
 import { randomUUID } from "crypto";
 import { assertWritesEnabled } from "@/lib/write-gate";
 import path from "node:path";
@@ -60,10 +62,18 @@ export interface HistoryItem {
 
 export interface SabnzbdQueue {
   slots: QueueItem[];
+  noofslots: number;
+  noofslots_total: number;
+  start: number;
+  limit: number;
 }
 
 export interface SabnzbdHistory {
   slots: HistoryItem[];
+  noofslots: number;
+  noofslots_total: number;
+  start: number;
+  limit: number;
 }
 
 // Extract filename and URL from NZB content
@@ -159,13 +169,81 @@ function triggerDownloadProcessing(): void {
     });
 }
 
-export async function getQueue(): Promise<SabnzbdQueue> {
-  const downloads = await prisma.download.findMany({
-    where: {
-      status: { in: ["queued", "downloading", "converting"] },
+async function readDownloads(kind: "queue" | "history", options: DownloadRead) {
+  const status = {
+    in: kind === "queue" ? ["queued", "downloading", "converting"] : ["completed", "failed"],
+  };
+  const where: Prisma.DownloadWhereInput = {
+    AND: [
+      { status },
+      ...(options.statuses.length ? [{ status: { in: options.statuses } }] : []),
+      ...(options.ids.length ? [{ id: { in: options.ids } }] : []),
+      ...(options.categories.length
+        ? [
+            {
+              OR: options.categories.flatMap((category) => [
+                { category },
+                { category: { startsWith: `${category}/` } },
+              ]),
+            },
+          ]
+        : []),
+      ...(options.search
+        ? [
+            {
+              title: {
+                contains: options.search,
+                ...(databaseProvider === "postgresql" ? { mode: "insensitive" as const } : {}),
+              },
+            },
+          ]
+        : []),
+    ],
+  };
+  const args: Prisma.DownloadFindManyArgs = {
+    where,
+    skip: options.start,
+    ...(options.limit > 0 ? { take: options.limit } : {}),
+    // A unique tie-breaker makes equal timestamps stable on both providers.
+    // Historical failed jobs can have NULL completion times: keep them last.
+    orderBy:
+      kind === "queue"
+        ? [{ createdAt: "asc" }, { id: "asc" }]
+        : [{ completedAt: { sort: "desc", nulls: "last" } }, { id: "asc" }],
+    omit: { url: true, mediaExpectations: true, mediaValidation: true },
+  };
+  if (
+    options.limit === 0 &&
+    options.start === 0 &&
+    !options.categories.length &&
+    !options.ids.length &&
+    !options.search &&
+    !options.statuses.length
+  ) {
+    const downloads = await prisma.download.findMany(args);
+    return {
+      downloads,
+      noofslots: downloads.length,
+      noofslots_total: downloads.length,
+      start: 0,
+      limit: 0,
+    };
+  }
+  // Count and rows share a read snapshot. New completions appear on the next
+  // refresh, not as a contradictory count inside this single response.
+  return prisma.$transaction(
+    async (tx) => {
+      const noofslots = await tx.download.count({ where });
+      const noofslots_total = await tx.download.count({ where: { status } });
+      const downloads = await tx.download.findMany(args);
+      return { downloads, noofslots, noofslots_total, start: options.start, limit: options.limit };
     },
-    orderBy: { createdAt: "asc" },
-  });
+    { isolationLevel: "Serializable" }
+  );
+}
+
+export async function getQueue(options: DownloadRead = allDownloads): Promise<SabnzbdQueue> {
+  const { downloads, ...page } = await readDownloads("queue", options);
 
   const slots: QueueItem[] = downloads.map((d) => {
     let statusText = "Queued";
@@ -199,17 +277,12 @@ export async function getQueue(): Promise<SabnzbdQueue> {
     };
   });
 
-  return { slots };
+  return { slots, ...page };
 }
 
-export async function getHistory(): Promise<SabnzbdHistory> {
+export async function getHistory(options: DownloadRead = allDownloads): Promise<SabnzbdHistory> {
   const downloadBasePath = await getDownloadBasePath();
-  const downloads = await prisma.download.findMany({
-    where: {
-      status: { in: ["completed", "failed"] },
-    },
-    orderBy: { completedAt: "desc" },
-  });
+  const { downloads, ...page } = await readDownloads("history", options);
 
   const slots: HistoryItem[] = downloads.map((d) => {
     // SABnzbd returns the folder path, not the file path
@@ -235,7 +308,7 @@ export async function getHistory(): Promise<SabnzbdHistory> {
     };
   });
 
-  return { slots };
+  return { slots, ...page };
 }
 
 export async function deleteHistoryItem(nzoId: string, delFiles: boolean): Promise<boolean> {

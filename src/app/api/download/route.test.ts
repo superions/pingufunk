@@ -167,6 +167,37 @@ describe.each([
     expect((await GET(request("invalid"))).status).toBe(400);
   });
 
+  it("forwards native category/zero limit and bounded old-ID reads on both endpoints", async () => {
+    getQueue.mockResolvedValue({ slots: [], noofslots: 60 });
+    getHistory.mockResolvedValue({ slots: [], noofslots: 1050 });
+    expect(
+      (
+        await GET(
+          new NextRequest(`http://localhost${path}?mode=queue&start=0&limit=0&category=sonarr`)
+        )
+      ).status
+    ).toBe(200);
+    expect(getQueue).toHaveBeenLastCalledWith(
+      expect.objectContaining({ start: 0, limit: 0, categories: ["sonarr"] })
+    );
+    expect(
+      (
+        await GET(
+          new NextRequest(`http://localhost${path}?mode=history&start=50&limit=50&nzo_ids=old-job`)
+        )
+      ).status
+    ).toBe(200);
+    expect(getHistory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ start: 50, limit: 50, ids: ["old-job"] })
+    );
+    getHistory.mockClear();
+    expect(
+      (await GET(new NextRequest(`http://localhost${path}?mode=history&limit=10001`))).status
+    ).toBe(400);
+    expect(getHistory).not.toHaveBeenCalled();
+    expect(addToQueue).not.toHaveBeenCalled();
+  });
+
   it("does not expose DB failures or turn them into an empty successful history", async () => {
     const failure = new Error("synthetic private connection detail");
     getHistory.mockRejectedValue(failure);

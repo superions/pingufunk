@@ -1932,3 +1932,49 @@ Zugriffschutz, GUI und separat belegten Arr-Import-/Blockstatus.
 Fork-/Backend-/Containerabnahme bis zu neuen erfolgreichen Läufen offen.
 Vertrag [Entscheidungsdiagnose](decision-diagnostics-contract.md); kein
 unabhängiger Peerreview und keine Sprach-/Worker-/Gesamtvollabnahme.
+
+### Finale P15.3- und P13.1-Abnahmen
+
+P15.3 auf `c8ccdcc91f8bb42c2d99d8790c12c6b5c3f90853`:
+[Fork-CI 37709293171](https://github.com/superions/pingufunk/actions/runs/37709293171)
+und [Containerkette 37709293111](https://github.com/superions/pingufunk/actions/runs/37709293111)
+vollständig grün. Die eigenen Volume-Owner-/Mode-/Inhaltssentinels über
+Start/Restart/Maintenance, Readonly-Abbruch und Medienabschlüsse auf beiden
+Backends sind neu geprüft, keine ersatzweise P14-Evidenz. Erster fehlgeschlagener
+Allowlistbuild bleibt dokumentiert. Keine P15.1-Ownershipabnahme.
+
+P13.1 auf `9ed044aa1f2f32a834702a3f1a7d5d30277d3e9d`:
+[Fork-CI 37709955459](https://github.com/superions/pingufunk/actions/runs/37709955459)
+und [Containerkette 37709955519](https://github.com/superions/pingufunk/actions/runs/37709955519)
+vollständig grün, inklusive PG, nativen Arr-/Prowlarrconsumern, Tooling,
+TLS-Migration/post-write-Rollback, SQLitepersistenz und realen Medienabschlüssen.
+1152 lokale Tests und übrige Gates grün. Keine neue UI-Journey dieses
+API-/Workerpakets; P13.2 besitzt UI, Zugriffschutz, freie Logs und Arr-Import.
+Die Checkboxen sind geschlossen, Gesamt-/Sprachvollabnahme weiterhin falsch.
+
+## Implementierungsreview P15.2 — paginierte Betriebsreads
+
+08.10.2026 auf `codex/download-read-pagination`. Vollständiger Read-/Callerpfad
+durch den Implementierer reviewt: Native SAB-/Arr-Parameter → geschlossene
+Validierung → DB-Filter/Sortierung/Serializable-Snapshot → Counts/Slots →
+serverseitige Pfadprojektion → GUI-Windowack/Generation → Filter/Paging/Polling.
+Mutationen unverändert, kein DDL oder Readtimeout als Retryfreigabe.
+Upstream besitzt bereits History-Paging; die Anpassung erhält dessen Prinzip
+ohne dessen andere Queue-/Medienverträge zu kopieren.
+
+Nachreview korrigiert: native `limit=0` darf nicht abgeschnitten werden,
+verlorene historische private Kategorien im Filter, Timestamp-Gleichstände
+und NULL-Sortierung, widersprüchliche Counts beim gleichzeitigen Abschluss,
+alte Antworten nach Filterwechsel, malformed Slotdaten und vermeintlich leere
+GUI bei Readfehler. ASCII-Suchcases auf beiden DBpfaden getestet; Unicode-
+Collation nicht pauschal gleichgesetzt. Offsetseiten sind keine unbewegliche
+Historie, alte konkrete IDs bleiben gezielt lesbar.
+
+Serviertes Desktopbundle 1280×720 Light, matched before/after: 1050→50 Zeilen,
+zweite Seite, Pointer-/Keyboardfilter, Kategorie/Failed, gezielter alter Titel,
+Leer-/DB-Fehler-/Recoveryzustand, Konsole sauber. 176798→8499 HTTP-Bytes bei
+derselben 1050er Fixture. Eigene DB zurückgestellt, alle 1110 Jobs unverändert;
+kein Retry/Grab/Delete. IAB meldet alle Vergleichtabs visible; kein tatsächlicher
+hidden-Tab-Timer-Nachweis behauptet. Pollentscheidung kausal getestet.
+PG-/Fork-/Containerfinale noch offen; [Readvertrag](download-read-contract.md).
+Keine Produktionsänderung, Mainintegration oder öffentliche Imagepublikation.
