@@ -2340,3 +2340,37 @@ und das bestehende TODO. Format-/Link-/Struktur-/Diffprüfung separat ausgeführ
 die erfolgreichen Produkt-/Backend-/Containergates des Mergecommits bleiben
 ohne neue Produktinputs gültig. Keine erneute Ausführung allein für den
 Dokumentationscommit behauptet.
+
+## ARD-CDN-Beleglücke — gezielter Hotfix (08.10.2026)
+
+Der vorhandene ARD-Adapter prüfte bereits Player-CRID, Rechte, exakte Medien-URL,
+Audiodeklarationen und Maße. Seine Caller erlaubten jedoch nur den älteren
+Das-Erste-CDN. Der bestätigte RBB-CDN wurde schon vor dem Providerabruf
+übersprungen; Worker-Revalidation hatte dieselbe Beschränkung. Das erzeugte
+neutrale Sprache und unbekannte Qualität, obwohl die strukturierte Quelle beide
+Fakten belegte. Kein Prowlarr-Routenfehler und kein fehlender Filmkandidat.
+
+`isArdProgressiveMp4` am vorhandenen ARD-Owner ist nun gemeinsamer Gate für
+Producer-Eignung, Quellenergänzung und Worker. Zwei exakte HTTPS-CDNs,
+kanonische CRID und exakter URL-Abgleich bleiben nötig. Keine Domainwildcards,
+Accounts, HTML-/Sendercrawler, Originalsprachendefaults oder Range-Probeausweitung.
+Renditionmaße und Sprache bleiben unabhängig. Synthetische Regressionen tragen
+Film-RSS bis NZB/Parser und prüfen alle drei Qualitäts-URLs, Originalenglisch
+gegen tatsächlich deutschen Ton, fremde Player/Selektoren, Ablauf/Blockaden und
+frischen Workerbeleg. Der native Consumerharness ergänzt `ard-1080p` für beide
+Radarr-Routen und Sonarrs echten Qualitätssuffixparser, ohne Grab.
+
+Upstream `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` erneut abgerufen: kein
+entsprechender Belegowner/Fix. Gezielt gelocktes `source-map-js` von 1.2.1 auf
+1.2.2 aktualisiert, innerhalb aller vorhandenen Ranges; keine direkten
+Abhängigkeiten oder Frameworkmajors geändert. Primäradvisory:
+[GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
+PostCSS, Tailwind und die Test-Coverage bleiben mit ihren bisherigen Ownern.
+
+Main enthält getrennt neue Receipt-DDL/v3-/Workerverträge. Der ausdrücklich
+genehmigte CDN-Hotfix wird für die vorhandene Produktionsserie zurückportiert,
+nicht mit diesem Architektur-/Schemarollout vermischt. Ein Rückfallbuild muss
+die neue RBB-Worker-Evidenz verstehen und frisch gescannt sein; der alte
+CDN-ausschließende Worker ist nach neuen RBB-Jobs kein sicherer Rückweg.
+Fork-/Containernachweise und Betriebsabnahme bleiben bis zur realen Ausführung
+offen. Allgemeine P03.4-Abdeckung wird mit diesem Einzelfix nicht geschlossen.

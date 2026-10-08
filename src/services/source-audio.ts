@@ -3,7 +3,13 @@ import { z } from "zod";
 import type { ApiResultItem, MatchedEpisodeInfo } from "@/types";
 import type { LanguagePolicy } from "@/lib/language-policy";
 import { selectRenditions, type QualityPreference } from "./rendition-quality";
-import { ardVideoId, getArdMedia, getArdSource, ardEdition } from "./ard-source-audio";
+import {
+  ardVideoId,
+  getArdMedia,
+  getArdSource,
+  ardEdition,
+  isArdProgressiveMp4,
+} from "./ard-source-audio";
 import type { SourceAudioEvidence } from "@/lib/media-expectations";
 import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
@@ -117,11 +123,7 @@ export async function verifySourceAudio(
   signal?.throwIfAborted();
   if (expected.provider === "arte_hbbtv")
     return verifyArteSourceAudio(expected, url, budget, signal);
-  if (
-    !isProbeableMp4(url) ||
-    new URL(url).hostname !== "ctv-videos.daserste.de" ||
-    mediaSourceIdentity(url) !== expected.mediaIdentity
-  )
+  if (!isArdProgressiveMp4(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   const edition = ardEdition(await getArdMedia(expected.videoId, budget, signal), url);
   if (!edition || edition.audioLanguage !== expected.language)
@@ -172,11 +174,15 @@ export async function enrichSourceAudio(
       continue;
     }
     const videoId = arteVideoId(item.url_website);
+    const ardId = ardVideoId(item.url_website);
     const fields = ["url_video_hd", "url_video", "url_video_low"] as const;
     if (
       !fields.some(
         (field) =>
-          item[field] && ((videoId && progressiveUrl(item[field])) || isProbeableMp4(item[field]))
+          item[field] &&
+          ((videoId && progressiveUrl(item[field])) ||
+            (ardId && isArdProgressiveMp4(item[field])) ||
+            isProbeableMp4(item[field]))
       )
     ) {
       recordDecision("language", "language_unknown", "missing");
@@ -227,11 +233,7 @@ export async function enrichSourceAudio(
             mediaIdentity: mediaSourceIdentity(url),
             language,
           };
-      } else if (
-        ardId &&
-        isProbeableMp4(url) &&
-        new URL(url).hostname === "ctv-videos.daserste.de"
-      ) {
+      } else if (ardId && isArdProgressiveMp4(url)) {
         if (!ard.has(ardId) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
           ard.set(ardId, await getArdSource(ardId, budget));

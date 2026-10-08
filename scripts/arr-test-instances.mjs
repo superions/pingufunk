@@ -120,7 +120,7 @@ async function up() {
   const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
   if (
     renditionQuality &&
-    (!sourceAudio || !["720p", "unknown", "conflicting"].includes(renditionQuality))
+    (!sourceAudio || !["720p", "unknown", "conflicting", "ard-1080p"].includes(renditionQuality))
   )
     throw new Error("Owned quality QA requires the bounded source-audio fixture");
   const appImages = Object.fromEntries(
@@ -714,7 +714,12 @@ async function movieSearch(root, manifest, app = "radarr") {
         );
       }
       if (app === "radarr" && manifest.renditionQuality) {
-        const expected = manifest.renditionQuality === "720p" ? "WEBDL-720p" : "Unknown";
+        const expected =
+          manifest.renditionQuality === "720p"
+            ? "WEBDL-720p"
+            : manifest.renditionQuality === "ard-1080p"
+              ? "WEBDL-1080p"
+              : "Unknown";
         if (
           candidates[0].quality?.quality?.name !== expected ||
           (expected === "Unknown" && candidates[0].quality.quality.id !== 0)

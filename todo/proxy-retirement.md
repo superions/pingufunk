@@ -341,6 +341,14 @@ B05/B07, A2/A3, R4.
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
 - [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+      Ergänzungsbefund 08.10.2026: Der ARD-Producer-/Worker-Gate schloss den
+      bestätigten RBB-CDN aus, obwohl das bestehende strukturierte Page-Gateway
+      Sprache und Maße pro exakter URL deklarierte. Gemeinsamen präzisen
+      URL-Gate erweitern, Film-RSS→NZB sowie frische Workerprüfung regressieren
+      und native Radarr-Wege direkt/via Prowlarr prüfen. Keine Senderheuristik,
+      Domainwildcard, Profilabschwächung oder neue Schema-/Payloadversion.
+      Implementiert auf dem Hotfixtopic; frische Fork-/Container-/Betriebsevidenz
+      noch ausstehend. Allgemeine P03.4-Abdeckung bleibt unabhängig offen.
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe
