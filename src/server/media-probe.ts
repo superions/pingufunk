@@ -208,9 +208,7 @@ export async function probeJobMedia(
       actualDirectory !== directory
     )
       throw new MediaProbeError();
-    const binary =
-      process.env.PINGUFUNK_FFPROBE_PATH ||
-      path.join(process.cwd(), "ffmpeg", process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
+    const binary = getFfprobePath();
     if (!path.isAbsolute(binary)) throw new MediaProbeError();
     const output = await readLocalProbe(binary, file);
     const sourceExpectation = sourceAudioExpectation(expected);
@@ -232,6 +230,14 @@ export async function probeJobMedia(
   } catch {
     throw new MediaProbeError();
   }
+}
+
+/** Shared with read-only capability checks; this never installs a binary. */
+export function getFfprobePath(): string {
+  return (
+    process.env.PINGUFUNK_FFPROBE_PATH ||
+    path.join(process.cwd(), "ffmpeg", process.platform === "win32" ? "ffprobe.exe" : "ffprobe")
+  );
 }
 
 function readLocalProbe(binary: string, file: string): Promise<string> {

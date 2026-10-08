@@ -75,6 +75,15 @@ let rerunRequested = false;
 // before the next explicit wakeup; cold-start recovery covers process loss.
 const pendingFailures = new Map<string, string>();
 
+/** Process-local observation only, not a cross-process exclusive ownership claim. */
+export function getWorkerRuntimeState() {
+  return {
+    state: pendingFailures.size > 0 ? "paused" : processingPromise ? "draining" : "idle",
+    configuredConcurrency: MAX_CONCURRENT_DOWNLOADS,
+    exclusiveOwnership: "unverified" as const,
+  };
+}
+
 /** Only the single production worker calls this once at a cold start. */
 export async function recoverInterruptedDownloads(): Promise<number> {
   assertWritesEnabled();

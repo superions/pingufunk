@@ -34,7 +34,7 @@ export function getYtdlpPath(): string {
 /**
  * Get the configured yt-dlp path or fall back to default
  */
-async function getConfiguredYtdlpPath(): Promise<string> {
+export async function getConfiguredYtdlpPath(): Promise<string> {
   const customPath = await getSetting("download.ytdlpPath");
   if (customPath && customPath.trim()) {
     return customPath.trim();

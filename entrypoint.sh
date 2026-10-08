@@ -52,19 +52,10 @@ echo "Checking selected database schema without applying migrations..."
 su-exec "$USER_NAME" node /app/scripts/check-database-schema.mjs || fail "Database schema check failed"
 
 if [ "$PINGUFUNK_WRITES_ENABLED" = 1 ]; then
-    # A maintenance boot must not create directories or recursively rewrite
-    # ownership/permissions on the persisted download volume.
-    DOWNLOAD_DIR="${DOWNLOAD_FOLDER_PATH:-/app/downloads}"
-    TEMP_DIR="${DOWNLOAD_TEMP_PATH:-$DOWNLOAD_DIR/incomplete}"
-    echo "Ensuring required download directories exist..."
-    mkdir -p "$DOWNLOAD_DIR" "$TEMP_DIR"
-    echo "Download directories created/verified"
-
-    echo "Setting ownership to $PUID:$PGID..."
-    chown -R "$PUID:$PGID" "$DOWNLOAD_DIR" "$TEMP_DIR" 2>/dev/null || echo "Note: Could not chown download directories (this is normal for mounted volumes)"
-
-    echo "Setting permissions..."
-    chmod -R 755 "$DOWNLOAD_DIR" "$TEMP_DIR" 2>/dev/null || echo "Note: Could not chmod download directories (this is normal for mounted volumes)"
+    # Only newly created required directories acquire the execution user's owner.
+    # Existing media, adjacent paths and volume permissions remain untouched.
+    node /app/scripts/download-directories.mjs prepare "$PUID" "$PGID" || fail "Download directory initialization failed"
+    su-exec "$USER_NAME" node /app/scripts/download-directories.mjs check || fail "Download directories are not writable by the configured execution user"
 fi
 
 exec su-exec "$USER_NAME" "$@"

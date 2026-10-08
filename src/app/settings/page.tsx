@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSettings } from "@/contexts/settings-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -42,6 +42,7 @@ import {
   normalizeSetting,
   type WritableSettingKey,
 } from "@/lib/settings-schema";
+import { parseSystemInformation, type SystemInformation } from "@/lib/system-information";
 
 const TOLERANCE_CONTROLS = [
   {
@@ -142,24 +143,36 @@ export default function SettingsPage() {
     success: false,
     message: "",
   });
-  const [systemInfo, setSystemInfo] = useState<{
-    version: { node: string; ffmpeg: string | null; ytdlp: string | null };
-    database: { sizeBytes: number; shows: number; episodes: number; configEntries: number };
-    downloads: { completed: number; inQueue: number; failed: number };
-    uptime: number;
-  } | null>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInformation | null>(null);
+  const [systemError, setSystemError] = useState<string | null>(null);
+  const [isReadingSystem, setIsReadingSystem] = useState(false);
+  const systemGeneration = useRef(0);
 
   // Fetch system info when System tab is viewed
   const fetchSystemInfo = async () => {
+    const generation = ++systemGeneration.current;
+    setIsReadingSystem(true);
+    setSystemError(null);
     try {
-      const res = await fetch("/api/system");
+      const res = await fetch("/api/system", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      const data = await res.json();
-      setSystemInfo(data);
-    } catch (error) {
-      console.error("Failed to fetch system info:", error);
+      const data = parseSystemInformation(await res.json());
+      if (!data) throw new Error("System snapshot unconfirmed");
+      if (generation === systemGeneration.current) setSystemInfo(data);
+    } catch {
+      if (generation === systemGeneration.current) {
+        setSystemInfo(null);
+        setSystemError(
+          "Systeminformationen sind unbestätigt: Datenbank/Schema oder Antwort derzeit nicht verfügbar. Kein bestätigter gesunder Zustand."
+        );
+      }
+    } finally {
+      if (generation === systemGeneration.current) setIsReadingSystem(false);
     }
   };
 
@@ -1038,15 +1051,60 @@ export default function SettingsPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>System-Informationen</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={fetchSystemInfo}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchSystemInfo}
+                    disabled={isReadingSystem}
+                    aria-label="Systeminformationen aktualisieren"
+                  >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {systemError && (
+                    <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                      {systemError}
+                    </p>
+                  )}
+                  {isReadingSystem && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      Systeminformationen werden geprüft…
+                    </p>
+                  )}
+                  {systemInfo && (
+                    <div className="space-y-1 text-sm" role="status">
+                      <p>
+                        Liveness: Prozess antwortet. DB/Schema:{" "}
+                        {systemInfo.runtime.schema.ready
+                          ? "kompatibel (kurz gecachte Leseprüfung)"
+                          : "unbestätigt"}
+                        .
+                      </p>
+                      <p>
+                        Schreibbetrieb:{" "}
+                        {systemInfo.runtime.writesEnabled
+                          ? "freigegeben"
+                          : "Maintenance / gesperrt"}
+                        . Prozesslokaler Worker:{" "}
+                        {systemInfo.runtime.worker.state === "disabled"
+                          ? "deaktiviert"
+                          : systemInfo.runtime.worker.state === "idle"
+                            ? "wartend"
+                            : systemInfo.runtime.worker.state === "paused"
+                              ? "pausiert"
+                              : "Verarbeitung aktiv"}
+                        .
+                      </p>
+                      <p className="text-muted-foreground">
+                        Dies ist kein prozessübergreifender Besitz- oder Arr-Importnachweis.
+                      </p>
+                    </div>
+                  )}
                   {/* Version Info */}
                   <div>
                     <h4 className="text-sm font-medium mb-3">Versionen</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                       <div>
                         <p className="text-xs text-muted-foreground">RundfunkArr</p>
                         <p className="font-medium">{packageJson.version}</p>
@@ -1061,10 +1119,29 @@ export default function SettingsPage() {
                           {systemInfo?.version.ffmpeg ? (
                             <span className="text-green-500">{systemInfo.version.ffmpeg}</span>
                           ) : systemInfo ? (
-                            <span className="text-red-500">Nicht gefunden</span>
+                            <span className="text-red-500">
+                              {systemInfo.capabilities.ffmpeg.state === "missing"
+                                ? "Nicht gefunden"
+                                : systemInfo.capabilities.ffmpeg.state === "timeout"
+                                  ? "Zeitlimit"
+                                  : "Unbestätigt"}
+                            </span>
                           ) : (
                             "..."
                           )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">ffprobe</p>
+                        <p className="font-medium">
+                          {systemInfo?.capabilities.ffprobe.version ||
+                            (systemInfo
+                              ? systemInfo.capabilities.ffprobe.state === "missing"
+                                ? "Nicht gefunden"
+                                : systemInfo.capabilities.ffprobe.state === "timeout"
+                                  ? "Zeitlimit"
+                                  : "Unbestätigt"
+                              : "...")}
                         </p>
                       </div>
                       <div>
@@ -1073,7 +1150,13 @@ export default function SettingsPage() {
                           {systemInfo?.version.ytdlp ? (
                             <span className="text-green-500">{systemInfo.version.ytdlp}</span>
                           ) : systemInfo ? (
-                            <span className="text-red-500">Nicht gefunden</span>
+                            <span className="text-red-500">
+                              {systemInfo.capabilities.ytdlp.state === "missing"
+                                ? "Nicht gefunden"
+                                : systemInfo.capabilities.ytdlp.state === "timeout"
+                                  ? "Zeitlimit"
+                                  : "Unbestätigt"}
+                            </span>
                           ) : (
                             "..."
                           )}
@@ -1091,6 +1174,9 @@ export default function SettingsPage() {
                   {/* Database Stats */}
                   <div>
                     <h4 className="text-sm font-medium mb-3">Datenbank</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Historische TVDB-Zeilen sind kein aktiver Metadaten-Cache.
+                    </p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <p className="text-xs text-muted-foreground">Größe</p>

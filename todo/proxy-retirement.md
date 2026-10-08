@@ -2496,6 +2496,19 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Blockade, DB-Ausfall/Readonly/Single-Worker-Status; synthetische gemountete
       Sentinels behalten Owner/Mode/Inhalt über Start/Restart/Maintenance,
       eigene Downloads bleiben möglich. Beide Backend-Containerketten prüfen.
+      Entwicklungscheckpoint 08.10.2026: asynchrone, begrenzte Capability-
+      Prüfungen tatsächlicher Binaries, eigene Healthroute mit Liveness/
+      aktueller DB-Erreichbarkeit/kurz gecachter voller Schemaprüfung und
+      explizit prozesslokalem Workerzustand; kein P15.1-Besitznachweis.
+      Eigener Volumehelper erstellt/chownt nur neue benötigte Verzeichnisse,
+      prüft als tatsächlicher User und lässt bestehende Medien-/Nachbarrechte
+      unangetastet. Maintenance ohne Dateisystemwrites. Containerharnesses
+      um Start-/Restart-/Readonly-Sentinels auf beiden Backends erweitert.
+      Tatsächlich serviertes Desktopbundle 1280×720 Light: gematchter
+      Vorher-/Nachherzustand, Pointer/Keyboard, kontrollierter nativer DB-Fehler
+      entfernt alte gesunde Anzeige; langsame ffprobe zeigt Timeout, Konsole
+      sauber und keine Jobs. Vertrag `docs/runtime-readiness-contract.md`.
+      Finale Fork-/PG-/Containerabnahme noch offen, daher Checkbox unverändert.
 - [ ] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
       Owner: `sab-api.ts::POST`, `download.ts::addToQueue`, UI-NZB-Consumer und
       bei Bedarf beide append-only DB-Ketten. Requestbody/Parameter vor Parsing

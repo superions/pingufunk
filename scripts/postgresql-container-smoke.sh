@@ -55,6 +55,23 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir "$SMOKE_ROOT/source" "$SMOKE_ROOT/backup"
+mkdir -m 750 "$SMOKE_ROOT/media"
+mkdir -m 700 "$SMOKE_ROOT/media/incomplete"
+SMOKE_VOLUME_ROOT="$SMOKE_ROOT" node --input-type=module -e '
+  import {writeFileSync} from "node:fs";import path from "node:path";
+  writeFileSync(path.join(process.env.SMOKE_VOLUME_ROOT,"media/sentinel.mkv"),"synthetic media sentinel",{mode:0o640,flag:"wx"});
+  writeFileSync(path.join(process.env.SMOKE_VOLUME_ROOT,"neighbor"),"synthetic neighbor sentinel",{mode:0o600,flag:"wx"});
+'
+volume_fingerprint() {
+  SMOKE_VOLUME_ROOT="$SMOKE_ROOT" node --input-type=module -e '
+    import {statSync,readFileSync} from "node:fs";import path from "node:path";import {createHash} from "node:crypto";
+    console.log(JSON.stringify(["media","media/incomplete","media/sentinel.mkv","neighbor"].map(name=>{
+      const file=path.join(process.env.SMOKE_VOLUME_ROOT,name),s=statSync(file);
+      return {name,uid:s.uid,gid:s.gid,mode:s.mode,content:s.isFile()?createHash("sha256").update(readFileSync(file)).digest("hex"):null};
+    })));
+  '
+}
+VOLUME_BEFORE="$(volume_fingerprint)"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
   -subj "/CN=${PG_CONTAINER}" \
   -keyout "$SMOKE_ROOT/server.key" -out "$SMOKE_ROOT/server.crt" >/dev/null 2>&1
@@ -177,6 +194,8 @@ SMOKE_SECRET="$SMOKE_ROOT/runtime-secret" SMOKE_URL="$RUNTIME_URL" node --input-
   writeFileSync(process.env.SMOKE_SECRET,process.env.SMOKE_URL,{mode:0o600,flag:"wx"});
 '
 docker run -d --name "$APP_CONTAINER" \
+  -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e DOWNLOAD_FOLDER_PATH=/qa/media \
+  --mount "type=bind,src=${SMOKE_ROOT}/media,dst=/qa/media,readonly" \
   --network "$SMOKE_NETWORK" -e DATABASE_URL_FILE=/run/secrets/database_url \
   --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
   "$RUNNER_IMAGE" >/dev/null
@@ -200,7 +219,10 @@ if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   echo "Maintenance unexpectedly marked a PostgreSQL write" >&2
   exit 1
 fi
+docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health \
+  | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==false||r.worker.state!=="disabled")process.exit(1)})'
 stop_app
+[[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'PG maintenance changed download volume metadata' >&2; exit 1; }
 
 if [[ -n "$SQLITE_ROLLBACK_IMAGE" ]]; then
   # The same full cutover rehearsal returns to its original source before the
@@ -225,6 +247,8 @@ if [[ -n "$SQLITE_ROLLBACK_IMAGE" ]]; then
 fi
 
 DATABASE_URL="$RUNTIME_URL" docker run -d --name "$APP_CONTAINER" \
+  -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e DOWNLOAD_FOLDER_PATH=/qa/media \
+  --mount "type=bind,src=${SMOKE_ROOT}/media,dst=/qa/media" \
   --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
@@ -246,6 +270,22 @@ if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   echo "First application write checkpoint missing" >&2
   exit 1
 fi
+docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health \
+  | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==true)process.exit(1)})'
+stop_app
+[[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'PG writer changed existing volume metadata' >&2; exit 1; }
+DATABASE_URL="$RUNTIME_URL" docker run -d --name "$APP_CONTAINER" \
+  -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e DOWNLOAD_FOLDER_PATH=/qa/media \
+  --mount "type=bind,src=${SMOKE_ROOT}/media,dst=/qa/media" \
+  --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 "$RUNNER_IMAGE" >/dev/null
+SMOKE_APP_STARTED=1
+ready=0
+for ((attempt=0;attempt<30;attempt++)); do
+  if docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health >/dev/null 2>&1; then ready=1; break; fi
+  sleep 1
+done
+[[ "$ready" == 1 ]] || { echo 'PG writer restart did not become ready' >&2; exit 1; }
+[[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'PG restart changed existing volume metadata' >&2; exit 1; }
 
 if [[ -n "$ROLLBACK_IMAGE" ]]; then
   stop_app

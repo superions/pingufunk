@@ -1851,3 +1851,45 @@ finaler Nachcheck nennt bei Leerantworten das begrenzte abgerufene Suchfenster.
 P14.1 und ausschließlich die enge Wiederöffnung P10.1 sind damit geschlossen.
 P13, P14.2/P14.3, P15/P16 sowie P03.4 bleiben offen, keine Vollabnahme oder
 Produktionsfreigabe. Keine DDL, Jobs, Imagepublikation oder Mainintegration.
+
+## Implementierungsreview P15.3 — Readiness und schonender Volume-Start
+
+Entwicklungscheckpoint 08.10.2026 auf `codex/runtime-volume-contract` nach
+P12/P14.1. Upstream-main `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` enthält
+noch synchrone Request-Toolchecks und rekursives Volume-`chown/chmod`; keine
+passende bestehende Korrektur übernommen. Kein Deployment oder Mainpush.
+
+Der vollständige Ownerpfad wurde durch den Implementierer geprüft: tatsächliche
+FFmpeg-/ffprobe-/yt-dlp-Auflösung → begrenzte Kindprozesse → geschlossenes
+DTO → Route → Desktopparser; Schema-/Verbindungsreads → Maintenance-/Writegate
+→ explizit prozesslokaler Workerzustand; persistierte Downloadpfadpriorität →
+Prepare nur neuer Verzeichnisse → actual-user Check → Entrypoint. Alte API-
+Statistikfelder/500-Vertrag bleiben erhalten, Health ergänzt 503-Readiness.
+Der Health-GET startet/installiert/migriert nichts. Zehnsekunden-Strukturcache
+beweist keine Strukturprüfung bei jedem Aufruf; aktuelle Verbindung wird
+separat live gelesen. Prozesslokaler Status ersetzt keine P15.1-Lease.
+
+Nachreview behoben: PATH statt wirklicher Binaryowner, relative ffprobe-
+Konfiguration, Konfigurationsrotation während laufender Toolprüfung,
+freie Versionsausgabe, gecachte Readiness bei aktuell ausgefallener DB und
+alte gesunde Desktopstatistiken nach Fehler. Volumepfade verwenden die reale
+Configpriorität, nicht bloß ENV. Bestehende Owner/Mode/Inhalte bleiben erhalten;
+Readonly-Writer bricht ab statt Volume-Reparatur. Das frische Composebeispiel
+entspricht dem bereits vorhandenen Bindmount, keine Bestandskonfigumschreibung.
+
+Desktop am tatsächlich servierten Productionbundle, 1280×720 Light, matched
+before/after: Pointer/Keyboard, native disposable SQLite-Tabellenunverfügbarkeit
+mit Live=200/Ready=503 und sichtbarem Fehler statt Altstatistik; Recoveryreadback
+mit null Jobs; langsame synthetische ffprobe ergibt den abgegrenzten Timeout.
+Frische Browserkonsole leer, keine horizontale Overflow-/Mobil-/Darkabnahme
+behauptet. Eigener Baselinecheckout und Testserver danach beendet/entfernt,
+Screenshots als ignorierte lokale Evidenz erhalten. Keine Produktionsdaten.
+
+Native Timeouttests beweisen Eventloopresponsivität; die UI allein ersetzt
+diesen kausalen Nachweis nicht. Windowscleanup nicht nativ getestet. Die
+await-Deadline ist keine Prisma-Cancellation oder Mutationsretry-Freigabe.
+Neue Backendcontainer-/Forkabnahme bleibt bis zum tatsächlich erfolgreichen
+Lauf offen; alte P14-Gates ersetzen sie nicht. Vertrag unter
+[Runtimeprüfung](runtime-readiness-contract.md). Kein unabhängiger Peerreview.
+P13/P14.2/P14.3/P15.1/P15.2/P15.4/P16 und P03.4 bleiben offen; bestehende
+Build-Tracingwarnungen und transitive Auditfinding separat unverändert.

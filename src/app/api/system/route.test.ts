@@ -14,7 +14,19 @@ vi.mock("@/lib/db", () => ({
   },
   databaseSizeBytes,
 }));
-vi.mock("child_process", () => ({ execSync: vi.fn(() => "synthetic-tool-version") }));
+vi.mock("@/server/tool-capabilities", () => ({
+  getToolCapabilities: async () => ({
+    ffmpeg: { version: "7.0", state: "ok" },
+    ffprobe: { version: "7.0", state: "ok" },
+    ytdlp: { version: "2026.09.23", state: "ok" },
+  }),
+  unavailableToolCapabilities: () => ({}),
+}));
+vi.mock("@/server/runtime-readiness", () => ({
+  boundedRuntimeRead: (promise: Promise<unknown>) => promise,
+  getSchemaReadiness: async () => ({ ready: true, state: "compatible" }),
+  runtimeState: (schema: unknown) => ({ schema, writesEnabled: false }),
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();

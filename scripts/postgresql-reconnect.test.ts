@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 const required = process.env.PINGUFUNK_REQUIRE_PG_RECONNECT_TESTS === "1";
 const configured = process.env.PINGUFUNK_TEST_DATABASE_URL;
@@ -36,6 +37,7 @@ it.skipIf(!required)(
     vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
     const { prisma, databaseProvider } = await import("@/lib/db");
     const { GET } = await import("@/app/api/system/route");
+    const { GET: health } = await import("@/app/api/health/route");
     const inspection = new PrismaClient({ datasourceUrl: url.href, log: [] });
     const sqlite = path.resolve("prisma/data/rundfunkarr.db");
     const fingerprint = () =>
@@ -46,14 +48,20 @@ it.skipIf(!required)(
       const count = await prisma.config.count();
       const checkpoint = await inspection.migrationCheckpoint.count();
       expect((await GET()).status).toBe(200);
+      expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(200);
       execFileSync("docker", ["pause", container], { timeout: 5000, stdio: "ignore" });
       paused = true;
       expect((await GET()).status).toBe(500);
+      expect((await health(new NextRequest("http://localhost/api/health?mode=live"))).status).toBe(
+        200
+      );
+      expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(503);
       expect(databaseProvider).toBe("postgresql");
       expect(fingerprint()).toBe(beforeSqlite);
       execFileSync("docker", ["unpause", container], { timeout: 5000, stdio: "ignore" });
       paused = false;
       expect((await GET()).status).toBe(200);
+      expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(200);
       expect(await prisma.config.count()).toBe(count);
       expect(await inspection.migrationCheckpoint.count()).toBe(checkpoint);
       expect(fingerprint()).toBe(beforeSqlite);

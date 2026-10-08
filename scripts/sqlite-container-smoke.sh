@@ -43,6 +43,23 @@ ready() {
 
 for variant in fresh bootstrap; do
   mkdir "$SMOKE_ROOT/$variant"
+  mkdir -m 750 "$SMOKE_ROOT/$variant/media"
+  mkdir -m 700 "$SMOKE_ROOT/$variant/media/incomplete"
+  SMOKE_VARIANT_ROOT="$SMOKE_ROOT/$variant" node --input-type=module -e '
+    import {writeFileSync} from "node:fs";import path from "node:path";
+    writeFileSync(path.join(process.env.SMOKE_VARIANT_ROOT,"media/sentinel.mkv"),"synthetic media sentinel",{mode:0o640,flag:"wx"});
+    writeFileSync(path.join(process.env.SMOKE_VARIANT_ROOT,"neighbor"),"synthetic neighbor sentinel",{mode:0o600,flag:"wx"});
+  '
+  volume_fingerprint() {
+    SMOKE_VARIANT_ROOT="$SMOKE_ROOT/$variant" node --input-type=module -e '
+      import {statSync,readFileSync} from "node:fs";import path from "node:path";import {createHash} from "node:crypto";
+      console.log(JSON.stringify(["media","media/incomplete","media/sentinel.mkv","neighbor"].map(name=>{
+        const file=path.join(process.env.SMOKE_VARIANT_ROOT,name),s=statSync(file);
+        return {name,uid:s.uid,gid:s.gid,mode:s.mode,content:s.isFile()?createHash("sha256").update(readFileSync(file)).digest("hex"):null};
+      })));
+    '
+  }
+  VOLUME_BEFORE="$(volume_fingerprint)"
   if [[ "$variant" == fresh ]]; then
     for attempt in 1 2; do
       docker run --rm --network none --user "$(id -u):$(id -g)" \
@@ -57,6 +74,7 @@ for variant in fresh bootstrap; do
     try {
       if(process.env.SMOKE_VARIANT==="bootstrap") db.exec(readFileSync("prisma/legacy/sqlite/init-db.sql","utf8"));
       db.prepare("INSERT INTO Config(key,value) VALUES (?,?)").run("smoke", "original");
+      db.prepare("INSERT INTO Config(key,value) VALUES (?,?)").run("download.path", "/qa/media");
       db.prepare("INSERT INTO Download(id,title,url,category,status,size,filePath,createdAt) VALUES (?,?,?,?,?,?,?,?)")
         .run("original-id","Synthetic","https://example.invalid/video","sonarr","failed",BigInt("9007199254741115"),"/synthetic/original.mkv",Date.now());
     } finally {db.close();}
@@ -106,8 +124,37 @@ for variant in fresh bootstrap; do
       -d '{"key":"matching.movie.yearTolerance","value":"02"}' http://localhost:6767/api/settings \
       | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(r.success!==true||r.updated!==1||r.settings["matching.movie.yearTolerance"]!=="2")process.exit(1)})'
     docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/system >/dev/null
+    docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health?mode=ready \
+      | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==true||r.worker.exclusiveOwnership!=="unverified")process.exit(1)})'
     stop_app
+    [[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'SQLite volume sentinel metadata changed' >&2; exit 1; }
   done
+  # Maintenance must not try to repair/write even a readonly download mount.
+  docker run -d --name "$APP_CONTAINER" --network none \
+    -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e PINGUFUNK_WRITES_ENABLED=0 \
+    -e "DATABASE_URL=file:/qa/${RUNTIME_FILE}" \
+    --mount "type=bind,src=${SMOKE_ROOT}/${variant},dst=/qa" \
+    --mount "type=bind,src=${SMOKE_ROOT}/${variant}/media,dst=/qa/media,readonly" "$RUNNER_IMAGE" >/dev/null
+  APP_STARTED=1
+  ready
+  docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health \
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==false||r.worker.state!=="disabled")process.exit(1)})'
+  stop_app
+  [[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]]
+  docker run -d --name "$APP_CONTAINER" --network none \
+    -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e PINGUFUNK_WRITES_ENABLED=1 \
+    -e "DATABASE_URL=file:/qa/${RUNTIME_FILE}" \
+    --mount "type=bind,src=${SMOKE_ROOT}/${variant},dst=/qa" \
+    --mount "type=bind,src=${SMOKE_ROOT}/${variant}/media,dst=/qa/media,readonly" "$RUNNER_IMAGE" >/dev/null
+  APP_STARTED=1
+  for ((attempt=0;attempt<20;attempt++)); do
+    [[ "$(docker inspect "$APP_CONTAINER" --format '{{.State.Status}}')" == exited ]] && break
+    sleep 1
+  done
+  [[ "$(docker inspect "$APP_CONTAINER" --format '{{.State.Status}}')" == exited ]] || { echo 'Readonly writer volume unexpectedly started' >&2; exit 1; }
+  [[ "$(docker inspect "$APP_CONTAINER" --format '{{.State.ExitCode}}')" != 0 ]]
+  stop_app
+  [[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]]
   SMOKE_SOURCE="$SMOKE_ROOT/$variant/$RUNTIME_FILE" SMOKE_VARIANT="$variant" node --input-type=module -e '
     import {DatabaseSync} from "node:sqlite"; const db=new DatabaseSync(process.env.SMOKE_SOURCE,{readOnly:true});
     try {
