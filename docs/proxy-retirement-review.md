@@ -2006,3 +2006,15 @@ Offener Reviewbefund: ganze RSS-Antwortcaches umgehen die erneute Auswahl und
 deren Rechteprüfung. P14.2 besitzt die gemeinsame Frischegrenze; vor deren
 Schließung und neuen Fork-/Backend-/Containergates keine P14.3-Vollabnahme.
 Vertrag [Quellenzeiten und Rechte](content-date-contract.md).
+
+### Finale P15.2-Abnahme
+
+`0d2d10745760cff7f2fdba63751d18af09825539`:
+[Fork-CI 37711382041](https://github.com/superions/pingufunk/actions/runs/37711382041)
+einschließlich großer PG-History-/Queueprobe und
+[Containerkette 37711382103](https://github.com/superions/pingufunk/actions/runs/37711382103)
+vollständig erfolgreich: native Arr direkt/via Prowlarr, Tooling, TLS-Migration/
+post-write-Rollback, SQLitepersistenz und echte Medienconsumer beider Backends.
+1175 lokale Tests und übrige Produktgates grün; Desktopfilter/Paging/Fehler/
+Recovery separat beobachtet. IAB-Visibilitygrenze weiter offengelegt. P15.2
+geschlossen, keine P15.1/P15.4- oder Gesamt-/Produktionsabnahme.

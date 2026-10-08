@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **P12, P13.1, P14.1 und P15.3 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **P12, P13.1, P14.1 und P15.2/P15.3 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -2502,7 +2502,7 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Jobs/IDs und folgender Queuefortschritt erhalten. Falls neue Spalten nötig,
       append-only Migrationen und Maintenance-/post-write-Rollback beider Provider
       prüfen. Neue Entwicklungsprobe ist kein Produktionsrestart.
-- [ ] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
+- [x] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
       Owner: `download.ts::{getHistory,getQueue}`, `sab-api.ts`,
       `/downloads` und beide DB-Querypfade. Aktuell wird die gesamte History
       alle fünf Sekunden gelesen. Native SAB-Paging-/Filter-/ID-Verträge vor
@@ -2531,6 +2531,16 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Abschluss grün; Antwort am GUI-Testserver 176798→8499 Bytes, alte ID
       weiter gezielt lesbar. Finale PG-/Fork-/Containerabnahme bleibt offen.
       Vertrag in `docs/download-read-contract.md`; kein Job/History gelöscht.
+      Finale Abnahme auf `0d2d10745760cff7f2fdba63751d18af09825539`:
+      [Fork-CI 37711382041](https://github.com/superions/pingufunk/actions/runs/37711382041)
+      einschließlich eigener großer PG-Historyprobe und
+      [Containerkette 37711382103](https://github.com/superions/pingufunk/actions/runs/37711382103)
+      vollständig grün: native Arr direkt/via Prowlarr, Tooling,
+      TLS-Migration/post-write-Rollback, SQLitepersistenz und tatsächliche
+      Medienabschlüsse auf beiden Backends. 1175 finale lokale Tests,
+      Lint/Typecheck/Format/Build/Diffcheck und tatsächliche Desktopzustände
+      separat geprüft. IAB-Visibilitygrenze bleibt transparent, keine mobile
+      oder simulierte native hidden-Tab-Abnahme. Kein Produktivzugriff.
 - [x] **P15.3 — Nichtblockierende Runtimeprüfung und schonender Volume-Start.**
       Owner: `/api/system`, vorhandener Healthvertrag, tatsächliche FFmpeg/
       ffprobe-/yt-dlp-Auflösung und `entrypoint.sh`. Synchrone bis zu zweimal
