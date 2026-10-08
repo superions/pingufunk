@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **P12 ist implementiert und einschließlich Desktop-/Backend-/Fork-/Containerketten abgenommen. P14.1 ist implementiert und lokal/desktopsicher geprüft, neue Fork-/Containerabnahme steht aus. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **P12 und P14.1 sind implementiert und einschließlich Desktop-/Backend-/Fork-/Containerketten abgenommen. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -1909,7 +1909,7 @@ Abhängigkeit P09 und alle für den gewählten Betriebsweg relevanten
 Entwicklungsabnahmen; B16/O01/O02, R6/R9/R10. P11.1 gilt für beide Betriebswege;
 P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optional.
 
-- [ ] **P10.1 — Komplette Paritätsabnahme ohne Produktion.** Beide Newznab-
+- [x] **P10.1 — Komplette Paritätsabnahme ohne Produktion.** Beide Newznab-
       Pfade einschließlich Caps/Validation/RSS, ID-/Text-/Staffel-/Episode-/Movie-
       Suche, Counts/Relative-Enclosure, NZB-addfile, Queue/failed/completed,
       History/Import/Remove/Retry gegen synthetische Sources und disposable
@@ -1933,6 +1933,13 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       Standard-HLS trotz nutzbarem HD-MP4; der alternative Providerpfad hat
       abweichende Budget-/Auswahlverträge. Neue synthetische UI-/NZB-Consumer-
       Regressionen ergänzen die historischen Paritätsnachweise, ersetzen sie nicht.
+      Engen Folgeauftrag erneut abgenommen 08.10.2026 mit P14.1 auf `7d98932`:
+      1121 lokale Tests, Lint/Typecheck/Format/Build und reale Desktop-HLS/MP4-
+      Auswahl samt NZB-/RSS-/Queueconsumer grün. Fork-CI 37707678742 und
+      Dockervalidierung 37707678881 vollständig erfolgreich, einschließlich
+      nativer Arr-Consumer direkt/via Prowlarr, beider Backend-/Medienketten,
+      Persistenz und Rollback. Keine Produktvollabnahme P13–P16/P03.4 oder
+      produktive Operation behauptet; historische übrige Routejourneys erhalten.
       Abgenommen 01.10.2026 auf Produktcheckpoint `8de3148`:
       Fork-CI 36802563431 und Dockerprobe 36802563450 erfolgreich.
       830 reguläre Tests sowie 15 separate native DB-Ausführungen, Lint,
@@ -2354,7 +2361,7 @@ GUI und Indexer nutzen dieselben Quellen-/Renditionfakten, nicht zwangsläufig
 dieselbe fachliche Zielprüfung. Kein Senderseitencrawler und kein Voll-Download
 für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge erhalten.
 
-- [ ] **P14.1 — GUI-/Provider-Suche auf gemeinsamen Rendition-/Budgetowner bringen.**
+- [x] **P14.1 — GUI-/Provider-Suche auf gemeinsamen Rendition-/Budgetowner bringen.**
       Abhängigkeit P12.1. Owner: `src/app/api/search/route.ts`,
       `content-search.ts`, `src/providers/registry.ts`, `src/types/provider.ts`,
       `rendition-quality.ts` und `ui-nzb.ts`. Ganzeintrag-HLS-Filter entfernen;
@@ -2387,6 +2394,17 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
       Persistenzfälle grün; finale Fork-/PG-/Containerabnahme noch ausstehend.
       Vertrag in `docs/bounded-search-contract.md`; P13/P14.2/P14.3 und P03.4
       hierdurch nicht abgenommen. Review durch Implementierer, kein Peerreview.
+      Finale Abnahme auf `7d9893299a807458ffa550374a6359adf0849cab`:
+      [Fork-CI 37707678742](https://github.com/superions/pingufunk/actions/runs/37707678742)
+      einschließlich vollständigem PG-Gate und
+      [Dockervalidierung 37707678881](https://github.com/superions/pingufunk/actions/runs/37707678881)
+      erfolgreich. Native Sonarr-/Radarr-Consumer direkt/via Prowlarr,
+      Werkzeugprüfung, TLS-Migrations-/post-write-Rollback, SQLitepersistenz
+      und tatsächliche Legacy/v1/v2/v3-Medienworker auf beiden disposable
+      Backends grün. Lokale finale 1121 Tests und Desktopzustände separat
+      geprüft; die letzte Leerantwort nennt ausdrücklich das abgerufene Fenster.
+      Keine DDL, öffentliche Images, Main-Integration, produktive Grabs oder
+      Liveänderung. Ausschließlich der enge P10.1-Folgeauftrag ebenfalls geschlossen.
 - [ ] **P14.2 — Frische URL-gebundene Quellenbelege mit begrenztem Cache.**
       Abhängigkeit P13.1. Owner: `source-audio.ts`, `mp4-audio-language.ts`,
       ARTE-/ARD-Belegowner, `cache.ts` und ihre Such-/Workerconsumer.

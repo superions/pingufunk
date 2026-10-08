@@ -1835,3 +1835,19 @@ unter [begrenzter Quellenabruf](bounded-search-contract.md). P14.1/P10.1 bleiben
 bis zur neuen Fork-/Containerevidenz offen; P13/P14.2/P14.3/P15/P16 und P03.4
 sind durch dieses Paket nicht abgenommen. Bestehende Build-Tracingwarnungen
 und der bereits dokumentierte transitive Auditbefund bleiben separate Befunde.
+
+### Abschließende P14.1-Abnahme
+
+Produktstand `7d9893299a807458ffa550374a6359adf0849cab` auf dem eigenen Fork:
+[CI 37707678742](https://github.com/superions/pingufunk/actions/runs/37707678742)
+inklusive vollständiger PG-Integration erfolgreich;
+[Dockervalidierung 37707678881](https://github.com/superions/pingufunk/actions/runs/37707678881)
+vollständig erfolgreich. Neue native Sonarr-/Radarr-Qualitätsconsumer direkt
+und über Prowlarr, Tooling, TLS-Migration/post-write-Rollback, SQLitepersistenz
+und reale synthetische Medienabschlüsse/Retry auf beiden Backends bestätigen
+den neuen Producerstand. Keine Wiederverwendung der P12-Containerprüfung als
+Ersatz für P14.1. Tatsächliche Desktopprüfung und 1121 lokale Tests wie oben;
+finaler Nachcheck nennt bei Leerantworten das begrenzte abgerufene Suchfenster.
+P14.1 und ausschließlich die enge Wiederöffnung P10.1 sind damit geschlossen.
+P13, P14.2/P14.3, P15/P16 sowie P03.4 bleiben offen, keine Vollabnahme oder
+Produktionsfreigabe. Keine DDL, Jobs, Imagepublikation oder Mainintegration.
