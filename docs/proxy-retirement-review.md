@@ -2204,3 +2204,26 @@ Transfer/Queue/Completion-Extraktion wartet auf native P15.1-Abnahme.
 Historischer Plan ausdrücklich als Analysebasis markiert, aktueller Einstieg
 bleibt ausschließlich das TODO. Upstream-main frisch
 `4ebaa8e8fa839fe44fa7862be0b49896385f5b49`, kein entsprechender Fix.
+
+### Kumulative Abnahme P13.2/P15.1/P15.4
+
+08.10.2026 auf `75b3318cb414218c624aee7c195084dda39d1d17`:
+[Fork-CI 37720415235](https://github.com/superions/pingufunk/actions/runs/37720415235)
+und [Containerkette 37720415340](https://github.com/superions/pingufunk/actions/runs/37720415340)
+erfolgreich. Die reale Muxprobe bestätigt auf SQLite und PostgreSQL kontrollierten
+SIGTERM-Abbruch, sofort failed ohne Medienvalidierung, Exit 143, folgenden
+Queueabschluss und unveränderten Nachbarhash. Zusätzlicher realer PG-Ausfall
+bestätigt Abort/paused Failurewrite und spätere Reconciliation ohne Re-Transfer.
+Die Bundleslotkorrektur beseitigt den beobachteten nativen Shutdownbefund; die
+ursprüngliche terminale Assertion bleibt unverändert. Erster Lauf dieser Revision
+scheiterte vor den Produktgates an Registry-429, genau ein begründeter Wiederlauf.
+
+1300 reguläre Tests und die vollständigen separaten PostgreSQLgates grün;
+Receipt-/ACK-/Restartketten, tatsächliche Arr-Consumer direkt/via Prowlarr,
+Tooling, vollständige SQLite-Migrationskette, TLS-Migration und Backup/Restore
+ebenfalls grün. Historische inkompatible Images werden abgewiesen; kompatible
+aktuelle Maintenance ist nicht als historische funktionale Coderücknahme
+ausgegeben. Desktop-/Readback-Evidenz von P13.2/P15.4 bleibt gültig, keine neue
+sichtbare Änderung in der Workerkorrektur. Die drei Ownerpunkte sind geschlossen;
+P16 und unabhängige P03.4-Abdeckung bleiben getrennt. Keine Produktion,
+Mainintegration, Publikation oder unabhängige Peerreview behauptet.

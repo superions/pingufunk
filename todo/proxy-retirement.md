@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **P12, P13.1, P14.1 und P15.2/P15.3 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **P12–P15 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. P16.1 bleibt bis zu seiner letzten Extraktion und Abnahme offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -2358,7 +2358,7 @@ gefunden“ oder vermuteter Ursache. P03.4-Abdeckung bleibt eigenständig.
       Medienconsumer beider Backends. 1152 lokale Tests, Lint, Typecheck,
       Formatcheck, Build und Diffcheck grün. Keine UIänderung dieses Pakets;
       P13.2 weiterhin offen, kein öffentlicher Reader, keine Gesamt-/Sprachabnahme.
-- [ ] **P13.2 — Sichere Diagnose in Suche, Downloads und Logs bedienbar machen.**
+- [x] **P13.2 — Sichere Diagnose in Suche, Downloads und Logs bedienbar machen.**
       Abhängigkeit P13.1. Owner: `/search`, `/movies`, `/shows`, `/downloads`,
       bisheriger `/logs`-Platzhalter und zugehörige API-Owner. Relevante Gründe
       und Belegstatus anzeigen, mit klaren Zuständen Katalogtreffer → passende
@@ -2386,6 +2386,15 @@ gefunden“ oder vermuteter Ursache. P03.4-Abdeckung bleibt eigenständig.
       Medienchecks beschriftet, Queue-Textfit und verlorenen Tastaturfokus
       korrigiert. Abschließende frische Bundle-/Fork-/Containerabnahme noch
       offen, Checkbox unverändert. Vertrag `docs/decision-diagnostics-contract.md`.
+      Finale Entwicklungsabnahme 08.10.2026: tatsächlich serviertes Desktopbundle
+      samt Fokus/Einzelread/Readback/5min-Expiry geprüft, keine unerwarteten
+      Konsolenfehler oder mutierenden Diagnoseoperationen. Fork-CI
+      [37720415235](https://github.com/superions/pingufunk/actions/runs/37720415235)
+      und kumulative Containerkette
+      [37720415340](https://github.com/superions/pingufunk/actions/runs/37720415340)
+      auf `75b3318cb414218c624aee7c195084dda39d1d17` erfolgreich, einschließlich
+      PostgreSQL, nativer Arr-Consumer und echter Medien-/Restartzustände beider
+      Backends. 1300 reguläre Tests auf diesem Stand; keine Live-Importabnahme.
 
 ## Phase P14 — Gemeinsame Quellenfakten statt divergierender Suchpfade
 
@@ -2526,7 +2535,7 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
 Ergebnis: sichere Jobbesitzgrenze, skalierende Historyreads und verlässlicher
 Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhöhung.
 
-- [ ] **P15.1 — Jobbesitz und Shutdown im Single-Worker-Vertrag absichern.**
+- [x] **P15.1 — Jobbesitz und Shutdown im Single-Worker-Vertrag absichern.**
       Owner: `download-manager.ts`, `instrumentation.ts`, `download.ts`,
       `scripts/application-entrypoint.mjs` und bei Bedarf beide Prisma-Ketten.
       Prozesslokales `processingPromise`/Semaphore verhindert keinen zweiten
@@ -2569,6 +2578,17 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Prozesszustände besitzen. Versionierter gemeinsamer Prozessslot samt
       Reload-Regression ergänzt; DB-Lease/Fence und unveränderte terminale
       Assertion bleiben verbindlich. Neue native Containerabnahme nötig.
+      Finale Abnahme 08.10.2026 auf `75b3318cb414218c624aee7c195084dda39d1d17`:
+      [Fork-CI 37720415235](https://github.com/superions/pingufunk/actions/runs/37720415235)
+      mit beiden echten Zweiprozess-/Crash-/Expiry-/Ausfallgates und
+      [Containerkette 37720415340](https://github.com/superions/pingufunk/actions/runs/37720415340)
+      erfolgreich. Tatsächlicher FFmpeg-Mux unter SIGTERM auf SQLite/PG beendet,
+      Status sofort failed ohne Validierung, Exit 143, Restart/Folgejob mit
+      regulärer fertiger Datei und unverändertem Nachbarhash; PG-Ausfall samt
+      Fehlerwrite-Pause/Reconciliation ebenfalls bestanden. Keine schwächere
+      Assertion. Erstversuch wegen Registry-429 gescheitert; genau ein
+      kontrollierter Wiederlauf nach dieser externen Pullstörung. Einzelworker,
+      keine gemischten alten/neuen Writer oder produktiver Restart freigegeben.
 - [x] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
       Owner: `download.ts::{getHistory,getQueue}`, `sab-api.ts`,
       `/downloads` und beide DB-Querypfade. Aktuell wird die gesamte History
@@ -2649,7 +2669,7 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       unveränderten Quellstand wiederverwendet. Die zuvor fehlende explizite
       `.dockerignore`-Helperfreigabe korrigiert; gescheiterter erster Build
       bleibt als Befund dokumentiert. P15.1-Besitzgrenze hierdurch nicht erledigt.
-- [ ] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
+- [x] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
       Owner: `sab-api.ts::POST`, `download.ts::addToQueue`, UI-NZB-Consumer und
       bei Bedarf beide append-only DB-Ketten. Requestbody/Parameter vor Parsing
       begrenzen; kompatible NZB-Versionen und Endpoints erhalten. Eigene UI
@@ -2696,6 +2716,16 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Migrationen); jetzt gesamte tatsächliche append-only Kette samt Namen,
       Checksummen und abgeschlossenen Zuständen verglichen. Kein gelockerter
       Schemaguard, frischer Containerlauf weiterhin erforderlich.
+      Finale kumulative Abnahme 08.10.2026 auf `75b3318` mit Fork-CI
+      [37720415235](https://github.com/superions/pingufunk/actions/runs/37720415235)
+      und Containerkette
+      [37720415340](https://github.com/superions/pingufunk/actions/runs/37720415340)
+      bestanden: parallele Receipt-/Jobatomarität beider Backends, verlorene
+      ACK/Restart mit gleicher Job-ID, Payloadkonflikt und bewusst neuer Auftrag,
+      Legacy/v1/v2/v3 sowie vollständiges Receipt-Backup/Restore. Historische
+      Imageablehnung und kompatible aktuelle Maintenance geprüft, kein
+      funktionaler historischer Code-Rollback behauptet. Desktopgates und
+      vorhandene Produktgates wiederverwendet; keine neue DDL seit diesem Stand.
 
 ## Phase P16 — Ownergrenzen bereinigen, ohne das Produkt neu zu schreiben
 
