@@ -8,6 +8,8 @@ const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
 const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
 const germanUrl = "https://fixture.akamaized.net/german.mp4";
 const frenchUrl = "https://fixture.akamaized.net/french.mp4";
+const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString("base64url");
+const ardUrl = "https://rbb-progressive.ard-mcdn.de/synthetic/film-1080.mp4?edition=standard";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
   if (
@@ -16,6 +18,42 @@ globalThis.fetch = async (input, init) => {
     url.pathname.startsWith("/api/")
   )
     return nativeFetch(input, { ...init, redirect: "error" });
+  if (
+    sourceAudio &&
+    renditionQuality === "ard-1080p" &&
+    url.href === `https://api.ardmediathek.de/page-gateway/pages/ard/item/${ardId}?embedded=true`
+  )
+    return Response.json({
+      widgets: [
+        {
+          id: ardId,
+          type: "player_ondemand",
+          blockedByLoginOnly: false,
+          blockedByFsk: false,
+          geoblocked: false,
+          availableTo: "2099-01-01T00:00:00Z",
+          mediaCollection: {
+            embedded: {
+              meta: { ovLanguageCode: "eng" },
+              streams: [
+                {
+                  kind: "main",
+                  media: [
+                    {
+                      url: ardUrl,
+                      mimeType: "video/mp4",
+                      audios: [{ kind: "standard", languageCode: "deu" }],
+                      maxHResolutionPx: 1920,
+                      maxVResolutionPx: 1080,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
   if (
     sourceAudio &&
     url.href ===
@@ -71,6 +109,12 @@ globalThis.fetch = async (input, init) => {
         row.url_video = frenchUrl;
         row.url_video_hd = germanUrl;
         row.url_video_low = "";
+        if (renditionQuality === "ard-1080p") {
+          row.channel = "RBB";
+          row.url_website = `https://www.ardmediathek.de/video/${ardId}`;
+          row.url_video = "";
+          row.url_video_hd = ardUrl;
+        }
       }
       if (matches(row)) rows.push(row);
       const episode = {

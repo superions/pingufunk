@@ -1,8 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { ApiResultItem } from "@/types";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { isProbeableMp4 } from "@/lib/mp4-audio-language";
 import { isArdProgressiveMp4 } from "./ard-source-audio";
 import { enrichSourceAudio, mediaSourceIdentity, verifySourceAudio } from "./source-audio";
+import { generateMovieRssItems } from "./newznab";
+import { decodeMediaExpectations, generateFakeNzb } from "./nzb-release";
+import { parseNzbContent } from "./download";
 
 const id = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString("base64url");
 const urls = ["1080", "720", "360"].map(
@@ -79,6 +83,59 @@ it("revalidates a stored RBB expectation independently of the current producer",
     `https://api.ardmediathek.de/page-gateway/pages/ard/item/${id}?embedded=true`,
     expect.objectContaining({ redirect: "error" })
   );
+});
+
+it("binds RBB German audio and dimensions per rendition through film RSS/NZB and fresh worker lookup", async () => {
+  const fetch = mock();
+  const enriched = (await enrichSourceAudio([item], new HttpRequestBudget())).get(item)!;
+  expect(enriched).toHaveLength(3);
+  expect(fetch).toHaveBeenCalledExactlyOnceWith(
+    `https://api.ardmediathek.de/page-gateway/pages/ard/item/${id}?embedded=true`,
+    expect.objectContaining({ redirect: "error" })
+  );
+  for (const [index, rendition] of enriched.entries()) {
+    expect(rendition).toMatchObject({ audioLanguage: "de", originalVersion: false });
+    const [rss] = generateMovieRssItems(
+      { item: rendition, score: 100, titleMatch: "exact", durationDiff: 0 },
+      {
+        tmdbId: 2147483001,
+        imdbId: null,
+        title: "Synthetic Film",
+        germanTitle: "Synthetic Film",
+        runtime: 10,
+        releaseDate: "2024-01-01",
+      },
+      "best",
+      false
+    );
+    expect(rss.title).toContain(".2024.GERMAN.");
+    expect(rss.title).toContain(index === 2 ? ".UNKNOWN." : `.${dimensions[index][1]}p.WEB.`);
+    expect(rss.link).toBe(urls[index]);
+    const query = new URL(rss.enclosure.url, "http://localhost").searchParams;
+    const expected = decodeMediaExpectations(query.get("encodedExpectations")!);
+    expect(expected).toMatchObject({
+      audio: null,
+      sourceAudio: {
+        provider: "ard_media",
+        videoId: id,
+        language: "de",
+        mediaIdentity: mediaSourceIdentity(urls[index]),
+      },
+      resolution: { width: dimensions[index][0], height: dimensions[index][1] },
+    });
+    expect(
+      parseNzbContent(
+        generateFakeNzb({ title: rss.title, url: urls[index], mediaExpectations: expected })
+      )
+    ).toEqual({ title: rss.title, url: urls[index], mediaExpectations: expected });
+    if (!("sourceAudio" in expected) || !expected.sourceAudio) throw new Error("Missing evidence");
+    await expect(
+      verifySourceAudio(expected.sourceAudio, urls[index], new HttpRequestBudget())
+    ).resolves.toEqual(expected.sourceAudio);
+  }
+  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(item).not.toHaveProperty("audioLanguage");
+  expect(isProbeableMp4(urls[0])).toBe(false);
 });
 
 it.each([

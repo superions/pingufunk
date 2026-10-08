@@ -12,7 +12,7 @@ cleanup() {
   if [[ -n "$QA_DIRECTORY" ]]; then node scripts/arr-test-instances.mjs stop "$QA_DIRECTORY"; fi
 }
 trap cleanup EXIT
-for quality in 720p unknown conflicting; do
+for quality in 720p unknown conflicting ard-1080p; do
   if [[ "$quality" == 720p ]]; then export PINGUFUNK_ARR_QA_TBA=1; else unset PINGUFUNK_ARR_QA_TBA; fi
   export PINGUFUNK_ARR_QA_RENDITION_QUALITY="$quality"
   output="$(node scripts/arr-test-instances.mjs up)"

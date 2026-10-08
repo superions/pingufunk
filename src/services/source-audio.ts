@@ -143,11 +143,15 @@ export async function enrichSourceAudio(
       continue;
     }
     const videoId = arteVideoId(item.url_website);
+    const ardId = ardVideoId(item.url_website);
     const fields = ["url_video_hd", "url_video", "url_video_low"] as const;
     if (
       !fields.some(
         (field) =>
-          item[field] && ((videoId && progressiveUrl(item[field])) || isProbeableMp4(item[field]))
+          item[field] &&
+          ((videoId && progressiveUrl(item[field])) ||
+            (ardId && isArdProgressiveMp4(item[field])) ||
+            isProbeableMp4(item[field]))
       )
     ) {
       renditions.push(item);
@@ -197,11 +201,7 @@ export async function enrichSourceAudio(
             mediaIdentity: mediaSourceIdentity(url),
             language,
           };
-      } else if (
-        ardId &&
-        isProbeableMp4(url) &&
-        new URL(url).hostname === "ctv-videos.daserste.de"
-      ) {
+      } else if (ardId && isArdProgressiveMp4(url)) {
         if (!ard.has(ardId) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
           ard.set(ardId, await getArdMedia(ardId, budget));
