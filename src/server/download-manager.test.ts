@@ -68,7 +68,7 @@ vi.mock("./media-probe", async (importOriginal) => ({
 }));
 import { unknownMediaExpectations } from "@/lib/media-expectations";
 import { mediaSourceIdentity } from "@/services/source-audio";
-import { validateMediaProbe } from "./media-probe";
+import { validateMediaProbe, MediaProbeError } from "./media-probe";
 import type { TransferFailure } from "./download-failure";
 
 const basicFacts = {
@@ -132,6 +132,25 @@ function failedTransfer(): TransferFailure {
   expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(false);
   return JSON.parse(call.data.error.slice("Download failed: ".length));
 }
+
+it("persists the media probe's closed cause through the real worker failure path", async () => {
+  const job = progressiveJob();
+  downloadUpdate.mockImplementation(async ({ data }) => Object.assign(job, data));
+  probeJobMedia.mockRejectedValueOnce(
+    new MediaProbeError("runtime_outside_tolerance", "conflicting")
+  );
+  const { processDownload } = await import("./download-manager");
+  await processDownload(job.id);
+  const failed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "failed")?.[0];
+  expect(job.status).toBe("failed");
+  expect(JSON.parse(failed.data.error.slice("Local media validation failed: ".length))).toEqual({
+    version: 1,
+    stage: "media",
+    reason: "runtime_outside_tolerance",
+    evidence: "conflicting",
+  });
+  expect(failed.data.error).not.toContain(testRoot);
+});
 
 it("classifies a progress DB failure separately and redacts both history and logs", async () => {
   const job = progressiveJob();

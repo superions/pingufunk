@@ -11,6 +11,7 @@ import { selectLanguageVariants } from "@/services/language-editions";
 import { eligibleRenditionItem, selectRenditions } from "@/services/rendition-quality";
 import { createUiNzbDownloads } from "@/services/ui-nzb";
 import type { ApiResultItem, UiNzbDownloads, UiSearchCoverage } from "@/types";
+import { recordDecision, withDecisionDiagnostics } from "@/server/decision-diagnostics";
 
 export interface SearchResult {
   id: string;
@@ -71,13 +72,22 @@ function searchResult(
 }
 
 export async function GET(request: NextRequest) {
+  const { result, report } = await withDecisionDiagnostics(() => handleSearchRequest(request));
+  result.headers.set("X-Pingufunk-Diagnostic-Id", report.correlationId);
+  return result;
+}
+
+async function handleSearchRequest(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const q = params.get("q")?.trim() ?? "";
   const rawLimit = params.get("limit") ?? "50";
   const type = params.get("type");
   const provider = params.get("provider");
   const rawProviders = params.get("providers");
-  if (!q || q.length < 2) return NextResponse.json({ results: [], error: "Query too short" });
+  if (!q || q.length < 2) {
+    recordDecision("request", "request_invalid", "conflicting");
+    return NextResponse.json({ results: [], error: "Query too short" });
+  }
   if (
     q.length > MAX_QUERY_LENGTH ||
     /[\x00-\x1f\x7f]/.test(params.get("q") ?? "") ||
@@ -88,8 +98,10 @@ export async function GET(request: NextRequest) {
     (type !== null && !["all", "movie", "series"].includes(type)) ||
     (provider !== null && !PROVIDERS.includes(provider as SearchProviderId)) ||
     (rawProviders !== null && rawProviders !== "true" && rawProviders !== "false")
-  )
+  ) {
+    recordDecision("request", "request_invalid", "conflicting");
     return NextResponse.json({ results: [], error: "Invalid search parameters" }, { status: 400 });
+  }
 
   try {
     return await withSettingsSnapshot(async () => {
@@ -156,6 +168,7 @@ export async function GET(request: NextRequest) {
       );
     });
   } catch {
+    recordDecision("request", "request_failed", "unavailable");
     return NextResponse.json(
       { results: [], error: "Search temporarily unavailable" },
       { status: 503, headers: { "Cache-Control": "no-store" } }

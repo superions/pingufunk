@@ -15,6 +15,7 @@ import type { ApiResultItem } from "@/types";
 import { resolveArteSeriesEditions } from "./arte-editions";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { providerItemToApiResult } from "@/providers/content-item";
+import { recordDecision } from "@/server/decision-diagnostics";
 
 const MAX_MEDIATHEK_CANDIDATES = 5000;
 const MAX_PENDING_SEARCHES = 128;
@@ -101,7 +102,10 @@ async function queryMediathekCandidateWindow(
   for (let offset = 0; offset < MAX_MEDIATHEK_CANDIDATES; offset += MEDIATHEK_VIEW_MAX_PAGE_SIZE) {
     const pageSize = Math.min(MEDIATHEK_VIEW_MAX_PAGE_SIZE, MAX_MEDIATHEK_CANDIDATES - offset);
     const page = await queryMediathekView(queries, pageSize, { ...options, offset });
-    if (page === null || page.length > pageSize) return null;
+    if (page === null || page.length > pageSize) {
+      recordDecision("catalogue", offset > 0 ? "followup_failed" : "source_failed", "unavailable");
+      return null;
+    }
 
     candidates.push(...page);
     if (page.length < pageSize) return { items: candidates, limited: false };
@@ -211,6 +215,26 @@ export async function queryContentWindow(
       ? await resolveArteSeriesEditions(items, options.arteSeries, options.requestBudget!)
       : items;
     const complete = sources.every((source) => source.state !== "failed") && editions !== null;
+    for (const item of editions ?? [])
+      recordDecision(
+        "language",
+        item.audioLanguage ? "language_verified" : "language_unknown",
+        item.audioLanguage ? "proven" : "missing"
+      );
+    for (const source of sources) {
+      if (source.state === "failed") recordDecision("catalogue", "source_failed", "unavailable");
+      else if (source.state === "complete")
+        recordDecision(
+          "catalogue",
+          source.candidateCount ? "catalogue_candidates" : "catalogue_empty",
+          "proven",
+          source.candidateCount || 1
+        );
+    }
+    if (sources.every((source) => source.state === "disabled"))
+      recordDecision("catalogue", "sources_disabled", "not_required");
+    if (indexed?.limited || (srfEnabled && size > 0 && (swiss?.length ?? 0) >= Math.min(size, 100)))
+      recordDecision("catalogue", "window_limited", "missing");
     return {
       items:
         editions === null

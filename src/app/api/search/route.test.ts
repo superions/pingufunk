@@ -22,6 +22,7 @@ import { queryContent } from "@/services/content-search";
 import { generateGenericRssItems } from "@/services/newznab";
 import { GET as getFakeNzb } from "@/app/api/newznab/fake_nzb_download/route";
 import { parseNzbContent } from "@/services/download";
+import { readDecisionReport } from "@/server/decision-diagnostics";
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 function apiItem(title: string, duration: number) {
@@ -88,6 +89,40 @@ it("reports an upstream failure without exposing its token", async () => {
   const response = await GET(new NextRequest("http://localhost/api/search?q=Documentary"));
   expect(response.status).toBe(502);
   expect(JSON.stringify(await response.json())).not.toContain("private");
+  const report = readDecisionReport(response.headers.get("X-Pingufunk-Diagnostic-Id")!);
+  expect(report?.events).toContainEqual(
+    expect.objectContaining({
+      stage: "catalogue",
+      reason: "source_failed",
+      evidence: "unavailable",
+    })
+  );
+  expect(report?.events.some((entry) => entry.reason === "catalogue_empty")).toBe(false);
+  expect(JSON.stringify(report)).not.toContain("private");
+});
+
+it("distinguishes a confirmed bounded catalogue empty from a failed required later page", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ result: { results: [] } }));
+  const empty = await GET(new NextRequest("http://localhost/api/search?q=SecretQuery"));
+  const emptyReport = readDecisionReport(empty.headers.get("X-Pingufunk-Diagnostic-Id")!);
+  expect(emptyReport?.events).toContainEqual(
+    expect.objectContaining({ reason: "catalogue_empty", evidence: "proven" })
+  );
+  vi.mocked(globalThis.fetch)
+    .mockResolvedValueOnce(
+      Response.json({
+        result: { results: Array.from({ length: 1000 }, (_, i) => apiItem(`Synthetic ${i}`, 120)) },
+      })
+    )
+    .mockResolvedValueOnce(new Response("private token", { status: 401 }));
+  const failed = await GET(new NextRequest("http://localhost/api/search?q=SecretQuery"));
+  expect(failed.status).toBe(502);
+  expect((await failed.json()).results).toEqual([]);
+  const report = readDecisionReport(failed.headers.get("X-Pingufunk-Diagnostic-Id")!);
+  expect(report?.events).toContainEqual(
+    expect.objectContaining({ reason: "followup_failed", evidence: "unavailable" })
+  );
+  expect(JSON.stringify(report)).not.toMatch(/SecretQuery|private|Synthetic/);
 });
 
 it("preserves explicit provider audio in server-authored UI releases", async () => {

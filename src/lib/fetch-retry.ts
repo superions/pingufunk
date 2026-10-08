@@ -1,3 +1,5 @@
+import { recordDecision } from "@/server/decision-diagnostics";
+
 /** Bounded retries for provider HTTP requests; response bodies need their own limit. */
 export interface RetryOptions {
   maxRetries?: number;
@@ -41,7 +43,14 @@ export class HttpRequestBudget {
   }
 
   assertAvailable(): void {
-    if (this.remaining <= 0 || Date.now() >= this.deadlineAt) throw new FetchBudgetError();
+    if (this.remaining <= 0 || Date.now() >= this.deadlineAt) {
+      recordDecision(
+        "request",
+        Date.now() >= this.deadlineAt ? "deadline_exceeded" : "budget_exhausted",
+        "unavailable"
+      );
+      throw new FetchBudgetError();
+    }
   }
 
   takeAttempt(): void {
@@ -110,7 +119,10 @@ export async function fetchWithRetry(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const remaining = deadlineAt - Date.now();
-    if (remaining <= 0 || init.signal?.aborted) throw new FetchBudgetError();
+    if (remaining <= 0 || init.signal?.aborted) {
+      recordDecision("request", "deadline_exceeded", "unavailable");
+      throw new FetchBudgetError();
+    }
     options.requestBudget?.takeAttempt();
     const controller = new AbortController();
     const signal = init.signal
@@ -135,6 +147,7 @@ export async function fetchWithRetry(
       void response.body?.cancel().catch(() => {});
     } catch (error) {
       if (error instanceof FetchBudgetError || init.signal?.aborted || Date.now() >= deadlineAt) {
+        recordDecision("request", "deadline_exceeded", "unavailable");
         throw new FetchBudgetError();
       }
       if (attempt === maxRetries) throw new Error("Provider request failed after retries");

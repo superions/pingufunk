@@ -2338,6 +2338,17 @@ gefunden“ oder vermuteter Ursache. P03.4-Abdeckung bleibt eigenständig.
       Entscheidungen bis tatsächlicher Route/Worker kausal assertiert,
       Timeout/Coverage vom echten Nichtfund unterscheidbar, Redaction-/Overflow-
       Regressionen; bisheriger RSS-/SAB-Fehlervertrag bleibt kompatibel.
+      Entwicklungscheckpoint 08.10.2026: geschlossener Stage-/Reason-/Evidenz-
+      Owner mit AsyncLocalStorage, 128 Collectors/Berichte, 64 Eventkombinationen,
+      fünf Minuten TTL und bounded Counts. Film-/Sonarrmatcher, Quellenabruf,
+      Audio-/Rendition-/MP4- und lokale Probe-/Workerconsumer instrumentiert.
+      Routen liefern nur neue zufällige Antwortkennung, keine XML-/SAB-Umschreibung
+      oder öffentliche Diagnoseliste. Lokale Medienfehler behalten validierte
+      Ursache über Catch/Persistenz, vorhandene Transfercodes weiter genutzt.
+      Kausale Routen-/Matcher-/Worker-, Isolation-/Overflow-/TTL-/Redactiontests
+      und lokale Gates grün; finale Fork-/Backendcontainerabnahme noch offen.
+      Vertrag `docs/decision-diagnostics-contract.md`; UI-/Logs-/Zugriffschutz
+      und Arr-Importdiagnose bleiben vollständig P13.2, Checkbox noch offen.
 - [ ] **P13.2 — Sichere Diagnose in Suche, Downloads und Logs bedienbar machen.**
       Abhängigkeit P13.1. Owner: `/search`, `/movies`, `/shows`, `/downloads`,
       bisheriger `/logs`-Platzhalter und zugehörige API-Owner. Relevante Gründe

@@ -9,6 +9,7 @@ import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import { isProbeableMp4, probeMp4MediaFacts, type Mp4MediaFacts } from "@/lib/mp4-audio-language";
 import { arteVideoId, parseArteVersion, progressiveUrl } from "./arte-editions";
+import { recordDecision, decisionFailure } from "@/server/decision-diagnostics";
 import {
   classifyLanguageEdition,
   selectLanguageVariants,
@@ -35,7 +36,8 @@ export function mediaSourceIdentity(url: string): string {
 }
 
 async function getArteStreams(videoId: string, budget: HttpRequestBudget): Promise<ArteStreams> {
-  if (!/^\d{6}-\d{3}-[AF]$/.test(videoId)) throw new Error("Invalid source identity");
+  if (!/^\d{6}-\d{3}-[AF]$/.test(videoId))
+    throw decisionFailure("identity", "identity_missing", "missing");
   const response = await fetchWithRetry(
     `https://www.arte.tv/hbbtvv2/services/web/index.php/OPA/v3/streams/${videoId}/SHOW/de`,
     { headers: { Accept: "application/json" } },
@@ -47,14 +49,14 @@ async function getArteStreams(videoId: string, budget: HttpRequestBudget): Promi
   }
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
-    throw new Error("Source evidence unavailable");
+    throw decisionFailure("language", "source_failed", "unavailable");
   }
   try {
     return streamsSchema.parse(
       await readBoundedProviderJson(response, budget.deadlineAt, 1024 * 1024)
     ).videoStreams;
   } catch {
-    throw new Error("Source evidence unavailable");
+    throw decisionFailure("language", "source_failed", "unavailable");
   }
 }
 
@@ -83,16 +85,17 @@ export async function verifyArteSourceAudio(
   url: string,
   budget: HttpRequestBudget
 ): Promise<SourceAudioEvidence> {
-  if (expected.provider !== "arte_hbbtv") throw new Error("Source evidence mismatch");
+  if (expected.provider !== "arte_hbbtv")
+    throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   if (!progressiveUrl(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
-    throw new Error("Source evidence mismatch");
+    throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   const edition = arteEdition(
     await getArteStreams(expected.videoId, budget),
     expected.videoId,
     url
   );
   if (!edition || edition.audioLanguage !== expected.language)
-    throw new Error("Source evidence mismatch");
+    throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   return expected;
 }
 
@@ -108,10 +111,10 @@ export async function verifySourceAudio(
     new URL(url).hostname !== "ctv-videos.daserste.de" ||
     mediaSourceIdentity(url) !== expected.mediaIdentity
   )
-    throw new Error("Source evidence mismatch");
+    throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   const edition = ardEdition(await getArdMedia(expected.videoId, budget), url);
   if (!edition || edition.audioLanguage !== expected.language)
-    throw new Error("Source evidence mismatch");
+    throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   return expected;
 }
 
@@ -141,6 +144,7 @@ export async function enrichSourceAudio(
     const renditions: ApiResultItem[] = [];
     output.set(item, renditions);
     if (classifyLanguageEdition(item).audioLanguage) {
+      recordDecision("language", "language_verified", "proven");
       // Earlier verified adapters already bound their audio to these renditions.
       // Do not spend the caller's budget re-proving the same provider response.
       renditions.push(item);
@@ -154,6 +158,7 @@ export async function enrichSourceAudio(
           item[field] && ((videoId && progressiveUrl(item[field])) || isProbeableMp4(item[field]))
       )
     ) {
+      recordDecision("language", "language_unknown", "missing");
       renditions.push(item);
       continue;
     }
@@ -243,6 +248,11 @@ export async function enrichSourceAudio(
         split.audioLanguage = language;
         if (edition) Object.assign(split, edition);
       }
+      recordDecision(
+        "language",
+        language ? "language_verified" : "language_unknown",
+        language ? "proven" : "missing"
+      );
       renditions.push(split);
     }
   }

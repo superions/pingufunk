@@ -1,5 +1,6 @@
 import type { ApiResultItem } from "@/types";
 import { isRenditionAllowed } from "@/lib/stream-url";
+import { recordDecision } from "@/server/decision-diagnostics";
 
 export type QualityPreference = "all" | "best" | "1080p" | "720p" | "480p";
 
@@ -29,8 +30,11 @@ export function renditionDimensions(item: ApiResultItem, url: string) {
         entry.width !== matches[0].width ||
         entry.height !== matches[0].height
     )
-  )
+  ) {
+    recordDecision("rendition", "rendition_unverified", matches.length ? "conflicting" : "missing");
     return null;
+  }
+  recordDecision("rendition", "rendition_verified", "proven");
   return { width: matches[0].width, height: matches[0].height };
 }
 

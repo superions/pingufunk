@@ -3,6 +3,7 @@ import { verifiedDurationCheck } from "@/lib/verified-duration";
 import { getSetting } from "@/lib/settings";
 import { configuredSetting } from "@/lib/settings-schema";
 import type { ApiResultItem, TmdbMovieData } from "@/types";
+import { recordDecision } from "@/server/decision-diagnostics";
 
 export function movieSourceTitle(value: string): { title: string; year: number | null } {
   let title = value.trim();
@@ -78,13 +79,18 @@ export async function matchMovieItems(
     movieData.runtime !== null && movieData.runtime > 0 ? movieData.runtime * 60 : null;
   const results: MovieMatchResult[] = [];
   for (const item of items) {
-    if (!Number.isFinite(item.duration) || item.duration <= 0) continue;
+    if (!Number.isFinite(item.duration) || item.duration <= 0) {
+      recordDecision("runtime", "runtime_invalid", "missing");
+      continue;
+    }
     if (
       ![item.url_video, item.url_video_low, item.url_video_hd].some((url) =>
         isRenditionAllowed(url, hlsEnabled)
       )
-    )
+    ) {
+      recordDecision("rendition", "rendition_unavailable", "unavailable");
       continue;
+    }
     const source = movieSourceTitle(item.title);
     const title = normalizeMovieTitle(source.title);
     const topic = normalizeMovieTitle(item.topic);
@@ -100,7 +106,10 @@ export async function matchMovieItems(
           words.filter((word) => source.has(word)).length >= Math.ceil(words.length / 2)
         );
       });
-    if (!plausible) continue;
+    if (!plausible) {
+      recordDecision("identity", "alias_conflict", "conflicting");
+      continue;
+    }
     const duration = verifiedDurationCheck(item.duration, expected, minDurationSeconds, tolerance);
     const qualifiedShortFilm =
       exact &&
@@ -109,7 +118,10 @@ export async function matchMovieItems(
       Math.abs(source.year - year) <= yearTolerance &&
       duration.expectedVerified &&
       !/\b(?:trailer|teaser|clip|preview|outtakes)\b/i.test(item.title);
-    if (item.duration < minDurationSeconds && !qualifiedShortFilm) continue;
+    if (item.duration < minDurationSeconds && !qualifiedShortFilm) {
+      recordDecision("runtime", "minimum_duration", "conflicting");
+      continue;
+    }
     // Explicitly approved metadata-backed correlation, not a fuzzy score or
     // a request stamp. Unknown runtime/year, conflicting years and clips remain
     // source candidates, including on the exact-title retrieval path.
@@ -121,6 +133,30 @@ export async function matchMovieItems(
       year >= 1800 &&
       (source.year === null || Math.abs(source.year - year) <= yearTolerance) &&
       !/\b(?:trailer|teaser|clip|preview|outtakes)\b/i.test(item.title);
+    recordDecision(
+      "runtime",
+      expected === null
+        ? "runtime_missing"
+        : duration.expectedVerified
+          ? "runtime_verified"
+          : "runtime_outside_tolerance",
+      expected === null ? "missing" : duration.expectedVerified ? "proven" : "conflicting"
+    );
+    recordDecision(
+      "identity",
+      identityVerified
+        ? "identity_verified"
+        : source.year !== null && year !== null && Math.abs(source.year - year) > yearTolerance
+          ? "year_conflict"
+          : !exact
+            ? "alias_conflict"
+            : "identity_missing",
+      identityVerified
+        ? "proven"
+        : source.year !== null && year !== null && Math.abs(source.year - year) > yearTolerance
+          ? "conflicting"
+          : "missing"
+    );
     results.push({
       item,
       score: exact ? 80 : 40,

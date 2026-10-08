@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { matchSonarrEpisodes, sonarrDurationCheck } from "./sonarr-matcher";
 import type { ApiResultItem, TvdbData } from "@/types";
+import { withDecisionDiagnostics } from "@/server/decision-diagnostics";
 
 const show: TvdbData = {
   id: 123,
@@ -31,6 +32,31 @@ const item: ApiResultItem = {
   url_video_low: "",
   url_website: "https://example.invalid/episode",
 };
+
+it("records real alias/coordinate/runtime causes without turning a score into evidence", async () => {
+  const { result, report } = await withDecisionDiagnostics(async () =>
+    matchSonarrEpisodes(
+      show,
+      [
+        { ...item, topic: "Unrelated private series" },
+        { ...item, title: "Missing episode (S01/E03)" },
+        { ...item, duration: 200 },
+        item,
+      ],
+      300,
+      10
+    )
+  );
+  expect(result).toHaveLength(1);
+  for (const reason of [
+    "alias_conflict",
+    "coordinate_conflict",
+    "runtime_outside_tolerance",
+    "identity_verified",
+  ])
+    expect(report.events.some((event) => event.reason === reason)).toBe(true);
+  expect(JSON.stringify(report)).not.toMatch(/Unrelated|Synthetic|example\.invalid/);
+});
 
 describe("supplemental duration policy", () => {
   it.each([108, 120, 132])("accepts the inclusive short-episode boundary %s", (duration) => {

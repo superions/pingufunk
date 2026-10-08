@@ -7,7 +7,9 @@ import {
   type MediaExpectations,
 } from "@/lib/media-expectations";
 import { configuredSetting } from "@/lib/settings-schema";
-import { probeJobMedia } from "./media-probe";
+import { probeJobMedia, MediaProbeError } from "./media-probe";
+import { recordDecision } from "./decision-diagnostics";
+import { parseDecisionEvent } from "@/lib/decision-diagnostics";
 import { downloadHlsStream } from "./ytdlp";
 import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
 import {
@@ -396,6 +398,7 @@ async function processDownload(downloadId: string): Promise<void> {
     );
 
     if (downloadFailure) {
+      recordDecision("transfer", "transfer_failed", "unavailable");
       console.error("[Download] Transfer failure", {
         jobRef: createHash("sha256").update(downloadId).digest("hex").slice(0, 16),
         ...downloadFailure,
@@ -489,7 +492,18 @@ async function processDownload(downloadId: string): Promise<void> {
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB)`
       );
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof MediaProbeError) {
+      // Closed probe facts survive persistence; never copy arbitrary exception messages.
+      const event = parseDecisionEvent({
+        stage: "media",
+        reason: error.reason,
+        evidence: error.evidence,
+        count: 1,
+      });
+      if (event)
+        failureMessage = `Local media validation failed: ${JSON.stringify({ version: 1, stage: event.stage, reason: event.reason, evidence: event.evidence })}`;
+    }
     console.error(`[Download] Error processing download ${downloadId}`);
     await markAsFailed(downloadId, failureMessage);
   } finally {

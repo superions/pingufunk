@@ -13,10 +13,23 @@ import { verifiedDurationCheck } from "@/lib/verified-duration";
 import { type SourceAudioEvidence } from "@/lib/media-expectations";
 import { verifySourceAudio } from "@/services/source-audio";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { recordDecision } from "./decision-diagnostics";
+import {
+  parseDecisionEvent,
+  DecisionFailure,
+  type DecisionReason,
+  type EvidenceStatus,
+} from "@/lib/decision-diagnostics";
 
 export class MediaProbeError extends Error {
-  constructor() {
+  readonly reason: DecisionReason;
+  readonly evidence: EvidenceStatus;
+  constructor(reason: DecisionReason = "media_invalid", evidence: EvidenceStatus = "unavailable") {
     super("Local media validation failed");
+    const event = parseDecisionEvent({ stage: "media", reason, evidence, count: 1 });
+    this.reason = event?.reason ?? "media_invalid";
+    this.evidence = event?.evidence ?? "unavailable";
+    recordDecision("media", this.reason, this.evidence);
   }
 }
 
@@ -78,14 +91,14 @@ export function validateMediaProbe(
   try {
     const probe = probeSchema.parse(value);
     if (!probe.format.format_name.split(",").some((format) => formats.has(format)))
-      throw new MediaProbeError();
+      throw new MediaProbeError("media_invalid", "conflicting");
     const durationSeconds = Number(probe.format.duration);
     if (
       !/^\d+(?:\.\d+)?$/.test(probe.format.duration) ||
       !Number.isFinite(durationSeconds) ||
       durationSeconds <= 0
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("runtime_invalid", "missing");
     const usableCodec = (name: string | undefined) => !!name && !["unknown", "none"].includes(name);
     const video = probe.streams
       .filter(
@@ -113,7 +126,12 @@ export function validateMediaProbe(
           .filter((tag): tag is string => tag !== null)
       ),
     ];
-    const contract = expected === null ? null : parseMediaExpectations(expected);
+    let contract: MediaExpectations | null;
+    try {
+      contract = expected === null ? null : parseMediaExpectations(expected);
+    } catch {
+      throw new MediaProbeError("expectations_invalid", "conflicting");
+    }
     const references = durationExpectations(contract, tolerancePercent);
     if (
       (contract?.version !== 3 &&
@@ -124,9 +142,12 @@ export function validateMediaProbe(
             .accepted
       )
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("runtime_outside_tolerance", "conflicting");
     if (contract?.audio && !audioLanguages.includes(languageTag(contract.audio.language)!))
-      throw new MediaProbeError();
+      throw new MediaProbeError(
+        audioLanguages.length ? "language_conflict" : "language_unknown",
+        audioLanguages.length ? "conflicting" : "missing"
+      );
     const providerExpectation = sourceAudioExpectation(contract);
     if (providerExpectation) {
       if (
@@ -136,11 +157,11 @@ export function validateMediaProbe(
         sourceAudioEvidence.mediaIdentity !== providerExpectation.mediaIdentity ||
         sourceAudioEvidence.language !== providerExpectation.language
       )
-        throw new MediaProbeError();
+        throw new MediaProbeError("source_evidence_mismatch", "missing");
       // Independent provider evidence can fill absent tags, never contradict a
       // known foreign track or relabel the probed track list as German.
       if (audioLanguages.some((language) => language !== languageTag(sourceAudioEvidence.language)))
-        throw new MediaProbeError();
+        throw new MediaProbeError("language_conflict", "conflicting");
     }
     if (
       contract?.resolution &&
@@ -150,7 +171,8 @@ export function validateMediaProbe(
           stream.height === contract.resolution!.height
       )
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("rendition_unverified", "conflicting");
+    recordDecision("media", "media_verified", "proven");
     return {
       durationSeconds,
       video,
@@ -170,8 +192,10 @@ export function validateMediaProbe(
         resolution: contract?.resolution ? "passed" : "unknown",
       },
     };
-  } catch {
-    throw new MediaProbeError();
+  } catch (error) {
+    throw error instanceof MediaProbeError
+      ? error
+      : new MediaProbeError("probe_invalid", "unavailable");
   }
 }
 
@@ -191,7 +215,7 @@ export async function probeJobMedia(
       !path.isAbsolute(jobDirectory) ||
       path.dirname(file) !== directory
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("file_unsafe", "conflicting");
     const [stat, directoryStat, actualFile, actualDirectory] = await Promise.all([
       lstat(file),
       lstat(directory),
@@ -207,14 +231,27 @@ export async function probeJobMedia(
       actualFile !== file ||
       actualDirectory !== directory
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("file_unsafe", "conflicting");
     const binary = getFfprobePath();
-    if (!path.isAbsolute(binary)) throw new MediaProbeError();
+    if (!path.isAbsolute(binary)) throw new MediaProbeError("tool_unavailable", "unavailable");
     const output = await readLocalProbe(binary, file);
     const sourceExpectation = sourceAudioExpectation(expected);
-    const proof = sourceExpectation
-      ? await verifySourceAudio(sourceExpectation, sourceUrl ?? "", new HttpRequestBudget(1))
-      : undefined;
+    let proof: SourceAudioEvidence | undefined;
+    if (sourceExpectation) {
+      try {
+        proof = await verifySourceAudio(
+          sourceExpectation,
+          sourceUrl ?? "",
+          new HttpRequestBudget(1)
+        );
+      } catch (error) {
+        const event = error instanceof DecisionFailure ? error.diagnostic : null;
+        throw new MediaProbeError(
+          event?.reason ?? "source_failed",
+          event?.evidence ?? "unavailable"
+        );
+      }
+    }
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);
     if (
@@ -225,10 +262,12 @@ export async function probeJobMedia(
       after.size !== stat.size ||
       after.mtimeMs !== stat.mtimeMs
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("file_changed", "conflicting");
     return validateMediaProbe(JSON.parse(output), expected, tolerancePercent, proof);
-  } catch {
-    throw new MediaProbeError();
+  } catch (error) {
+    throw error instanceof MediaProbeError
+      ? error
+      : new MediaProbeError("probe_invalid", "unavailable");
   }
 }
 
@@ -284,16 +323,16 @@ function readLocalProbe(binary: string, file: string): Promise<string> {
         child.kill("SIGKILL");
       }
     };
-    const finish = (ok: boolean, terminate = false) => {
+    const finish = (ok: boolean, terminate = false, reason: DecisionReason = "probe_invalid") => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (!ok) {
         if (terminate) killOwnedTree();
-        reject(new MediaProbeError());
+        reject(new MediaProbeError(reason));
       } else resolve(Buffer.concat(chunks).toString("utf8"));
     };
-    const timer = setTimeout(() => finish(false, true), 30_000);
+    const timer = setTimeout(() => finish(false, true, "tool_timeout"), 30_000);
     child.stdout.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > 1024 * 1024 || chunks.length >= 8192) {
@@ -307,7 +346,7 @@ function readLocalProbe(binary: string, file: string): Promise<string> {
       if (chunk.length) hasDiagnostics = true;
       if (bytes > 1024 * 1024) finish(false, true);
     });
-    child.on("error", () => finish(false, true));
+    child.on("error", () => finish(false, true, "tool_unavailable"));
     child.on("close", (code) => finish(code === 0 && !hasDiagnostics && bytes > 0));
   });
 }

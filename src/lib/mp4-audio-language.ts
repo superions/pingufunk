@@ -1,5 +1,6 @@
 import { readBoundedProviderBytes } from "./bounded-provider-json";
 import { FetchBudgetError, fetchWithRetry, type HttpRequestBudget } from "./fetch-retry";
+import { recordDecision } from "@/server/decision-diagnostics";
 
 const MAX_BYTES = 1024 * 1024;
 const hosts = new Set([
@@ -94,7 +95,11 @@ export interface Mp4MediaFacts {
   audioLanguage: string | null;
   videoDimensions: { width: number; height: number } | null;
 }
-const unknownFacts = (): Mp4MediaFacts => ({ audioLanguage: null, videoDimensions: null });
+const unknownFacts = (): Mp4MediaFacts => {
+  recordDecision("language", "language_unknown", "missing");
+  recordDecision("rendition", "rendition_unverified", "missing");
+  return { audioLanguage: null, videoDimensions: null };
+};
 
 /**
  * Four 1-MiB windows, seeking only by bounded, declared ISO-BMFF box sizes.
@@ -271,6 +276,7 @@ export async function probeMp4MediaFacts(
     }
   } catch (error) {
     if (!(error instanceof UnsupportedMetadata)) throw error;
+    recordDecision("media", "probe_unsupported", "missing");
   }
   return unknownFacts();
 }

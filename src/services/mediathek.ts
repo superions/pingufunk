@@ -32,6 +32,13 @@ import {
   parseEpisodeFromTitle,
 } from "./newznab";
 import { matchMovieItems, movieSourceTitle, normalizeMovieTitle } from "./movie-matcher";
+import { recordDecision } from "@/server/decision-diagnostics";
+
+/** A cached feed is not a newly performed match or current asset evidence. */
+function cachedFeed(response: string): string {
+  recordDecision("catalogue", "cached_response", "not_required");
+  return response;
+}
 import { movieSearchTerms } from "./movie-search-terms";
 import { titleSearchTerms } from "@/lib/title-search-terms";
 import { tvSearchQueries, verifiedRuleTopics } from "./tv-search-terms";
@@ -970,7 +977,7 @@ export async function fetchSearchResultsById(
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
     console.log(`[Mediathek] Returning cached response for ${cacheKey}`);
-    return (cached as { response: string }).response;
+    return cachedFeed((cached as { response: string }).response);
   }
 
   const desiredEpisodes = getDesiredEpisodes(tvdbData, context);
@@ -1140,7 +1147,7 @@ export async function fetchSearchResultsByString(
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
-    return (cached as { response: string }).response;
+    return cachedFeed((cached as { response: string }).response);
   }
 
   const apiCacheKey = `mediathekapi_q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
@@ -1238,7 +1245,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && !sonarrUnavailable) {
-    return (cached as { response: string }).response;
+    return cachedFeed((cached as { response: string }).response);
   }
 
   const apiCacheKey = `rss_mediathekview_results_${CONTENT_SEARCH_CACHE_VERSION}_${sourceContext}`;
@@ -1320,7 +1327,7 @@ export async function fetchMovieSearchForRssSync(
   }
   const responseKey = JSON.stringify([key, inventory, limit, offset, quality, minimum, hlsEnabled]);
   const response = mediathekCache.get(responseKey);
-  if (response && "response" in response) return response.response as string;
+  if (response && "response" in response) return cachedFeed(response.response as string);
   const eligible = sources.filter(
     (item) => !SKIP_KEYWORDS.some((word) => item.title.includes(word))
   );
@@ -1419,7 +1426,7 @@ export async function fetchMovieSearchResults(
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
     console.log(`[Mediathek] Returning cached movie response for ${cacheKey}`);
-    return (cached as { response: string }).response;
+    return cachedFeed((cached as { response: string }).response);
   }
 
   // Search by German title and original title in parallel
@@ -1552,7 +1559,7 @@ export async function fetchMovieSearchByQuery(
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
     console.log(`[Mediathek] Returning cached movie query response for ${cacheKey}`);
-    return (cached as { response: string }).response;
+    return cachedFeed((cached as { response: string }).response);
   }
 
   // Search Mediathek by query (without year)

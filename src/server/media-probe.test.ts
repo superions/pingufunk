@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { unknownMediaExpectations, unknownJobMediaExpectations } from "@/lib/media-expectations";
-import { validateMediaProbe } from "./media-probe";
+import { validateMediaProbe, MediaProbeError } from "./media-probe";
+import { withDecisionDiagnostics } from "./decision-diagnostics";
 import { mediaSourceIdentity } from "@/services/source-audio";
 
 interface TestStream {
@@ -25,6 +26,32 @@ const media = (): { format: { format_name: string; duration: string }; streams: 
     },
     { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 2 },
   ],
+});
+
+it("preserves a closed causal media reason instead of flattening it in the exception boundary", async () => {
+  const { report } = await withDecisionDiagnostics(async () => {
+    try {
+      validateMediaProbe(
+        media(),
+        { ...unknownMediaExpectations(), audio: { language: "de", provenance: "provider_audio" } },
+        10
+      );
+      throw new Error("must fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MediaProbeError);
+      expect((error as MediaProbeError).reason).toBe("language_unknown");
+      expect((error as Error).message).toBe("Local media validation failed");
+    }
+  });
+  expect(report.events).toContainEqual({
+    stage: "media",
+    reason: "language_unknown",
+    evidence: "missing",
+    count: 1,
+  });
+  const injected = new MediaProbeError("https://secret.invalid/token" as never, "private" as never);
+  expect(injected.reason).toBe("media_invalid");
+  expect(JSON.stringify(injected)).not.toMatch(/secret|token|private/);
 });
 
 it("checks both frozen v3 references independently and ignores later GUI/legacy tolerance", () => {

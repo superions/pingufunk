@@ -1900,3 +1900,35 @@ Allowlist wurde gezielt ergänzt, nicht die private Script-/Datenabschirmung
 aufgehoben. Keine Containerabnahme aus diesem fehlgeschlagenen Lauf behauptet.
 Finale lokale **1141 Tests**, Lint, Typecheck, Formatcheck und Diffcheck grün;
 Productionbuild für den unveränderten Produktquellstand wiederverwendet.
+
+## Implementierungsreview P13.1 — kausale geschlossene Diagnose
+
+Entwicklungscheckpoint 08.10.2026, `codex/decision-evidence-contract` nach
+P12/P14.1/P15.3-Produktcheckpoint. Upstream-main
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49` anhand tatsächlichem Movie-/Workerowner
+erneut geprüft: kein entsprechender geschlossener Diagnosevertrag vorhanden.
+Keine Main-/Produktions-/Upstreamänderung, kein Imagepublish.
+
+Vollständiger betroffener Pfad durch den Implementierer reviewt: GUI-/Indexer-
+Requestscope → Quellen-/Folgeseiten-/Budgetentscheidungen → Movie-/Sonarrmatcher
+→ Sprach-/Rendition-/MP4-Beleg → Probeerror → Workerfailure-Write. Positive
+Belege bleiben getrennt von Scores und fehlenden Facts. Ein Medienfehler wird
+erneut vor Persistenz validiert; rohe Errorobjekte bleiben außen. Bestehende
+Transferdiagnostik und sichere Quellfehlermessages bleiben kompatibel.
+
+Nachreview behoben: bislang verlorene Probeursache, gespeicherte Berichtobjekte
+gegen Fremdmutation, Late-Tasks nach Scopeabschluss, begrenzte parallele
+Collectorzahl, TTL-/Kapazitäts-/Eventoverflow, „complete“ als missverständliches
+Berichtsfeld (jetzt `recorded`, kein Source-/Match-Erfolg), cached RSS ohne
+behauptete neue Belegprüfung. Mehrere Metadatenvergleiche sind Ownerprüfungen,
+keine deduplizierte Trefferzählung. Header bleibt neue zufällige Kennung,
+XML/Status/IDs/GUIDs unverändert; Prowlarr-Headerweiterleitung nicht behauptet.
+
+Neue Routen-/Matcher-/Probe-/Workerregressionen schützen die wirkliche Ursache
+und den Consumer; synthetische Exception-/URL-/Pfadinjektionen werden verworfen.
+Kein öffentlicher Reader oder Dockerlogzugriff. Die alten freien Logs sind
+nicht pauschal behoben; P13.2 besitzt deren Bereinigung, tatsächlichen
+Zugriffschutz, GUI und separat belegten Arr-Import-/Blockstatus.
+Fork-/Backend-/Containerabnahme bis zu neuen erfolgreichen Läufen offen.
+Vertrag [Entscheidungsdiagnose](decision-diagnostics-contract.md); kein
+unabhängiger Peerreview und keine Sprach-/Worker-/Gesamtvollabnahme.

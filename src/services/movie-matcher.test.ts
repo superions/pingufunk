@@ -7,8 +7,33 @@ vi.mock("@/lib/settings", () => ({
 
 import { matchMovieItems } from "./movie-matcher";
 import { getSetting } from "@/lib/settings";
+import { withDecisionDiagnostics } from "@/server/decision-diagnostics";
 
 beforeEach(() => vi.mocked(getSetting).mockResolvedValue(null));
+
+it("explains canonical year/runtime rejection separately from a plausible source candidate", async () => {
+  const { result, report } = await withDecisionDiagnostics(() =>
+    matchMovieItems(
+      [
+        { ...makeItem(2700, "year"), title: "Documentary (2020)" },
+        makeItem(5400, "long"),
+        { ...makeItem(2700, "unrelated"), title: "Foreign film", topic: "Foreign" },
+        makeItem(2700, "verified"),
+      ],
+      movie,
+      300
+    )
+  );
+  expect(result.filter((match) => match.identityVerified)).toHaveLength(1);
+  for (const reason of [
+    "year_conflict",
+    "runtime_outside_tolerance",
+    "alias_conflict",
+    "identity_verified",
+  ])
+    expect(report.events.some((event) => event.reason === reason)).toBe(true);
+  expect(JSON.stringify(report)).not.toMatch(/Documentary|Foreign|example\.com|tt0000028/);
+});
 
 const movie: TmdbMovieData = {
   tmdbId: 28,
