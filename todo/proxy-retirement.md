@@ -353,9 +353,15 @@ B05/B07, A2/A3, R4.
       neuen positiven Regressionen scheitern am unveränderten alten Owner.
       Main-Fix `9c52fff`, schemafreier Rückport `23b15e0`, kompatibler
       Worker-Rückfallstand `ba2e9f9`; alle drei Fork-/Containerketten grün.
-      Produktivumschaltung noch nicht ausgeführt: der vorgeschriebene frische
-      Trivy-DB-Gate ist wegen abgelaufener offizieller DB-Veröffentlichungen
-      blockiert. Kein Sicherheitsbypass. Allgemeine P03.4-Abdeckung bleibt offen.
+      Gezielten Rückport produktiv abgenommen: schreibgeschützter Start,
+      PostgreSQL-/Daten-/Datei-/Consumervergleich, native Deutsch-/1080p- und
+      720p-Akzeptanz via Prowlarr und anschließender Schreibbetrieb bestanden.
+      Vollständige Imageprüfungen mit ausdrücklich genehmigter, befristeter
+      Ausnahme ausschließlich für die veraltete offizielle Trivy-DB; kein
+      normaler Frische-Gate-Pass, CVE-Ignore oder Abschwächen der übrigen Gates.
+      Zusätzlicher Controller-/Imagebefund privat dokumentiert und separat
+      entscheidungsbedürftig. Kein neuer Dateiimport behauptet;
+      allgemeine P03.4-Abdeckung bleibt offen.
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe

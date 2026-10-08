@@ -2372,8 +2372,8 @@ genehmigte CDN-Hotfix wird für die vorhandene Produktionsserie zurückportiert,
 nicht mit diesem Architektur-/Schemarollout vermischt. Ein Rückfallbuild muss
 die neue RBB-Worker-Evidenz verstehen und frisch gescannt sein; der alte
 CDN-ausschließende Worker ist nach neuen RBB-Jobs kein sicherer Rückweg.
-Fork-/Containernachweise und Betriebsabnahme bleiben bis zur realen Ausführung
-offen. Allgemeine P03.4-Abdeckung wird mit diesem Einzelfix nicht geschlossen.
+Fork-/Containernachweise und Betriebsabnahme folgen im Abnahmenachtrag.
+Allgemeine P03.4-Abdeckung wird mit diesem Einzelfix nicht geschlossen.
 
 Abnahmenachtrag desselben Auftrags: Main-Fix `9c52fff` mit
 [CI](https://github.com/superions/pingufunk/actions/runs/37777023312) und
@@ -2395,14 +2395,33 @@ Der Gegencheck des alten `source-audio.ts` zeigt genau den fehlenden Producer-
 und Workerpfad; Wiederherstellung geprüft, keine Änderung am veröffentlichten
 Altstand. Review durch Implementierer, kein unabhängiger Peerreview behauptet.
 
-Beide Linux/amd64-Builds sind aus committed Git-Archiven vorbereitet, jedoch
-nicht produktiv gestartet. Der vorgeschriebene Imagegate stoppt an der
+Beide Linux/amd64-Builds wurden aus committed Git-Archiven vorbereitet. Der
+vorgeschriebene Imagegate stoppte zunächst an der
 abgelaufenen offiziellen Trivy-DB. Frische isolierte Direktabrufe bei GHCR,
 ECR und Docker Hub ergaben denselben veralteten Stand. Die aktuellen
 offiziellen Trivy-DB-Builds scheiterten nach der DB-Erzeugung beim Registrylogin,
-ohne veröffentlichtes DB-Artefakt; der beobachtete Folgebuild war noch offen.
-Keine Frische-/Zeitstempelmanipulation, kein CVE-Ignore oder anderer Bypass.
-Produktion, PostgreSQL-Schema, Bibliothek und Consumerprofile unverändert;
-Backup und operative Nachweise ausschließlich im privaten Runbook. Rollout
-bleibt trotz ausdrücklicher Nutzerfreigabe bis zum bestandenen Sicherheitsgate
-ausstehend, nicht als erledigt markieren.
+ohne veröffentlichtes DB-Artefakt. Dies war der zunächst gemeldete Blocker.
+
+Nach ausdrücklich bestätigter Risikoentscheidung wurde ausschließlich die
+DB-Frische für diesen Rollout befristet ausgenommen: unveränderter offizieller
+DB-Inhalt und Metadaten, höchstens 36 Stunden alt, feste zwei Archive/Image-IDs,
+Integrität und OS-/Anwendungspaketabdeckung vor/nach dem vollständigen Scan,
+keine HIGH/CRITICAL-Befunde im akzeptierten DB-Stand. Der globale Gate blieb
+unverändert; kein CVE-Ignore, Scanüberspringen oder vorgetäuschter Frischepass.
+Neue Schwachstellen nach diesem DB-Stand sind damit ausdrücklich nicht bewertet.
+
+Rückport `23b15e0` produktiv abgenommen: tatsächlicher gesunder Image-/Revisions-
+Nachweis, zuerst schreibgeschützter Start, unveränderter PostgreSQL-Datenbestand,
+Schema-/Migrations-/Schreibcheckpoint sowie Dateien und Consumerkonfiguration.
+Native Radarr-Suche über die bestehende Prowlarr-Route akzeptiert belegtes
+Deutsch/WEBDL-1080p und WEBDL-720p ohne Ablehnung. Niedrige unbekannte Qualität
+bleibt wahrheitsgemäß unbekannt. Schreibbetrieb anschließend wieder aktiviert;
+ein Worker, Queue leer, Health/API geprüft. Kein neuer Grab oder Medienimport,
+keine DB-Migration und keine Vermischung mit dem Architekturstand auf Main.
+Produktgates wurden ohne neue Produktinputs wiederverwendet, nicht erneut
+ausgeführt. Sicherung, kompatibler Rückfall und volle operative Belege liegen
+ausschließlich im privaten Runbook.
+
+Ein zusätzlicher nativer Controller-/Mutable-Tag-Befund ist dort separat offen
+und dem Nutzer gemeldet. Die Abnahme des Pingufunk-Hotfixes ist keine allgemeine
+Sicherheitsabnahme aller laufenden Dienste; allgemeine P03.4 bleibt offen.
