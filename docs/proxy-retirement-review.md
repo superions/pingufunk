@@ -2227,3 +2227,29 @@ ausgegeben. Desktop-/Readback-Evidenz von P13.2/P15.4 bleibt gültig, keine neue
 sichtbare Änderung in der Workerkorrektur. Die drei Ownerpunkte sind geschlossen;
 P16 und unabhängige P03.4-Abdeckung bleiben getrennt. Keine Produktion,
 Mainintegration, Publikation oder unabhängige Peerreview behauptet.
+
+### Letzte P16.1-Extraktion — Downloadowner
+
+Nach tatsächlicher P15.1-Abnahme: `download-transfer.ts` besitzt den bestehenden
+exklusiven Byte-/Dateifinish-Transfer samt geschlossenem Fehlervertrag und
+60s-Inaktivitätsgrenze; dies ist keine Medien- oder Importbestätigung.
+`download-completion.ts` besitzt die sichere Veröffentlichung in den eigenen
+Jobordner und den einzigen Probe→reguläre Datei→gefenceten Completionwrite.
+`download-manager.ts` bleibt Scheduler/HLS-/Muxkoordinator sowie Failure-
+Reconciliation; Prozessslot und DB-Lease bleiben ihre bestehenden Besitzer.
+Keine neue Persistenz, Public-API, Kategorie, Pfad-/GUID-/Versionssemantik oder
+Parallelität. Alle 14 ursprünglichen Funktionen zusätzlich als exakt ein Owner
+mit identischen ASTnormalisierten Bodies verglichen; kein Ersatz für Verhalten.
+
+Vollständiger Call-/Read-/Writepfad erneut durch Implementierer geprüft:
+direkter/HLS-/Muxabschluss benutzt denselben Mediaowner, Abortsignal und
+Lease bleiben durchgehend, Fehler löschen ausschließlich eigene unvollständige
+Dateien, unbekannte Commitbestätigung wird lesend reconciliert. Aussage über
+positive Sourcecache-Reuse und die inzwischen behobene historische Queue-
+Unsichtbarkeit im Inaktivitätskommentar bereinigt. 143 fokussierte Tests für
+Transfer/Files/EXDEV/HLS/Probe/Mux sowie Suchconsumer grün. Abschließende reguläre
+Gates ebenfalls erfolgreich: 1303 reguläre Tests, 21 bewusst separate
+Backendfälle im dedizierten Gate; Lint/Typecheck/Formatcheck/Productionbuild und
+Diffcheck grün. Die 14 bestehenden Tracingwarnungen bleiben, keine neuen
+Dependencies oder Schemaänderungen. Native kumulative Abnahme dieses letzten
+Extraktionsstands noch ausstehend; P16.1 bleibt offen.

@@ -117,7 +117,7 @@ export async function queryTvSearchCandidates(
   const candidateQueries = getTvSearchCandidateQueries(context);
   if (candidateQueries.length === 0) return [];
 
-  // Each provider query has its own source cap. Newznab total below describes
+  // Each provider query has its own source cap. The Newznab total describes
   // the filtered union, not the source's full catalog.
   const candidates = await Promise.all(
     candidateQueries.map((query) =>
@@ -135,6 +135,6 @@ export async function queryTvSearchCandidates(
     if (!uniqueCandidates.has(identity)) uniqueCandidates.set(identity, item);
   }
 
-  // Cache only source rows: ARTE ownership depends on the current rule catalogue.
+  // Return source rows only: ARTE ownership depends on the current rule catalogue.
   return [...uniqueCandidates.values()];
 }

@@ -2765,3 +2765,14 @@ leichter überprüfbare künftige Upstreamübernahmen.
       unter echter disposable SQLite-Sperre geprüft. Keine neuen Jobs/externer
       Providerzugriff. 1303 reguläre Tests/übrige Gates grün; Transfer/Completion-
       Extraktion und finale Containerabnahme bleiben offen, Checkbox unverändert.
+      Zweiter Entwicklungscheckpoint nach nativer P15.1-Abnahme:
+      `download-transfer.ts` für exklusive Bytes/Finish/geschlossene Fehler,
+      `download-completion.ts` für Ownjob-Veröffentlichung und gefenceten
+      Probe-/Dateiabschluss. Manager behält Scheduling, HLS/Muxkoordination und
+      Failure-Reconciliation; 14 Functionbodies identisch und genau einem Owner
+      zugeordnet. Vollständiger Call-/Read-/Writepfad erneut geprüft, keine neue
+      DDL/API/Versions-/Pathsemantik; obsolete Inaktivitäts-/Cachekommentare
+      korrigiert. 143 fokussierte und 1303 reguläre Tests, Lint/Typecheck/Format/
+      Productionbuild/Diffcheck grün. 21 separate Backendfälle laufen im eigenen
+      PG-Gate, nicht als lokal ausgeführt gezählt. Finale Fork-/Containerkette
+      dieses Extraktionsstands steht noch aus; Checkbox bleibt offen.

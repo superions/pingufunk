@@ -2,14 +2,9 @@ import { prisma } from "@/lib/db";
 import { DOWNLOAD_CONCURRENCY, getDownloadWorkerState } from "./download-worker-state";
 import { acquireWorkerLease, WorkerOwnershipError, type WorkerLease } from "./worker-lease";
 import { assertWritesEnabled } from "@/lib/write-gate";
-import { getSetting, isMkvConversionEnabled } from "@/lib/settings";
-import {
-  readPersistedMediaExpectations,
-  sourceAudioExpectation,
-  type MediaExpectations,
-} from "@/lib/media-expectations";
-import { configuredSetting } from "@/lib/settings-schema";
-import { probeJobMedia, MediaProbeError } from "./media-probe";
+import { isMkvConversionEnabled } from "@/lib/settings";
+import { readPersistedMediaExpectations } from "@/lib/media-expectations";
+import { MediaProbeError } from "./media-probe";
 import { recordDecision } from "./decision-diagnostics";
 import { parseDecisionEvent } from "@/lib/decision-diagnostics";
 import { downloadHlsStream } from "./ytdlp";
@@ -25,15 +20,11 @@ import {
   safeReleaseName,
 } from "@/lib/download-paths";
 import * as fs from "fs/promises";
-import { constants, createWriteStream } from "fs";
 import { createHash } from "node:crypto";
 import * as path from "path";
-import {
-  safeTransferErrorCode,
-  transferFailureMessage,
-  type TransferFailure,
-  type TransferPhase,
-} from "./download-failure";
+import { transferFailureMessage } from "./download-failure";
+import { completeValidatedDownload, moveIntoJobDir } from "./download-completion";
+import { downloadFile } from "./download-transfer";
 
 async function getDownloadTempPath(): Promise<string> {
   const basePath = await getDownloadBasePath();
@@ -183,111 +174,6 @@ export function installWorkerShutdownHandlers(): void {
           process.exit(1);
         });
     });
-}
-
-/** All transfer/mux paths converge here before exposing import-ready history. */
-async function completeValidatedDownload(
-  id: string,
-  filePath: string,
-  jobDirectory: string,
-  expectations: MediaExpectations | null,
-  sourceUrl: string,
-  lease: WorkerLease
-): Promise<void> {
-  // Frozen v3 references never re-read current GUI policy. The dynamic Sonarr
-  // tolerance remains only for shipped unversioned/v1/v2 compatibility.
-  const tolerance =
-    expectations?.version === 3
-      ? 0
-      : Number(
-          configuredSetting(
-            "matching.sonarr.tolerancePercent",
-            await getSetting("matching.sonarr.tolerancePercent")
-          )
-        );
-  const facts = sourceAudioExpectation(expectations)
-    ? await probeJobMedia(filePath, jobDirectory, expectations, tolerance, sourceUrl, lease.signal)
-    : await probeJobMedia(filePath, jobDirectory, expectations, tolerance, undefined, lease.signal);
-  lease.checkTransfer();
-  const stats = await fs.lstat(filePath);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)
-    throw new Error("Invalid completed media file");
-  // A statement timeout must not leave an unacknowledged autocommit write queued
-  // on a suspended connection. Commit only after the verified write returned.
-  // A lost COMMIT acknowledgement can still be ambiguous; reconcile by reading
-  // the durable row on the next wakeup, never by redownloading or provider fallback.
-  await lease.mutate(async (tx) => {
-    lease.checkTransfer();
-    await tx.download.update({
-      where: { id },
-      data: {
-        status: "completed",
-        progress: 100,
-        size: stats.size,
-        filePath,
-        completedAt: new Date(),
-        mediaValidation: JSON.stringify({ version: expectations?.version ?? 1, ...facts }),
-      },
-    });
-  });
-}
-
-/**
- * Move a finished file into its private job folder.
- *
- * The folder was created when the download started, but *arr apps remove the
- * imported file from the category folder while later downloads are still
- * running, and delete the folder once it is empty -- so it is re-created
- * right before the move. That still leaves a moment between mkdir and link;
- * if an import deletes the folder in exactly that instant, the ENOENT is
- * answered with one more re-create and retry. A missing SOURCE file also
- * surfaces as ENOENT and fails the retry identically, which is correct.
- */
-async function moveIntoJobDir(
-  sourcePath: string,
-  targetPath: string,
-  tempJobDir: string,
-  basePath: string,
-  categoryDir: string,
-  jobDir: string
-): Promise<void> {
-  if (path.dirname(path.resolve(sourcePath)) !== path.resolve(tempJobDir)) {
-    throw new Error("Download result is outside its temporary job directory");
-  }
-  const sourceStat = await fs.lstat(sourcePath);
-  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
-    throw new Error("Download result is not a regular job file");
-  }
-  const ensureTarget = async () => {
-    await ensureOwnedDirectory(basePath, categoryDir);
-    await ensureOwnedDirectory(categoryDir, jobDir);
-  };
-  await ensureTarget();
-  const move = async () => {
-    try {
-      // link creates the target without replacing an existing file or symlink.
-      await fs.link(sourcePath, targetPath);
-    } catch (error) {
-      // Cross-device moves and filesystems without hard-link support still
-      // create a fresh target exclusively before removing the source.
-      if (
-        !["EXDEV", "EPERM", "EOPNOTSUPP", "ENOTSUP"].includes(
-          (error as NodeJS.ErrnoException).code ?? ""
-        )
-      ) {
-        throw error;
-      }
-      await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
-    }
-    await fs.unlink(sourcePath);
-  };
-  try {
-    await move();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await ensureTarget();
-    await move();
-  }
 }
 
 async function processDownload(downloadId: string): Promise<void> {
@@ -634,210 +520,6 @@ async function markAsFailed(downloadId: string, error: string, lease: WorkerLeas
     })
   );
   runtime.pendingFailures.delete(downloadId);
-}
-
-// CDN streams (confirmed live: a 3sat direct-download URL) can stop sending
-// data mid-transfer without closing the connection or erroring - fetch()'s
-// reader.read() then just hangs forever, since fetch has no built-in
-// stall/read timeout. That leaves a download stuck at whatever percent it
-// reached, with no error, no retry, and nothing for Radarr/Sonarr to act on
-// even once they can see the queue (see formatSabnzbdTimeleft's doc comment
-// for the separate bug that hid this from them entirely). Abort if no data
-// arrives for this long.
-const STALL_TIMEOUT_MS = 60_000;
-
-/** Null confirms byte transfer and file finish, not media validation. Failures
- * retain only the closed diagnostic contract; raw exceptions never escape. */
-async function downloadFile(
-  url: string,
-  destPath: string,
-  onProgress?: (
-    percent: number,
-    downloadedBytes: number,
-    totalBytes: number,
-    speed: number
-  ) => Promise<void>,
-  parentSignal?: AbortSignal
-): Promise<TransferFailure | null> {
-  const abortController = new AbortController();
-  const abort = () => abortController.abort();
-  parentSignal?.addEventListener("abort", abort, { once: true });
-  if (parentSignal?.aborted) abort();
-  let fileStream: ReturnType<typeof createWriteStream> | undefined;
-  let fileCreated = false;
-  let completed = false;
-  const startedAt = Date.now();
-  let phase: TransferPhase = "request";
-  let failure: TransferFailure | null = null;
-  let fileError: unknown;
-  let fileErrorPhase: TransferPhase = "file_open";
-  let timedOut = false;
-  let receivedBytes = 0;
-  let downloadedBytes = 0;
-  let expectedBytes: number | null = null;
-  let httpStatus: number | null = null;
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-  const fail = (reason: TransferFailure["reason"], error?: unknown): void => {
-    // File errors abort an outstanding network read too. Keep their original
-    // phase/code rather than blaming the resulting fetch AbortError.
-    failure = {
-      version: 1,
-      phase: fileError ? fileErrorPhase : phase,
-      reason: timedOut && !fileError ? "inactivity_timeout" : reason,
-      code: safeTransferErrorCode(fileError ?? error),
-      receivedBytes,
-      writtenBytes: downloadedBytes,
-      expectedBytes,
-      httpStatus,
-      elapsedMs: Math.max(0, Date.now() - startedAt),
-    };
-  };
-  let stallTimer: ReturnType<typeof setTimeout> | undefined;
-  const resetStallTimer = () => {
-    // This existing timer also runs during writes/progress persistence. Record
-    // the phase, not an unproven claim that the network itself stalled.
-    if (stallTimer) clearTimeout(stallTimer);
-    stallTimer = setTimeout(() => {
-      timedOut = true;
-      abortController.abort();
-    }, STALL_TIMEOUT_MS);
-  };
-
-  try {
-    abortController.signal.throwIfAborted();
-    resetStallTimer();
-    const response = await fetch(url, { redirect: "error", signal: abortController.signal });
-    phase = "response";
-    httpStatus = response.status;
-
-    if (!response.ok || !response.body) {
-      fail(response.ok ? "missing_body" : "http_status");
-      return failure;
-    }
-
-    const lengthHeader = response.headers.get("content-length");
-    const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
-    // Fetch may decode an encoded body: its wire Content-Length is not the
-    // resulting file length. Compare only an unencoded, fully valid length.
-    const reliableLength = lengthHeader !== null && (!encoding || encoding === "identity");
-    if (
-      reliableLength &&
-      (!/^\d+$/.test(lengthHeader) || !Number.isSafeInteger(Number(lengthHeader)))
-    ) {
-      fail("invalid_length");
-      return failure;
-    }
-    const contentLength = reliableLength ? Number(lengthHeader) : 0;
-    expectedBytes = reliableLength ? contentLength : null;
-    phase = "file_open";
-    fileStream = createWriteStream(destPath, { flags: "wx" });
-    fileStream.once("open", () => {
-      fileCreated = true;
-    });
-    fileStream.on("error", (error) => {
-      fileError = error;
-      fileErrorPhase = fileCreated
-        ? phase === "file_finish"
-          ? "file_finish"
-          : "file_write"
-        : "file_open";
-      abortController.abort();
-    });
-    await new Promise<void>((resolve, reject) => {
-      fileStream!.once("open", () => resolve());
-      fileStream!.once("error", reject);
-    });
-
-    reader = response.body.getReader();
-    let lastProgressUpdate = 0;
-    let lastSpeedCheck = Date.now();
-    let lastSpeedBytes = 0;
-    let currentSpeed = 0;
-
-    while (true) {
-      phase = "body_read";
-      const { done, value } = await reader.read();
-      abortController.signal.throwIfAborted();
-      resetStallTimer();
-
-      if (done) {
-        break;
-      }
-      receivedBytes += value.length;
-      if (reliableLength && receivedBytes > contentLength) {
-        fail("length_overflow");
-        return failure;
-      }
-
-      phase = "file_write";
-      await new Promise<void>((resolve, reject) => {
-        fileStream!.write(Buffer.from(value), (error) => (error ? reject(error) : resolve()));
-      });
-      downloadedBytes += value.length;
-
-      // Calculate speed every second
-      const now = Date.now();
-      const timeDiff = now - lastSpeedCheck;
-      if (timeDiff >= 1000) {
-        const bytesDiff = downloadedBytes - lastSpeedBytes;
-        currentSpeed = Math.round(bytesDiff / (timeDiff / 1000));
-        lastSpeedCheck = now;
-        lastSpeedBytes = downloadedBytes;
-      }
-
-      // Update progress (throttled to every 1%)
-      if (contentLength > 0 && onProgress) {
-        const percent = Math.floor((downloadedBytes / contentLength) * 100);
-        if (percent > lastProgressUpdate) {
-          lastProgressUpdate = percent;
-          phase = "progress";
-          await onProgress(percent, downloadedBytes, contentLength, currentSpeed);
-          if (timedOut) {
-            fail("inactivity_timeout");
-            return failure;
-          }
-        }
-      }
-    }
-
-    if (reliableLength && downloadedBytes !== contentLength) {
-      fail("length_mismatch");
-      return failure;
-    }
-
-    phase = "file_finish";
-    completed = await new Promise<boolean>((resolve) => {
-      fileStream!.once("finish", () => resolve(true));
-      fileStream!.once("error", () => {
-        resolve(false);
-      });
-      fileStream!.end();
-    });
-    if (!completed) fail("exception", fileError);
-    return failure;
-  } catch (error) {
-    fail("exception", error);
-    return failure;
-  } finally {
-    clearTimeout(stallTimer);
-    parentSignal?.removeEventListener("abort", abort);
-    reader?.releaseLock();
-    if (!completed) {
-      abortController.abort();
-      if (fileStream) {
-        await new Promise<void>((resolve) => {
-          if (fileStream!.closed) return resolve();
-          fileStream!.once("close", resolve);
-          fileStream!.destroy();
-        });
-        if (fileCreated) {
-          await fs.unlink(destPath).catch((error: unknown) => {
-            if (failure) failure.cleanupCode = safeTransferErrorCode(error);
-          });
-        }
-      }
-    }
-  }
 }
 
 // Export for use in API routes
