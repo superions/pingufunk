@@ -25,6 +25,13 @@ auch bei parallelen Aufrufen. Nur ein bewiesener Unique-Konflikt erlaubt
 anschließend das Lesen der vorhandenen Bestätigung; ungewisse Transaktionen
 werden niemals blind wiederholt. Nur eine neue Einreihung stößt den Worker an.
 
+SQLite-Aufträge innerhalb eines Prozesses erhalten einen seriellen Schreibzugang
+(maximal 64 Wartende, drei Sekunden Admissiondeadline). Ein vor Admission
+abgelaufener Aufruf startet auch später keine Mutation. Nach Admission wird kein
+Readtimeout über die Transaktion gelegt. Diese Begrenzung ist keine globale
+Idempotenz oder Retrylogik: DB-Receipt und atomarer Unique-Vertrag bleiben die
+Autorität, auch über Prozesse hinweg; unbekannter Commit/BUSY ergibt einen Fehler.
+
 Die Bestätigung hat absichtlich keinen FK/Cascade zum Job. Ein ausdrücklicher
 History-Delete oder Retry kann dessen alten Datensatz entfernen; ein verlorener
 Enqueue-Response darf danach trotzdem keinen zweiten Transfer verursachen.

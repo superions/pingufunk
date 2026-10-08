@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { prisma } from "@/lib/db";
+import { databaseProvider, prisma } from "@/lib/db";
+import { serialSqliteEnqueue } from "@/lib/serial-enqueue";
 import { assertWritesEnabled } from "@/lib/write-gate";
 import {
   ENQUEUE_KEY_RETENTION_MS,
@@ -30,6 +31,19 @@ function confirmed(row: IntentRow, payloadHash: string, now: Date): { id: string
 
 /** Atomic receipt/job commit, never retrying after an uncertain transaction. */
 export async function createEnqueueIntent(
+  data: EnqueuePayload,
+  rawKey: string
+): Promise<{ id: string; created: boolean }> {
+  assertWritesEnabled();
+  // SQLite has one writer. Admit local requests before entering a transaction,
+  // never retry a BUSY/uncertain commit. The durable unique receipt remains the
+  // cross-process authority; native unkeyed clients keep their own contract.
+  return databaseProvider === "sqlite"
+    ? serialSqliteEnqueue(() => commitEnqueueIntent(data, rawKey))
+    : commitEnqueueIntent(data, rawKey);
+}
+
+async function commitEnqueueIntent(
   data: EnqueuePayload,
   rawKey: string
 ): Promise<{ id: string; created: boolean }> {

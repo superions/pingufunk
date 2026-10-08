@@ -2646,6 +2646,12 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       sichere Ablehnung, vollständiges Backup/Restore und kompatible Maintenance
       werden geprüft, kein behaupteter historischer Code-Rollback.
       Vertrag `docs/enqueue-intent-contract.md`; P15.1-Workerbesitz separat.
+      Erste Fork-CI `37715047688` scheiterte an einem realen parallelen
+      SQLite-Schreibkonflikt und einer veralteten PG-Driftfixture. Serieller,
+      begrenzter SQLite-Admissionpfad ergänzt; weder BUSY-/Commitretry noch
+      abgeschwächte Parallelassertion. PG-Fixture wendet beide späteren DDLs
+      vor dem vollständigen Schema-Gate an. 1259 lokale Tests und übrige Gates
+      erneut erfolgreich; frische Fork-/Backend-/Containerabnahme offen.
 
 ## Phase P16 — Ownergrenzen bereinigen, ohne das Produkt neu zu schreiben
 

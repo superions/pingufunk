@@ -5,7 +5,7 @@ export const ENQUEUE_KEY_RETENTION_MS = 7 * 86400_000;
 export class EnqueueRequestError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 408 | 413 = 400
+    readonly status: 400 | 408 | 413 | 503 = 400
   ) {
     super(message);
   }
