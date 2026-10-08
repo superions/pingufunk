@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCategoriesForTopics, CategoryType } from "@/services/category";
+import { getCategoriesForTopics, type CategoryType } from "@/services/category";
 import { getMinDurationSeconds, getSetting, withSettingsSnapshot } from "@/lib/settings";
-import { providerRegistry, initializeProviders } from "@/providers";
-import type { ProviderContentItem } from "@/types/provider";
-
-import { queryContent } from "@/services/content-search";
-import { isStreamingUrl } from "@/lib/stream-url";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
+import {
+  getConfiguredLanguagePolicy,
+  queryContentWindow,
+  type SearchProviderId,
+} from "@/services/content-search";
+import { selectLanguageVariants } from "@/services/language-editions";
+import { eligibleRenditionItem, selectRenditions } from "@/services/rendition-quality";
 import { createUiNzbDownloads } from "@/services/ui-nzb";
-import type { UiNzbDownloads } from "@/types";
-
-async function isHlsEnabled(): Promise<boolean> {
-  const setting = await getSetting("download.enableHLS");
-  return setting === "true";
-}
+import type { ApiResultItem, UiNzbDownloads, UiSearchCoverage } from "@/types";
 
 export interface SearchResult {
   id: string;
@@ -28,195 +26,139 @@ export interface SearchResult {
   url_video_low: string;
   url_website: string;
   category?: CategoryType;
-  providerId?: string;
+  providerId?: SearchProviderId;
   nzbDownloads: UiNzbDownloads;
 }
 
-/**
- * Convert a ProviderContentItem to SearchResult format
- */
-function providerItemToSearchResult(
-  item: ProviderContentItem,
+const PROVIDERS = ["mediathekview", "orf", "srf"] as const;
+const MAX_QUERY_LENGTH = 256;
+const MAX_GUI_RESULTS = 100;
+
+function itemProvider(item: ApiResultItem): SearchProviderId {
+  return /^ORF\b/i.test(item.channel)
+    ? "orf"
+    : item.sourceProviderId === "srf"
+      ? "srf"
+      : "mediathekview";
+}
+
+function searchResult(
+  item: ApiResultItem,
   hlsEnabled: boolean,
+  providerForm: boolean,
   category?: CategoryType
 ): SearchResult {
+  const defaultId = `${item.channel}-${item.topic}-${item.title}-${item.filmlisteTimestamp}`;
   return {
-    id: item.id,
+    // The two shipped forms retain their IDs; neither source-row hashes nor
+    // better rendition facts manufacture a new GUI identity.
+    id: providerForm && itemProvider(item) === "srf" ? (item.id ?? defaultId) : defaultId,
     channel: item.channel,
     topic: item.topic,
     title: item.title,
     description: item.description,
-    timestamp: item.timestamp,
+    timestamp: item.filmlisteTimestamp,
     duration: item.duration,
     size: item.size,
-    url_video: item.videoUrls.standard,
-    url_video_hd: item.videoUrls.high || item.videoUrls.standard,
-    url_video_low: item.videoUrls.low || "",
-    url_website: item.websiteUrl,
+    url_video: item.url_video,
+    url_video_hd: item.url_video_hd,
+    url_video_low: item.url_video_low,
+    url_website: item.url_website,
     category,
-    providerId: item.providerId,
-    nzbDownloads: createUiNzbDownloads(
-      {
-        ...item,
-        filmlisteTimestamp: item.timestamp,
-        url_website: item.websiteUrl,
-        url_video: item.videoUrls.standard,
-        url_video_hd: item.videoUrls.high || item.videoUrls.standard,
-        url_video_low: item.videoUrls.low || "",
-      },
-      hlsEnabled
-    ),
+    ...(providerForm ? { providerId: itemProvider(item) } : {}),
+    nzbDownloads: createUiNzbDownloads(item, hlsEnabled),
   };
 }
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const q = searchParams.get("q");
-  const limit = parseInt(searchParams.get("limit") || "50", 10);
-  const type = searchParams.get("type"); // "movie" for movies only
-  const useProviders = searchParams.get("providers") === "true"; // Use provider system
-  const providerId = searchParams.get("provider"); // Specific provider to search
-
-  if (!q || q.trim().length < 2) {
-    return NextResponse.json({ results: [], error: "Query too short" });
-  }
+  const params = request.nextUrl.searchParams;
+  const q = params.get("q")?.trim() ?? "";
+  const rawLimit = params.get("limit") ?? "50";
+  const type = params.get("type");
+  const provider = params.get("provider");
+  const rawProviders = params.get("providers");
+  if (!q || q.length < 2) return NextResponse.json({ results: [], error: "Query too short" });
+  if (
+    q.length > MAX_QUERY_LENGTH ||
+    /[\x00-\x1f\x7f]/.test(params.get("q") ?? "") ||
+    ["q", "limit", "type", "provider", "providers"].some((key) => params.getAll(key).length > 1) ||
+    !/^\d{1,3}$/.test(rawLimit) ||
+    Number(rawLimit) < 1 ||
+    Number(rawLimit) > MAX_GUI_RESULTS ||
+    (type !== null && !["all", "movie", "series"].includes(type)) ||
+    (provider !== null && !PROVIDERS.includes(provider as SearchProviderId)) ||
+    (rawProviders !== null && rawProviders !== "true" && rawProviders !== "false")
+  )
+    return NextResponse.json({ results: [], error: "Invalid search parameters" }, { status: 400 });
 
   try {
-    return await withSettingsSnapshot(() =>
-      useProviders || providerId
-        ? handleProviderSearch(q, limit, type, providerId)
-        : handleDefaultSearch(q, limit, type)
-    );
+    return await withSettingsSnapshot(async () => {
+      const limit = Number(rawLimit);
+      // All selected sources and retries share the same attempts and wallclock.
+      // Generic browsing never borrows the larger explicit TV identity budget.
+      const requestBudget = new HttpRequestBudget();
+      const hlsEnabled = (await getSetting("download.enableHLS")) === "true";
+      const minDuration = type === "movie" ? await getMinDurationSeconds() : 0;
+      const window = await queryContentWindow(
+        [{ fields: ["topic", "title"], query: q }],
+        100,
+        { requestBudget, deferLanguageSelection: true },
+        (provider as SearchProviderId | null) ?? undefined
+      );
+      // Eligibility precedes edition dedupe and the UI result limit. One HLS
+      // slot cannot hide an independent MP4 slot or fill an absent HD slot.
+      const eligible = selectLanguageVariants(
+        window.items
+          .map((item) => eligibleRenditionItem(item, hlsEnabled))
+          .filter(
+            (item) =>
+              item.duration >= minDuration && selectRenditions(item, "all", hlsEnabled).length > 0
+          ),
+        await getConfiguredLanguagePolicy()
+      ).sort((a, b) => b.filmlisteTimestamp - a.filmlisteTimestamp);
+      const coverage: UiSearchCoverage = {
+        ...window.coverage,
+        eligibleCount: eligible.length,
+        returnedCount: Math.min(limit, eligible.length),
+        resultLimitReached: eligible.length > limit,
+      };
+      const selected = eligible.slice(0, limit);
+      const categories = await getCategoriesForTopics([
+        ...new Set(selected.map((item) => item.topic)),
+      ]);
+      const providerForm = rawProviders === "true" || provider !== null;
+      const results = selected.map((item) =>
+        searchResult(item, hlsEnabled, providerForm, categories.get(item.topic))
+      );
+      const errors = window.coverage.sources
+        .filter((source) => source.state === "failed")
+        .map(({ providerId }) => ({ providerId, error: "Provider search failed" }));
+      const allFailed =
+        errors.length > 0 && window.coverage.sources.every((source) => source.state !== "complete");
+      return NextResponse.json(
+        {
+          results,
+          coverage,
+          ...(providerForm
+            ? {
+                providerCounts: Object.fromEntries(
+                  PROVIDERS.filter((id) => provider === null || id === provider).map((id) => [
+                    id,
+                    eligible.filter((item) => itemProvider(item) === id).length,
+                  ])
+                ),
+              }
+            : {}),
+          ...(errors.length ? { errors } : {}),
+          ...(allFailed ? { error: "Provider search failed" } : {}),
+        },
+        { status: allFailed ? 502 : 200, headers: { "Cache-Control": "no-store" } }
+      );
+    });
   } catch {
     return NextResponse.json(
       { results: [], error: "Search temporarily unavailable" },
-      { status: 503 }
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     );
-  }
-}
-
-/**
- * Handle search using the provider system
- */
-async function handleProviderSearch(
-  q: string,
-  limit: number,
-  type: string | null,
-  providerId: string | null
-): Promise<NextResponse> {
-  try {
-    // Initialize providers if not already done
-    await initializeProviders();
-
-    const searchType = type === "movie" ? "movie" : type === "series" ? "series" : "all";
-
-    let items: ProviderContentItem[];
-    let providerCounts: Record<string, number> = {};
-    let errors: Array<{ providerId: string; error: string }> = [];
-
-    if (providerId) {
-      // Search specific provider
-      items = await providerRegistry.searchProvider(providerId, {
-        query: q,
-        limit,
-        type: searchType,
-      });
-      providerCounts[providerId] = items.length;
-    } else {
-      // Search all enabled providers
-      const result = await providerRegistry.searchAll({
-        query: q,
-        limit,
-        type: searchType,
-      });
-      items = result.items;
-      providerCounts = result.providerCounts;
-      errors = result.errors;
-    }
-
-    // Collect unique topics for category lookup
-    const topics = [...new Set(items.map((item) => item.topic))] as string[];
-    const categoryMap = await getCategoriesForTopics(topics);
-
-    // Convert to SearchResult format
-    const hlsEnabled = await isHlsEnabled();
-    const results: SearchResult[] = items.map((item) =>
-      providerItemToSearchResult(item, hlsEnabled, categoryMap.get(item.topic))
-    );
-
-    return NextResponse.json({
-      results,
-      providerCounts,
-      errors:
-        errors.length > 0
-          ? errors.map(({ providerId }) => ({ providerId, error: "Provider search failed" }))
-          : undefined,
-    });
-  } catch {
-    console.error("Provider search failed");
-    return NextResponse.json({ results: [], error: "Search failed" }, { status: 500 });
-  }
-}
-
-/**
- * Search enabled sources while preserving the UI response format
- */
-async function handleDefaultSearch(
-  q: string,
-  limit: number,
-  type: string | null
-): Promise<NextResponse> {
-  // Fetch more results than needed because accessibility filtering may remove many
-  // For movie search: at least 3x limit or 150
-  // For regular search: at least 3x limit to ensure enough results after filtering
-  const fetchSize = type === "movie" ? Math.max(limit * 3, 150) : Math.max(limit * 3, 100);
-
-  try {
-    const items = await queryContent([{ fields: ["topic", "title"], query: q }], fetchSize);
-    if (items === null) {
-      return NextResponse.json({ results: [], error: "Provider search failed" }, { status: 502 });
-    }
-
-    // Filter out m3u8 streams (unless HLS enabled) and transform results
-    // For movies: only items >= 60 minutes (3600 seconds)
-    const minDuration = type === "movie" ? await getMinDurationSeconds() : 0;
-    const hlsEnabled = await isHlsEnabled();
-
-    const filteredItems = items
-      .filter(
-        (item: { url_video: string; duration: number }) =>
-          (hlsEnabled || !isStreamingUrl(item.url_video)) && item.duration >= minDuration
-      )
-      .slice(0, limit);
-
-    // Collect unique topics for category lookup
-    const topics = [
-      ...new Set(filteredItems.map((item: { topic: string }) => item.topic)),
-    ] as string[];
-
-    // Get categories for all topics
-    const categoryMap = await getCategoriesForTopics(topics);
-
-    const results: SearchResult[] = filteredItems.map((item) => ({
-      id: `${item.channel}-${item.topic}-${item.title}-${item.filmlisteTimestamp}`,
-      channel: item.channel,
-      topic: item.topic,
-      title: item.title,
-      description: item.description,
-      timestamp: item.filmlisteTimestamp,
-      duration: item.duration,
-      size: item.size,
-      url_video: item.url_video,
-      url_video_hd: item.url_video_hd || item.url_video,
-      url_video_low: item.url_video_low || "",
-      url_website: item.url_website,
-      category: categoryMap.get(item.topic),
-      nzbDownloads: createUiNzbDownloads(item, hlsEnabled),
-    }));
-
-    return NextResponse.json({ results });
-  } catch {
-    console.error("Search failed");
-    return NextResponse.json({ results: [], error: "Search failed" }, { status: 500 });
   }
 }

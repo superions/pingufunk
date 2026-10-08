@@ -107,9 +107,7 @@ class ProviderRegistry {
     const providerCounts: Record<string, number> = {};
     const errors: Array<{ providerId: string; error: string }> = [];
 
-    console.log(
-      `[ProviderRegistry] Searching ${enabledProviders.length} providers for: "${query.query}"`
-    );
+    console.log(`[ProviderRegistry] Searching ${enabledProviders.length} providers`);
 
     const searchPromises = enabledProviders.map(async (provider) => {
       try {

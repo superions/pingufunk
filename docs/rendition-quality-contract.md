@@ -78,10 +78,13 @@ hinaus offene Sprach-/Abdeckungsbefunde werden dadurch nicht pauschal geschlosse
 
 ## NZB, Worker und historische Identität
 
-RSS und UI-NZB übertragen Maße nur für die ausgewählte exakte URL in den
-bereits vorhandenen `MediaExpectations` v1/v2 mit `provider_dimensions`.
-Keine Payload-Version oder DB-Schemaänderung: SQLite und PostgreSQL behalten
-denselben serialisierten Vertrag über Queue, Restart und Retry.
+Die historische Auflösungskorrektur übertrug Maße für die ausgewählte exakte
+URL in `MediaExpectations` v1/v2 mit `provider_dimensions`, damals ohne neue
+Payloadversion oder DB-Schemaänderung. Seit P12 verwenden neue RSS-/UI-Jobs
+[v3 mit eingefrorenen Dauerreferenzen](settings-contract.md); die exakte
+Dimensionsbindung und gespeicherten v1/v2-Jobs bleiben erhalten. SQLite und
+PostgreSQL sichern den jeweiligen serialisierten Vertrag über Queue,
+Restart und Retry.
 Der Worker vergleicht die lokale ffprobe-Ausgabe mit **Breite und Höhe**;
 abweichende Maße dürfen nicht zu `Completed` führen. Unbekannte Sollmaße
 bleiben `expectedChecks.resolution=unknown`, nicht „bestanden“.
@@ -143,7 +146,8 @@ im P09.3-TODO; angelegte Gates sind noch kein Ausführungsnachweis.
 Produktionsrollout bleibt separat freizugeben. Vorher Queue/History, neue
 UNKNOWN-Titel, konkret konfigurierte Qualitätsauswahl und Consumerprofile im
 installationsbezogenen Runbook prüfen. Neue Jobs erhalten strengere Sollmaße;
-ein App-Rollback muss v1/v2 und die vorhandenen Dimensionschecks verstehen und
+ein App-Rollback muss alle vorhandenen Jobversionen (heute v1/v2/v3) und die
+vorhandenen Dimensionschecks verstehen und
 die aktuelle Datenbank behalten. Zurück zum alten Slot-Stempel wäre ein
 bewusster Rückfall auf den Fehler, kein geprüfter Qualitätsrollback. Nach PG-
 Writes keinen veralteten SQLite-Snapshot reaktivieren. P03.4 bleibt unabhängig.

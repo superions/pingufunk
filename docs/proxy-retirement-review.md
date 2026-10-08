@@ -1787,3 +1787,51 @@ SSH-Tunnel und markierter disposable PG-Container sind beendet; keine fremden
 Prozesse, Volumes oder Datenbanken bereinigt. Produktstand bleibt auf dem
 eigenen Topicbranch; weder Main-Integration, Deployment noch Imagepublikation.
 Die separaten Warnungen sowie P13–P16 und P03.4 bleiben ausdrücklich offen.
+
+## Implementierungsreview P14.1 — gemeinsamer begrenzter Quellenabruf
+
+Entwicklungscheckpoint 08.10.2026 auf `codex/search-rendition-contract`, nach
+P12. Upstream-main `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` nochmals gelesen:
+der betreffende Ganzeintrag-HLS-Filter und die Standard-als-HD-Ersetzung sind
+dort nicht bereits behoben. Keine Produktions- oder Main-/Upstreamänderung.
+
+`queryContentWindow` koordiniert beide GUI-Abfrageformen und den strengen
+Indexerwrapper. Ein gemeinsames zehn-Versuche-/15-Sekunden-Budget begrenzt
+Quellen, Folgeseiten und Retries. Überlange Seiten und fehlgeschlagene
+Folgeseiten verwerfen den Quellbestand; die GUI darf andere erfolgreiche
+Quellen nur ausdrücklich als Teilantwort anzeigen. Der Indexer übernimmt
+keine solche Teilantwort. Bounded Counts behaupten keine Kataloggesamtzahl.
+
+Eligibility entfernt einzelne URL-Slots vor Editiondedupe und Limit. Damit
+bleibt HD-/Low-MP4 trotz Standard-HLS auswählbar und Standard-MP4 trotz HD-HLS
+erhalten. Fehlendes HD wird nicht erfunden. Der vertrauenswürdige Adapter
+erhält URL-gebundene Audio-/Dimensionsfakten; untrusted Rohzeilen dürfen keine
+Providerherkunft oder GUI-ID vorgeben. Exakte NZBs verwenden denselben
+Renditionowner wie RSS. Ein nur zur anderen URL gehörender Audiobeleg entfernt
+auch die daraus abgeleitete Sprachangabe, nicht bloß den Belegcontainer.
+Alte GUI-IDs, RSS-/NZB-GUIDs, Kategorien und v1/v2/v3-Jobs bleiben erhalten.
+
+Lokale Gates: **1121 Tests bestanden, 18 getrennt geroutete Fälle übersprungen**,
+Lint, Typecheck, Formatcheck, Productionbuild und Diffcheck grün. Darin sechs
+echte SQLite-Runtimefälle der GUI→NZB→SAB→DB-/Retrykette. Unveränderte
+Installation aus P12 wiederverwendet; kein neuer `npm ci`-Lauf behauptet.
+Die separate PG-/native Arr-/Containerabnahme ist zu diesem Checkpoint offen.
+
+Desktopabnahme am tatsächlich servierten Productionbundle, 1280×720 Light:
+gematchte Vorher-/Nachherzustände zeigen 2→3 Ergebnisse bei gemischten HLS/MP4-
+Slots; nur tatsächliche HD/SD/Low-Auswahl, Keyboard und Pointer geprüft.
+Leere Antwort heißt nun ausdrücklich „im abgerufenen Suchfenster“, eine leere
+Teilantwort ist kein bestätigter Nichtfund. Sourcefehler, 50-von-70-Fenster,
+Partial- und alle-Quellen-deaktiviert-Zustände sind sichtbar geprüft, frische
+Browserkonsole leer. Der absichtliche Buttoncheck bei Write-Gate 0 bestätigt
+Ablehnung statt Download; native DB-Zählung bleibt **0 Jobs**. Externe
+Netzsperre und synthetische Providerfixtures verhindern reale Katalog-/Grabs.
+Eigene Tabs und Testserver anschließend beendet; keine fremden Prozesse.
+
+Nachreview durch den Implementierer, kein unabhängiger Peerreview: zusätzlich
+die Eligibility-vor-Edition-Grenze, abgeleitete Audioangaben, Roh-ID-Injektion,
+übergroße Providerseite und begrenzte Counts kausal negativ geprüft. Vertrag
+unter [begrenzter Quellenabruf](bounded-search-contract.md). P14.1/P10.1 bleiben
+bis zur neuen Fork-/Containerevidenz offen; P13/P14.2/P14.3/P15/P16 und P03.4
+sind durch dieses Paket nicht abgenommen. Bestehende Build-Tracingwarnungen
+und der bereits dokumentierte transitive Auditbefund bleiben separate Befunde.

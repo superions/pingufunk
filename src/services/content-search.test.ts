@@ -3,7 +3,8 @@ import { NextRequest } from "next/server";
 import { GET } from "@/app/api/search/route";
 import { GET as getFakeNzb } from "@/app/api/newznab/fake_nzb_download/route";
 import type { ApiResultItem, TvSearchContext } from "@/types";
-import { queryContent } from "./content-search";
+import { queryContent, queryContentWindow } from "./content-search";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { generateGenericRssItems } from "./newznab";
 import { parseNzbContent } from "./download";
 import {
@@ -178,6 +179,71 @@ it("restricts ORF-only upstream searches before applying the requested limit", a
     { offset: 0, deadlineAt: expect.any(Number) }
   );
   expect(queries).toHaveLength(1);
+});
+
+it("shares the caller budget across source pages, discards an exhausted source and recovers fresh", async () => {
+  settings.set("provider.srf.enabled", "false");
+  const candidate: ApiResultItem = {
+    channel: "ARD",
+    topic: "Budget fixture",
+    title: "Example",
+    description: "",
+    filmlisteTimestamp: 1,
+    duration: 120,
+    size: 0,
+    url_website: "https://example.invalid/page",
+    url_video: "https://example.invalid/video.mp4",
+    url_video_hd: "",
+    url_video_low: "",
+  };
+  const budgets: HttpRequestBudget[] = [];
+  vi.mocked(queryMediathekView).mockImplementation(async (_queries, size, options) => {
+    const budget = options!.requestBudget!;
+    budgets.push(budget);
+    budget.takeAttempt();
+    return Array.from({ length: size }, () => candidate);
+  });
+  const exhausted = new HttpRequestBudget(1);
+  const result = await queryContentWindow([], 100, { requestBudget: exhausted });
+  expect(result.items).toEqual([]);
+  expect(result.coverage.complete).toBe(false);
+  expect(result.coverage.sources).toContainEqual({
+    providerId: "mediathekview",
+    state: "failed",
+    candidateCount: 0,
+  });
+  expect(budgets).toEqual([exhausted, exhausted]);
+  expect(exhausted.remainingAttempts).toBe(0);
+  vi.mocked(queryMediathekView).mockImplementation(async (_queries, _size, options) => {
+    options!.requestBudget!.takeAttempt();
+    return [candidate];
+  });
+  const fresh = new HttpRequestBudget();
+  expect(await queryContent([], 100, { requestBudget: fresh })).toEqual([candidate]);
+  expect(fresh.remainingAttempts).toBe(9);
+});
+
+it("rejects a provider page that exceeds the agreed candidate bound", async () => {
+  settings.set("provider.srf.enabled", "false");
+  const item: ApiResultItem = {
+    channel: "ARD",
+    topic: "Example",
+    title: "Overflow",
+    description: "",
+    filmlisteTimestamp: 1,
+    duration: 120,
+    size: 0,
+    url_website: "",
+    url_video: "https://example.invalid/video.mp4",
+    url_video_hd: "",
+    url_video_low: "",
+  };
+  vi.mocked(queryMediathekView).mockResolvedValue(Array.from({ length: 1001 }, () => item));
+  const result = await queryContentWindow([], 100, { requestBudget: new HttpRequestBudget() });
+  expect(result.items).toEqual([]);
+  expect(result.coverage.complete).toBe(false);
+  expect(await queryContent([], 100)).toBeNull();
+  expect(queryMediathekView).toHaveBeenCalledTimes(2);
 });
 
 it("finds and selects a later German edition across the bounded source pages", async () => {

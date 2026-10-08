@@ -3,6 +3,7 @@ import type { ApiResultItem } from "@/types";
 import { createUiNzbDownloads } from "./ui-nzb";
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 import { parseNzbContent } from "./download";
+import { mediaSourceIdentity } from "./source-audio";
 
 const item: ApiResultItem = {
   channel: "Synthetic",
@@ -90,4 +91,41 @@ it("binds UI NZB dimensions to the selected URL, never the default rendition", (
     provenance: "provider_dimensions",
   });
   expect(parseNzbContent(releases.low!)?.mediaExpectations?.resolution).toBeNull();
+});
+
+it("never copies a rendition-bound audio proof to a different video URL", () => {
+  const sourceAudioEvidence = {
+    provider: "arte_hbbtv" as const,
+    videoId: "123456-001-A",
+    mediaIdentity: mediaSourceIdentity(item.url_video_hd),
+    language: "de",
+  };
+  const releases = createUiNzbDownloads(
+    { ...item, sourceAudioEvidence, audioLanguage: "de" },
+    false
+  );
+  expect(parseNzbContent(releases.hd!)?.mediaExpectations).toMatchObject({
+    sourceAudio: sourceAudioEvidence,
+  });
+  expect(parseNzbContent(releases.sd!)?.mediaExpectations).toMatchObject({
+    sourceAudio: null,
+    audio: null,
+  });
+  expect(parseNzbContent(releases.low!)?.mediaExpectations).toMatchObject({
+    sourceAudio: null,
+    audio: null,
+  });
+});
+
+it("uses shared rendition eligibility and exact-URL dedupe for UI releases", () => {
+  const onlyHd = createUiNzbDownloads(
+    { ...item, url_video: "https://example.invalid/sd.m3u8", url_video_low: "" },
+    false
+  );
+  expect(Object.keys(onlyHd)).toEqual(["hd"]);
+  const repeated = createUiNzbDownloads(
+    { ...item, url_video: item.url_video_hd, url_video_low: item.url_video_hd },
+    false
+  );
+  expect(Object.keys(repeated)).toEqual(["hd"]);
 });

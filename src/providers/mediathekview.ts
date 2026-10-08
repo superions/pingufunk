@@ -1,4 +1,5 @@
-import { isStreamingUrl } from "@/lib/stream-url";
+import { selectRenditions } from "@/services/rendition-quality";
+import { apiResultToProviderItem } from "./content-item";
 import { BaseProvider } from "./base";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
@@ -67,12 +68,13 @@ export class MediathekViewProvider extends BaseProvider {
       return [];
     }
 
-    console.log(`[${this.id}] Searching for: "${searchQuery}" (limit: ${limit})`);
+    console.log(`[${this.id}] Searching bounded catalogue`);
 
     try {
       const results = await queryMediathekView(
         [{ fields: ["topic", "title"], query: searchQuery }],
-        limit * 3 // Fetch more to account for filtering
+        limit * 3, // Fetch more to account for filtering
+        { requestBudget: query.requestBudget, deadlineAt: query.deadlineAt }
       );
 
       if (results === null) throw new Error("MediathekView search failed");
@@ -133,7 +135,7 @@ export class MediathekViewProvider extends BaseProvider {
       // ORF has its own opt-in provider in aggregated searches.
       if (/^ORF\b/i.test(result.channel)) continue;
       // Skip HLS unless enabled
-      if (!this.hlsEnabled && isStreamingUrl(result.url_video)) {
+      if (selectRenditions(result, "all", this.hlsEnabled).length === 0) {
         continue;
       }
 
@@ -157,20 +159,7 @@ export class MediathekViewProvider extends BaseProvider {
    * Map API result to ProviderContentItem
    */
   private mapToContentItem(result: ApiResultItem): ProviderContentItem {
-    return this.createContentItem({
-      id: `${result.channel}-${result.topic}-${result.title}-${result.filmlisteTimestamp}`,
-      channel: result.channel,
-      topic: result.topic,
-      title: result.title,
-      description: result.description,
-      timestamp: result.filmlisteTimestamp,
-      duration: result.duration,
-      size: result.size,
-      websiteUrl: result.url_website,
-      videoUrl: result.url_video,
-      videoUrlLow: result.url_video_low || undefined,
-      videoUrlHigh: result.url_video_hd || undefined,
-    });
+    return apiResultToProviderItem(result, this.id);
   }
 }
 

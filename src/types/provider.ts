@@ -33,6 +33,9 @@ export interface ProviderContentItem {
   size: number;
   /** Only set from provider metadata that explicitly identifies the audio track language. */
   audioLanguage?: string | null;
+  /** Trusted adapter facts remain bound to their exact rendition, never a slot label. */
+  sourceAudioEvidence?: import("@/types").ApiResultItem["sourceAudioEvidence"];
+  sourceVideoDimensions?: import("@/types").ApiResultItem["sourceVideoDimensions"];
   /** URL to the website page for this content */
   websiteUrl: string;
   /** Available video URLs by quality */

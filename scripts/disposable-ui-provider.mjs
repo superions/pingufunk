@@ -44,7 +44,40 @@ globalThis.fetch = async (input, init) => {
       url_video_hd: "https://example.invalid/hd.mp4",
       url_video_low: "https://example.invalid/low.mp4",
     };
-    const rows = query.includes("synthetic-empty") || Number(body.offset ?? 0) > 0 ? [] : [item];
+    let rows = query.includes("synthetic-empty") || Number(body.offset ?? 0) > 0 ? [] : [item];
+    if (rows.length && query.includes("synthetic-mixed")) {
+      rows = [
+        {
+          ...item,
+          title: "Mixed standard-HLS / HD-MP4",
+          url_video: "https://example.invalid/mixed-a.m3u8",
+          url_video_hd: "https://example.invalid/mixed-a-hd.mp4",
+          url_video_low: "https://example.invalid/mixed-a-low.mp4",
+        },
+        {
+          ...item,
+          title: "Mixed standard-MP4 / HD-HLS",
+          url_video: "https://example.invalid/mixed-b.mp4",
+          url_video_hd: "https://example.invalid/mixed-b-hd.m3u8",
+          url_video_low: "",
+        },
+        {
+          ...item,
+          title: "Missing HD slot",
+          url_video: "https://example.invalid/missing-hd.mp4",
+          url_video_hd: "",
+          url_video_low: "",
+        },
+      ];
+    }
+    if (rows.length && query.includes("synthetic-bounded"))
+      rows = Array.from({ length: 70 }, (_, index) => ({
+        ...item,
+        title: `Bounded result ${index}`,
+        url_video: `https://example.invalid/${index}.mp4`,
+        url_video_hd: "",
+        url_video_low: "",
+      }));
     return Response.json({ result: { results: rows }, err: null });
   }
   // Next's own loopback requests are allowed; all external/download traffic is blocked.

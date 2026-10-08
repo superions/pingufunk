@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **P12 ist implementiert und einschließlich Desktop-/Backend-/Fork-/Containerketten abgenommen. P13–P16 sind noch offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 08.10.2026. **P12 ist implementiert und einschließlich Desktop-/Backend-/Fork-/Containerketten abgenommen. P14.1 ist implementiert und lokal/desktopsicher geprüft, neue Fork-/Containerabnahme steht aus. Die übrigen Pakete P13–P16 bleiben offen. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Vollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -2374,6 +2374,19 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
       Desktop-Suche mit HD/SD/Low und kausalem RSS/NZB-Consumervergleich.
       Native Arr direkt/via Prowlarr weiterhin auf demselben Endpoint; isolierte
       Fremdconsumerprobe nur nach passender Freigabe. P10.1 danach erneut schließen.
+      Entwicklungscheckpoint 08.10.2026: beide GUI-Formen verwenden denselben
+      begrenzten Quellenowner mit einem zehn-Versuche-/15-Sekunden-Budget;
+      per-URL-Eligibility vor Dedupe/Limit, keine erfundene HD-URL und exakte
+      Audio-/Dimensionsbindung im Adapter/NZB. GUI-Partialantworten und
+      begrenzte Fenster ausdrücklich sichtbar, Indexerwrapper weiter streng.
+      Desktop 1280×720 Light, tatsächlich serviertes Productionbundle:
+      vor/nach 2→3 Treffer bei Standard-HLS/HD-MP4, nur erlaubte HD/SD/Low-
+      Buttons, Keyboard/Pointer, Leer-/Fehler-/50-von-70-/Partialzustände und
+      frische saubere Konsole. Write-Gate und externe Netzsperre, keine Jobs.
+      Kausale Routen-/NZB-/RSS-/Budget-/Redactiontests und reale SQLite-
+      Persistenzfälle grün; finale Fork-/PG-/Containerabnahme noch ausstehend.
+      Vertrag in `docs/bounded-search-contract.md`; P13/P14.2/P14.3 und P03.4
+      hierdurch nicht abgenommen. Review durch Implementierer, kein Peerreview.
 - [ ] **P14.2 — Frische URL-gebundene Quellenbelege mit begrenztem Cache.**
       Abhängigkeit P13.1. Owner: `source-audio.ts`, `mp4-audio-language.ts`,
       ARTE-/ARD-Belegowner, `cache.ts` und ihre Such-/Workerconsumer.

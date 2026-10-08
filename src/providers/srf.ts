@@ -100,7 +100,7 @@ export class SrfProvider extends BaseProvider {
       return [];
     }
 
-    console.log(`[${this.id}] Searching for: "${searchQuery}" (limit: ${limit})`);
+    console.log(`[${this.id}] Searching bounded catalogue`);
 
     try {
       // Search SRF videos

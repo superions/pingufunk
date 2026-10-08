@@ -3,6 +3,16 @@ import { isRenditionAllowed } from "@/lib/stream-url";
 
 export type QualityPreference = "all" | "best" | "1080p" | "720p" | "480p";
 
+/** Remove ineligible selectors before edition dedupe, not just before a button renders. */
+export function eligibleRenditionItem(item: ApiResultItem, hlsEnabled: boolean): ApiResultItem {
+  return {
+    ...item,
+    url_video: isRenditionAllowed(item.url_video, hlsEnabled) ? item.url_video : "",
+    url_video_hd: isRenditionAllowed(item.url_video_hd, hlsEnabled) ? item.url_video_hd : "",
+    url_video_low: isRenditionAllowed(item.url_video_low, hlsEnabled) ? item.url_video_low : "",
+  };
+}
+
 /** Missing, invalid or conflicting evidence never turns a catalogue slot into pixels. */
 export function renditionDimensions(item: ApiResultItem, url: string) {
   const matches = item.sourceVideoDimensions?.filter((entry) => entry.url === url) ?? [];

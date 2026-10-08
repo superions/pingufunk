@@ -9,6 +9,7 @@ import { Search, Download } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
 import { useContentSearch } from "@/hooks/use-content-search";
+import { SearchCoverageNotice } from "@/components/search-coverage-notice";
 
 interface SearchResult {
   id: string;
@@ -33,6 +34,7 @@ export default function SearchPage() {
     isSearching,
     submittedQuery,
     error: searchError,
+    coverage,
     search,
   } = useContentSearch<SearchResult>();
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -122,6 +124,7 @@ export default function SearchPage() {
       )}
 
       {/* Search Results */}
+      <SearchCoverageNotice coverage={coverage} />
       {searchResults.length > 0 && (
         <Card>
           <CardHeader>
@@ -183,13 +186,18 @@ export default function SearchPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && !searchError && searchResults.length === 0 && submittedQuery && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            Keine Ergebnisse gefunden für &quot;{submittedQuery}&quot;
-          </CardContent>
-        </Card>
-      )}
+      {!isSearching &&
+        !searchError &&
+        coverage?.complete &&
+        coverage.sources.some((source) => source.state === "complete") &&
+        searchResults.length === 0 &&
+        submittedQuery && (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Keine nutzbaren Ergebnisse im abgerufenen Suchfenster für &quot;{submittedQuery}&quot;
+            </CardContent>
+          </Card>
+        )}
     </div>
   );
 }

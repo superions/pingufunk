@@ -9,6 +9,7 @@ import { Search, Download, Film } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
 import { useContentSearch } from "@/hooks/use-content-search";
+import { SearchCoverageNotice } from "@/components/search-coverage-notice";
 
 interface SearchResult {
   id: string;
@@ -39,6 +40,7 @@ export default function MoviesPage() {
     isSearching,
     submittedQuery,
     error: searchError,
+    coverage,
     search,
   } = useContentSearch<SearchResult>("movie");
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export default function MoviesPage() {
 
   const getQualityOptions = (result: SearchResult): QualityOption[] => {
     const options: QualityOption[] = [];
-    if (result.nzbDownloads.hd && result.url_video_hd !== result.url_video) {
+    if (result.nzbDownloads.hd) {
       options.push({ label: "HD", nzb: result.nzbDownloads.hd, key: "hd" });
     }
     if (result.nzbDownloads.sd) {
@@ -146,6 +148,7 @@ export default function MoviesPage() {
       )}
 
       {/* Search Results */}
+      <SearchCoverageNotice coverage={coverage} />
       {searchResults.length > 0 && (
         <Card>
           <CardHeader>
@@ -213,13 +216,18 @@ export default function MoviesPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && !searchError && searchResults.length === 0 && submittedQuery && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            Keine Filme gefunden für &quot;{submittedQuery}&quot;
-          </CardContent>
-        </Card>
-      )}
+      {!isSearching &&
+        !searchError &&
+        coverage?.complete &&
+        coverage.sources.some((source) => source.state === "complete") &&
+        searchResults.length === 0 &&
+        submittedQuery && (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Keine nutzbaren Filme im abgerufenen Suchfenster für &quot;{submittedQuery}&quot;
+            </CardContent>
+          </Card>
+        )}
 
       {/* Initial State */}
       {!searchQuery && searchResults.length === 0 && (

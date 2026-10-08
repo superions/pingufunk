@@ -9,8 +9,13 @@ import { unknownMediaExpectations, parseMediaExpectations } from "@/lib/media-ex
 import { mediaSourceIdentity } from "@/services/source-audio";
 
 vi.mock("@/server/download-manager", () => ({ startDownloadProcessing: vi.fn(async () => {}) }));
-const { queryContent } = vi.hoisted(() => ({ queryContent: vi.fn() }));
-vi.mock("@/services/content-search", () => ({ queryContent }));
+const { queryContentWindow } = vi.hoisted(() => ({ queryContentWindow: vi.fn() }));
+vi.mock("@/services/content-search", () => ({
+  queryContentWindow,
+  getConfiguredLanguagePolicy: vi.fn(
+    async () => (await import("@/lib/language-policy")).DEFAULT_LANGUAGE_POLICY
+  ),
+}));
 vi.mock("@/services/category", () => ({ getCategoriesForTopics: vi.fn(async () => new Map()) }));
 const enabled = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 const pgUrl = process.env.PINGUFUNK_TEST_DATABASE_URL;
@@ -273,21 +278,28 @@ for (const provider of ["sqlite", "postgresql"] as const) {
         );
         expect(rejectedRetry.status).toBe(409);
         expect(await prisma.download.findUnique({ where: { id: legacy.id } })).not.toBeNull();
-        queryContent.mockResolvedValue([
-          {
-            channel: "Synthetic",
-            topic: "Synthetic UI",
-            title: "Example",
-            description: "",
-            duration: 120,
-            size: 1000,
-            filmlisteTimestamp: 1700000000,
-            url_website: "https://example.invalid/page",
-            url_video: release.url,
-            url_video_hd: "https://example.invalid/hd.mp4",
-            url_video_low: "https://example.invalid/low.mp4",
+        queryContentWindow.mockResolvedValue({
+          items: [
+            {
+              channel: "Synthetic",
+              topic: "Synthetic UI",
+              title: "Example",
+              description: "",
+              duration: 120,
+              size: 1000,
+              filmlisteTimestamp: 1700000000,
+              url_website: "https://example.invalid/page",
+              url_video: release.url,
+              url_video_hd: "https://example.invalid/hd.mp4",
+              url_video_low: "https://example.invalid/low.mp4",
+            },
+          ],
+          coverage: {
+            complete: true,
+            candidateWindowLimited: false,
+            sources: [{ providerId: "mediathekview", state: "complete", candidateCount: 1 }],
           },
-        ]);
+        });
         const { GET: search } = await import("@/app/api/search/route");
         await prisma.config.create({ data: { key: "matching.minDuration", value: "0" } });
         const uiIds: string[] = [];
@@ -295,6 +307,7 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           const found = await search(
             new NextRequest(`http://localhost/api/search?q=Synthetic${type}`)
           );
+          expect(found.status).toBe(200);
           const uiItem = (await found.json()).results[0];
           for (const key of ["hd", "sd", "low"]) {
             const queued = await POST(

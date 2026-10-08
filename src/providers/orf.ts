@@ -1,4 +1,5 @@
 import { BaseProvider } from "./base";
+import { apiResultToProviderItem } from "./content-item";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getDetailedVideoInfo, ensureYtdlpExists } from "@/server/ytdlp";
 import { queryMediathekView } from "@/lib/mediathek-client";
@@ -112,7 +113,7 @@ export class OrfProvider extends BaseProvider {
       return [];
     }
 
-    console.log(`[${this.id}] Searching for: "${searchQuery}" (limit: ${limit})`);
+    console.log(`[${this.id}] Searching bounded catalogue`);
 
     try {
       const results = await queryMediathekView(
@@ -120,7 +121,8 @@ export class OrfProvider extends BaseProvider {
           { fields: ["topic", "title"], query: searchQuery },
           { fields: ["channel"], query: "ORF" },
         ],
-        limit * 3
+        limit * 3,
+        { requestBudget: query.requestBudget, deadlineAt: query.deadlineAt }
       );
 
       if (results === null) throw new Error("MediathekView search failed");
@@ -253,20 +255,7 @@ export class OrfProvider extends BaseProvider {
    * Map a MediathekView API result to ProviderContentItem
    */
   private mapToContentItem(result: ApiResultItem): ProviderContentItem {
-    return this.createContentItem({
-      id: `${result.channel}-${result.topic}-${result.title}-${result.filmlisteTimestamp}`,
-      channel: result.channel,
-      topic: result.topic,
-      title: result.title,
-      description: result.description,
-      timestamp: result.filmlisteTimestamp,
-      duration: result.duration,
-      size: result.size,
-      websiteUrl: result.url_website,
-      videoUrl: result.url_video,
-      videoUrlLow: result.url_video_low || undefined,
-      videoUrlHigh: result.url_video_hd || undefined,
-    });
+    return apiResultToProviderItem(result, this.id);
   }
 }
 

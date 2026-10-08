@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { parseUiSearchCoverage } from "@/lib/ui-search-coverage";
+import type { UiSearchCoverage } from "@/types";
 
 /** UI transport only: matching and release authorship remain on the server. */
 export function useContentSearch<T>(type?: "movie") {
@@ -8,6 +10,7 @@ export function useContentSearch<T>(type?: "movie") {
   const [isSearching, setIsSearching] = useState(false);
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<UiSearchCoverage | null>(null);
   const active = useRef<AbortController | null>(null);
 
   useEffect(() => () => active.current?.abort(), []);
@@ -17,6 +20,7 @@ export function useContentSearch<T>(type?: "movie") {
     if (!query.trim() || active.current) return;
     if (query.trim().length < 2) {
       setResults([]);
+      setCoverage(null);
       setError("Bitte mindestens zwei Zeichen für die Suche eingeben.");
       return;
     }
@@ -25,6 +29,7 @@ export function useContentSearch<T>(type?: "movie") {
     setSubmittedQuery(query);
     setError(null);
     setResults([]);
+    setCoverage(null);
     setIsSearching(true);
     try {
       const params = new URLSearchParams({ q: query, limit: "50" });
@@ -35,7 +40,12 @@ export function useContentSearch<T>(type?: "movie") {
       if (!response.ok) throw new Error("Search unavailable");
       const data = await response.json();
       if (!Array.isArray(data.results)) throw new Error("Invalid search response");
-      if (!controller.signal.aborted) setResults(data.results);
+      const confirmedCoverage = parseUiSearchCoverage(data.coverage, data.results.length);
+      if (!confirmedCoverage) throw new Error("Invalid search coverage");
+      if (!controller.signal.aborted) {
+        setResults(data.results);
+        setCoverage(confirmedCoverage);
+      }
     } catch {
       if (!controller.signal.aborted) {
         setError("Die Suche ist fehlgeschlagen. Bitte erneut versuchen.");
@@ -46,5 +56,5 @@ export function useContentSearch<T>(type?: "movie") {
     }
   };
 
-  return { results, isSearching, submittedQuery, error, search };
+  return { results, isSearching, submittedQuery, error, coverage, search };
 }

@@ -2,6 +2,20 @@
 /** Server-authored NZBs selected by rendition; clients treat the payload as opaque. */
 export type UiNzbDownloads = Partial<Record<"hd" | "sd" | "low", string>>;
 
+/** Bounded retrieval coverage, not a total count of a provider's catalogue. */
+export interface UiSearchCoverage {
+  complete: boolean;
+  candidateWindowLimited: boolean;
+  resultLimitReached: boolean;
+  eligibleCount: number;
+  returnedCount: number;
+  sources: Array<{
+    providerId: "mediathekview" | "orf" | "srf";
+    state: "complete" | "failed" | "disabled";
+    candidateCount: number;
+  }>;
+}
+
 export interface MediathekApiResponse {
   result: MediathekApiResult;
   err: unknown | null;
@@ -47,6 +61,8 @@ export interface ApiResultItem {
   releaseVariantKey?: string;
   /** Server-authored dimensions bound to the exact rendition, never catalogue slot names. */
   sourceVideoDimensions?: Array<{ url: string; width: number; height: number }>;
+  /** Internal source owner only, never accepted from raw catalogue properties. */
+  sourceProviderId?: "mediathekview" | "orf" | "srf";
 }
 
 // TVDB Types
