@@ -2,6 +2,30 @@ import { z } from "zod";
 import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 
+const progressiveHosts = new Set(["ctv-videos.daserste.de", "rbb-progressive.ard-mcdn.de"]);
+
+/**
+ * Indexed assets eligible for exact-URL ARD JSON evidence, not arbitrary MP4
+ * probing. Producer and worker share this boundary; CDN membership alone never
+ * proves language or dimensions. New hosts require verified provider contracts.
+ */
+export function isArdProgressiveMp4(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      progressiveHosts.has(url.hostname) &&
+      /\.mp4$/i.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Exact indexed ARD video identity, not a series-page or arbitrary fetch target. */
 export function ardVideoId(website: string): string | null {
   try {

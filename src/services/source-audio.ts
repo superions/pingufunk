@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ApiResultItem, MatchedEpisodeInfo } from "@/types";
 import type { LanguagePolicy } from "@/lib/language-policy";
 import { selectRenditions, type QualityPreference } from "./rendition-quality";
-import { ardVideoId, getArdMedia, ardEdition } from "./ard-source-audio";
+import { ardVideoId, getArdMedia, ardEdition, isArdProgressiveMp4 } from "./ard-source-audio";
 import type { SourceAudioEvidence } from "@/lib/media-expectations";
 import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
@@ -103,11 +103,7 @@ export async function verifySourceAudio(
   budget: HttpRequestBudget
 ): Promise<SourceAudioEvidence> {
   if (expected.provider === "arte_hbbtv") return verifyArteSourceAudio(expected, url, budget);
-  if (
-    !isProbeableMp4(url) ||
-    new URL(url).hostname !== "ctv-videos.daserste.de" ||
-    mediaSourceIdentity(url) !== expected.mediaIdentity
-  )
+  if (!isArdProgressiveMp4(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
     throw new Error("Source evidence mismatch");
   const edition = ardEdition(await getArdMedia(expected.videoId, budget), url);
   if (!edition || edition.audioLanguage !== expected.language)
