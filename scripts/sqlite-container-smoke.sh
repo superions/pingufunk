@@ -156,12 +156,16 @@ for variant in fresh bootstrap; do
   stop_app
   [[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]]
   SMOKE_SOURCE="$SMOKE_ROOT/$variant/$RUNTIME_FILE" SMOKE_VARIANT="$variant" node --input-type=module -e '
-    import {DatabaseSync} from "node:sqlite"; const db=new DatabaseSync(process.env.SMOKE_SOURCE,{readOnly:true});
+    import {DatabaseSync} from "node:sqlite"; import {readdirSync,readFileSync} from "node:fs"; import {createHash} from "node:crypto";
+    const db=new DatabaseSync(process.env.SMOKE_SOURCE,{readOnly:true});
     try {
       const query=db.prepare("SELECT id,size,filePath,status FROM Download");query.setReadBigInts(true);const rows=query.all();
       if(rows.length!==1||rows[0].id!=="original-id"||rows[0].size!==BigInt("9007199254741115")||rows[0].filePath!=="/synthetic/original.mkv"||rows[0].status!=="failed")throw Error("SQLite data changed");
       if(db.prepare("SELECT value FROM Config WHERE key=?").get("smoke").value!=="original"||db.prepare("SELECT value FROM Config WHERE key=?").get("matching.movie.yearTolerance").value!=="2")throw Error("SQLite settings preservation or persistence failed");
-      if(db.prepare("SELECT count(*) AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL").get().n!==5)throw Error("Current ledger incomplete");
+      // Compare the actual append-only chain, not a stale hard-coded row count.
+      const expected=readdirSync("prisma/legacy/sqlite/migrations",{withFileTypes:true}).filter(entry=>entry.isDirectory()).map(entry=>({migration_name:entry.name,checksum:createHash("sha256").update(readFileSync(`prisma/legacy/sqlite/migrations/${entry.name}/migration.sql`)).digest("hex")})).sort((a,b)=>a.migration_name.localeCompare(b.migration_name));
+      const ledger=db.prepare("SELECT migration_name,checksum,finished_at,rolled_back_at FROM _prisma_migrations ORDER BY migration_name").all();
+      if(ledger.some(row=>row.finished_at==null||row.rolled_back_at!=null)||JSON.stringify(ledger.map(({migration_name,checksum})=>({migration_name,checksum})))!==JSON.stringify(expected))throw Error("Current ledger incomplete or mismatched");
     }finally{db.close();}
   '
 done
