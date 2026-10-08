@@ -428,7 +428,9 @@ do {
 if (!afterStopReady) throw new Error("Writer did not restart after mux shutdown");
 const shutRow = readJob(shutdownId);
 if (shutRow.status !== "failed" || shutRow.validation !== null)
-  throw new Error("Aborted mux claimed completed or verified media");
+  throw new Error(
+    `Mux shutdown left status=${shutRow.status}; validation=${shutRow.validation === null ? "absent" : "present"}`
+  );
 while (readJob(followingId).status === "queued" && Date.now() < afterStopDeadline) await delay(100);
 while (
   !["completed", "failed"].includes(readJob(followingId).status) &&

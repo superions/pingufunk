@@ -51,6 +51,10 @@ liegen bleiben und sind kein geprüfter Download.
 
 Die schreibenden Startwege setzen `NEXT_MANUAL_SIG_HANDLE=1`; der tatsächlich
 verwendete Next-Startserver überlässt Signale damit dem installierten Owner.
+Next kann Instrumentation und Routen in getrennte Modulgraphen bündeln. Ihr
+Scheduling-/Lease-/Drainzustand liegt deshalb in einem gemeinsamen, versionierten
+prozesslokalen Slot; der Signalhandler drainiert nicht einen zweiten leeren
+Modulzustand. Dieser Slot ersetzt weder DB-Fencing noch Prozess-Isolation.
 SIGINT/SIGTERM stoppen Scheduling, brechen eigene Arbeit ab und drainieren
 Transfers/Tools vor terminalem Write und Freigabe der Lease. Erfolg endet mit
 130/143, DB-/Drainfehler mit 1; nach zwölf Sekunden greift ein harter eigener

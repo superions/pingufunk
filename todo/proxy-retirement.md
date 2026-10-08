@@ -2562,6 +2562,13 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       erhält deshalb ein eigenes disposable Schema; die wichtige Null-Checkpoint-
       Assertion der verweigerten Rolle bleibt unverändert. Frische Gesamtprobe
       erforderlich, P15.1 bleibt offen.
+      Der native Mux-Shutdowngate auf `4c44255` erreichte tatsächlichen FFmpeg,
+      scheiterte aber am unmittelbar gelesenen terminalen Jobzustand nach Restart.
+      Der servierte Next-Build bündelt Download-Manager in getrennten Modulgraphen;
+      Instrumentation-Signalowner und Route dürfen keine getrennten leeren
+      Prozesszustände besitzen. Versionierter gemeinsamer Prozessslot samt
+      Reload-Regression ergänzt; DB-Lease/Fence und unveränderte terminale
+      Assertion bleiben verbindlich. Neue native Containerabnahme nötig.
 - [x] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
       Owner: `download.ts::{getHistory,getQueue}`, `sab-api.ts`,
       `/downloads` und beide DB-Querypfade. Aktuell wird die gesamte History

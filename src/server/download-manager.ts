@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { DOWNLOAD_CONCURRENCY, getDownloadWorkerState } from "./download-worker-state";
 import { acquireWorkerLease, WorkerOwnershipError, type WorkerLease } from "./worker-lease";
 import { assertWritesEnabled } from "@/lib/write-gate";
 import { getSetting, isMkvConversionEnabled } from "@/lib/settings";
@@ -34,69 +35,28 @@ import {
   type TransferPhase,
 } from "./download-failure";
 
-const MAX_CONCURRENT_DOWNLOADS = 1;
-
 async function getDownloadTempPath(): Promise<string> {
   const basePath = await getDownloadBasePath();
   return process.env.DOWNLOAD_TEMP_PATH || path.join(basePath, "incomplete");
 }
 
-// Semaphore implementation for limiting concurrent downloads
-class Semaphore {
-  private permits: number;
-  private queue: Array<() => void> = [];
-
-  constructor(permits: number) {
-    this.permits = permits;
-  }
-
-  async acquire(): Promise<void> {
-    if (this.permits > 0) {
-      this.permits--;
-      return;
-    }
-
-    return new Promise((resolve) => {
-      this.queue.push(resolve);
-    });
-  }
-
-  release(): void {
-    this.permits++;
-    const next = this.queue.shift();
-    if (next) {
-      this.permits--;
-      next();
-    }
-  }
-}
-
-const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
-let processingPromise: Promise<void> | null = null;
-let rerunRequested = false;
-let activeLease: WorkerLease | null = null;
-let shuttingDown = false;
-let ownershipState: "idle" | "waiting" | "held" | "lost" = "idle";
-const directWork = new Set<Promise<void>>();
-// A failed DB write pauses the drain. Reconcile only this worker's interrupted jobs
-// before the next explicit wakeup; cold-start recovery covers process loss.
-const pendingFailures = new Map<string, string>();
+const runtime = getDownloadWorkerState();
 
 /** Closed observation, never exposing lease owner/fence or database values. */
 export function getWorkerRuntimeState() {
   return {
     state:
-      pendingFailures.size > 0
+      runtime.pendingFailures.size > 0
         ? "paused"
-        : processingPromise || directWork.size
+        : runtime.processingPromise || runtime.directWork.size
           ? "draining"
           : "idle",
-    configuredConcurrency: MAX_CONCURRENT_DOWNLOADS,
-    exclusiveOwnership: activeLease
-      ? activeLease.ownershipLost
+    configuredConcurrency: DOWNLOAD_CONCURRENCY,
+    exclusiveOwnership: runtime.activeLease
+      ? runtime.activeLease.ownershipLost
         ? "lost"
         : "held"
-      : ownershipState,
+      : runtime.ownershipState,
   };
 }
 
@@ -124,33 +84,33 @@ export async function recoverInterruptedDownloads(owned?: WorkerLease): Promise<
 
 export async function startDownloadProcessing(): Promise<void> {
   assertWritesEnabled();
-  if (shuttingDown) throw new Error("Worker is shutting down");
-  if (processingPromise) {
+  if (runtime.shuttingDown) throw new Error("Worker is shutting down");
+  if (runtime.processingPromise) {
     // A new queue row can arrive just after the last empty poll. Run one
     // additional pass after the current drain rather than losing that wakeup.
-    rerunRequested = true;
-    return processingPromise;
+    runtime.rerunRequested = true;
+    return runtime.processingPromise;
   }
 
-  processingPromise = (async () => {
+  runtime.processingPromise = (async () => {
     try {
       do {
-        rerunRequested = false;
+        runtime.rerunRequested = false;
         await processQueue();
-      } while (rerunRequested);
+      } while (runtime.rerunRequested);
     } finally {
-      processingPromise = null;
+      runtime.processingPromise = null;
     }
   })();
-  return processingPromise;
+  return runtime.processingPromise;
 }
 
 async function processQueue(): Promise<void> {
   let lease: WorkerLease | null = null;
-  while (!shuttingDown && !lease) {
+  while (!runtime.shuttingDown && !lease) {
     lease = await acquireWorkerLease();
     if (!lease) {
-      ownershipState = "waiting";
+      runtime.ownershipState = "waiting";
       if (!(await prisma.download.findFirst({ where: { status: "queued" }, select: { id: true } })))
         return;
       // Waiting follows only a proved busy lease, never an ambiguous DB mutation.
@@ -158,17 +118,17 @@ async function processQueue(): Promise<void> {
     }
   }
   if (!lease) return;
-  activeLease = lease;
-  ownershipState = "held";
+  runtime.activeLease = lease;
+  runtime.ownershipState = "held";
   try {
-    for (const [id, error] of pendingFailures) {
+    for (const [id, error] of runtime.pendingFailures) {
       const row = await prisma.download.findUnique({ where: { id } });
       if (row && ["queued", "downloading", "converting"].includes(row.status))
         await markAsFailed(id, error, lease);
-      else pendingFailures.delete(id);
+      else runtime.pendingFailures.delete(id);
     }
     await recoverInterruptedDownloads(lease);
-    while (!shuttingDown) {
+    while (!runtime.shuttingDown) {
       lease.checkTransfer();
       // Get next queued download
       const nextDownload = await prisma.download.findFirst({
@@ -190,24 +150,23 @@ async function processQueue(): Promise<void> {
     try {
       await lease.release();
     } finally {
-      activeLease = null;
-      ownershipState = "idle";
+      runtime.activeLease = null;
+      runtime.ownershipState = "idle";
     }
   }
 }
 
 /** Stop scheduling and abort only this process's transfers; do not re-grab. */
 export async function shutdownDownloadProcessing(): Promise<void> {
-  shuttingDown = true;
-  activeLease?.abort();
-  await processingPromise;
-  await Promise.all(directWork);
+  runtime.shuttingDown = true;
+  runtime.activeLease?.abort();
+  await runtime.processingPromise;
+  await Promise.all(runtime.directWork);
 }
 
-let shutdownHandlersInstalled = false;
 export function installWorkerShutdownHandlers(): void {
-  if (shutdownHandlersInstalled) return;
-  shutdownHandlersInstalled = true;
+  if (runtime.shutdownHandlersInstalled) return;
+  runtime.shutdownHandlersInstalled = true;
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {
       // This exact process owns the worker and tools. If persistence is unavailable,
@@ -334,31 +293,31 @@ async function moveIntoJobDir(
 async function processDownload(downloadId: string): Promise<void> {
   assertWritesEnabled();
   const work = executeSingleDownload(downloadId);
-  directWork.add(work);
+  runtime.directWork.add(work);
   try {
     await work;
   } finally {
-    directWork.delete(work);
+    runtime.directWork.delete(work);
   }
 }
 
 async function executeSingleDownload(downloadId: string): Promise<void> {
   assertWritesEnabled();
-  await downloadSemaphore.acquire();
+  await runtime.semaphore.acquire();
   let lease: WorkerLease | null = null;
   try {
-    if (shuttingDown) throw new Error("Worker is shutting down");
+    if (runtime.shuttingDown) throw new Error("Worker is shutting down");
     lease = await acquireWorkerLease();
     if (!lease) throw new WorkerOwnershipError();
-    activeLease = lease;
+    runtime.activeLease = lease;
     await recoverInterruptedDownloads(lease);
     await processOwnedDownload(downloadId, lease);
   } finally {
     try {
       await lease?.release();
     } finally {
-      if (activeLease === lease) activeLease = null;
-      downloadSemaphore.release();
+      if (runtime.activeLease === lease) runtime.activeLease = null;
+      runtime.semaphore.release();
     }
   }
 }
@@ -636,9 +595,9 @@ async function processOwnedDownload(downloadId: string, lease: WorkerLease): Pro
     console.error(`[Download] Error processing download ${downloadId}`);
     await markAsFailed(
       downloadId,
-      shuttingDown
+      runtime.shuttingDown
         ? "Worker interrupted; retry this job explicitly"
-        : (pendingFailures.get(downloadId) ?? failureMessage),
+        : (runtime.pendingFailures.get(downloadId) ?? failureMessage),
       lease
     );
   } finally {
@@ -656,12 +615,12 @@ async function processOwnedDownload(downloadId: string, lease: WorkerLease): Pro
 }
 
 async function markAsFailed(downloadId: string, error: string, lease: WorkerLease): Promise<void> {
-  pendingFailures.set(downloadId, error);
+  runtime.pendingFailures.set(downloadId, error);
   // A lost transaction acknowledgement is not proof of rollback. Preserve an
   // already durable terminal row instead of overwriting a verified completion.
   const row = await prisma.download.findUnique({ where: { id: downloadId } });
   if (!row || ["completed", "failed"].includes(row.status)) {
-    pendingFailures.delete(downloadId);
+    runtime.pendingFailures.delete(downloadId);
     return;
   }
   await lease.mutate((tx) =>
@@ -674,7 +633,7 @@ async function markAsFailed(downloadId: string, error: string, lease: WorkerLeas
       },
     })
   );
-  pendingFailures.delete(downloadId);
+  runtime.pendingFailures.delete(downloadId);
 }
 
 // CDN streams (confirmed live: a 3sat direct-download URL) can stop sending
