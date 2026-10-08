@@ -66,14 +66,16 @@ eindeutigen Beleg keine Identitätsstempel; neutrale Kandidaten bleiben gemäß
 bisherigem Endpointvertrag zulässig. Legacy-Regelfeld `timestamp` bleibt aus
 Kompatibilitätsgründen unverändert und ist kein neuer Airdateowner.
 
-## Gates und verbleibende Frischegrenze
+## Gates und Frischegrenze
 
 Kausale Tests prüfen Adapter-/Raw-Whitelist, fehlende Rechte, unmögliche/reverse
 Zeiten, Ablauf und exakte URL-Bindung; tatsächliche Film-/TV-/Generic-Serializer,
 gleichbleibende GUIDs, Zukunftsfolge durch Newznab→NZB ohne Enqueue und erhaltene
 RSS-Grenze. Kein UIlayout dieses Pakets geändert, keine Live-Grabs.
 
-Die bisherige ganze RSS-Antwort im Cache kann erneute Serialisierung umgehen;
-das ist ein gesondert zu beseitigender Frischebefund in **P14.2**, kein Beleg
-aktuell geprüfter Rechte. Die finale P14.3-Abnahme bleibt bis zur geschlossenen
-Cachegrenze und neuen Fork-/Backend-/Containerketten offen.
+Der P14.2-Entwicklungscheckpoint entfernt ganze RSS-Antwortcaches und positive
+Katalog-/Sonarr-Treffer-Snapshots. Nur Metadatenziele bleiben paginierbar;
+Auswahl und Rechte werden frisch geprüft. Der konkrete Vertrag und seine
+konservative Validatorgrenze stehen unter
+[Quellenfrische](source-proof-freshness.md). Finale Fork-/Backend-/Container-
+Abnahme und Status ausschließlich im TODO, kein Rollout aus Entwicklungsgrün.

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { HttpRequestBudget } from "./fetch-retry";
 import { isProbeableMp4, probeMp4AudioLanguage, readMp4AudioLanguage } from "./mp4-audio-language";
 import { probeMp4MediaFacts } from "./mp4-audio-language";
-import { syntheticMp4 } from "./__fixtures__/mp4";
+import { syntheticMp4, mp4RangeResponse } from "./__fixtures__/mp4";
 
 function atom(type: string, payload: Buffer) {
   const header = Buffer.alloc(8);
@@ -73,13 +73,19 @@ it("skips a top-level mdat by its declared size, reading at most two bounded ran
     .mockResolvedValueOnce(
       new Response(first, {
         status: 206,
-        headers: { "content-range": `bytes 0-${first.length - 1}/${total}` },
+        headers: {
+          "content-range": `bytes 0-${first.length - 1}/${total}`,
+          etag: '"synthetic-v1"',
+        },
       })
     )
     .mockResolvedValueOnce(
       new Response(last, {
         status: 206,
-        headers: { "content-range": `bytes ${start}-${total - 1}/${total}` },
+        headers: {
+          "content-range": `bytes ${start}-${total - 1}/${total}`,
+          etag: '"synthetic-v1"',
+        },
       })
     );
   vi.stubGlobal("fetch", fetch);
@@ -91,6 +97,7 @@ it("skips a top-level mdat by its declared size, reading at most two bounded ran
     headers: { Range: "bytes=0-1048575", "Accept-Encoding": "identity" },
   });
   expect(fetch.mock.calls[1][1].headers.Range).toBe(`bytes=${start}-${start + 1048575}`);
+  expect(fetch.mock.calls[1][1].headers["If-Range"]).toBe('"synthetic-v1"');
   expect(budget.remainingAttempts).toBe(8);
 });
 
@@ -116,15 +123,7 @@ function largeTrack(handlerType: string, code: string, padding: number) {
 }
 
 function stubRanges(data: Buffer) {
-  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
-    const range = /^bytes=(\d+)-(\d+)$/.exec((init.headers as Record<string, string>).Range)!;
-    const start = Number(range[1]),
-      end = Math.min(Number(range[2]), data.length - 1);
-    return new Response(new Uint8Array(data.subarray(start, end + 1)), {
-      status: 206,
-      headers: { "content-range": `bytes ${start}-${end}/${data.length}` },
-    });
-  });
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => mp4RangeResponse(data, init));
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -194,6 +193,202 @@ it("inspects the further conflicting track in a third window, never accepting th
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
+function proofContext(fingerprint: string) {
+  return { fingerprint, isCurrent: () => true };
+}
+function distantTracks(code = "deu") {
+  return atom(
+    "moov",
+    Buffer.concat([largeTrack("vide", "und", 2 * 1024 * 1024), metadata([code])])
+  );
+}
+
+it.each(["changed", "missing", "weak", "last-modified", "if-range-ignored"])(
+  "never combines equally sized assets using an insufficient validator: %s",
+  async (kind) => {
+    const data = distantTracks();
+    let count = 0;
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const response = mp4RangeResponse(data, init);
+      count++;
+      if (kind === "changed" && count === 2) response.headers.set("etag", '"changed-same-size"');
+      if (kind === "missing" || kind === "last-modified") response.headers.delete("etag");
+      if (kind === "weak") response.headers.set("etag", 'W/"version"');
+      if (kind === "last-modified") {
+        response.headers.set("last-modified", "Tue, 06 Oct 2026 12:00:00 GMT");
+        response.headers.set("date", "Tue, 06 Oct 2026 12:00:05 GMT");
+      }
+      if (kind === "if-range-ignored" && count === 2) return new Response(data, { status: 200 });
+      return response;
+    });
+    vi.stubGlobal("fetch", fetch);
+    expect(await probeMp4MediaFacts(url, new HttpRequestBudget())).toEqual({
+      audioLanguage: null,
+      videoDimensions: null,
+    });
+    expect(fetch).toHaveBeenCalledTimes(["changed", "if-range-ignored"].includes(kind) ? 2 : 1);
+  }
+);
+
+it("revalidates temporal facts with a fresh first range and measures the saved range bytes", async () => {
+  const data = distantTracks();
+  const fetch = stubRanges(data);
+  const context = proofContext("temporal-cache");
+  const firstBudget = new HttpRequestBudget();
+  const first = await probeMp4MediaFacts(url, firstBudget, true, context);
+  expect(first.audioLanguage).toBe("de");
+  expect(fetch).toHaveBeenCalledTimes(2);
+  const secondBudget = new HttpRequestBudget();
+  expect(await probeMp4MediaFacts(url, secondBudget, true, context)).toEqual(first);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(secondBudget.remainingAttempts).toBe(9);
+  const requestedStarts = fetch.mock.calls.map((call) => new Headers(call[1].headers).get("range"));
+  expect(requestedStarts[2]).toBe("bytes=0-1048575");
+  // The revalidation saves the final sound-track range, not the required first MiB.
+  const finalStart = Number(/^bytes=(\d+)/.exec(requestedStarts[1]!)![1]);
+  expect(data.length - finalStart).toBe(68);
+});
+
+it("refreshes a same-size changed asset, rotated URL and changed context without changing source identity", async () => {
+  const context = proofContext("rotation-context");
+  const first = distantTracks("deu");
+  const changed = distantTracks("fra");
+  expect(first.length).toBe(changed.length);
+  const fetch = stubRanges(first);
+  expect(
+    (await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context)).audioLanguage
+  ).toBe("de");
+  fetch.mockImplementation(async (_url, init) => mp4RangeResponse(changed, init));
+  expect(
+    (await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context)).audioLanguage
+  ).toBe("fr");
+  expect(fetch).toHaveBeenCalledTimes(4);
+  await probeMp4MediaFacts(url + "?token=rotated", new HttpRequestBudget(), true, context);
+  await probeMp4MediaFacts(url, new HttpRequestBudget(), true, proofContext("new-credentials"));
+  expect(fetch).toHaveBeenCalledTimes(8);
+});
+
+it("expires versioned proof and refuses late invalidated settings", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const fetch = stubRanges(distantTracks());
+  const context = proofContext("expiry-context");
+  await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context);
+  now += 300_001;
+  await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context);
+  expect(fetch).toHaveBeenCalledTimes(4);
+  let current = true;
+  fetch.mockImplementation(async (_url, init) => {
+    current = false;
+    return mp4RangeResponse(distantTracks(), init);
+  });
+  expect(
+    await probeMp4MediaFacts(url, new HttpRequestBudget(), true, {
+      fingerprint: "invalidated",
+      isCurrent: () => current,
+    })
+  ).toEqual({ audioLanguage: null, videoDimensions: null });
+});
+
+it("coalesces simultaneous probes while independently charging each caller's actual requests", async () => {
+  const data = distantTracks();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    await gate;
+    return mp4RangeResponse(data, init);
+  });
+  vi.stubGlobal("fetch", fetch);
+  const one = new HttpRequestBudget();
+  const two = new HttpRequestBudget();
+  const context = proofContext("concurrent-context");
+  const first = probeMp4MediaFacts(url, one, true, context);
+  const second = probeMp4MediaFacts(url, two, true, context);
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  expect(a.audioLanguage).toBe("de");
+  expect(b).toEqual(a);
+  expect(b).not.toBe(a);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect([one.remainingAttempts, two.remainingAttempts]).toEqual([8, 8]);
+});
+
+it("does not turn weak proof, timeout or Unknown into a definitive cached miss", async () => {
+  const context = proofContext("retry-context");
+  const data = distantTracks();
+  const fetch = stubRanges(data);
+  fetch.mockImplementation(async (_url, init) => {
+    const response = mp4RangeResponse(data, init);
+    response.headers.delete("etag");
+    return response;
+  });
+  expect(
+    (await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context)).audioLanguage
+  ).toBeNull();
+  fetch.mockImplementation(() => new Promise(() => {}));
+  await expect(
+    probeMp4MediaFacts(url, new HttpRequestBudget(10, 5), true, context)
+  ).rejects.toThrow("Provider request deadline exceeded");
+  fetch.mockImplementation(async (_url, init) => mp4RangeResponse(data, init));
+  expect(
+    (await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context)).audioLanguage
+  ).toBe("de");
+  expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+it("does not reuse single-window facts without a strong tag or leak facts across rendition selectors", async () => {
+  const data = syntheticMp4();
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    const response = mp4RangeResponse(data, init);
+    response.headers.delete("etag");
+    return response;
+  });
+  vi.stubGlobal("fetch", fetch);
+  const context = proofContext("weak-single-window");
+  const one = await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context);
+  const two = await probeMp4MediaFacts(url, new HttpRequestBudget(), true, context);
+  expect(one.audioLanguage).toBe("de");
+  expect(two).toEqual(one);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  fetch.mockImplementation(async (value, init) =>
+    mp4RangeResponse(
+      syntheticMp4(1280, 720, value.includes("edition=french") ? ["fra"] : ["deu"]),
+      init
+    )
+  );
+  const other = await probeMp4MediaFacts(
+    url + "?edition=french",
+    new HttpRequestBudget(),
+    true,
+    context
+  );
+  expect(other).toEqual({ audioLanguage: "fr", videoDimensions: { width: 1280, height: 720 } });
+});
+
+it("rejects a coalesced result exceeding the waiter's attempts or independent deadline", async () => {
+  const data = distantTracks();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    await gate;
+    return mp4RangeResponse(data, init);
+  });
+  vi.stubGlobal("fetch", fetch);
+  const context = proofContext("caller-budget-bound");
+  const first = probeMp4MediaFacts(url, new HttpRequestBudget(), true, context);
+  const small = probeMp4MediaFacts(url, new HttpRequestBudget(1), true, context);
+  const late = probeMp4MediaFacts(url, new HttpRequestBudget(10, 5), true, context);
+  await expect(late).rejects.toThrow("Provider request deadline exceeded");
+  release();
+  expect((await first).audioLanguage).toBe("de");
+  await expect(small).rejects.toThrow("Provider request deadline exceeded");
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 it("reads distant track trailers within four windows but refuses a fifth without a partial language", async () => {
   const trailer = atom("trgr", Buffer.alloc(8));
   const withTrailer = (type: string, code: string) => {
@@ -219,6 +414,30 @@ it("reads distant track trailers within four windows but refuses a fifth without
   const capped = stubRanges(more);
   expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBeNull();
   expect(capped).toHaveBeenCalledTimes(4);
+});
+
+it("revalidates a four-window audio proof with one request and the measured byte reduction", async () => {
+  const trailer = atom("trgr", Buffer.alloc(8));
+  const tracks = [
+    ["vide", "und"],
+    ["soun", "deu"],
+  ].map(([type, code]) => {
+    const track = largeTrack(type, code, 2 * 1024 * 1024);
+    return atom("trak", Buffer.concat([track.subarray(8), trailer]));
+  });
+  const data = atom("moov", Buffer.concat(tracks));
+  const fetch = stubRanges(data);
+  const context = proofContext("four-window-byte-measurement");
+  const first = await probeMp4MediaFacts(url, new HttpRequestBudget(), false, context);
+  expect(first.audioLanguage).toBe("de");
+  expect(fetch).toHaveBeenCalledTimes(4);
+  const firstBytes = fetch.mock.calls.reduce((sum, [, init]) => {
+    const from = Number(/^bytes=(\d+)/.exec(new Headers(init.headers).get("range")!)![1]);
+    return sum + Math.min(1048576, data.length - from);
+  }, 0);
+  expect(await probeMp4MediaFacts(url, new HttpRequestBudget(), false, context)).toEqual(first);
+  expect(fetch).toHaveBeenCalledTimes(5);
+  expect(firstBytes - 1048576).toBe(2097168);
 });
 
 it("accepts only the explicit ARD CDN and still verifies all tracks", async () => {

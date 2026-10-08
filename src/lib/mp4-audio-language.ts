@@ -1,6 +1,9 @@
 import { readBoundedProviderBytes } from "./bounded-provider-json";
 import { FetchBudgetError, fetchWithRetry, type HttpRequestBudget } from "./fetch-retry";
 import { recordDecision } from "@/server/decision-diagnostics";
+import { createHash } from "node:crypto";
+import { LRUCache } from "lru-cache";
+import { getSearchTTL } from "./cache";
 
 const MAX_BYTES = 1024 * 1024;
 const hosts = new Set([
@@ -90,6 +93,7 @@ export function readMp4AudioLanguage(moov: Buffer): string | null {
 }
 
 class UnsupportedMetadata extends Error {}
+class AssetVersionChanged extends Error {}
 
 export interface Mp4MediaFacts {
   audioLanguage: string | null;
@@ -101,19 +105,110 @@ const unknownFacts = (): Mp4MediaFacts => {
   return { audioLanguage: null, videoDimensions: null };
 };
 
+/** Server-owned fingerprint includes provider/credentials, instance and parser generation. */
+export interface Mp4ProofContext {
+  fingerprint: string;
+  isCurrent: () => boolean;
+}
+interface AssetProof {
+  facts: Mp4MediaFacts;
+  validator: string;
+  total: number;
+  expiresAt: number;
+}
+interface ProbeFlight {
+  promise: Promise<Mp4MediaFacts>;
+  attempts: number;
+  budget: HttpRequestBudget;
+  charged: WeakSet<HttpRequestBudget>;
+}
+const proofs = new LRUCache<string, AssetProof>({ max: 256 });
+const flights = new Map<string, ProbeFlight>();
+const PARSER_VERSION = "mp4-tracks-v2";
+
+function strongEtag(value: string | null): string | null {
+  // Last-Modified alone is not a strong validator: shared CDN clock provenance
+  // is unavailable. Do not combine ranges on a weak tag or a guessed date.
+  return value !== null && value.length <= 256 && /^"[\x21\x23-\x7e]*"$/.test(value) ? value : null;
+}
+
+/** Coalesced consumers keep their own deadline and pay the actual range count. */
+async function consumeFlight(
+  flight: ProbeFlight,
+  budget: HttpRequestBudget
+): Promise<Mp4MediaFacts> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    budget.assertAvailable();
+    const facts = await Promise.race([
+      flight.promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new FetchBudgetError()),
+          Math.max(0, budget.deadlineAt - Date.now())
+        );
+      }),
+    ]);
+    if (Date.now() >= budget.deadlineAt) throw new FetchBudgetError();
+    return structuredClone(facts);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (!flight.charged.has(budget)) {
+      for (let attempt = 0; attempt < flight.attempts; attempt++) budget.takeAttempt();
+      flight.charged.add(budget);
+    }
+  }
+}
+
+export async function probeMp4MediaFacts(
+  url: string,
+  budget: HttpRequestBudget,
+  includeDimensions = true,
+  context?: Mp4ProofContext
+): Promise<Mp4MediaFacts> {
+  if (!isProbeableMp4(url) || context?.isCurrent() === false) return unknownFacts();
+  if (!context) return readMp4MediaFacts(url, budget, includeDimensions);
+  const key = createHash("sha256")
+    .update(JSON.stringify([PARSER_VERSION, context.fingerprint, url, includeDimensions]))
+    .digest("hex");
+  const pending = flights.get(key);
+  if (pending) {
+    const facts = await consumeFlight(pending, budget);
+    return context.isCurrent() ? facts : unknownFacts();
+  }
+  if (flights.size >= 128) return unknownFacts();
+  const flight: ProbeFlight = {
+    promise: Promise.resolve({ audioLanguage: null, videoDimensions: null }),
+    attempts: 0,
+    budget,
+    charged: new WeakSet([budget]),
+  };
+  flight.promise = readMp4MediaFacts(url, budget, includeDimensions, key, context, () => {
+    flight.attempts++;
+  }).finally(() => {
+    if (flights.get(key) === flight) flights.delete(key);
+  });
+  flights.set(key, flight);
+  return flight.promise;
+}
+
 /**
  * Four 1-MiB windows, seeking only by bounded, declared ISO-BMFF box sizes.
  * Sample tables can make moov/trak many MiB long: they are not language evidence
  * and need not be fetched. Every track header still has to be inspected, so a
  * fifth required window or an incomplete/conflicting track stays unknown.
  */
-export async function probeMp4MediaFacts(
+async function readMp4MediaFacts(
   url: string,
   budget: HttpRequestBudget,
-  includeDimensions = true
+  includeDimensions = true,
+  key?: string,
+  context?: Mp4ProofContext,
+  onAttempt?: () => void
 ): Promise<Mp4MediaFacts> {
   if (!isProbeableMp4(url)) return unknownFacts();
   let total: number | undefined;
+  let validator: string | null = null;
   const windows: Array<{ start: number; data: Buffer }> = [];
   let requests = 0;
   let boxes = 0;
@@ -131,22 +226,31 @@ export async function probeMp4MediaFacts(
       (total !== undefined && start + size > total)
     )
       throw new UnsupportedMetadata();
+    if (requests > 0 && !validator) throw new AssetVersionChanged();
     requests++;
+    onAttempt?.();
     const response = await fetchWithRetry(
       url,
       {
         headers: {
           Range: `bytes=${start}-${start + MAX_BYTES - 1}`,
           "Accept-Encoding": "identity",
+          ...(requests > 1 && validator ? { "If-Range": validator } : {}),
         },
       },
       { requestBudget: budget, maxRetries: 0 }
     );
     const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get("content-range") ?? "");
     const encoding = response.headers.get("content-encoding");
-    if (response.status !== 206 || !range || (encoding && encoding !== "identity")) {
+    const currentValidator = strongEtag(response.headers.get("etag"));
+    if (
+      response.status !== 206 ||
+      !range ||
+      (encoding && encoding !== "identity") ||
+      (requests > 1 && (!validator || currentValidator !== validator))
+    ) {
       void response.body?.cancel().catch(() => {});
-      throw new UnsupportedMetadata();
+      throw new AssetVersionChanged();
     }
     const [from, end, length] = range.slice(1).map(Number);
     if (
@@ -158,9 +262,10 @@ export async function probeMp4MediaFacts(
       (total !== undefined && length !== total)
     ) {
       void response.body?.cancel().catch(() => {});
-      throw new UnsupportedMetadata();
+      throw new AssetVersionChanged();
     }
     total = length;
+    if (requests === 1) validator = currentValidator;
     const data = await readBoundedProviderBytes(response, budget.deadlineAt, MAX_BYTES);
     if (data.length !== end - from + 1 || data.length < size) throw new UnsupportedMetadata();
     windows.push({ start, data });
@@ -223,6 +328,22 @@ export async function probeMp4MediaFacts(
 
   try {
     await read(0, 8);
+    if (key) {
+      const cached = proofs.get(key);
+      // Every temporal hit still validates a fresh bounded first range. A
+      // rotated signed URL, missing/changed validator or expired context is a miss.
+      if (
+        cached &&
+        validator &&
+        cached.validator === validator &&
+        cached.total === total &&
+        Date.now() < cached.expiresAt &&
+        context?.isCurrent() &&
+        Date.now() < budget.deadlineAt
+      )
+        return structuredClone(cached.facts);
+      proofs.delete(key);
+    }
     for (let offset = 0; offset < total!; ) {
       const current = await headerAt(offset, total!);
       offset = current.end;
@@ -266,16 +387,28 @@ export async function probeMp4MediaFacts(
         languages.push(language);
       }
       if (Date.now() >= budget.deadlineAt) throw new FetchBudgetError();
-      return {
+      const facts: Mp4MediaFacts = {
         audioLanguage:
           languages.length && languages.every((language) => language && language === languages[0])
             ? languages[0]
             : null,
         videoDimensions: videos.length === 1 ? videos[0] : null,
       };
+      if (context?.isCurrent() === false) return unknownFacts();
+      const ttl = Math.min(getSearchTTL(), 300) * 1000;
+      if (key && validator && total && ttl > 0 && (facts.audioLanguage || facts.videoDimensions))
+        proofs.set(key, {
+          facts: structuredClone(facts),
+          validator,
+          total,
+          expiresAt: Date.now() + ttl,
+        });
+      return facts;
     }
   } catch (error) {
-    if (!(error instanceof UnsupportedMetadata)) throw error;
+    if (!(error instanceof UnsupportedMetadata) && !(error instanceof AssetVersionChanged))
+      throw error;
+    if (key) proofs.delete(key);
     recordDecision("media", "probe_unsupported", "missing");
   }
   return unknownFacts();

@@ -135,8 +135,39 @@ class DynamicTTLCache {
   }
 }
 
-// Cache for Mediathek API results (configurable TTL)
-export const mediathekCache = new DynamicTTLCache(500, getSearchTTL);
+/** Only a successfully empty catalogue window may outlive its request (at most 15s).
+ * Positive rows include expiring media URLs and adapter proof; never reuse them
+ * as current source evidence. Metadata identity keeps its separate TTL owner.
+ */
+class EmptyCatalogueCache {
+  private entries = new LRUCache<string, number>({ max: 128 });
+  get(key: string): { results: [] } | undefined {
+    const until = this.entries.get(key);
+    if (until === undefined) return undefined;
+    if (Date.now() >= until) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    return { results: [] };
+  }
+  set(key: string, value: { results: import("@/types").ApiResultItem[] }): void {
+    if (productSettingsContext.getStore()?.isCurrent() === false) return;
+    if (!Array.isArray(value.results) || value.results.length !== 0) return;
+    const ttl = Math.min(getSearchTTL(), 15) * 1000;
+    if (ttl <= 0) {
+      this.entries.delete(key);
+      return;
+    }
+    this.entries.set(key, Date.now() + ttl);
+  }
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
+  clear(): void {
+    this.entries.clear();
+  }
+}
+export const mediathekCache = new EmptyCatalogueCache();
 
 // Cache for TVDB data (configurable TTL)
 export const tvdbCache = new DynamicTTLCache(1000, getMetadataTTL);

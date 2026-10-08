@@ -152,10 +152,10 @@ describe("Sonarr supplemental search consumer", () => {
     const initialCalls = mockedFetch.mock.calls.length;
     expect(initialCalls).toBeGreaterThan(0);
     await fetchSearchResultsById(supplemental, context, 100, 0);
-    expect(mockedFetch).toHaveBeenCalledTimes(initialCalls);
+    expect(mockedFetch).toHaveBeenCalledTimes(initialCalls * 2);
     mediathekMocks.rulesets.getRulesetContext.mockReturnValue("after-topic-change");
     await fetchSearchResultsById(supplemental, context, 100, 0);
-    expect(mockedFetch.mock.calls.length).toBeGreaterThan(initialCalls);
+    expect(mockedFetch.mock.calls.length).toBeGreaterThan(initialCalls * 2);
   });
 
   it("finds an exact supplemental episode via its real title on the same caller budget", async () => {
@@ -317,7 +317,7 @@ describe("shared catalogue rules preserve identity and independent candidates", 
     expect(xml).toContain('name="tvdbid" value="299964"');
     expect(xml).toContain("S02E01");
   });
-  it("does not reuse identity output after a rule-context change, while reusing source candidates", async () => {
+  it("does not reuse identity output or positive source rows after a rule-context change", async () => {
     mockApi([makeItem({ topic: rule.topic, title: "Occupied S02E01" })]);
     mediathekMocks.rulesets.getRulesetContext.mockReturnValue("rules-before");
     const context = makeTvSearchContext({ query: "Occupied" });
@@ -328,7 +328,7 @@ describe("shared catalogue rules preserve identity and independent candidates", 
     const after = await fetchSearchResultsByString(context, 100, 0);
     expect(after).not.toContain('name="tvdbid"');
     expect(after).toContain('total="1"');
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
   it.each(["bad-json", '[{"attribute":"duration","type":"GreaterThan","value":"1000"}]', "[]"])(
     "keeps independent candidates when a rule fails: %s",
@@ -1288,7 +1288,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(secondPage).not.toContain("<item>");
   });
 
-  it("paginates the full generic result set and reuses successful provider data", async () => {
+  it("paginates the full generic result set while refreshing positive source rows", async () => {
     mockedGetSetting.mockImplementation(async (key) =>
       key === "download.quality" ? "720p" : null
     );
@@ -1328,11 +1328,8 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(samePageFromCache).toBe(secondPage);
     expect(thirdPage).toContain('offset="2"');
     expect(thirdPage).toContain("Example.C");
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_v13-tv-source-facts_["Example",null,null,null]_1_1_720p_300'),
-      expect.objectContaining({ response: secondPage })
-    );
+    expect(mockedFetch).toHaveBeenCalledTimes(3);
+    expect(mockedCacheSet.mock.calls.every(([, entry]) => !("response" in entry))).toBe(true);
   });
 
   it("does not cache a failed provider response as a successful empty search", async () => {
@@ -1349,7 +1346,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
 
     expect(retriedResponse).toContain('total="3"');
     expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(mockedCacheSet).toHaveBeenCalledTimes(2);
+    expect(mockedCacheSet).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1357,7 +1354,15 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
   it("includes movies at the configured boundary and rejects shorter results", async () => {
     mockedGetMinDuration.mockResolvedValue(2700);
     mockApi([
-      makeItem({ topic: "Too Short", title: "Documentary", duration: 2699 }),
+      makeItem({
+        topic: "Too Short",
+        title: "Documentary",
+        duration: 2699,
+        url_video: "https://example.com/short_720.mp4",
+        url_video_hd: "https://example.com/short_1080.mp4",
+        url_video_low: "https://example.com/short_480.mp4",
+        url_website: "https://example.com/short",
+      }),
       makeItem({ topic: "At Boundary", title: "Documentary", duration: 2700 }),
     ]);
 
@@ -1365,10 +1370,11 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
 
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
-    expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v13-tv-source-facts_Documentary__100_0_all_2700"),
-      expect.any(Object)
-    );
+    mockedGetMinDuration.mockResolvedValue(2699);
+    const refreshed = await fetchMovieSearchByQuery("Documentary", 100, 0);
+    expect(refreshed).toContain("Too.Short");
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockedCacheSet.mock.calls.every(([, entry]) => !("response" in entry))).toBe(true);
   });
 });
 
@@ -1466,10 +1472,11 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
 
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
-    expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v13-tv-source-facts_[a-f0-9]{64}_100_0_all_2700/),
-      expect.any(Object)
-    );
+    mockedGetMinDuration.mockResolvedValue(2699);
+    const refreshed = await fetchMovieSearchResults(movie, 100, 0);
+    expect(refreshed).toContain("show_720.mp4");
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockedCacheSet.mock.calls.every(([, entry]) => !("response" in entry))).toBe(true);
   });
 });
 

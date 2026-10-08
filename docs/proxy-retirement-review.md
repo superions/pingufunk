@@ -2018,3 +2018,33 @@ post-write-Rollback, SQLitepersistenz und echte Medienconsumer beider Backends.
 1175 lokale Tests und übrige Produktgates grün; Desktopfilter/Paging/Fehler/
 Recovery separat beobachtet. IAB-Visibilitygrenze weiter offengelegt. P15.2
 geschlossen, keine P15.1/P15.4- oder Gesamt-/Produktionsabnahme.
+
+## Implementierungsreview P14.2 — Quellenfrische
+
+08.10.2026 auf `codex/source-proof-freshness`: vollständiger betroffener
+Read-/Call-/Cache-/Writepfad durch Implementierer erneut geprüft. Positive
+Katalogzeilen/RSS-Bodies und Sonarr-Treffer dürfen aktuelle Assetfakten nicht
+ersetzen. Sonarr hält nur Metadatenziele/Cursor, actual source retrieval und
+Serialisierung bleiben frisch. Kein zweiter Sprachowner oder Sendercrawler.
+
+MP4: gleiche Größe reicht nicht; weiterer Range braucht denselben starken
+ETag plus If-Range. Versionskonflikt verwirft auch schon gelesene Audiofakten,
+kein partieller Dimensionscatch darf solche Fakten retten. Last-Modified ist
+ohne belegte Clockstärke nicht ausreichend. Zeitcache validiert immer neue
+erste Bytes, exakte URL inklusive Signaturen, Kontextgeneration und Parser;
+Flights behalten unabhängige Attempt-/Deadlinegrenzen. Typisierte begrenzte
+Caches, keine beleglosen negativen Ergebnisse. Frische Worker-/lokale
+Abschlussprüfungen unverändert. [Vertrag](source-proof-freshness.md).
+
+Regressionen und Review: gleich großer Assetwechsel zwischen Ranges, schwache/
+fehlende Validatoren, ignoriertes If-Range, Rotation/Expiry/anderer Fassung,
+parallele Caller, zu kleines/abgelaufenes Budget und späterer erfolgreicher
+Beleg; actual RSS→NZB erneuert URL/Audio/Rechte. Alte Cache-Assertions ersetzt
+durch erneute Quellenrequests und strenge Consumer-/GUID-/Expiryassertions;
+keine Tests entfernt/skipped. Die native leere RSS-Validationitemgrenze bleibt
+ausdrücklich kein normaler Treffer. Gemessene synthetische Vierfensterprobe:
+drei Requests/2.097.168 Bytes gespart, keine Provider-Vollabdeckungsbehauptung.
+
+1228 lokale Tests/übrige Produktgates grün. Finale neue Fork-/Backend-/Container-
+ketten noch offen; P14.2/P14.3 nicht vorzeitig geschlossen, P03.4 weiterhin
+separat. Keine neue UIlayout-/Schema-/Deploymentänderung.

@@ -522,9 +522,107 @@ it.each([false, true])(
     const parsed = await parseStringPromise(await page.text());
     expect(parsed.rss.channel[0]["newznab:response"][0].$).toEqual({ offset: "1", total: "1" });
     expect(parsed.rss.channel[0].item).toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(beforePage);
+    expect(fetchMock).toHaveBeenCalledTimes(beforePage + 2);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes("api/v3/episode"))
+    ).toHaveLength(1);
   }
 );
+
+it("refreshes exact ARD URL/audio/rights in repeated RSS, never returning the previous body as proof", async () => {
+  const base = fetchMock.getMockImplementation()!;
+  const id = Buffer.from("crid://example.invalid/synthetic/fresh").toString("base64url");
+  let token = "first";
+  let language = "deu";
+  let expired = false;
+  const mediaUrl = () => `https://ctv-videos.daserste.de/synthetic/fresh.mp4?token=${token}`;
+  fetchMock.mockImplementation(async (value: string) => {
+    const url = new URL(value);
+    if (url.hostname === "mediathekviewweb.de")
+      return Response.json({
+        result: {
+          results: [
+            {
+              ...source,
+              url_website: `https://www.ardmediathek.de/video/synthetic/${id}`,
+              url_video: mediaUrl(),
+            },
+          ],
+        },
+        err: null,
+      });
+    if (url.hostname === "api.ardmediathek.de")
+      return Response.json({
+        widgets: [
+          {
+            id,
+            type: "player_ondemand",
+            blockedByLoginOnly: false,
+            blockedByFsk: false,
+            geoblocked: false,
+            availableTo: expired ? "2000-01-01T00:00:00Z" : "2099-01-01T00:00:00Z",
+            mediaCollection: {
+              embedded: {
+                meta: { ovLanguageCode: "eng" },
+                streams: [
+                  {
+                    kind: "main",
+                    media: [
+                      {
+                        url: mediaUrl(),
+                        mimeType: "video/mp4",
+                        audios: [{ languageCode: language, kind: "standard" }],
+                        maxHResolutionPx: 1280,
+                        maxVResolutionPx: 720,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    return base(value);
+  });
+  const read = async () =>
+    (
+      await parseStringPromise(
+        await (
+          await GET(new NextRequest("http://localhost/api/newznab?t=tvsearch&cat=5000"))
+        ).text()
+      )
+    ).rss.channel[0];
+  const first = await read();
+  expect(first.item[0].title[0]).toContain("GERMAN");
+  expect(first.item[0].link[0]).toBe(mediaUrl());
+  const guid = first.item[0].guid[0]._;
+  token = "rotated";
+  language = "fra";
+  const second = await read();
+  expect(second.item[0].title[0]).toContain("RundfunkArr.Validation");
+  expect(JSON.stringify(second)).not.toContain("S02E03");
+  expect(JSON.stringify(second)).not.toContain(mediaUrl());
+  // The configured German policy rejects the newly French rendition; a
+  // rotated signature alone does not manufacture a new release GUID.
+  language = "deu";
+  const third = await read();
+  expect(third.item[0].guid[0]._).toBe(guid);
+  expect(third.item[0].link[0]).toBe(mediaUrl());
+  const nzb = await downloadNzb(
+    new NextRequest(new URL(third.item[0].enclosure[0].$.url, "http://localhost"))
+  );
+  expect(parseNzbContent(await nzb.text())?.url).toBe(mediaUrl());
+  expired = true;
+  const final = await read();
+  expect(final.item[0].title[0]).toContain("RundfunkArr.Validation");
+  expect(JSON.stringify(final)).not.toContain("S02E03");
+  expect(JSON.stringify(final)).not.toContain(mediaUrl());
+  expect(
+    fetchMock.mock.calls.filter(([url]) => String(url).includes("api.ardmediathek.de"))
+  ).toHaveLength(4);
+  expect(state.addToQueue).not.toHaveBeenCalled();
+});
 
 it("does not republish a verified Sonarr episode as an unknown candidate or requested neighbor", async () => {
   state.settings.set("matching.minDuration", "0");

@@ -10,6 +10,9 @@ import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import { isProbeableMp4, probeMp4MediaFacts, type Mp4MediaFacts } from "@/lib/mp4-audio-language";
 import { arteVideoId, parseArteVersion, progressiveUrl } from "./arte-editions";
 import { recordDecision, decisionFailure } from "@/server/decision-diagnostics";
+import { productSettingsContext } from "@/lib/product-settings-context";
+import { cacheContextEpoch } from "@/lib/cache";
+import { searchCacheContext } from "./content-search";
 import {
   classifyLanguageEdition,
   selectLanguageVariants,
@@ -133,6 +136,16 @@ export async function enrichSourceAudio(
   const arte = new Map<string, ArteStreams>();
   const ard = new Map<string, Awaited<ReturnType<typeof getArdSource>>>();
   const mp4 = new Map<string, Mp4MediaFacts>();
+  const snapshot = productSettingsContext.getStore();
+  const epoch = cacheContextEpoch();
+  // Only a server-owned settings snapshot may enable cross-request proof reuse.
+  // Worker revalidation has no context and always performs its fresh lookup.
+  const proofContext = snapshot
+    ? {
+        fingerprint: await searchCacheContext(),
+        isCurrent: () => snapshot.isCurrent() && epoch === cacheContextEpoch(),
+      }
+    : undefined;
   const output = new Map<ApiResultItem, ApiResultItem[]>();
   let probes = 0;
   const ordered = [...items].sort(
@@ -237,7 +250,7 @@ export async function enrichSourceAudio(
       } else if (isProbeableMp4(url)) {
         if (!mp4.has(url) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
-          mp4.set(url, await probeMp4MediaFacts(url, budget));
+          mp4.set(url, await probeMp4MediaFacts(url, budget, true, proofContext));
         }
         const facts = mp4.get(url);
         language = facts?.audioLanguage ?? null;

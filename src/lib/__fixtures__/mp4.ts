@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /** Synthetic ISO-BMFF metadata; no real catalogue rows, URLs or media bytes. */
 export function mp4Box(type: string, payload: Buffer): Buffer {
   const header = Buffer.alloc(8);
@@ -52,6 +53,9 @@ export function mp4RangeResponse(data: Buffer, init: RequestInit): Response {
     end = Math.min(Number(range[2]), data.length - 1);
   return new Response(new Uint8Array(data.subarray(start, end + 1)), {
     status: 206,
-    headers: { "content-range": `bytes ${start}-${end}/${data.length}` },
+    headers: {
+      "content-range": `bytes ${start}-${end}/${data.length}`,
+      etag: `"${createHash("sha256").update(data).digest("hex")}"`,
+    },
   });
 }

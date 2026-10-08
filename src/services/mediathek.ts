@@ -35,11 +35,6 @@ import { matchMovieItems, movieSourceTitle, normalizeMovieTitle } from "./movie-
 import { recordDecision } from "@/server/decision-diagnostics";
 import { sourceEpoch } from "@/lib/content-dates";
 
-/** A cached feed is not a newly performed match or current asset evidence. */
-function cachedFeed(response: string): string {
-  recordDecision("catalogue", "cached_response", "not_required");
-  return response;
-}
 import { movieSearchTerms } from "./movie-search-terms";
 import { titleSearchTerms } from "@/lib/title-search-terms";
 import { tvSearchQueries, verifiedRuleTopics } from "./tv-search-terms";
@@ -65,7 +60,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v13-tv-source-facts";
+const CONTENT_SEARCH_CACHE_VERSION = "v14-fresh-source-facts";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -960,7 +955,6 @@ export async function fetchSearchResultsById(
 
   const quality = await getQualityPreference();
   const minDuration = await getMinDurationSeconds();
-  const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const searchQuery = context.query || tvdbData.germanName || tvdbData.name;
   console.log(
@@ -972,13 +966,6 @@ export async function fetchSearchResultsById(
   const rulesetContext = getRulesetContext();
   const sourceContext = await searchCacheContext();
   const metadataContext = createHash("sha256").update(JSON.stringify(tvdbData)).digest("hex");
-  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${metadataContext}_${rulesetContext}`;
-
-  const cached = mediathekCache.get(cacheKey);
-  if (cached && typeof cached === "object" && "response" in cached) {
-    console.log(`[Mediathek] Returning cached response for ${cacheKey}`);
-    return cachedFeed((cached as { response: string }).response);
-  }
 
   const desiredEpisodes = getDesiredEpisodes(tvdbData, context);
   console.log(`[Mediathek] Desired episodes: ${desiredEpisodes?.length ?? 0}`);
@@ -988,7 +975,6 @@ export async function fetchSearchResultsById(
       `[Mediathek] No desired episodes found for season=${context.season}, episode=${context.episode}, returning empty`
     );
     const response = serializeRss(getEmptyRssResult(offset));
-    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -998,7 +984,7 @@ export async function fetchSearchResultsById(
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
-  if (cachedApi) {
+  if (cachedApi && cachedApi.results.length === 0) {
     console.log(`[Mediathek] Using cached API response for ${apiCacheKey}`);
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
@@ -1120,7 +1106,6 @@ export async function fetchSearchResultsById(
     offset
   );
 
-  mediathekCache.set(cacheKey, { response });
   return response;
 }
 
@@ -1136,25 +1121,16 @@ export async function fetchSearchResultsByString(
   };
   const trimmedQ = context.query;
   await ensureRulesetsLoaded(budget);
-  const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
-  const minDuration = await getMinDurationSeconds();
-  const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const contextKey = tvSearchContextKey(context);
   const sourceContext = await searchCacheContext();
-  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${rulesetContext}`;
-
-  const cached = mediathekCache.get(cacheKey);
-  if (cached) {
-    return cachedFeed((cached as { response: string }).response);
-  }
 
   const apiCacheKey = `mediathekapi_q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
-  if (cachedApi) {
+  if (cachedApi && cachedApi.results.length === 0) {
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     results = await queryTvSearchCandidates(context, budget);
@@ -1216,43 +1192,30 @@ export async function fetchSearchResultsByString(
   const allItems = dedupeNewznabItems([...newznabItems, ...genericItems, ...unknownCandidates]);
   const response = convertItemsToRss(allItems, limit, offset);
 
-  mediathekCache.set(cacheKey, { response });
   return response;
 }
 
 export async function fetchSearchResultsForRssSync(limit: number, offset: number): Promise<string> {
   const budget = new HttpRequestBudget();
   await ensureRulesetsLoaded(budget);
-  const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();
-  const minDuration = await getMinDurationSeconds();
-  const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const sourceContext = await searchCacheContext();
-  // Build before consulting the normal RSS response cache: otherwise its hour
-  // TTL would prevent the 60s Sonarr snapshot/cursor from ever refreshing.
+  // Reuse metadata goals, never an RSS body or cached signed media URL.
   let supplementalMatches: MatchedEpisodeInfo[] = [];
   let sonarrUnavailable = false;
   try {
     supplementalMatches = await getSonarrRssMatches(getBaseShowForSonarrRss, budget);
   } catch {
     sonarrUnavailable = true;
-  }
-  const supplementalContext = createHash("sha256")
-    .update(JSON.stringify(supplementalMatches))
-    .digest("hex");
-  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${supplementalContext}_${rulesetContext}`;
-
-  const cached = mediathekCache.get(cacheKey);
-  if (cached && !sonarrUnavailable) {
-    return cachedFeed((cached as { response: string }).response);
+    recordDecision("catalogue", "source_failed", "unavailable");
   }
 
   const apiCacheKey = `rss_mediathekview_results_${CONTENT_SEARCH_CACHE_VERSION}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
-  if (cachedApi) {
+  if (cachedApi && cachedApi.results.length === 0) {
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     // total below counts verified matches in this bounded source window only.
@@ -1288,7 +1251,6 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   ).flatMap((info) => generateRssItems(info, quality, hlsEnabled));
   const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
 
-  if (!sonarrUnavailable) mediathekCache.set(cacheKey, { response });
   return response;
 }
 
@@ -1310,13 +1272,12 @@ export async function fetchMovieSearchForRssSync(
   const minimum = await getMinDurationSeconds();
   const hlsEnabled = await isHlsEnabled();
   const sourceContext = await searchCacheContext();
-  const inventory = createHash("sha256").update(JSON.stringify(movies)).digest("hex");
   // A minute-scoped source window cannot be kept stale by the usual hour TTL.
   const window = Math.floor(Date.now() / 60_000);
   const key = JSON.stringify(["movie-recent", CONTENT_SEARCH_CACHE_VERSION, window, sourceContext]);
   const cached = mediathekCache.get(key);
   let sources: ApiResultItem[];
-  if (cached && "results" in cached) sources = cached.results as ApiResultItem[];
+  if (cached && cached.results.length === 0) sources = cached.results;
   else {
     const fetched = await queryContent([], RSS_SYNC_CANDIDATE_LIMIT, {
       requestBudget: budget,
@@ -1325,9 +1286,6 @@ export async function fetchMovieSearchForRssSync(
     if (fetched === null) throw new Error("Search provider unavailable");
     sources = fetched;
   }
-  const responseKey = JSON.stringify([key, inventory, limit, offset, quality, minimum, hlsEnabled]);
-  const response = mediathekCache.get(responseKey);
-  if (response && "response" in response) return cachedFeed(response.response as string);
   const eligible = sources.filter(
     (item) => !SKIP_KEYWORDS.some((word) => item.title.includes(word))
   );
@@ -1397,9 +1355,8 @@ export async function fetchMovieSearchForRssSync(
   );
   if (Date.now() >= budget.deadlineAt || epoch !== cacheContextEpoch())
     throw new Error("Search provider unavailable");
-  // Publish neither source nor response cache after an incomplete snapshot.
+  // Only definitive empty source windows may be cached after a complete snapshot.
   mediathekCache.set(key, { results: sources });
-  mediathekCache.set(responseKey, { response: rss });
   return rss;
 }
 
@@ -1420,14 +1377,6 @@ export async function fetchMovieSearchResults(
   );
 
   const sourceContext = await searchCacheContext();
-  const movieIdentity = createHash("sha256").update(JSON.stringify(movieData)).digest("hex");
-  const cacheKey = `movie_${CONTENT_SEARCH_CACHE_VERSION}_${movieIdentity}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
-
-  const cached = mediathekCache.get(cacheKey);
-  if (cached && typeof cached === "object" && "response" in cached) {
-    console.log(`[Mediathek] Returning cached movie response for ${cacheKey}`);
-    return cachedFeed((cached as { response: string }).response);
-  }
 
   // Search by German title and original title in parallel
   const searchTerms = movieSearchTerms([
@@ -1441,7 +1390,7 @@ export async function fetchMovieSearchResults(
     const apiCacheKey = `mediathekapi_movie_${CONTENT_SEARCH_CACHE_VERSION}_${searchTerm}_${sourceContext}`;
     const cachedApi = mediathekCache.get(apiCacheKey);
 
-    if (cachedApi) {
+    if (cachedApi && cachedApi.results.length === 0) {
       console.log(`[Mediathek] Using cached API response for movie search: "${searchTerm}"`);
       return (cachedApi as { results: ApiResultItem[] }).results;
     }
@@ -1476,7 +1425,6 @@ export async function fetchMovieSearchResults(
   if (allResults.length === 0) {
     console.log(`[Mediathek] No results found for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1491,7 +1439,6 @@ export async function fetchMovieSearchResults(
   if (filteredResults.length === 0) {
     console.log(`[Mediathek] No results after filtering for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1501,7 +1448,6 @@ export async function fetchMovieSearchResults(
   if (matchResults.length === 0) {
     console.log(`[Mediathek] No matches found for movie`);
     const response = serializeRss(getEmptyRssResult(offset));
-    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1526,7 +1472,6 @@ export async function fetchMovieSearchResults(
   );
 
   const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
-  mediathekCache.set(cacheKey, { response });
   return response;
 }
 
@@ -1554,20 +1499,13 @@ export async function fetchMovieSearchByQuery(
   );
 
   const sourceContext = await searchCacheContext();
-  const cacheKey = `movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${searchYear || ""}_${limit}_${offset}_${quality}_${minDuration}_${hlsEnabled}_${sourceContext}`;
-
-  const cached = mediathekCache.get(cacheKey);
-  if (cached && typeof cached === "object" && "response" in cached) {
-    console.log(`[Mediathek] Returning cached movie query response for ${cacheKey}`);
-    return cachedFeed((cached as { response: string }).response);
-  }
 
   // Search Mediathek by query (without year)
   const apiCacheKey = `mediathekapi_movie_query_${CONTENT_SEARCH_CACHE_VERSION}_${cleanedQuery}_${sourceContext}`;
   let results: ApiResultItem[] | null;
   const cachedApi = mediathekCache.get(apiCacheKey);
 
-  if (cachedApi) {
+  if (cachedApi && cachedApi.results.length === 0) {
     console.log(`[Mediathek] Using cached API response for movie query: "${cleanedQuery}"`);
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
@@ -1593,7 +1531,6 @@ export async function fetchMovieSearchByQuery(
   if (results.length === 0) {
     console.log(`[Mediathek] No API response for movie query`);
     const response = serializeRss(getEmptyRssResult(offset));
-    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1612,7 +1549,6 @@ export async function fetchMovieSearchByQuery(
   if (filteredResults.length === 0) {
     console.log(`[Mediathek] No movie results after filtering`);
     const response = serializeRss(getEmptyRssResult(offset));
-    mediathekCache.set(cacheKey, { response });
     return response;
   }
 
@@ -1632,6 +1568,5 @@ export async function fetchMovieSearchByQuery(
   );
 
   const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
-  mediathekCache.set(cacheKey, { response });
   return response;
 }

@@ -16,6 +16,7 @@ import {
   metadataCacheKey,
   tvdbCache,
 } from "./cache";
+import type { ApiResultItem } from "@/types";
 
 beforeEach(() => {
   clearTTLCache();
@@ -23,6 +24,22 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.useRealTimers());
+
+it("retains only definitive empty windows for at most fifteen seconds, never positive asset rows", async () => {
+  vi.useFakeTimers();
+  findMany.mockResolvedValue([{ key: "cache.ttl.search", value: "3600" }]);
+  await initCacheTTL();
+  mediathekCache.set("empty", { results: [] });
+  mediathekCache.set("positive", {
+    results: [{ url_video: "https://example.invalid/media.mp4" } as ApiResultItem],
+  });
+  expect(mediathekCache.get("empty")).toEqual({ results: [] });
+  expect(mediathekCache.get("positive")).toBeUndefined();
+  const clone = mediathekCache.get("empty")!;
+  expect(clone).not.toBe(mediathekCache.get("empty"));
+  vi.advanceTimersByTime(15_000);
+  expect(mediathekCache.get("empty")).toBeUndefined();
+});
 
 it("bounds configured TTLs and rejects malformed values", async () => {
   findMany.mockResolvedValue([

@@ -2449,6 +2449,24 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
       Beleg; keine Belegübertragung auf fremde URL/Track/Fassung, keine neue
       GUID nur durch bessere Fakten. Gemessene Request-/Byteersparnis benennen,
       nicht vollständige Sprachabdeckung aus Cachetreffern behaupten.
+      Entwicklungscheckpoint 08.10.2026: ganze RSS-Bodies und positive
+      Katalog-/Sonarr-Treffercaches entfernt; Sonarr hält nur Metadatenziele
+      für Pagination/Cursor, Quellen/URLs/Rechte werden erneut abgerufen.
+      Leere erfolgreiche Katalogfenster maximal 15 Sekunden. Typisierter
+      MP4-Faktencache (256/5min) und begrenzte Flights (128) binden exakte
+      URL, serverseitigen Kontext und Parserversion; jeder zeitliche Treffer
+      validiert frische erste Rangebytes/starken ETag/Gesamtgröße. Weitere
+      Fenster nur mit gleichem starken ETag/If-Range, sonst Unknown. Fehlende/
+      schwache Validatoren, gleich großer Versionswechsel, Rotation/Expiry,
+      Timeout/Unknown→Erfolg und unabhängige Coalescingbudgets kausal geprüft.
+      ARD-/ARTE-JSON weiterhin nur anfrageintern, Workerprüfung nicht gecacht.
+      Vierfensterfixture 4→1 Requests, 3.145.744→1.048.576 Bytes; kein allgemeines
+      Produktionsmaß. Echte RSS→NZB-Regression erneuert URL/Audio/Rechte,
+      keine GUIDänderung allein durch Signaturrotation. Vertrag
+      `docs/source-proof-freshness.md`. 1228 lokale Tests (19 separate
+      Backendtests nicht lokal aktiv), übrige Produktgates grün; neue Fork-/
+      Backend-/Containergates vor finaler Abnahme offen. Keine DDL/UIlayout-
+      änderung, neuen Grabs oder Produktionsmutationen.
 - [ ] **P14.3 — Verfügbarkeit und verschiedene Datumsarten explizit modellieren.**
       Abhängigkeit P13.1/P14.1. Owner: Provider-/`ApiResultItem`-Adapter,
       TV-Matcher, `mediathek.ts` und Search-/RSS-Serializer. Filmproduktionsjahr,
