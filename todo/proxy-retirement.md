@@ -347,8 +347,15 @@ B05/B07, A2/A3, R4.
       URL-Gate erweitern, Film-RSS→NZB sowie frische Workerprüfung regressieren
       und native Radarr-Wege direkt/via Prowlarr prüfen. Keine Senderheuristik,
       Domainwildcard, Profilabschwächung oder neue Schema-/Payloadversion.
-      Implementiert auf dem Hotfixtopic; frische Fork-/Container-/Betriebsevidenz
-      noch ausstehend. Allgemeine P03.4-Abdeckung bleibt unabhängig offen.
+      Entwicklungsseitig abgenommen: synthetisches Film-RSS→NZB→Parser,
+      frische Workerprüfung, negative Player-/URL-/Rechte-/Sprachfälle und
+      native Deutsch/1080p-Erkennung direkt/via Prowlarr bestanden. Die beiden
+      neuen positiven Regressionen scheitern am unveränderten alten Owner.
+      Main-Fix `9c52fff`, schemafreier Rückport `23b15e0`, kompatibler
+      Worker-Rückfallstand `ba2e9f9`; alle drei Fork-/Containerketten grün.
+      Produktivumschaltung noch nicht ausgeführt: der vorgeschriebene frische
+      Trivy-DB-Gate ist wegen abgelaufener offizieller DB-Veröffentlichungen
+      blockiert. Kein Sicherheitsbypass. Allgemeine P03.4-Abdeckung bleibt offen.
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe

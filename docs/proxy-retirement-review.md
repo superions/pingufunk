@@ -2374,3 +2374,35 @@ die neue RBB-Worker-Evidenz verstehen und frisch gescannt sein; der alte
 CDN-ausschließende Worker ist nach neuen RBB-Jobs kein sicherer Rückweg.
 Fork-/Containernachweise und Betriebsabnahme bleiben bis zur realen Ausführung
 offen. Allgemeine P03.4-Abdeckung wird mit diesem Einzelfix nicht geschlossen.
+
+Abnahmenachtrag desselben Auftrags: Main-Fix `9c52fff` mit
+[CI](https://github.com/superions/pingufunk/actions/runs/37777023312) und
+[Containerkette](https://github.com/superions/pingufunk/actions/runs/37777023328)
+grün; 1322 reguläre Tests, separate PG-Gates, Lint/Types/Format/Build.
+Schemafreier Produktionsrückport `23b15e0` mit
+[CI](https://github.com/superions/pingufunk/actions/runs/37777239200) und
+[Containerkette](https://github.com/superions/pingufunk/actions/runs/37777239086)
+grün; 1037 reguläre Tests, separate PG-Gates und native `ard-1080p` direkt/via
+Prowlarr. Worker-kompatibler Rückfallstand `ba2e9f9` mit
+[CI](https://github.com/superions/pingufunk/actions/runs/37777126389) und
+[Containerkette](https://github.com/superions/pingufunk/actions/runs/37777126384)
+grün; 1036 reguläre Tests. Jeweils frisches `npm ci`/Node 24.21.0, Audit null.
+Reguläre bedingte PG-Skips nicht als dort ausgeführt zählen; die separaten
+PG- und SQLite-/Container-/Medien-/Rollbackgates sind ausgeführt. RBB-spezifische
+Abnahme ist Quellbeleg/Serialisierung/Worker-Revalidation und native Suche,
+kein vollständiger neuer RBB-Dateiimport. Vorhandene Tracingwarnungen bleiben.
+Der Gegencheck des alten `source-audio.ts` zeigt genau den fehlenden Producer-
+und Workerpfad; Wiederherstellung geprüft, keine Änderung am veröffentlichten
+Altstand. Review durch Implementierer, kein unabhängiger Peerreview behauptet.
+
+Beide Linux/amd64-Builds sind aus committed Git-Archiven vorbereitet, jedoch
+nicht produktiv gestartet. Der vorgeschriebene Imagegate stoppt an der
+abgelaufenen offiziellen Trivy-DB. Frische isolierte Direktabrufe bei GHCR,
+ECR und Docker Hub ergaben denselben veralteten Stand. Die aktuellen
+offiziellen Trivy-DB-Builds scheiterten nach der DB-Erzeugung beim Registrylogin,
+ohne veröffentlichtes DB-Artefakt; der beobachtete Folgebuild war noch offen.
+Keine Frische-/Zeitstempelmanipulation, kein CVE-Ignore oder anderer Bypass.
+Produktion, PostgreSQL-Schema, Bibliothek und Consumerprofile unverändert;
+Backup und operative Nachweise ausschließlich im privaten Runbook. Rollout
+bleibt trotz ausdrücklicher Nutzerfreigabe bis zum bestandenen Sicherheitsgate
+ausstehend, nicht als erledigt markieren.
