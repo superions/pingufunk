@@ -2297,3 +2297,46 @@ Tonsprachenabdeckung, kein Produktvollabschluss. Produktion, Main, Upstream und
 Imagepublikation unverändert; Deployment-/Rollbacksicherheitsgrenzen bleiben
 operative Freigabegates. Nach diesem Quellstand folgen nur Abnahmedokumente,
 keine dadurch ungültig gewordenen Produktgates.
+
+### Mainintegration 08.10.2026
+
+Nach gesondertem Nutzerauftrag über
+[PR #5](https://github.com/superions/pingufunk/pull/5) am 08.10.2026 um
+06:56 UTC in den eigenen Fork-Main integriert:
+`5f80f658f121527875e3b8dc32bca02d34ed9b68`. Beide Eltern sind der bisherige
+Main `483c3e2` und der abgenommene Topicstand `81404b8`; keine Historyrewrite,
+kein Squash oder Branchdelete. Main hatte gegenüber der gemeinsamen Basis
+keine zusätzlichen Dateiänderungen. Merge-Tree und tatsächlicher Remote-Merge
+stimmen exakt mit dem abgenommenen Topic-Dateibaum überein, ohne Konfliktfix
+oder neue Produktinputs. Seit dem letzten geprüften Produktstand `82aef87`
+waren ausschließlich die beiden Abnahmedokumente geändert.
+
+Zusätzliche Main-CI
+[37740415064](https://github.com/superions/pingufunk/actions/runs/37740415064)
+erfolgreich: Node 24.21.0, frisches `npm ci`, 1303 reguläre Tests,
+Lint/Typecheck/Format/Build und separate echte PostgreSQLintegration.
+Die 21 regulären Backend-Skips sind nicht als dort ausgeführt gezählt;
+ihre eigenständigen Backendgates sind erfolgreich.
+Die zusätzliche [Containerkette 37740415132](https://github.com/superions/pingufunk/actions/runs/37740415132)
+vollständig erfolgreich: native Qualitäts-/TBA-Consumer direkt und via Prowlarr,
+Runtime-/Migratortooling, TLS-Migration, sichere historische Imageablehnung,
+Receipt-Backup/Restore, SQLiteledger/Persistenz und tatsächliche progressive/
+HLS-/Mux-/v3-/Legacy-Medienabschlüsse beider Backends. Tatsächlicher Mux-SIGTERM,
+Restart/Folgejob und PostgreSQL-Write-Pause/Reconciliation erneut bestanden.
+Unveränderte Desktop-Evidenz wird wiederverwendet. Die 14 akzeptierten
+Architekturpakete und 32 lokalen Referenzlinks erneut auf Status-/Linkdrift
+geprüft; keine neuen Vertragsanforderungen oder Abnahmeabschwächungen.
+
+Fork-Workflows vor Integration gelesen: Runner-/Migratorbuild bleiben
+`push: false`, ohne Registrylogin oder Publikationsrechte. Mainintegration ist
+kein Release oder Rollout. Produktion, Services, Datenbanken, Bibliotheksgrabs,
+Upstream und Tags unverändert; der andere lokale Checkout samt eigenem Branch
+bleibt erhalten. P03.4, optionale P11.9-Arbeit und die bekannten separaten
+Tracing-/Auditbefunde bleiben offen. Receipt-DDL/v3 benötigen weiterhin einen
+kompatiblen Rückfallstand vor einem gesondert beauftragten Produktionsrollout.
+
+Die abschließende Main-Integrationsnotiz verändert ausschließlich dieses Review
+und das bestehende TODO. Format-/Link-/Struktur-/Diffprüfung separat ausgeführt;
+die erfolgreichen Produkt-/Backend-/Containergates des Mergecommits bleiben
+ohne neue Produktinputs gültig. Keine erneute Ausführung allein für den
+Dokumentationscommit behauptet.

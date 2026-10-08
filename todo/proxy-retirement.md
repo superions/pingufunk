@@ -1,6 +1,17 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
 Stand: 08.10.2026. **Alle 14 Architekturpakete P12–P16 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die unabhängige allgemeine Sprachabdeckung P03.4, optionale P11.9-Arbeit und gesonderte Betriebs-/Entfernungsgates bleiben davon getrennt. Keine Produktions-, Mainintegrations- oder Publikationsfreigabe aus dieser Entwicklungsabnahme. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Produktvollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+
+Gesondert beauftragte Mainintegration am 08.10.2026 über
+[PR #5](https://github.com/superions/pingufunk/pull/5): Topicstand `81404b8`
+mit Mergecommit `5f80f658f121527875e3b8dc32bca02d34ed9b68` übernommen,
+beide Historien erhalten und Dateibaum exakt unverändert. Die zusätzlich
+gestarteten Main-Gates einschließlich PostgreSQL-/Containerkette sind erfolgreich;
+Abnahme im
+[Review](../docs/proxy-retirement-review.md#mainintegration-08102026).
+Produktion, reale Bibliotheksaufträge, Datenbanken, Upstream, Release-Tags und
+öffentliche Imagepublikation bleiben durch diese Integration unberührt.
+
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
