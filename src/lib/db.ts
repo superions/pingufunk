@@ -59,9 +59,17 @@ function createClient() {
     await checkpointPending;
   }
   return base.$extends({
+    client: {
+      async $prepareMutation(): Promise<void> {
+        assertWritesEnabled();
+        // Prepare outside interactive transactions, never consuming a second
+        // pool connection while the transaction is waiting for this checkpoint.
+        await ensureFirstWriteCheckpoint();
+      },
+    },
     query: {
-      // No current domain owner uses raw mutations. Keep future executeRaw
-      // paths behind the same maintenance and durable rollback boundary.
+      // Worker CAS and future raw mutations share the model operations'
+      // maintenance gate and durable PostgreSQL rollback boundary.
       async $executeRaw({ args, query }) {
         assertWritesEnabled();
         await ensureFirstWriteCheckpoint();

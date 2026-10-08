@@ -301,7 +301,7 @@ it.each([480, 720, 1080] as const)(
   }
 );
 
-it("times out a silent downloader without waiting for a close event", async () => {
+it("terminates a silent downloader but waits for close before releasing its output", async () => {
   vi.useFakeTimers();
   try {
     const done = downloadVideo("https://example.org/master.m3u8", {
@@ -309,9 +309,16 @@ it("times out a silent downloader without waiting for a close event", async () =
     });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
     await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    let settled = false;
+    void done.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(2001);
     expect(child.kill).toHaveBeenCalledWith("SIGKILL");
-    expect(await done).toEqual({ success: false, error: expect.stringContaining("timed out") });
+    expect(settled).toBe(false);
     child.emit("close", 0);
+    expect(await done).toEqual({ success: false, error: expect.stringContaining("timed out") });
     expect(vi.getTimerCount()).toBe(0);
   } finally {
     vi.useRealTimers();

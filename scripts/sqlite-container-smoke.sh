@@ -125,7 +125,7 @@ for variant in fresh bootstrap; do
       | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(r.success!==true||r.updated!==1||r.settings["matching.movie.yearTolerance"]!=="2")process.exit(1)})'
     docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/system >/dev/null
     docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health?mode=ready \
-      | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==true||r.worker.exclusiveOwnership!=="unverified")process.exit(1)})'
+      | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==true||!["idle","held","waiting"].includes(r.worker.exclusiveOwnership))process.exit(1)})'
     stop_app
     [[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'SQLite volume sentinel metadata changed' >&2; exit 1; }
   done

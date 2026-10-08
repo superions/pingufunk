@@ -90,3 +90,22 @@ it("includes UTF-8 decoding in the original absolute operation deadline", async 
     vi.useRealTimers();
   }
 });
+
+it("aborts a held source-proof body without waiting for its cancellation promise", async () => {
+  const controller = new AbortController();
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
+  const response = new Response(new ReadableStream({ cancel }));
+  const pending = readBoundedProviderJson(response, Date.now() + 10_000, 100, controller.signal);
+  const outcome = expect(pending).rejects.toThrow(/^Invalid provider response$/);
+  controller.abort(new Error("https://fixture.invalid/?token=synthetic"));
+  await outcome;
+  expect(cancel).toHaveBeenCalledTimes(1);
+});
+
+it("rejects an already aborted source-proof body before consuming it", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    readBoundedProviderJson(new Response("[1]"), Date.now() + 1000, 100, controller.signal)
+  ).rejects.toThrow(/^Invalid provider response$/);
+});

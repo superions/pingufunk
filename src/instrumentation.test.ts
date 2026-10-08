@@ -1,14 +1,21 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-const { initCacheTTL, recoverInterruptedDownloads, startDownloadProcessing } = vi.hoisted(() => ({
+const {
+  initCacheTTL,
+  recoverInterruptedDownloads,
+  startDownloadProcessing,
+  installWorkerShutdownHandlers,
+} = vi.hoisted(() => ({
   initCacheTTL: vi.fn().mockResolvedValue(undefined),
   recoverInterruptedDownloads: vi.fn().mockResolvedValue(0),
   startDownloadProcessing: vi.fn().mockResolvedValue(undefined),
+  installWorkerShutdownHandlers: vi.fn(),
 }));
 vi.mock("@/lib/cache", () => ({ initCacheTTL }));
 vi.mock("@/server/download-manager", () => ({
   recoverInterruptedDownloads,
   startDownloadProcessing,
+  installWorkerShutdownHandlers,
 }));
 
 import { register } from "./instrumentation";
@@ -31,14 +38,14 @@ it("does not boot the queue when the legacy boot flag is set during maintenance"
   expect(startDownloadProcessing).not.toHaveBeenCalled();
 });
 
-it("recovers interrupted rows once before draining queued work", async () => {
+it("boots the worker once and leaves recovery behind its exclusive acquisition", async () => {
   vi.stubEnv("NEXT_RUNTIME", "nodejs");
   vi.stubEnv("PINGUFUNK_BOOT_QUEUE", "1");
   await register();
   await register();
-  expect(recoverInterruptedDownloads).toHaveBeenCalledTimes(1);
+  expect(recoverInterruptedDownloads).not.toHaveBeenCalled();
   expect(startDownloadProcessing).toHaveBeenCalledTimes(1);
-  expect(recoverInterruptedDownloads.mock.invocationCallOrder[0]).toBeLessThan(
+  expect(installWorkerShutdownHandlers.mock.invocationCallOrder[0]).toBeLessThan(
     startDownloadProcessing.mock.invocationCallOrder[0]
   );
 });

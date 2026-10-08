@@ -4,6 +4,7 @@ import * as path from "path";
 import { createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
 import { writesEnabled } from "@/lib/write-gate";
+import { bindOwnedProcessAbort } from "./owned-process";
 
 const isWindows = process.platform === "win32";
 const APP_DIR = process.cwd();
@@ -180,7 +181,8 @@ export interface ConversionResult {
 export async function convertMp4ToMkv(
   mp4Path: string,
   mkvPath: string,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  signal?: AbortSignal
 ): Promise<ConversionResult> {
   // Ensure FFmpeg exists
   const ffmpegExists = await ensureFfmpegExists();
@@ -196,6 +198,10 @@ export async function convertMp4ToMkv(
   }
 
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ success: false, error: "Conversion interrupted" });
+      return;
+    }
     // FFmpeg arguments:
     // -i input: input file
     // -map 0:v -map 0:a: copy video and audio streams
@@ -209,17 +215,21 @@ export async function convertMp4ToMkv(
       "0:a",
       "-c",
       "copy",
-      "-y", // Overwrite output
+      "-n", // Never overwrite another output, even on a stale-owner race.
       mkvPath,
     ];
 
     console.log(`[FFmpeg] Starting conversion: ${mp4Path} -> ${mkvPath}`);
-    const proc = spawn(FFMPEG_PATH, args);
+    const proc = spawn(FFMPEG_PATH, args, {
+      detached: process.platform !== "win32",
+      windowsHide: true,
+    });
+    bindOwnedProcessAbort(proc, signal);
 
     let stderr = "";
 
     proc.stderr.on("data", (data) => {
-      stderr += data.toString();
+      stderr = (stderr + data.toString()).slice(-65536);
 
       // Parse progress from FFmpeg output
       // FFmpeg outputs progress to stderr
@@ -242,7 +252,7 @@ export async function convertMp4ToMkv(
     });
 
     proc.on("close", async (code) => {
-      if (code === 0) {
+      if (code === 0 && !signal?.aborted) {
         console.log(`[FFmpeg] Conversion completed: ${mkvPath}`);
 
         // Delete original MP4 file
@@ -276,7 +286,8 @@ export async function convertMp4ToMkv(
 export async function mergeVideoAudio(
   videoPath: string,
   audioPath: string,
-  outputPath: string
+  outputPath: string,
+  signal?: AbortSignal
 ): Promise<ConversionResult> {
   const ffmpegExists = await ensureFfmpegExists();
   if (!ffmpegExists) {
@@ -284,6 +295,10 @@ export async function mergeVideoAudio(
   }
 
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ success: false, error: "Mux interrupted" });
+      return;
+    }
     // The HLS consumer selects the audio stream but has no language evidence;
     // stream-copy its metadata rather than assigning a synthetic German tag.
     const args = [
@@ -297,17 +312,21 @@ export async function mergeVideoAudio(
       "1:a:0",
       "-c",
       "copy",
-      "-y",
+      "-n",
       outputPath,
     ];
 
     console.log(`[FFmpeg] Muxing video+audio: ${videoPath} + ${audioPath} -> ${outputPath}`);
-    const proc = spawn(FFMPEG_PATH, args);
+    const proc = spawn(FFMPEG_PATH, args, {
+      detached: process.platform !== "win32",
+      windowsHide: true,
+    });
+    bindOwnedProcessAbort(proc, signal);
 
     proc.stderr.on("data", () => {});
 
     proc.on("close", (code) => {
-      if (code === 0) {
+      if (code === 0 && !signal?.aborted) {
         console.log(`[FFmpeg] Mux completed: ${outputPath}`);
         resolve({ success: true, outputPath });
       } else {

@@ -5,6 +5,7 @@ import { createHash } from "crypto";
 import release from "./ytdlp-release.json";
 import { getSetting } from "@/lib/settings";
 import { writesEnabled } from "@/lib/write-gate";
+import { bindOwnedProcessAbort } from "./owned-process";
 
 const isWindows = process.platform === "win32";
 const APP_DIR = process.cwd();
@@ -176,6 +177,7 @@ export interface YtdlpDownloadOptions {
   useProxy?: boolean;
   container?: "mkv" | "mp4";
   onProgress?: (percent: number, speed: string, eta: string) => void | Promise<void>;
+  signal?: AbortSignal;
 }
 
 /**
@@ -279,6 +281,7 @@ export async function downloadVideo(
   url: string,
   options: YtdlpDownloadOptions
 ): Promise<YtdlpDownloadResult> {
+  if (options.signal?.aborted) return { success: false, error: "Stream download interrupted" };
   const ytdlpExists = await ensureYtdlpExists();
   if (!ytdlpExists) {
     return { success: false, error: "yt-dlp not available" };
@@ -333,19 +336,27 @@ export async function downloadVideo(
   args.push(url);
 
   return new Promise((resolve) => {
+    if (options.signal?.aborted) {
+      resolve({ success: false, error: "Stream download interrupted" });
+      return;
+    }
     console.log("[yt-dlp] Starting stream download");
-    const proc = spawn(ytdlpPath, args);
+    const proc = spawn(ytdlpPath, args, {
+      detached: process.platform !== "win32",
+      windowsHide: true,
+    });
+    const owned = bindOwnedProcessAbort(proc, options.signal);
 
     let progressUpdates = Promise.resolve();
     let progressError: unknown;
     let ended = false;
+    let timedOut = false;
     let stallTimer: ReturnType<typeof setTimeout>;
     const resetStallTimer = () => {
       clearTimeout(stallTimer);
       stallTimer = setTimeout(() => {
-        ended = true;
-        proc.kill("SIGKILL");
-        resolve({ success: false, error: "yt-dlp timed out after 10 minutes without output" });
+        timedOut = true;
+        owned.terminate();
       }, DOWNLOAD_STALL_TIMEOUT_MS);
     };
     resetStallTimer();
@@ -369,7 +380,7 @@ export async function downloadVideo(
           .then(() => options.onProgress?.(percent, speed, eta))
           .catch((error) => {
             progressError = error;
-            proc.kill();
+            owned.terminate();
           });
       }
     });
@@ -384,6 +395,15 @@ export async function downloadVideo(
       if (ended) return;
       ended = true;
       await progressUpdates;
+      if (timedOut || options.signal?.aborted) {
+        resolve({
+          success: false,
+          error: timedOut
+            ? "yt-dlp timed out after 10 minutes without output"
+            : "Stream download interrupted",
+        });
+        return;
+      }
       if (progressError) {
         resolve({ success: false, error: "Failed to persist download progress" });
         return;
@@ -468,7 +488,8 @@ export async function downloadHlsStream(
   // caller already builds it with the right one) since the final merge
   // writes straight to outputPath - kept for API compatibility with callers.
   _container: "mkv" | "mp4" = "mkv",
-  maxHeight?: 480 | 720 | 1080
+  maxHeight?: 480 | 720 | 1080,
+  signal?: AbortSignal
 ): Promise<YtdlpDownloadResult> {
   const tempDir = path.dirname(outputPath);
   const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -499,6 +520,7 @@ export async function downloadHlsStream(
         ? `bestvideo[height<=${maxHeight}]/best[height<=${maxHeight}]`
         : "bestvideo/best",
       onProgress: forwardProgress(0, 85),
+      signal,
     });
     videoOutputPath = videoResult.outputPath ?? videoTempPath;
     if (!videoResult.success) {
@@ -515,6 +537,7 @@ export async function downloadHlsStream(
       // safe to hand it a combined video+audio file here too.
       format: maxHeight ? `bestaudio/best[height<=${maxHeight}]` : "bestaudio/best",
       onProgress: forwardProgress(85, 10),
+      signal,
     });
     audioOutputPath = audioResult.outputPath ?? audioTempPath;
     if (!audioResult.success) {
@@ -522,7 +545,7 @@ export async function downloadHlsStream(
     }
 
     const { mergeVideoAudio } = await import("./ffmpeg");
-    const mergeResult = await mergeVideoAudio(videoOutputPath, audioOutputPath, outputPath);
+    const mergeResult = await mergeVideoAudio(videoOutputPath, audioOutputPath, outputPath, signal);
     if (!mergeResult.success) {
       await fs.unlink(outputPath).catch(() => {});
       return { success: false, error: mergeResult.error };

@@ -2531,6 +2531,17 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Jobs/IDs und folgender Queuefortschritt erhalten. Falls neue Spalten nötig,
       append-only Migrationen und Maintenance-/post-write-Rollback beider Provider
       prüfen. Neue Entwicklungsprobe ist kein Produktionsrestart.
+      Entwicklungscheckpoint 08.10.2026: exklusiver Config-CAS/Fenceowner auf
+      beiden Backends ohne neue DDL; Recovery/Status-/Progress-/Completionwrites
+      hinter Besitz-/Wartungsgrenze. Signal durch HTTP/Quellenbeleg/Probe/yt-dlp/
+      FFmpeg, tatsächliches Child-close vor Release; Next-Signalowner und
+      begrenztes Drain. Echte SQLite-Zweiprozessprobe mit Heartbeat, altem Fence,
+      Crash/30s-Expiry, aktivem HTTP-Abbruch, Folgequeue und unverändertem Nachbarn
+      bestanden. 1263 lokale Tests vor den abschließenden Reviewkorrekturen grün.
+      PG-Ausfall/Zweiprozess- und tatsächlicher Container-Muxshutdowngate neu
+      angeschlossen, noch nicht abgenommen. Vertrag
+      `docs/worker-ownership-contract.md`; alte/neue Writer nicht mischen,
+      unverändert Parallelität eins, kein Produktionsrestart oder Gesamtabschluss.
 - [x] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
       Owner: `download.ts::{getHistory,getQueue}`, `sab-api.ts`,
       `/downloads` und beide DB-Querypfade. Aktuell wird die gesamte History

@@ -38,12 +38,16 @@ export function mediaSourceIdentity(url: string): string {
   return createHash("sha256").update(stableUrlIdentity(url)).digest("hex");
 }
 
-async function getArteStreams(videoId: string, budget: HttpRequestBudget): Promise<ArteStreams> {
+async function getArteStreams(
+  videoId: string,
+  budget: HttpRequestBudget,
+  signal?: AbortSignal
+): Promise<ArteStreams> {
   if (!/^\d{6}-\d{3}-[AF]$/.test(videoId))
     throw decisionFailure("identity", "identity_missing", "missing");
   const response = await fetchWithRetry(
     `https://www.arte.tv/hbbtvv2/services/web/index.php/OPA/v3/streams/${videoId}/SHOW/de`,
-    { headers: { Accept: "application/json" } },
+    { headers: { Accept: "application/json" }, ...(signal ? { signal } : {}) },
     { requestBudget: budget, maxRetries: 0 }
   );
   if (response.status === 404 || response.status === 410) {
@@ -56,7 +60,7 @@ async function getArteStreams(videoId: string, budget: HttpRequestBudget): Promi
   }
   try {
     return streamsSchema.parse(
-      await readBoundedProviderJson(response, budget.deadlineAt, 1024 * 1024)
+      await readBoundedProviderJson(response, budget.deadlineAt, 1024 * 1024, signal)
     ).videoStreams;
   } catch {
     throw decisionFailure("language", "source_failed", "unavailable");
@@ -86,14 +90,15 @@ function arteEdition(streams: ArteStreams, videoId: string, url: string) {
 export async function verifyArteSourceAudio(
   expected: SourceAudioEvidence,
   url: string,
-  budget: HttpRequestBudget
+  budget: HttpRequestBudget,
+  signal?: AbortSignal
 ): Promise<SourceAudioEvidence> {
   if (expected.provider !== "arte_hbbtv")
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   if (!progressiveUrl(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   const edition = arteEdition(
-    await getArteStreams(expected.videoId, budget),
+    await getArteStreams(expected.videoId, budget, signal),
     expected.videoId,
     url
   );
@@ -106,16 +111,19 @@ export async function verifyArteSourceAudio(
 export async function verifySourceAudio(
   expected: SourceAudioEvidence,
   url: string,
-  budget: HttpRequestBudget
+  budget: HttpRequestBudget,
+  signal?: AbortSignal
 ): Promise<SourceAudioEvidence> {
-  if (expected.provider === "arte_hbbtv") return verifyArteSourceAudio(expected, url, budget);
+  signal?.throwIfAborted();
+  if (expected.provider === "arte_hbbtv")
+    return verifyArteSourceAudio(expected, url, budget, signal);
   if (
     !isProbeableMp4(url) ||
     new URL(url).hostname !== "ctv-videos.daserste.de" ||
     mediaSourceIdentity(url) !== expected.mediaIdentity
   )
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
-  const edition = ardEdition(await getArdMedia(expected.videoId, budget), url);
+  const edition = ardEdition(await getArdMedia(expected.videoId, budget, signal), url);
   if (!edition || edition.audioLanguage !== expected.language)
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   return expected;

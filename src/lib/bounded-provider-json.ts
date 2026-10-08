@@ -12,11 +12,13 @@ export const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024 * 1024;
 export async function readBoundedProviderBytes(
   response: Response,
   deadlineAt: number,
-  maximumBytes: number
+  maximumBytes: number,
+  signal?: AbortSignal
 ): Promise<Buffer> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let complete = false;
+  let abort: (() => void) | undefined;
   try {
     if (
       !Number.isFinite(deadlineAt) ||
@@ -26,6 +28,7 @@ export async function readBoundedProviderBytes(
     )
       throw new ProviderResponseError();
     reader = response.body?.getReader();
+    signal?.throwIfAborted();
     const remaining = deadlineAt - Date.now();
     if (!reader || remaining <= 0) throw new ProviderResponseError();
     const declared = response.headers.get("content-length");
@@ -34,11 +37,16 @@ export async function readBoundedProviderBytes(
     const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new ProviderResponseError()), remaining);
     });
+    const aborted = new Promise<never>((_, reject) => {
+      abort = () => reject(new ProviderResponseError());
+      signal?.addEventListener("abort", abort, { once: true });
+    });
     const chunks: Uint8Array[] = [];
     let bytes = 0;
     while (true) {
       if (Date.now() >= deadlineAt) throw new ProviderResponseError();
-      const chunk = await Promise.race([reader.read(), deadline]);
+      signal?.throwIfAborted();
+      const chunk = await Promise.race([reader.read(), deadline, aborted]);
       if (chunk.done) break;
       bytes += chunk.value.byteLength;
       if (bytes > maximumBytes) throw new ProviderResponseError();
@@ -56,6 +64,7 @@ export async function readBoundedProviderBytes(
     throw new ProviderResponseError();
   } finally {
     if (timer) clearTimeout(timer);
+    if (abort) signal?.removeEventListener("abort", abort);
     if (reader) {
       // A remote stream may never settle cancellation; do not extend the budget.
       if (!complete) void reader.cancel().catch(() => {});
@@ -67,11 +76,12 @@ export async function readBoundedProviderBytes(
 export async function readBoundedProviderText(
   response: Response,
   deadlineAt: number,
-  maximumBytes: number
+  maximumBytes: number,
+  signal?: AbortSignal
 ): Promise<string> {
   try {
     const value = new TextDecoder("utf-8", { fatal: true }).decode(
-      await readBoundedProviderBytes(response, deadlineAt, maximumBytes)
+      await readBoundedProviderBytes(response, deadlineAt, maximumBytes, signal)
     );
     if (Date.now() >= deadlineAt) throw new ProviderResponseError();
     return value;
@@ -83,11 +93,12 @@ export async function readBoundedProviderText(
 export async function readBoundedProviderJson(
   response: Response,
   deadlineAt: number,
-  maximumBytes: number
+  maximumBytes: number,
+  signal?: AbortSignal
 ): Promise<unknown> {
   try {
     const value: unknown = JSON.parse(
-      await readBoundedProviderText(response, deadlineAt, maximumBytes)
+      await readBoundedProviderText(response, deadlineAt, maximumBytes, signal)
     );
     if (Date.now() >= deadlineAt) throw new ProviderResponseError();
     return value;

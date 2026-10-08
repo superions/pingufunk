@@ -39,18 +39,30 @@ it.skipIf(!required)(
     const { GET } = await import("@/app/api/system/route");
     const { GET: health } = await import("@/app/api/health/route");
     const inspection = new PrismaClient({ datasourceUrl: url.href, log: [] });
+    const { acquireWorkerLease } = await import("@/server/worker-lease");
     const sqlite = path.resolve("prisma/data/rundfunkarr.db");
     const fingerprint = () =>
       existsSync(sqlite) ? createHash("sha256").update(readFileSync(sqlite)).digest("hex") : null;
     let paused = false;
+    let lease: Awaited<ReturnType<typeof acquireWorkerLease>> = null;
     try {
       const beforeSqlite = fingerprint();
-      const count = await prisma.config.count();
-      const checkpoint = await inspection.migrationCheckpoint.count();
       expect((await GET()).status).toBe(200);
       expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(200);
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      lease = await acquireWorkerLease();
+      expect(lease).not.toBeNull();
+      const count = await prisma.config.count();
+      const checkpoint = await inspection.migrationCheckpoint.count();
       execFileSync("docker", ["pause", container], { timeout: 5000, stdio: "ignore" });
       paused = true;
+      await expect(
+        lease!.mutate((tx) =>
+          tx.config.create({ data: { key: "qa-worker-outage-never-commit", value: "synthetic" } })
+        )
+      ).rejects.toThrow();
+      expect(lease!.signal.aborted).toBe(true);
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
       expect((await GET()).status).toBe(500);
       expect((await health(new NextRequest("http://localhost/api/health?mode=live"))).status).toBe(
         200
@@ -60,6 +72,13 @@ it.skipIf(!required)(
       expect(fingerprint()).toBe(beforeSqlite);
       execFileSync("docker", ["unpause", container], { timeout: 5000, stdio: "ignore" });
       paused = false;
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      await lease!.release();
+      lease = null;
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+      expect(
+        await prisma.config.findUnique({ where: { key: "qa-worker-outage-never-commit" } })
+      ).toBeNull();
       expect((await GET()).status).toBe(200);
       expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(200);
       expect(await prisma.config.count()).toBe(count);
@@ -68,6 +87,8 @@ it.skipIf(!required)(
     } finally {
       if (paused)
         execFileSync("docker", ["unpause", container], { timeout: 5000, stdio: "ignore" });
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      await lease?.release();
       await prisma.$disconnect();
       await inspection.$disconnect();
       vi.unstubAllEnvs();

@@ -56,6 +56,26 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// Transfer unit fixtures exercise file/media behavior with an injected lease.
+// Exclusivity is proved separately by real two-process SQLite/PG runtime tests.
+vi.mock("./worker-lease", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./worker-lease")>();
+  return {
+    ...original,
+    acquireWorkerLease: vi.fn(async () => ({
+      signal: new AbortController().signal,
+      check: () => {},
+      checkTransfer: () => {},
+      mutate: async (operation: (tx: unknown) => Promise<unknown>) =>
+        operation({
+          download: { update: downloadUpdate, updateMany: downloadUpdateMany },
+        }),
+      release: async () => {},
+      abort: () => {},
+    })),
+  };
+});
+
 vi.mock("./ffmpeg", () => {
   ffmpegModuleLoaded();
   return { convertMp4ToMkv };
@@ -432,7 +452,9 @@ it("does not report legacy completion until the probe resolves and persists unkn
     expect.stringContaining(jobDirectoryName(job.title, job.id)),
     expect.any(String),
     null,
-    10
+    10,
+    undefined,
+    expect.any(AbortSignal)
   );
   finishProbe(basicFacts);
   await work;
@@ -466,7 +488,8 @@ it("passes v2 source URL to the media owner and persists separate evidence witho
     expect.any(String),
     expected,
     10,
-    url
+    url,
+    expect.any(AbortSignal)
   );
   const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
     .data;
@@ -635,7 +658,9 @@ it("passes the persisted v1 expectations and configured P06 tolerance to the com
     expect.any(String),
     expect.any(String),
     expectations,
-    0
+    0,
+    undefined,
+    expect.any(AbortSignal)
   );
   const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
     .data;
@@ -677,7 +702,9 @@ it("uses frozen v3 references without reading or repairing current series policy
     expect.any(String),
     expect.any(String),
     expectations,
-    0
+    0,
+    undefined,
+    expect.any(AbortSignal)
   );
   expect(
     downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")?.[0].data
@@ -719,7 +746,8 @@ it.each(["mkv", "mp4"])(
       expect.stringContaining(`Rundschau.${container}`),
       expect.any(Function),
       container,
-      480
+      480,
+      expect.any(AbortSignal)
     );
     const finalPath = path.join(
       testRoot,
@@ -747,6 +775,7 @@ beforeEach(async () => {
   downloadFindUnique.mockReset();
   downloadUpdate.mockReset();
   downloadUpdateMany.mockReset();
+  downloadUpdateMany.mockResolvedValue({ count: 0 });
   convertMp4ToMkv.mockReset();
   probeJobMedia.mockReset().mockResolvedValue(basicFacts);
 

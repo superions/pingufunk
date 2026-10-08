@@ -161,7 +161,7 @@ preflight_report="$(DATABASE_URL="$IMPORT_URL" docker run --rm --user "$(id -u):
   --mount "type=bind,src=${SMOKE_ROOT}/backup,dst=/backup,readonly" \
   "$MIGRATOR_IMAGE" /app/scripts/postgresql-preflight.mjs \
   /backup/run/source.sqlite pingufunk_smoke pingufunk_smoke_import "$PG_CONTAINER")"
-printf '%s' "$preflight_report" | node -e '
+printf '%s' "$preflight_report" | SMOKE_PREFLIGHT_VARIANT="$SOURCE_VARIANT" node -e '
   // The candidate must match the exact project pin, never merely the same major.
   const expectedClient=require("./package.json").dependencies["@prisma/client"];
   let input=""; process.stdin.on("data",chunk=>input+=chunk);
@@ -170,7 +170,7 @@ printf '%s' "$preflight_report" | node -e '
     if(report.version!==2 || !/^6\.\d+\.\d+$/.test(expectedClient) || report.prismaClient!==expectedClient ||
        Number(report.node.slice(1).split(".")[0])<24 ||
        report.target.schemaState!=="validated" || report.target.tls!==true ||
-       Object.values(report.source.counts).some(value=>value!=="1")) process.exit(1);
+       Object.entries(report.source.counts).some(([model,value])=>value!==(model==="EnqueueIntent" && process.env.SMOKE_PREFLIGHT_VARIANT==="bootstrap" ? "0" : "1"))) process.exit(1);
   });
 '
 for action in import verify sequences; do

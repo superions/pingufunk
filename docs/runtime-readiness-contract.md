@@ -15,11 +15,13 @@ bei Fehler eine Sekunde gecacht. Erfolgreicher Maintenancebetrieb ist ready,
 aber `writesEnabled=false` und Worker `disabled`. Nicht bestätigte Readiness
 liefert 503, ungültiger Modus 400, sämtliche Antworten `no-store`.
 
-Der Workerstatus ist ausdrücklich **prozesslokal**, mit Parallelität eins
-und `exclusiveOwnership=unverified`. Idle, aktive Verarbeitung und persistenz-
-bedingt pausierter Fortschritt sind unterscheidbar. Das ist weder die in P15.1
-geforderte Lease/Fencing-Absicherung noch ein Arr-Importnachweis. Auch gesunde
-DB und vorhandene Tools beweisen keinen abgeschlossenen Download.
+Der Workerstatus ist ausdrücklich **prozesslokal**, mit Parallelität eins.
+Der historische P15.3-Stand lieferte `exclusiveOwnership=unverified`; P15.1
+ergänzt die geschlossenen Besitzbeobachtungen gemäß
+[Workervertrag](worker-ownership-contract.md). Idle, aktive Verarbeitung und
+persistenzbedingt pausierter Fortschritt sind unterscheidbar. Das ist kein
+Arr-Importnachweis. Auch gesunde DB und vorhandene Tools beweisen keinen
+abgeschlossenen Download.
 
 Die Health-GETs installieren nichts, initialisieren keine DB, führen keine
 Migration aus und starten keine Queue. Verbindungsdaten bleiben im vorhandenen

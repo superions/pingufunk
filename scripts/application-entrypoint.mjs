@@ -22,8 +22,13 @@ try {
   process.env.PINGUFUNK_WRITES_ENABLED ??= config.provider === "sqlite" ? "1" : "0";
   if (!["0", "1"].includes(process.env.PINGUFUNK_WRITES_ENABLED))
     throw new Error("Invalid write gate");
-  if (process.env.PINGUFUNK_WRITES_ENABLED === "1") process.env.PINGUFUNK_BOOT_QUEUE = "1";
-  else delete process.env.PINGUFUNK_BOOT_QUEUE;
+  if (process.env.PINGUFUNK_WRITES_ENABLED === "1") {
+    process.env.PINGUFUNK_BOOT_QUEUE = "1";
+    process.env.NEXT_MANUAL_SIG_HANDLE = "1";
+  } else {
+    delete process.env.PINGUFUNK_BOOT_QUEUE;
+    delete process.env.NEXT_MANUAL_SIG_HANDLE;
+  }
   const child = spawn(
     process.execPath,
     [resolve("node_modules/next/dist/bin/next"), command, ...args],

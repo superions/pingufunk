@@ -6,7 +6,11 @@ import { randomUUID } from "node:crypto";
 const container = process.argv[2];
 const owner = process.env.PINGUFUNK_MEDIA_QA_OWNER;
 function run(args, input) {
-  const result = spawnSync("docker", args, { input, encoding: "utf8", timeout: 10_000 });
+  const result = spawnSync("docker", args, {
+    input,
+    encoding: "utf8",
+    timeout: args[0] === "stop" ? 20_000 : 10_000,
+  });
   if (result.error || result.status !== 0) throw new Error("Disposable media command failed");
   return args[0] === "logs" ? result.stdout + result.stderr : result.stdout;
 }
@@ -357,6 +361,81 @@ if (
 )
   throw new Error("Retry lost expectations or bypassed the failed-media gate");
 console.log("Both SAB aliases, real isolated completed-file removal and re-probed retry passed");
+
+// Stop the actual writing Next process during an actual FFmpeg stream-copy mux,
+// not merely a mocked kill call. The fixture wrapper slows only this next mux.
+request("api/settings", JSON.stringify({ "download.convertToMkv": "true" }));
+run([
+  "exec",
+  container,
+  "node",
+  "-e",
+  'const fs=require("node:fs");fs.writeFileSync("/tmp/slow-next-mux","synthetic",{flag:"wx"});fs.chownSync("/tmp/slow-next-mux",Number(process.env.PUID),Number(process.env.PGID));',
+]);
+const shutdownId = request("api?mode=addfile&cat=sonarr", nzb("slow-mux.mp4", 10).body).nzo_ids[0];
+const muxDeadline = Date.now() + 30_000;
+let actualMux = false;
+do {
+  actualMux =
+    run([
+      "exec",
+      container,
+      "node",
+      "-e",
+      'const fs=require("node:fs");console.log(fs.existsSync("/tmp/media-mux-ready")&&fs.readdirSync("/proc").filter(x=>/^\\d+$/.test(x)).some(pid=>{try{const a=fs.readFileSync("/proc/"+pid+"/cmdline","utf8").split("\\0");return a[0]==="/usr/bin/ffmpeg"&&a.includes("-re");}catch{return false}}));',
+    ]).trim() === "true";
+  if (!actualMux) await delay(100);
+} while (!actualMux && Date.now() < muxDeadline);
+if (!actualMux || readJob(shutdownId).status !== "converting")
+  throw new Error("Actual owned mux was not running before shutdown");
+const neighborBefore = run([
+  "exec",
+  container,
+  "node",
+  "-e",
+  'console.log(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))',
+  neighborPath,
+]);
+request("api/settings", JSON.stringify({ "download.convertToMkv": "false" }));
+const followingId = request("api?mode=addfile&cat=sonarr", nzb("valid.mp4", 2).body).nzo_ids[0];
+run(["stop", "--time", "15", container]);
+if (run(["inspect", "--format", "{{.State.ExitCode}}", container]).trim() !== "143")
+  throw new Error("Writer did not drain through its controlled SIGTERM handler");
+run(["start", container]);
+let afterStopReady = false;
+const afterStopDeadline = Date.now() + 30_000;
+do {
+  try {
+    request("api?mode=version");
+    afterStopReady = true;
+  } catch {
+    await delay(200);
+  }
+} while (!afterStopReady && Date.now() < afterStopDeadline);
+if (!afterStopReady) throw new Error("Writer did not restart after mux shutdown");
+const shutRow = readJob(shutdownId);
+if (shutRow.status !== "failed" || shutRow.validation !== null)
+  throw new Error("Aborted mux claimed completed or verified media");
+while (readJob(followingId).status === "queued" && Date.now() < afterStopDeadline) await delay(100);
+while (
+  !["completed", "failed"].includes(readJob(followingId).status) &&
+  Date.now() < afterStopDeadline
+)
+  await delay(100);
+if (readJob(followingId).status !== "completed" || !fileExists(readJob(followingId).filePath))
+  throw new Error("Following queue job lost progress after mux shutdown");
+if (
+  run([
+    "exec",
+    container,
+    "node",
+    "-e",
+    'console.log(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))',
+    neighborPath,
+  ]) !== neighborBefore
+)
+  throw new Error("Mux shutdown changed a neighboring file");
+console.log("Actual mux SIGTERM drain, failed persistence and following queue progress passed");
 
 const pgContainer = process.env.PINGUFUNK_MEDIA_QA_PG_CONTAINER;
 if (pgContainer) {

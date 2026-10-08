@@ -68,13 +68,14 @@ export interface ArdSource {
 /** Keep explicit expiry with its exact asset declarations even when no release is eligible. */
 export async function getArdSource(
   id: string,
-  budget: HttpRequestBudget
+  budget: HttpRequestBudget,
+  signal?: AbortSignal
 ): Promise<ArdSource | null> {
   if (ardVideoId(`https://www.ardmediathek.de/video/${id}`) !== id)
     throw new Error("Invalid source identity");
   const response = await fetchWithRetry(
     `https://api.ardmediathek.de/page-gateway/pages/ard/item/${id}?embedded=true`,
-    { headers: { Accept: "application/json" } },
+    { headers: { Accept: "application/json" }, ...(signal ? { signal } : {}) },
     { requestBudget: budget, maxRetries: 0 }
   );
   if (response.status === 404 || response.status === 410) {
@@ -88,7 +89,7 @@ export async function getArdSource(
   try {
     const page = z
       .object({ widgets: z.array(z.unknown()).max(32) })
-      .parse(await readBoundedProviderJson(response, budget.deadlineAt, 1024 * 1024));
+      .parse(await readBoundedProviderJson(response, budget.deadlineAt, 1024 * 1024, signal));
     const players = page.widgets.filter(
       (widget) =>
         widget && typeof widget === "object" && Reflect.get(widget, "type") === "player_ondemand"
@@ -128,8 +129,12 @@ export async function getArdSource(
 }
 
 /** Fresh worker verification cannot use an explicitly expired declaration. */
-export async function getArdMedia(id: string, budget: HttpRequestBudget): Promise<ArdMedia[]> {
-  const source = await getArdSource(id, budget);
+export async function getArdMedia(
+  id: string,
+  budget: HttpRequestBudget,
+  signal?: AbortSignal
+): Promise<ArdMedia[]> {
+  const source = await getArdSource(id, budget, signal);
   return (
     source?.media.filter((entry) =>
       ["unknown", "rights_current"].includes(

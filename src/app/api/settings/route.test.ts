@@ -126,6 +126,22 @@ it("masks both SRF credentials in bulk and single-setting responses", async () =
   );
 });
 
+it("keeps internal worker ownership opaque and unmodifiable through settings", async () => {
+  values.set("internal.workerLease.v1", "private-worker-owner-fence");
+  const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  expect(JSON.stringify(all)).not.toContain("private-worker-owner-fence");
+  expect(all["internal.workerLease.v1"]).toBeUndefined();
+  expect(
+    (await GET(new NextRequest("http://localhost/api/settings?key=internal.workerLease.v1"))).status
+  ).toBe(404);
+  expect((await post({ "internal.workerLease.v1": "override" })).status).toBe(404);
+  expect(
+    (await DELETE(new NextRequest("http://localhost/api/settings?key=internal.workerLease.v1")))
+      .status
+  ).toBe(400);
+  expect(values.get("internal.workerLease.v1")).toBe("private-worker-owner-fence");
+});
+
 it("shows a usable TMDB read token only as presence", async () => {
   values.set("api.tmdb.key", "eyJ.synthetic.read.token");
   const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();

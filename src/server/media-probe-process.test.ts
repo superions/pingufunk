@@ -92,8 +92,9 @@ it("times out and kills only the process group created for this probe", async ()
   const rejected = expect(result).rejects.toThrow("Local media validation failed");
   await started();
   await vi.advanceTimersByTimeAsync(30_000);
-  await rejected;
   expect(kill).toHaveBeenCalledWith(-child.pid, "SIGKILL");
+  child.emit("close", null);
+  await rejected;
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -103,8 +104,9 @@ it("caps stdout and stderr together without retaining or publishing tool diagnos
   await started();
   child.stdout.emit("data", Buffer.alloc(600_000));
   child.stderr.emit("data", Buffer.alloc(500_000));
-  await rejected;
   expect(kill).toHaveBeenCalledWith(-child.pid, "SIGKILL");
+  child.emit("close", null);
+  await rejected;
 });
 
 it("rejects successful exit accompanied by a media error rather than hiding truncation", async () => {

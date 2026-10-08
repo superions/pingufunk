@@ -205,9 +205,11 @@ export async function probeJobMedia(
   jobDirectory: string,
   expected: MediaExpectations | null,
   tolerancePercent: number,
-  sourceUrl?: string
+  sourceUrl?: string,
+  signal?: AbortSignal
 ): Promise<MediaProbeFacts> {
   try {
+    signal?.throwIfAborted();
     const file = path.resolve(filePath);
     const directory = path.resolve(jobDirectory);
     if (
@@ -234,7 +236,7 @@ export async function probeJobMedia(
       throw new MediaProbeError("file_unsafe", "conflicting");
     const binary = getFfprobePath();
     if (!path.isAbsolute(binary)) throw new MediaProbeError("tool_unavailable", "unavailable");
-    const output = await readLocalProbe(binary, file);
+    const output = await readLocalProbe(binary, file, signal);
     const sourceExpectation = sourceAudioExpectation(expected);
     let proof: SourceAudioEvidence | undefined;
     if (sourceExpectation) {
@@ -242,7 +244,8 @@ export async function probeJobMedia(
         proof = await verifySourceAudio(
           sourceExpectation,
           sourceUrl ?? "",
-          new HttpRequestBudget(1)
+          new HttpRequestBudget(1),
+          signal
         );
       } catch (error) {
         const event = error instanceof DecisionFailure ? error.diagnostic : null;
@@ -254,6 +257,7 @@ export async function probeJobMedia(
     }
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);
+    signal?.throwIfAborted();
     if (
       !after.isFile() ||
       after.isSymbolicLink() ||
@@ -279,7 +283,7 @@ export function getFfprobePath(): string {
   );
 }
 
-function readLocalProbe(binary: string, file: string): Promise<string> {
+function readLocalProbe(binary: string, file: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       binary,
@@ -305,6 +309,7 @@ function readLocalProbe(binary: string, file: string): Promise<string> {
     let settled = false;
     let bytes = 0;
     let hasDiagnostics = false;
+    let terminating: DecisionReason | undefined;
     const chunks: Buffer[] = [];
     const killOwnedTree = () => {
       if (child.pid && process.platform !== "win32") {
@@ -325,28 +330,38 @@ function readLocalProbe(binary: string, file: string): Promise<string> {
     };
     const finish = (ok: boolean, terminate = false, reason: DecisionReason = "probe_invalid") => {
       if (settled) return;
+      if (terminate) {
+        terminating = reason;
+        killOwnedTree();
+        return; // A kill request is not proof that the child has stopped writing.
+      }
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       if (!ok) {
-        if (terminate) killOwnedTree();
         reject(new MediaProbeError(reason));
       } else resolve(Buffer.concat(chunks).toString("utf8"));
     };
     const timer = setTimeout(() => finish(false, true, "tool_timeout"), 30_000);
+    const abort = () => finish(false, true);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
     child.stdout.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > 1024 * 1024 || chunks.length >= 8192) {
         finish(false, true);
         return;
       }
-      if (!settled) chunks.push(Buffer.from(chunk));
+      if (!settled && !terminating) chunks.push(Buffer.from(chunk));
     });
     child.stderr.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (chunk.length) hasDiagnostics = true;
       if (bytes > 1024 * 1024) finish(false, true);
     });
-    child.on("error", () => finish(false, true, "tool_unavailable"));
-    child.on("close", (code) => finish(code === 0 && !hasDiagnostics && bytes > 0));
+    child.on("error", () => finish(false, false, "tool_unavailable"));
+    child.on("close", (code) =>
+      finish(!terminating && code === 0 && !hasDiagnostics && bytes > 0, false, terminating)
+    );
   });
 }
