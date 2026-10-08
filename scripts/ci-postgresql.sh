@@ -85,6 +85,7 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   -c 'CREATE SCHEMA p15_reads AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_enqueues AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_workers AUTHORIZATION pingufunk_qa_runtime' \
+  -c 'CREATE SCHEMA p15_reconnect AUTHORIZATION pingufunk_qa_runtime' \
   -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_runtime' \
   -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_qa_runtime' \
@@ -119,10 +120,12 @@ PINGUFUNK_REQUIRE_PG_TESTS=1 \
   npx vitest run scripts/download-read-runtime.test.ts scripts/enqueue-runtime.test.ts scripts/worker-lease-runtime.test.ts
 
 # Pause only this harness-owned container, after the parallel CRUD suites finish.
+DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
+  npx prisma migrate deploy
 PINGUFUNK_REQUIRE_PG_RECONNECT_TESTS=1 \
   PINGUFUNK_TEST_RECONNECT_CONTAINER="$CI_PG_CONTAINER" \
-  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
   npx vitest run scripts/postgresql-reconnect.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \

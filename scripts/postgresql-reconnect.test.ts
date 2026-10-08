@@ -20,7 +20,8 @@ it.skipIf(!required)(
       !["postgres:", "postgresql:"].includes(url.protocol) ||
       url.hostname !== "127.0.0.1" ||
       url.pathname !== "/pingufunk_qa" ||
-      url.username !== "pingufunk_qa_runtime"
+      url.username !== "pingufunk_qa_runtime" ||
+      url.searchParams.get("schema") !== "p15_reconnect"
     )
       throw new Error("Owned disposable reconnect target required");
     const published = execFileSync("docker", ["port", container, "5432/tcp"], {

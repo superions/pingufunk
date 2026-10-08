@@ -2542,6 +2542,13 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       angeschlossen, noch nicht abgenommen. Vertrag
       `docs/worker-ownership-contract.md`; alte/neue Writer nicht mischen,
       unverändert Parallelität eins, kein Produktionsrestart oder Gesamtabschluss.
+      Erste Fork-PG-Probe bestätigt beide echten Zweiprozess-/Crash-/Expiry-
+      Backends und den neuen Besitzverlust bei DB-Ausfall. Der anschließende
+      bestehende Denied-role-Test scheiterte an der durch diese neue Writerprobe
+      erzeugten Checkpointzeile im gemeinsam genutzten Testschema. Reconnect
+      erhält deshalb ein eigenes disposable Schema; die wichtige Null-Checkpoint-
+      Assertion der verweigerten Rolle bleibt unverändert. Frische Gesamtprobe
+      erforderlich, P15.1 bleibt offen.
 - [x] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
       Owner: `download.ts::{getHistory,getQueue}`, `sab-api.ts`,
       `/downloads` und beide DB-Querypfade. Aktuell wird die gesamte History
