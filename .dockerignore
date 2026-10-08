@@ -62,6 +62,7 @@ scripts/*
 !scripts/sqlite-schema.mjs
 !scripts/sqlite-baseline.mjs
 !scripts/check-postgresql-schema.mjs
+!scripts/download-directories.mjs
 !scripts/migrate-entrypoint.sh
 !scripts/postgresql-preflight.mjs
 !scripts/postgresql-snapshot.mjs

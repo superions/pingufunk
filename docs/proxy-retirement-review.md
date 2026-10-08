@@ -1893,3 +1893,10 @@ Lauf offen; alte P14-Gates ersetzen sie nicht. Vertrag unter
 [Runtimeprüfung](runtime-readiness-contract.md). Kein unabhängiger Peerreview.
 P13/P14.2/P14.3/P15.1/P15.2/P15.4/P16 und P03.4 bleiben offen; bestehende
 Build-Tracingwarnungen und transitive Auditfinding separat unverändert.
+
+Container-Zwischenlauf 37709209422 brach bereits beim Build ab: die bestehende
+Script-Allowlist in `.dockerignore` schloss den neuen Volumehelper aus. Die
+Allowlist wurde gezielt ergänzt, nicht die private Script-/Datenabschirmung
+aufgehoben. Keine Containerabnahme aus diesem fehlgeschlagenen Lauf behauptet.
+Finale lokale **1141 Tests**, Lint, Typecheck, Formatcheck und Diffcheck grün;
+Productionbuild für den unveränderten Produktquellstand wiederverwendet.
