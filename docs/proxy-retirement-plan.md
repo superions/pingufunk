@@ -1,7 +1,9 @@
 # Pingufunk: vollständige Ablösung des Kompatibilitätsproxys
 
-Stand: 28.09.2026. **Analyse und Planung, keine Funktionsänderung oder
-Bereitstellung.** Dieses Dokument ersetzt den bisherigen groben Projektplan.
+Historische Analysebasis vom 28.09.2026, **kein aktueller Funktions- oder
+Bereitstellungsstatus**. Dieses Dokument ersetzt den damaligen groben Projektplan.
+Datierte Aussagen und damalige Code-Anker unten beschreiben diese Analysebasis;
+spätere Owner-Extraktionen machen sie nicht zu einer zweiten Implementierungsfolge.
 Der anschließende [Reviewbericht](proxy-retirement-review.md) dokumentiert
 Befunde, Korrekturen und verbleibende Unsicherheiten.
 Entscheidung vom 30.09.2026: **PostgreSQL ist optional; SQLite bleibt ein

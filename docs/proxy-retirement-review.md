@@ -2111,3 +2111,96 @@ bedient; neun Transportanforderungen ergeben fünf bewusste Simulatoraufträge,
 Wiederholungen dieselbe ID. App schreibt dabei keine Jobs, Browser-Konsole leer.
 Kein Live-Importnachweis aus diesem Simulator. Neue Fork-/PG-/Containerabnahme
 steht noch aus; P15.4 bleibt offen. [Vertrag](enqueue-intent-contract.md).
+
+## Implementierungsreview P15.1 — tatsächlicher Workerbesitz und Shutdown
+
+08.10.2026: vollständiger Start/Recovery/Claim/Progress/Probe/Completion/Failure-
+und Signalpfad durch Implementierer geprüft, kein unabhängiger Peerreview.
+DB-CAS gegen exakten versionierten Wert und DBzeit, Mutation hinter gehaltenem
+Fence, konservative Expiry/Heartbeat, keine fremden Recoverywrites und kein
+automatischer Re-Transfer nach Crash/ungewissem Commit. HTTP und eigene
+POSIX-Toolgruppen erhalten Abort; tatsächliches close vor Leasefreigabe.
+Keine DDL, keine neue Parallelität oder HA-Zusage.
+
+Die echte Zweiprozess-/Crash-/Expiry-/PG-Ausfallprobe ist im Fork grün.
+Ein anfänglicher Denied-role-Folgefehler war Testschema-Kontamination: das
+Reconnectschema wurde isoliert, Null-Checkpoint-Assertion blieb unverändert.
+Die erste kumulative Containerkette stoppte zuvor beim veralteten hardcodierten
+SQLiteledgercount; jetzt werden alle realen Namen und SQLchecksums verglichen,
+keine Schemaabnahme aufgeweicht. Die nächste Kette erreichte tatsächlichen Mux,
+scheiterte jedoch am unmittelbar terminalen Zustand nach Restart.
+
+Der servierte Turbopack-Build enthält mehrere Download-Manager-Modulgraphen.
+Moduleigene Queue-/Signalglobals können so den APIwriter vom Instrumentation-
+Drain trennen. Ein gemeinsamer versionierter Prozessslot verbindet Scheduling,
+Lease, offene Directwork, Fehlerreconciliation und einmaligen Signalhandler;
+ein Modulreloadtest schützt genau diese Trennung. DB-CAS bleibt der
+prozessübergreifende Besitzer, der Globalslot ist kein Ersatz dafür.
+Die native Muxassertion wird nicht gelockert; Fehler nennen nur geschlossenen
+Status und Vorhandensein von Validierung. Frische Containerabnahme ausstehend.
+
+## Implementierungsreview P13.2 — bedienbare geschlossene Diagnose
+
+08.10.2026 auf `4c44255`: JSON-Suche und Diagnosebericht stammen aus derselben
+Operation, kein Berichtreader mit beliebiger ID und keine Veränderung des
+nativen RSS/SAB-Bodys. `/logs` zeigt ausschließlich den begrenzten tablokalen
+Kurzzeitbericht; UUIDs sind kein Authmechanismus. Selektiver Jobreader benutzt
+die vorhandene Installations-Lesegrenze, niemals beliebige Provider-/Dateipfade,
+Rohantworten oder Shelllogs. GET-only Arr-Vertrag ist optional, standardmäßig
+aus und exakt an Download-ID, Grab/Importhistory, File-ID, Pfad, Größe und
+aktuellen Serien-/Filmbezug gebunden. Abgeschnittene/widersprüchliche History
+und unsichere Zuordnung bleiben unbekannt; API-Importmeldung ist kein physischer
+Dateibeweis auf dem Arr-Host.
+
+Tatsächliche lokale Jobdatei verlangt regulären sicheren Ownjobpfad und gleiche
+positive DB-/Dateigröße. Persistierte v1/v2/v3-Medienfakten sind historische
+Prüfung, kein erfundener neuer Mediencheck; zukünftige Version unbekannt.
+Reviewkorrekturen: geschlossene APIparser verwerfen freie Felder/Widersprüche,
+Ausfall entfernt vorherige Dateibestätigung, alte rohe Failmessages nicht in GUI,
+Diagnosebutton erhält Tastaturfokus mit aria-busy und synchroner Doppelreadsperre.
+Prüferwartung in alten Tests war einmal durch einen als Cleanup zurückgegebenen
+Vitestmock verfälscht; Testhook korrigiert, Productcatch nicht geschwächt.
+
+1299 lokale Tests, Lint, Typecheck, Formatcheck und Productionbuild grün.
+Desktop-Light 1280×720 am eigenen tatsächlich servierten Bundle: Suche/Filme/
+Shows/Downloads/Logs vor/nach, Pointer/Keyboard, leer/timeout/konflikt/unknown/
+completed/importblocked und Readback/5minExpiry. Achtsekündiger GET bestätigt
+Busyfocus und nur eine Diagnoseanforderung, keine Mutationen. Screenshots lokal,
+Browserkonsole leer. Fork-CI `37719361827` einschließlich PG grün; Containerkette
+`37719361778` scheiterte ausschließlich am beschriebenen nativen Shutdown-
+Folgezustand. Kein vorzeitiger P13.2-/Produktgesamtabschluss, keine Liveprobe.
+
+## Implementierungsreview P16.1 — konkrete Ownergrenzen
+
+08.10.2026: erster buildbarer Extraktionsstand, kein abgeschlossener Gesamtpunkt.
+`mediathek.ts` koordiniert Anfragen und Bounded Retrieval; bestehende Ruleset-
+Zuordnung und TV-Koordinaten liegen in konkreten Matchern, Kandidatenabruf und
+ARTE-Discovery in ihrem Abrufowner, Sourceproof→Releaseassembly in
+`mediathek-release.ts`. `newznab.ts` bleibt der unveränderte Titel/GUID/RSS/NZB-
+Serializer; kein zweiter Episodenparser. 33 verschobene Funktionen besitzen nach
+ASTnormalisierung identische Bodies; zusätzlich kausale Consumerregressionen,
+nicht allein Sourcegleichheit, schützen Ordering und Negativfälle.
+
+Metadatencache besitzt die echte Series/Film-Union mit Narrowing statt `any`-
+Werten/ungeprüften Callerassertions. Leerer Cataloguecache bleibt unverändert;
+keine neuen positiven Whole-RSS-/URLcaches. NZBparser liegt beim vorhandenen
+versionierten Releaseowner; öffentlicher Downloadexport bleibt kompatibel,
+UI-NZB-Producer braucht keinen statischen Queue/DBimport mehr. Kein behaupteter
+Clientbundle-Leak aus einem rein serverseitigen historischen Import.
+
+Settingskarte und lokaler Draft sind getrennt, kanonisches Schema/Server-
+Validation/Responseordering unverändert. Drei getrennte Identitätsgrenzen und
+optionale Arr-/Sprachkarten behalten IDs/Labels, keine Credentialsfelder.
+Bestätigte Karte löscht weder fremde Entwürfe noch neuere Werte desselben Keys.
+Desktopreview fand den nativen Busy-Fokusverlust: synchroner Saveguard plus
+aria-busy statt nativer Busy-Deaktivierung korrigiert, Invalidgrenzen bleiben
+gesperrt. Nachher am tatsächlich gebauten Bundle, Light 1280×720: alle vier
+Karten gematcht, Pointer/Keyboard, Werte 12/15/2 gegen Radarrentwurf 11,
+Save/Reload/API- und direkter DBreadback. Echte disposable SQLite-Schreibsperre
+verweigert den Write, Eingabe/Fokus erhalten und gespeicherter Filmwert weiterhin
+10, keine Jobs. Save und Reload bewahren Fokus; Sprachpräferenz separat
+persistiert. Keine Mobil-/Theme-/Liveprobe, Konsole ohne unerwartete Fehler.
+Transfer/Queue/Completion-Extraktion wartet auf native P15.1-Abnahme.
+Historischer Plan ausdrücklich als Analysebasis markiert, aktueller Einstieg
+bleibt ausschließlich das TODO. Upstream-main frisch
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49`, kein entsprechender Fix.

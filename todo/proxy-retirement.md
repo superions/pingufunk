@@ -2724,3 +2724,14 @@ leichter überprüfbare künftige Upstreamübernahmen.
       Gates und tatsächliche Backend-/Container-/Consumerketten grün. Erhaltene
       historische Vertragsdokumentation klar als solche markieren, aktuellen
       Einstieg über diesen TODO halten; kein zweiter Plan oder Done-Archiv.
+      Erster Entwicklungscheckpoint 08.10.2026: bestehende Abruf-/Koordinaten-/
+      Ruleset-/Releaseowner getrennt, versionierter NZBparser beim Releasevertrag,
+      Series/Filmcache als echte Union ohne `any`. Keine neue Matcherpolitik,
+      IDs/GUIDs/Kategorien und Parser-Versionen unverändert; 33 verschobene
+      Functionbodies zusätzlich mechanisch abgeglichen. Settingsdraft und vier
+      Matchingkarten extrahiert, Fremdkarten-/Samekey-Race geschützt; Busy-Save/
+      Reloadfokus korrigiert. Tatsächliches Desktopbundle, gematchte Karten,
+      12/15/2-Save/Reload, API-/DBreadback, Sprachpräferenz und verweigerter Write
+      unter echter disposable SQLite-Sperre geprüft. Keine neuen Jobs/externer
+      Providerzugriff. 1303 reguläre Tests/übrige Gates grün; Transfer/Completion-
+      Extraktion und finale Containerabnahme bleiben offen, Checkbox unverändert.
