@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { parseUiSearchCoverage } from "@/lib/ui-search-coverage";
 import type { UiSearchCoverage } from "@/types";
+import { type DecisionReport } from "@/lib/decision-diagnostics";
+import { rememberUiDiagnosis } from "@/lib/ui-diagnostics";
 
 /** UI transport only: matching and release authorship remain on the server. */
 export function useContentSearch<T>(type?: "movie") {
@@ -11,6 +13,7 @@ export function useContentSearch<T>(type?: "movie") {
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<UiSearchCoverage | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DecisionReport | null>(null);
   const active = useRef<AbortController | null>(null);
 
   useEffect(() => () => active.current?.abort(), []);
@@ -21,6 +24,7 @@ export function useContentSearch<T>(type?: "movie") {
     if (query.trim().length < 2) {
       setResults([]);
       setCoverage(null);
+      setDiagnostics(rememberUiDiagnosis(null));
       setError("Bitte mindestens zwei Zeichen für die Suche eingeben.");
       return;
     }
@@ -30,6 +34,7 @@ export function useContentSearch<T>(type?: "movie") {
     setError(null);
     setResults([]);
     setCoverage(null);
+    setDiagnostics(rememberUiDiagnosis(null));
     setIsSearching(true);
     try {
       const params = new URLSearchParams({ q: query, limit: "50" });
@@ -37,8 +42,9 @@ export function useContentSearch<T>(type?: "movie") {
       const response = await fetch(`/api/search?${params}`, {
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
       });
-      if (!response.ok) throw new Error("Search unavailable");
       const data = await response.json();
+      if (!controller.signal.aborted) setDiagnostics(rememberUiDiagnosis(data.diagnostics));
+      if (!response.ok) throw new Error("Search unavailable");
       if (!Array.isArray(data.results)) throw new Error("Invalid search response");
       const confirmedCoverage = parseUiSearchCoverage(data.coverage, data.results.length);
       if (!confirmedCoverage) throw new Error("Invalid search coverage");
@@ -56,5 +62,5 @@ export function useContentSearch<T>(type?: "movie") {
     }
   };
 
-  return { results, isSearching, submittedQuery, error, coverage, search };
+  return { results, isSearching, submittedQuery, error, coverage, diagnostics, search };
 }

@@ -18,6 +18,7 @@ import { getStatusBadge } from "@/components/shared/status-badge";
 import { Input } from "@/components/ui/input";
 import { downloadPollDelay } from "@/lib/download-read";
 import { parseQueuePage, parseHistoryPage, type DownloadPageMeta } from "@/lib/download-page";
+import { JobDiagnosis } from "@/components/job-diagnosis";
 
 const pageSize = 50;
 const emptyMeta: DownloadPageMeta = { noofslots: 0, noofslots_total: 0, start: 0, limit: pageSize };
@@ -367,8 +368,9 @@ export default function DownloadsPage() {
                     <TableBody>
                       {queue.map((item) => (
                         <TableRow key={item.nzo_id}>
-                          <TableCell className="font-medium max-w-xs truncate">
-                            {item.filename}
+                          <TableCell className="font-medium max-w-xs">
+                            <span className="truncate block">{item.filename}</span>
+                            <JobDiagnosis id={item.nzo_id} />
                           </TableCell>
                           <TableCell>{getStatusBadge(item.status)}</TableCell>
                           <TableCell>{item.percentage}%</TableCell>
@@ -420,8 +422,11 @@ export default function DownloadsPage() {
                           <TableCell className="font-medium max-w-xs">
                             <span className="truncate block">{item.name}</span>
                             {item.fail_message && (
-                              <span className="text-xs text-destructive">{item.fail_message}</span>
+                              <span className="text-xs text-destructive">
+                                Fehler gemeldet – geschlossene Diagnose lesen.
+                              </span>
                             )}
+                            <JobDiagnosis id={item.nzo_id} />
                           </TableCell>
                           <TableCell>{getStatusBadge(item.status)}</TableCell>
                           <TableCell>

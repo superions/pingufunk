@@ -1,6 +1,6 @@
 # Geschlossene Entscheidungsdiagnose
 
-Entwicklungsvertrag P13.1. Status und Abnahme im
+Entwicklungsvertrag P13.1/P13.2. Status und Abnahme im
 [Phasen-TODO](../todo/proxy-retirement.md), kein Produktionsauftrag.
 
 ## Bedeutung und Grenzen
@@ -43,10 +43,11 @@ Transportparser erstellen eine neue geschlossene Form und entfernen fremde
 Felder. Zugriff auf zurückgegebene Objekte verändert den gespeicherten Bericht
 nicht.
 
-GUI-Suchroute und derselbe direkte/Prowlarr-Newznabhandler liefern nur die
-zusätzliche Antwortkennung `X-Pingufunk-Diagnostic-Id`. RSS-/SAB-Body und bisherige
-Fehlerstatus bleiben kompatibel. Noch kein HTTP-Reader, globale Diagnoseliste
-oder UI-Logviewer: P13.2 besitzt deren Zugriffsschutz und Desktopbedienung.
+GUI-Suchroute und derselbe direkte/Prowlarr-Newznabhandler liefern die
+zusätzliche Antwortkennung `X-Pingufunk-Diagnostic-Id`. Die GUI-JSON-Antwort
+enthält außerdem den geschlossenen Bericht genau dieser Anfrage. RSS-/SAB-Body
+und bisherige Fehlerstatus bleiben kompatibel. Kein HTTP-Reader zum Abruf
+anderer Suchberichte und keine globale Diagnoseliste.
 Ein womöglich entfernter Header über Prowlarr ist kein behaupteter diagnostischer
 Forwardingnachweis. Der internen Kennung folgt keine neue automatische Aktion.
 
@@ -67,10 +68,70 @@ und SAB-`fail_message` als String bleiben unverändert lesbar. Positive lokale
 Medienprüfung bleibt im bestehenden `mediaValidation`-Vertrag. Keine DDL,
 Job-/Historyumschreibung, Retryfreigabe oder Importbehauptung.
 
-P13.1 macht nicht sämtliche alten Dockerlogs privat: deren vorhandene freie
-Ausgaben und bedienbarer Diagnosezugriff sind ausdrücklich P13.2. Es gibt keine
-Shell-/Dockerlog-API. Entscheidungen werden an ihren Ownern aufgezeichnet,
-nicht aus Logtexten zurückgeraten.
+Die Diagnose macht nicht sämtliche historischen Dockerlogs privat. Es gibt
+keine Shell-/Dockerlog-API oder Rohantwortanzeige. Entscheidungen werden an
+ihren Ownern aufgezeichnet, nicht aus Logtexten zurückgeraten.
+
+## Bedienung und tatsächliche Zugriffsgrenze
+
+Suche und Filme zeigen die Gründe der gerade ausgeführten Anfrage, auch bei
+Fehlerantworten. Die Route `/logs` (Navigation „Diagnose“) ersetzt den alten
+Dockerlog-Platzhalter. Sie liest ausschließlich den letzten geschlossenen
+Suchbericht dieses Browser-Tabs aus optionalem Sessionstorage, maximal fünf
+Minuten/32 KiB. Kein Suchtext oder Quellen-/Bibliotheksinhalt wird dort gespeichert.
+Ein neuer Versuch entfernt zuerst den alten Bericht. Fehlende/abgelaufene
+Berichte heißen unbekannt, nicht bestätigt leer. Historische Shows sind keine
+Suchdiagnose; die Oberfläche verweist auf Anfrage und Download.
+
+Downloads bieten einen ausdrücklich lesenden Button pro bestehendem Job.
+`GET /api/downloads/<UUID>/diagnostics` erlaubt weder frei gewählte URLs,
+Dateipfade, Provider noch Queryparameter. Der Read ist begrenzt/coalesced
+(maximal acht aktive Jobs, keine globale Liste). Neue Diagnosen bestehen nur
+aus geschlossenen Enums und Zählern; alte freie `fail_message`-Texte werden in
+der GUI nicht übernommen. Native SAB-Antworten bleiben kompatibel.
+
+**Pingufunk besitzt derzeit keinen eigenen Login.** Die Route hat dieselbe
+bestehende Lesegrenze wie History und Jobdaten; eine UUID oder ein vermeintlich
+privater Routenname ist keine Authentifizierung. Installationen müssen die
+vorhandene Oberfläche und APIs über ihren tatsächlich gewählten Zugang schützen.
+Es wird weder ein bestimmter Proxy noch TLS vorausgesetzt. Kein globaler
+Docker-/Shell-/HTTP-Reader wird freigeschaltet. Diagnosebuttons führen keine
+Grabs, Retries, Overrides, Löschungen oder Imports aus.
+
+## Datei und optionaler Arr-Import sind getrennte Belege
+
+Für Completed wird der bestehende Kategorie-/Mapping-/Pfadowner **lesend**
+verwendet: sichere reguläre lokale Datei, keine Symlinks, positive Größe genau
+wie im Job. „Geprüfte Datei vorhanden“ benötigt zusätzlich gültige gespeicherte
+Medienfakten. Die Medienchecks stammen vom Abschluss, keine neue Probe oder
+aktueller kryptografischer Inhaltsnachweis. Alte Jobs ohne Fakten bleiben
+unverifiziert. Eine native Arr-Verschiebung darf unsere lokale Datei entfernen;
+das ist getrennt vom Importstatus zu prüfen.
+
+Optionale Sonarr-/Radarr-Anbindung verwendet ausschließlich vorhandene
+serverseitige Secretquellen und den GET-only-Client mit Unterpfad/HTTP-Support.
+Deaktiviert bedeutet unbekannt ohne Secret-/Netz-I/O. Maximal zehn Versuche,
+acht Sekunden, keine HTTP-Retries; Kontextwechsel, Fehler und unvollständige
+Fenster bleiben unavailable/unknown. Unterstützte API-Verträge: Sonarr 3/4,
+Radarr 6. Die Prüfung beruht auf den offiziellen API- und Versionsquellen,
+insbesondere [Sonarr v4.0.20.3014 HistoryController](https://github.com/Sonarr/Sonarr/blob/v4.0.20.3014/src/Sonarr.Api.V3/History/HistoryController.cs)
+und [Radarr v6.4.4.10685 HistoryController](https://github.com/Radarr/Radarr/blob/v6.4.4.10685/src/Radarr.Api.V3/History/HistoryController.cs),
+ergänzt durch [Sonarr API](https://sonarr.tv/docs/api/) und
+[Radarr API](https://radarr.video/docs/api/).
+
+Die importierte History muss die **exakte Download-ID** und passende gepaarte
+Grab-/Importereignisse besitzen. Import-File-ID/Path müssen zur aktuellen
+Episode-/MovieFile, Episode-/Movie-ID, hasFile und positiven API-Dateigröße
+passen. Maximal 100 History-/Queuerecords und vier Importbindungen; nicht
+vollständig gelesene Fenster beweisen keine Abwesenheit oder Vollständigkeit.
+Fremde Download-IDs/Titel werden niemals zugerechnet. Queue-Importblocker werden
+aus deren Nachrichten auf geschlossene Gründe projiziert; Rohtexte/Pfade
+werden nicht ausgeliefert.
+
+„Arr-API meldet einen zugeordneten Import“ ist ein begrenzter **API-Beleg**,
+kein physischer Dateinachweis am fremden Arr-Host. Completed, leere Queue,
+Command-200 oder ein beliebiges hasFile sind kein Importbeleg. Remote-Dateien
+werden nicht per SSH/Docker gelesen, keine Infrastrukturroute eingebaut.
 
 ## Kausale Gates
 

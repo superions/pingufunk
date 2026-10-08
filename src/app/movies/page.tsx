@@ -12,6 +12,7 @@ import { useContentSearch } from "@/hooks/use-content-search";
 import { SearchCoverageNotice } from "@/components/search-coverage-notice";
 import { enqueueUiNzb, UiEnqueueError, type UiEnqueueRequest } from "@/lib/ui-enqueue";
 import { UncertainEnqueue } from "@/components/uncertain-enqueue";
+import { DecisionDiagnosis } from "@/components/decision-diagnosis";
 
 interface SearchResult {
   id: string;
@@ -44,6 +45,7 @@ export default function MoviesPage() {
     submittedQuery,
     error: searchError,
     coverage,
+    diagnostics,
     search,
   } = useContentSearch<SearchResult>("movie");
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -165,6 +167,7 @@ export default function MoviesPage() {
 
       {/* Search Results */}
       <SearchCoverageNotice coverage={coverage} />
+      {submittedQuery && !isSearching && <DecisionDiagnosis report={diagnostics} />}
       {searchResults.length > 0 && (
         <Card>
           <CardHeader>

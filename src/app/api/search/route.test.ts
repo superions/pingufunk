@@ -105,6 +105,7 @@ it("distinguishes a confirmed bounded catalogue empty from a failed required lat
   vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ result: { results: [] } }));
   const empty = await GET(new NextRequest("http://localhost/api/search?q=SecretQuery"));
   const emptyReport = readDecisionReport(empty.headers.get("X-Pingufunk-Diagnostic-Id")!);
+  expect((await empty.json()).diagnostics).toEqual(emptyReport);
   expect(emptyReport?.events).toContainEqual(
     expect.objectContaining({ reason: "catalogue_empty", evidence: "proven" })
   );

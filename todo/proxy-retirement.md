@@ -2373,6 +2373,19 @@ gefunden“ oder vermuteter Ursache. P03.4-Abdeckung bleibt eigenständig.
       Zustände im servierten Testbundle mit Readback, Fokus, Screenshots und
       sauberer Konsole; Mock-Import muss passende Download-ID und Datei verlangen.
       Keine Diagnosebuttons mit implizitem Retry, Grab, Override oder Löschung.
+      Entwicklungscheckpoint 08.10.2026: geschlossene Anfrageberichte in
+      Suche/Filmen, selektiver Job-/Dateireader und GET-only Arr-Importdiagnose
+      mit exakter Download-ID, gepaarter History und aktueller Dateizuordnung.
+      API-Importmeldung ausdrücklich kein physischer Arr-Hostdateibeweis.
+      `/logs` zeigt nur tablokalen Kurzzeitbericht, keine Rohlogs oder globale
+      Liste. Bestehende Oberfläche ohne eigenen Login: UUID ist kein Schutz,
+      tatsächliche Installations-Lesegrenze dokumentiert. Desktop-Light
+      1280×720, Pointer/Keyboard, Leer-/Timeout-/Konflikt-/Unknown-/Completed- /
+      Importblocked-Journeys, gematchte Screenshots und Readback geprüft;
+      Diagnoseausfall entfernt vorherigen Dateibeleg. Im Review historische
+      Medienchecks beschriftet, Queue-Textfit und verlorenen Tastaturfokus
+      korrigiert. Abschließende frische Bundle-/Fork-/Containerabnahme noch
+      offen, Checkbox unverändert. Vertrag `docs/decision-diagnostics-contract.md`.
 
 ## Phase P14 — Gemeinsame Quellenfakten statt divergierender Suchpfade
 
@@ -2670,6 +2683,12 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       abgeschwächte Parallelassertion. PG-Fixture wendet beide späteren DDLs
       vor dem vollständigen Schema-Gate an. 1259 lokale Tests und übrige Gates
       erneut erfolgreich; frische Fork-/Backend-/Containerabnahme offen.
+      Folgeprüfung `37717534652`: vollständige PG-CI einschließlich echter
+      Zwei-Prozess-/Crash-/Ausfallproben grün. Containerlauf `37717534667`
+      scheiterte am veralteten SQLite-Ledgerzähler (fünf statt sechs
+      Migrationen); jetzt gesamte tatsächliche append-only Kette samt Namen,
+      Checksummen und abgeschlossenen Zuständen verglichen. Kein gelockerter
+      Schemaguard, frischer Containerlauf weiterhin erforderlich.
 
 ## Phase P16 — Ownergrenzen bereinigen, ohne das Produkt neu zu schreiben
 

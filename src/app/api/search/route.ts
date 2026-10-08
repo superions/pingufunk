@@ -77,7 +77,15 @@ function searchResult(
 export async function GET(request: NextRequest) {
   const { result, report } = await withDecisionDiagnostics(() => handleSearchRequest(request));
   result.headers.set("X-Pingufunk-Diagnostic-Id", report.correlationId);
-  return result;
+  result.headers.set("Cache-Control", "no-store");
+  // Same operation/read boundary, never a lookup of another caller's report.
+  return NextResponse.json(
+    { ...(await result.json()), diagnostics: report },
+    {
+      status: result.status,
+      headers: result.headers,
+    }
+  );
 }
 
 async function handleSearchRequest(request: NextRequest) {

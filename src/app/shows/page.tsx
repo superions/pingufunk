@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Search, Tv, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 interface Show {
   id: number;
@@ -93,6 +94,18 @@ export default function ShowsPage() {
         </p>
       )}
 
+      <p className="text-sm text-muted-foreground">
+        Diese historischen Metadaten belegen weder aktuelle Mediathektreffer noch Downloads oder
+        Arr-Importe. Aktuelle Quellen-/Fassungsgründe findest du in der{" "}
+        <Link href="/search" className="underline">
+          Suche
+        </Link>
+        , Job-/Importbelege bei{" "}
+        <Link href="/downloads" className="underline">
+          Downloads
+        </Link>
+        .
+      </p>
       {/* Search */}
       <Card>
         <CardContent className="p-4">

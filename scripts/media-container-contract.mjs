@@ -71,6 +71,17 @@ function readJob(id) {
   return JSON.parse(run(["exec", container, "node", "-e", code, id]));
 }
 const terminalSnapshots = new Map();
+function assertCompletedDiagnosis(id, job) {
+  const diagnosis = request(`api/downloads/${id}/diagnostics`);
+  if (
+    diagnosis.job !== "completed" ||
+    diagnosis.file !== "verified_present" ||
+    diagnosis.import.state !== "unknown" ||
+    diagnosis.import.reason !== "integration_disabled" ||
+    JSON.stringify(diagnosis).includes(job.filePath)
+  )
+    throw new Error("Closed job diagnosis lost physical evidence or invented an Arr import");
+}
 request(
   "api/settings",
   JSON.stringify({
@@ -178,6 +189,7 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
     throw new Error("Frozen media contract mismatch");
   const facts = JSON.parse(job.validation ?? "null");
   if (status === "completed") {
+    assertCompletedDiagnosis(id, job);
     const references = Object.values(expected.durations).filter(Boolean);
     if (
       facts?.version !== 3 ||
@@ -244,6 +256,7 @@ for (const [filename, duration, status, convert, resolution] of [
     throw new Error("SAB consumer status mismatch");
   if (status === "completed") {
     const facts = JSON.parse(job.validation);
+    assertCompletedDiagnosis(id, job);
     if (
       facts.version !== 1 ||
       !Number.isFinite(facts.durationSeconds) ||
