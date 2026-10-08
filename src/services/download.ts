@@ -15,8 +15,7 @@ import {
   validateCategory,
   validateReleaseTitle,
 } from "@/lib/download-paths";
-import { decodeBase64Utf8, readNzbMediaExpectations } from "./nzb-release";
-import type { NzbRelease } from "./nzb-release";
+export { parseNzbContent } from "./nzb-release";
 import {
   serializeMediaExpectations,
   readPersistedMediaExpectations,
@@ -75,58 +74,6 @@ export interface SabnzbdHistory {
   noofslots_total: number;
   start: number;
   limit: number;
-}
-
-// Extract filename and URL from NZB content
-const FILE_NAME_REGEX = /filename="([^"]+)\.nzb"/;
-// New NZBs use Base64 comments so URLs containing "--" remain valid XML.
-// Accept raw URL comments too, for NZBs saved before the format changed.
-const COMMENT_REGEX = /<!--([\s\S]*?)-->/g;
-
-export function parseNzbContent(nzbContent: string): NzbRelease | null {
-  let mediaExpectations: NzbRelease["mediaExpectations"];
-  try {
-    // Validate the versioned declaration before any legacy URL/title recovery.
-    mediaExpectations = readNzbMediaExpectations(nzbContent);
-  } catch {
-    return null;
-  }
-  const filenameMatch = nzbContent.match(FILE_NAME_REGEX);
-  const metadataTitleMatch = nzbContent.match(
-    /<meta\s+type=["']title["'][^>]*>([\s\S]*?)<\/meta\s*>/i
-  );
-  let title: string | null = null;
-  let url: string | null = null;
-
-  for (const match of nzbContent.matchAll(COMMENT_REGEX)) {
-    const comment = match[1].trim();
-    if (/^https?:\/\/\S+$/.test(comment)) {
-      url ??= comment;
-      continue;
-    }
-
-    const decoded = decodeBase64Utf8(comment);
-    if (decoded === null) {
-      continue;
-    }
-    if (/^https?:\/\/\S+$/.test(decoded)) {
-      url ??= decoded;
-    } else if (decoded.trim() && title === null) {
-      title = decoded;
-    }
-  }
-
-  // Older generators stored the release name in metadata or a filename subject.
-  title ??= metadataTitleMatch?.[1] ?? filenameMatch?.[1] ?? null;
-  if (!url || !title?.trim()) {
-    return null;
-  }
-
-  return {
-    title,
-    url,
-    ...(mediaExpectations === undefined ? {} : { mediaExpectations }),
-  };
 }
 
 export async function addToQueue(

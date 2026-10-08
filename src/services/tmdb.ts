@@ -43,8 +43,8 @@ export async function getShowInfoByTvdbId(
   }
 
   const cacheKey = metadataCacheKey("tmdb-series", tvdbId, apiKey);
-  const cached = tvdbCache.get(cacheKey) as TvdbData | undefined;
-  if (cached) {
+  const cached = tvdbCache.get(cacheKey);
+  if (cached && "episodes" in cached) {
     return cached;
   }
 
@@ -270,8 +270,8 @@ export async function getMovieInfoByTmdbId(
 
   // Check memory cache first
   const cacheKey = metadataCacheKey("tmdb-movie", tmdbId, apiKey);
-  const cached = tvdbCache.get(cacheKey) as TmdbMovieData | undefined;
-  if (cached) {
+  const cached = tvdbCache.get(cacheKey);
+  if (cached && "tmdbId" in cached) {
     console.log(`[TMDB] Movie cache hit for TMDB ID ${tmdbId}`);
     return cached;
   }
@@ -419,8 +419,8 @@ export async function searchMovieByTitle(
 
   // Check memory cache first
   const cacheKey = metadataCacheKey("tmdb-movie-search", [title, year], apiKey);
-  const cached = tvdbCache.get(cacheKey) as TmdbMovieData | undefined;
-  if (cached) {
+  const cached = tvdbCache.get(cacheKey);
+  if (cached && "tmdbId" in cached) {
     console.log(`[TMDB] Movie search cache hit for "${title}" (${year})`);
     return cached;
   }
@@ -502,8 +502,8 @@ export async function getMovieInfoByImdbId(
 
   // Check memory cache first
   const cacheKey = metadataCacheKey("tmdb-movie-imdb", imdbId, apiKey);
-  const cached = tvdbCache.get(cacheKey) as TmdbMovieData | undefined;
-  if (cached) {
+  const cached = tvdbCache.get(cacheKey);
+  if (cached && "tmdbId" in cached) {
     console.log(`[TMDB] Movie cache hit for IMDB ID ${imdbId}`);
     return cached;
   }

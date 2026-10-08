@@ -58,7 +58,7 @@ it("disables caching at zero TTL and invalidates entries on a TTL change", async
   ]);
   await initCacheTTL();
   mediathekCache.set("search", { results: [] });
-  tvdbCache.set("metadata", { value: "x" });
+  tvdbCache.set("metadata", { id: 1, name: "Test", germanName: "Test", aliases: [], episodes: [] });
   expect(mediathekCache.get("search")).toBeUndefined();
   expect(tvdbCache.get("metadata")).toBeUndefined();
 

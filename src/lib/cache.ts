@@ -3,9 +3,7 @@ import { prisma } from "@/lib/db";
 import { createHash } from "node:crypto";
 import { productSettingsContext } from "./product-settings-context";
 import { SETTING_DEFINITIONS } from "./settings-schema";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type CacheValue = Record<string, any>;
+import type { TvdbData, TmdbMovieData, Ruleset } from "@/types";
 
 // Default TTL values (in seconds)
 const DEFAULT_SEARCH_TTL = Number(SETTING_DEFINITIONS["cache.ttl.search"].defaultValue);
@@ -86,21 +84,21 @@ export function clearTTLCache(): void {
 }
 
 // Cache with custom TTL stored per entry
-interface CacheEntry {
-  value: CacheValue;
+interface CacheEntry<T> {
+  value: T;
   expiresAt: number;
 }
 
-class DynamicTTLCache {
-  private cache: LRUCache<string, CacheEntry>;
+class DynamicTTLCache<T> {
+  private cache: LRUCache<string, CacheEntry<T>>;
   private getTTL: () => number;
 
   constructor(max: number, getTTL: () => number) {
-    this.cache = new LRUCache<string, CacheEntry>({ max });
+    this.cache = new LRUCache<string, CacheEntry<T>>({ max });
     this.getTTL = getTTL;
   }
 
-  get(key: string): CacheValue | undefined {
+  get(key: string): T | undefined {
     const entry = this.cache.get(key);
     if (!entry) return undefined;
 
@@ -113,7 +111,7 @@ class DynamicTTLCache {
     return entry.value;
   }
 
-  set(key: string, value: CacheValue): void {
+  set(key: string, value: T): void {
     if (productSettingsContext.getStore()?.isCurrent() === false) return;
     const ttlMs = this.getTTL() * 1000;
     if (ttlMs <= 0) {
@@ -169,8 +167,8 @@ class EmptyCatalogueCache {
 }
 export const mediathekCache = new EmptyCatalogueCache();
 
-// Cache for TVDB data (configurable TTL)
-export const tvdbCache = new DynamicTTLCache(1000, getMetadataTTL);
+// Shared bounded metadata storage; readers narrow the series/film union before use.
+export const tvdbCache = new DynamicTTLCache<TvdbData | TmdbMovieData>(1000, getMetadataTTL);
 
 // Only definitive provider misses belong here. Authentication/network failures
 // remain retryable and never become an empty-success cache entry.
@@ -234,7 +232,7 @@ export function clearMetadataCaches(): void {
 }
 
 // Cache for rulesets (1 hour TTL - not configurable)
-export const rulesetsCache = new LRUCache<string, CacheValue>({
+export const rulesetsCache = new LRUCache<string, Ruleset[]>({
   max: 10,
   ttl: 60 * 60 * 1000, // 1 hour
 });

@@ -4,7 +4,7 @@ import { mediaSourceIdentity } from "./source-audio";
 import { generateFakeNzb } from "./nzb-release";
 import { releaseMediaExpectations } from "./release-media-expectations";
 import { createHash } from "node:crypto";
-import { parseNzbContent } from "./download";
+import { parseNzbContent } from "./nzb-release";
 import { serializeMediaExpectations } from "@/lib/media-expectations";
 
 /** Canonical enqueue payload, not NZB transport timestamps. A fresh search after

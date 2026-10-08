@@ -128,13 +128,13 @@ export class MediathekViewProvider extends BaseProvider {
   ): ProviderContentItem[] {
     const items: ProviderContentItem[] = [];
 
-    // For movie search, require at least 60 minutes
+    // Generic browsing uses the configured minimum, not a film-identity rule.
     const effectiveMinDuration = this.minDuration;
 
     for (const result of results) {
       // ORF has its own opt-in provider in aggregated searches.
       if (/^ORF\b/i.test(result.channel)) continue;
-      // Skip HLS unless enabled
+      // Exclude an item only when none of its concrete renditions is eligible.
       if (selectRenditions(result, "all", this.hlsEnabled).length === 0) {
         continue;
       }
