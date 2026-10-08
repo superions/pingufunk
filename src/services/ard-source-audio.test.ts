@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import type { ApiResultItem } from "@/types";
-import { ardEdition, ardVideoId, getArdMedia } from "./ard-source-audio";
+import { ardEdition, ardVideoId, getArdMedia, getArdSource } from "./ard-source-audio";
 import { enrichSourceAudio, mediaSourceIdentity, verifySourceAudio } from "./source-audio";
 import { classifyLanguageEdition } from "./language-editions";
 import { generateGenericRssItems } from "./newznab";
@@ -63,6 +63,39 @@ function mock(value = page(), status = 200) {
   return fetch;
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it("preserves explicit ARD expiry through enrichment and the serializer rather than exposing a neutral expired candidate", async () => {
+  const value = page();
+  value.widgets[0].availableTo = "2000-01-01T00:00:00Z";
+  mock(value);
+  const source = await getArdSource(id, new HttpRequestBudget());
+  expect(source?.availability).toMatchObject({
+    state: "declared_rights",
+    provenance: "ard_player",
+    endsAt: Date.parse(value.widgets[0].availableTo) / 1000,
+    urls: [url],
+  });
+  const enriched = (await enrichSourceAudio([item], new HttpRequestBudget())).get(item)!;
+  expect(enriched).toHaveLength(1);
+  expect(generateGenericRssItems(enriched[0], "all", false)).toEqual([]);
+  expect(await getArdMedia(id, new HttpRequestBudget())).toEqual([]);
+});
+it("does not invent ARD expiry when the verified response contains no rights date", async () => {
+  const value = page();
+  Reflect.deleteProperty(value.widgets[0], "availableTo");
+  mock(value);
+  const source = await getArdSource(id, new HttpRequestBudget());
+  expect(source?.availability).toEqual({ state: "unknown" });
+  expect(ardEdition(source!.media, url)?.audioLanguage).toBe("de");
+});
+it("rejects an impossible ARD rights instant instead of Date.parse normalization", async () => {
+  const value = page();
+  value.widgets[0].availableTo = "2099-02-30T00:00:00Z";
+  mock(value);
+  await expect(getArdSource(id, new HttpRequestBudget())).rejects.toThrow(
+    /^Source evidence unavailable$/
+  );
+});
 
 it("accepts only canonical video identities and fetches the fixed JSON endpoint without redirects", async () => {
   expect(ardVideoId(item.url_website)).toBe(id);

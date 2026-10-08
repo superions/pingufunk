@@ -1,16 +1,45 @@
 import type { ApiResultItem } from "@/types";
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { recordDecision } from "@/server/decision-diagnostics";
+import { sourceAvailabilityState } from "@/lib/content-dates";
 
 export type QualityPreference = "all" | "best" | "1080p" | "720p" | "480p";
+
+function rightsPermit(item: ApiResultItem, url: string): boolean {
+  if (!url) return false;
+  const state = sourceAvailabilityState(item.sourceAvailability, url);
+  recordDecision(
+    "availability",
+    state === "conflicting"
+      ? "rights_conflict"
+      : state === "expired"
+        ? "rights_expired"
+        : state === "not_yet"
+          ? "rights_not_yet"
+          : state === "rights_current"
+            ? "rights_current"
+            : "rights_unknown",
+    state === "conflicting" ? "conflicting" : state === "unknown" ? "missing" : "proven"
+  );
+  return state === "unknown" || state === "rights_current";
+}
 
 /** Remove ineligible selectors before edition dedupe, not just before a button renders. */
 export function eligibleRenditionItem(item: ApiResultItem, hlsEnabled: boolean): ApiResultItem {
   return {
     ...item,
-    url_video: isRenditionAllowed(item.url_video, hlsEnabled) ? item.url_video : "",
-    url_video_hd: isRenditionAllowed(item.url_video_hd, hlsEnabled) ? item.url_video_hd : "",
-    url_video_low: isRenditionAllowed(item.url_video_low, hlsEnabled) ? item.url_video_low : "",
+    url_video:
+      rightsPermit(item, item.url_video) && isRenditionAllowed(item.url_video, hlsEnabled)
+        ? item.url_video
+        : "",
+    url_video_hd:
+      rightsPermit(item, item.url_video_hd) && isRenditionAllowed(item.url_video_hd, hlsEnabled)
+        ? item.url_video_hd
+        : "",
+    url_video_low:
+      rightsPermit(item, item.url_video_low) && isRenditionAllowed(item.url_video_low, hlsEnabled)
+        ? item.url_video_low
+        : "",
   };
 }
 
@@ -54,7 +83,7 @@ export function selectRenditions(
   ] as const;
   const renditions = slots.flatMap((slot) => {
     const url = item[slot.field];
-    if (!isRenditionAllowed(url, hlsEnabled)) return [];
+    if (!rightsPermit(item, url) || !isRenditionAllowed(url, hlsEnabled)) return [];
     const dimensions = renditionDimensions(item, url);
     const height = dimensions?.height;
     const quality =

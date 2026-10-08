@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
+import {
+  sourceInstant,
+  sourceAvailabilityState,
+  type SourceAvailability,
+} from "@/lib/content-dates";
 
 /** Exact indexed ARD video identity, not a series-page or arbitrary fetch target. */
 export function ardVideoId(website: string): string | null {
@@ -42,7 +47,7 @@ const widgetSchema = z.object({
   blockedByLoginOnly: z.boolean(),
   blockedByFsk: z.boolean(),
   geoblocked: z.boolean(),
-  availableTo: z.string(),
+  availableTo: z.string().optional(),
   mediaCollection: z.object({
     embedded: z.object({
       meta: z.object({ ovLanguageCode: z.string().max(35).optional() }),
@@ -55,7 +60,16 @@ const widgetSchema = z.object({
   }),
 });
 
-export async function getArdMedia(id: string, budget: HttpRequestBudget): Promise<ArdMedia[]> {
+export interface ArdSource {
+  media: ArdMedia[];
+  availability: SourceAvailability;
+}
+
+/** Keep explicit expiry with its exact asset declarations even when no release is eligible. */
+export async function getArdSource(
+  id: string,
+  budget: HttpRequestBudget
+): Promise<ArdSource | null> {
   if (ardVideoId(`https://www.ardmediathek.de/video/${id}`) !== id)
     throw new Error("Invalid source identity");
   const response = await fetchWithRetry(
@@ -65,7 +79,7 @@ export async function getArdMedia(id: string, budget: HttpRequestBudget): Promis
   );
   if (response.status === 404 || response.status === 410) {
     void response.body?.cancel().catch(() => {});
-    return [];
+    return null;
   }
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
@@ -79,26 +93,50 @@ export async function getArdMedia(id: string, budget: HttpRequestBudget): Promis
       (widget) =>
         widget && typeof widget === "object" && Reflect.get(widget, "type") === "player_ondemand"
     );
-    if (players.length !== 1) return [];
+    if (players.length !== 1) return null;
     const player = widgetSchema.parse(players[0]);
     // Page IDs can differ; the player widget's identity must equal the requested video.
     if (player.id !== id || player.blockedByLoginOnly || player.blockedByFsk || player.geoblocked)
-      return [];
-    const until = Date.parse(player.availableTo);
-    if (!Number.isFinite(until)) throw new Error("Invalid source validity");
-    if (until <= Date.now()) return [];
+      return null;
+    const until = sourceInstant(player.availableTo);
+    if (player.availableTo !== undefined && until === null)
+      throw new Error("Invalid source validity");
     const originalLanguage = language(player.mediaCollection.embedded.meta.ovLanguageCode);
-    return (
-      player.mediaCollection.embedded.streams
-        // Unrecognized auxiliary/sign-language streams need their own edition
-        // contract; they must not silently become ordinary German releases.
-        .filter((stream) => stream.kind === "main")
-        .flatMap((stream) => stream.media)
-        .map((media) => ({ ...media, originalLanguage }))
-    );
+    const media = player.mediaCollection.embedded.streams
+      // Unrecognized auxiliary/sign-language streams need their own edition
+      // contract; they must not silently become ordinary German releases.
+      .filter((stream) => stream.kind === "main")
+      .flatMap((stream) => stream.media)
+      .map((media) => ({ ...media, originalLanguage }));
+    return {
+      media,
+      availability:
+        until === null || !media.length
+          ? { state: "unknown" }
+          : {
+              state: "declared_rights",
+              provenance: "ard_player",
+              checkedAt: Date.now() / 1000,
+              beginsAt: null,
+              endsAt: until,
+              urls: [...new Set(media.map((entry) => entry.url))],
+            },
+    };
   } catch {
     throw new Error("Source evidence unavailable");
   }
+}
+
+/** Fresh worker verification cannot use an explicitly expired declaration. */
+export async function getArdMedia(id: string, budget: HttpRequestBudget): Promise<ArdMedia[]> {
+  const source = await getArdSource(id, budget);
+  return (
+    source?.media.filter((entry) =>
+      ["unknown", "rights_current"].includes(
+        sourceAvailabilityState(source.availability, entry.url)
+      )
+    ) ?? []
+  );
 }
 
 function language(value: string | undefined): string | null {

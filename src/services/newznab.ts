@@ -366,6 +366,7 @@ function createRssItem(
     },
     link: url,
     comments: item.url_website,
+    // Preserve catalogue publication ordering, never reinterpret it as episode airdate.
     pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
     category: category,
     description: item.description,

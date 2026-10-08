@@ -16,6 +16,7 @@ import { resolveArteSeriesEditions } from "./arte-editions";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { providerItemToApiResult } from "@/providers/content-item";
 import { recordDecision } from "@/server/decision-diagnostics";
+import { eligibleRenditionItem } from "./rendition-quality";
 
 const MAX_MEDIATHEK_CANDIDATES = 5000;
 const MAX_PENDING_SEARCHES = 128;
@@ -215,7 +216,10 @@ export async function queryContentWindow(
       ? await resolveArteSeriesEditions(items, options.arteSeries, options.requestBudget!)
       : items;
     const complete = sources.every((source) => source.state !== "failed") && editions !== null;
-    for (const item of editions ?? [])
+    const available = (editions ?? []).map((item) =>
+      eligibleRenditionItem(item, hlsSetting === "true")
+    );
+    for (const item of available)
       recordDecision(
         "language",
         item.audioLanguage ? "language_verified" : "language_unknown",
@@ -240,8 +244,8 @@ export async function queryContentWindow(
         editions === null
           ? []
           : options.deferLanguageSelection
-            ? editions
-            : selectLanguageVariants(editions, languagePolicy),
+            ? available
+            : selectLanguageVariants(available, languagePolicy),
       coverage: {
         complete,
         candidateWindowLimited:

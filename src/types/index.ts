@@ -39,7 +39,11 @@ export interface ApiResultItem {
   topic: string;
   title: string;
   description: string;
+  /** Shipped catalogue-update timestamp; preserved for IDs/pubDate, never an aired date or film year. */
   filmlisteTimestamp: number;
+  /** Transient validated adapter facts; never accepted wholesale from a catalogue response. */
+  contentDates?: import("@/lib/content-dates").ContentDates;
+  sourceAvailability?: import("@/lib/content-dates").SourceAvailability;
   duration: number;
   size: number;
   url_website: string;
@@ -99,6 +103,7 @@ export interface TvdbAlias {
 
 export interface TvdbEpisode {
   name: string;
+  /** Metadata episode airdate, independent of source publication/rights and not an explicit-search cutoff. */
   aired: Date | null;
   runtime: number | null;
   seasonNumber: number;

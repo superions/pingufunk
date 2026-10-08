@@ -63,7 +63,10 @@ function mockPlayer(value: unknown = config(), status = 200) {
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("ARTE source and edition contracts", () => {
   it.each(["valid", "conflict", "missing", "different-url"])(
@@ -178,11 +181,54 @@ describe("ARTE source and edition contracts", () => {
       ])
     );
     const result = await resolveArteSeriesEditions([item], show, new HttpRequestBudget());
-    expect(result).toEqual([{ ...item, arteVerifiedVideoId: "123456-001-A" }]);
+    expect(result).toEqual([
+      {
+        ...item,
+        arteVerifiedVideoId: "123456-001-A",
+        sourceAvailability: {
+          state: "declared_rights",
+          provenance: "arte_player",
+          checkedAt: expect.any(Number),
+          beginsAt: Date.parse("2020-01-01T00:00:00Z") / 1000,
+          endsAt: Date.parse("2099-01-01T00:00:00Z") / 1000,
+          urls: [item.url_video],
+        },
+      },
+    ]);
     expect(result![0]).not.toHaveProperty("audioLanguage");
     expect(result![0]).not.toHaveProperty("sourceAudioEvidence");
     expect(selectLanguageVariants(result!, readLanguagePolicy(null))).toHaveLength(1);
   });
+
+  it.each(["empty", "missing", "reversed", "impossible", "future"])(
+    "keeps rights distinct from a current player response: %s",
+    async (kind) => {
+      const value = config([stream("VA", item.url_video)]);
+      if (kind === "empty")
+        value.data.attributes.rights = {} as typeof value.data.attributes.rights;
+      if (kind === "missing") Reflect.deleteProperty(value.data.attributes, "rights");
+      if (kind === "reversed")
+        value.data.attributes.rights = {
+          begin: "2099-01-01T00:00:00Z",
+          end: "2020-01-01T00:00:00Z",
+        };
+      if (kind === "impossible") value.data.attributes.rights.begin = "2026-02-30T00:00:00Z";
+      if (kind === "future") value.data.attributes.rights.begin = "2099-01-01T00:00:00Z";
+      mockPlayer(value);
+      const result = await resolveArteSeriesEditions(
+        [{ ...item, url_video: "", url_video_hd: item.url_video }],
+        show,
+        new HttpRequestBudget()
+      );
+      if (kind === "empty" || kind === "missing") {
+        expect(result).toHaveLength(1);
+        expect(result![0]).toMatchObject({
+          sourceAvailability: { state: "unknown" },
+          url_video_hd: item.url_video,
+        });
+      } else expect(result).toEqual(kind === "future" ? [] : null);
+    }
+  );
   it("distinguishes absent editions from provider outage without partial results", async () => {
     mockPlayer(config(), 404);
     expect(await resolveArteSeriesEditions([item], show, new HttpRequestBudget())).toEqual([]);
@@ -190,6 +236,8 @@ describe("ARTE source and edition contracts", () => {
     expect(await resolveArteSeriesEditions([item], show, new HttpRequestBudget())).toBeNull();
   });
   it("keeps verified OV and AD independently of row and stream order", async () => {
+    // Row ordering is compared at the same evidence-observation instant.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now());
     const streams = [
       stream("VOA", "https://fixture.akamaized.net/ov.mp4"),
       stream("VAAUD", "https://fixture.akamaized.net/ad.mp4"),

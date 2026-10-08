@@ -110,10 +110,15 @@ export abstract class BaseProvider implements ContentProvider {
     // Provider locale and channel do not prove track language; unknown stays neutral.
     const sanitizedTopic = this.sanitizeForFilename(item.topic);
     const sanitizedTitle = this.sanitizeForFilename(item.title);
-    const year = new Date(item.timestamp * 1000).getFullYear();
+    const year =
+      Number.isSafeInteger(item.productionYear) &&
+      item.productionYear! >= 1800 &&
+      item.productionYear! <= 2199
+        ? `.${item.productionYear}`
+        : "";
 
     const languageSuffix = isGermanLanguageCode(item.audioLanguage) ? ".GERMAN" : "";
-    const suffix = `.${year}${languageSuffix}.${quality}.WEB.h264-${this.id.toUpperCase()}`;
+    const suffix = `${year}${languageSuffix}.${quality}.WEB.h264-${this.id.toUpperCase()}`;
     const characters = Array.from(`${sanitizedTopic}.${sanitizedTitle}`);
     while (Buffer.byteLength(characters.join("") + suffix, "utf8") > 200) characters.pop();
     return characters.join("") + suffix;

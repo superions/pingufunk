@@ -25,8 +25,12 @@ export interface ProviderContentItem {
   title: string;
   /** Description text */
   description: string;
-  /** Unix timestamp of when the content was published */
+  /** Legacy provider sort/ID timestamp; not authoritative availability or film production year. */
   timestamp: number;
+  contentDates?: import("@/lib/content-dates").ContentDates;
+  sourceAvailability?: import("@/lib/content-dates").SourceAvailability;
+  /** Explicit production-year metadata only; never derived from timestamp. */
+  productionYear?: number;
   /** Duration in seconds */
   duration: number;
   /** File size in bytes (0 if unknown) */

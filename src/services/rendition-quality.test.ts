@@ -47,6 +47,46 @@ const episode: MatchedEpisodeInfo = {
 };
 
 describe("rendition resolution, not catalogue slot quality", () => {
+  it("rechecks dated rights at the real serializer without changing IDs or inventing availability", () => {
+    const now = Date.now() / 1000;
+    const current = {
+      ...item,
+      sourceAvailability: {
+        state: "declared_rights" as const,
+        provenance: "arte_player" as const,
+        checkedAt: now - 1,
+        beginsAt: now - 10,
+        endsAt: now + 10,
+        urls: [item.url_video_hd],
+      },
+    };
+    const [before] = generateGenericRssItems(item, "720p", false);
+    const [after] = generateGenericRssItems(current, "720p", false);
+    expect(after.guid).toEqual(before.guid);
+    const expired = {
+      ...current,
+      sourceAvailability: { ...current.sourceAvailability, endsAt: now - 1 },
+    };
+    expect(generateGenericRssItems(expired, "720p", false)).toEqual([]);
+    expect(generateRssItems({ ...episode, item: expired }, "720p", false)).toEqual([]);
+    expect(
+      generateMovieRssItems(
+        { item: expired, score: 1, titleMatch: "exact", durationDiff: 0 },
+        movie,
+        "720p",
+        false
+      )
+    ).toEqual([]);
+    expect(
+      generateGenericRssItems(
+        { ...item, sourceAvailability: { state: "unknown" } },
+        "720p",
+        false
+      )[0].guid
+    ).toEqual(before.guid);
+    // The expired declaration is not silently transferred to the distinct standard asset.
+    expect(selectRenditions(expired, "all", false).map((r) => r.url)).toEqual([item.url_video]);
+  });
   it("selects measured quality before best/preference and retains independent URLs", () => {
     expect(selectRenditions(item, "720p", false).map((r) => r.url)).toEqual([item.url_video_hd]);
     expect(selectRenditions(item, "1080p", false).map((r) => r.url)).toEqual([item.url_video]);

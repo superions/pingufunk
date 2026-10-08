@@ -137,6 +137,53 @@ afterEach(() => {
   mediathekCache.clear();
 });
 
+it("finds an already listed future-airdate episode by exact/season search without granting RSS advance access", async () => {
+  const base = fetchMock.getMockImplementation()!;
+  const future = new Date(Date.now() + 7 * 86400_000).toISOString();
+  fetchMock.mockImplementation(async (value: string) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/episode"))
+      return Response.json([
+        {
+          id: 45,
+          seriesId: 12,
+          seasonNumber: 2,
+          episodeNumber: 3,
+          title: "Missing episode",
+          airDateUtc: future,
+          runtime: 2,
+        },
+      ]);
+    if (url.hostname === "mediathekviewweb.de")
+      return Response.json({
+        result: { results: [{ ...source, timestamp: Date.parse(future) / 1000 }] },
+        err: null,
+      });
+    return base(value);
+  });
+  for (const query of ["t=tvsearch&tvdbid=123&season=2&ep=3", "t=tvsearch&tvdbid=123&season=2"]) {
+    const response = await GET(new NextRequest(`http://localhost/api/newznab?${query}`));
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel.item).toHaveLength(1);
+    expect(channel.item[0].title[0]).toContain("S02E03");
+    expect(channel.item[0].pubDate[0]).toBe(
+      new Date(source.filmlisteTimestamp * 1000).toUTCString()
+    );
+    const nzb = await downloadNzb(
+      new NextRequest(new URL(channel.item[0].enclosure[0].$.url, "http://localhost"))
+    );
+    expect(parseNzbContent(await nzb.text())?.url).toBe(source.url_video);
+  }
+  const rss = await GET(new NextRequest("http://localhost/api/newznab?t=tvsearch&cat=5000"));
+  const rssBody = await rss.text();
+  // The native endpoint preserves its shipped empty-feed validation item, not the future episode.
+  expect(rssBody).not.toContain("S02E03");
+  expect(rssBody).not.toContain(source.url_video);
+  expect(rssBody).toContain("RundfunkArr.Validation");
+  expect(state.addToQueue).not.toHaveBeenCalled();
+});
+
 it.each(["ard", "arte", "zdf"] as const)(
   "finds a complete unbundled %s season with generic metadata and exact source audio through RSS/NZB/queue",
   async (provider) => {

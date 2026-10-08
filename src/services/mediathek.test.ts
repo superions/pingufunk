@@ -1035,6 +1035,68 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     }
   });
 
+  it.each([undefined, "2026-09-27", "2026-09-26"])(
+    "disambiguates repeated episode titles only with a unique source broadcast day: %s",
+    async (broadcastDay) => {
+      const show: TvdbData = {
+        id: 654321,
+        name: "Repeated series",
+        germanName: null,
+        aliases: [],
+        episodes: ["2026-09-27", "2026-09-28"].map((day, index) => ({
+          name: "Repeated episode",
+          aired: new Date(`${day}T00:00:00Z`),
+          runtime: 60,
+          seasonNumber: 1,
+          episodeNumber: index + 1,
+        })),
+      };
+      const rule: Ruleset = {
+        id: 9,
+        mediaId: 9,
+        topic: show.name,
+        priority: 0,
+        filters: "[]",
+        titleRegexRules: JSON.stringify([
+          { type: "regex", field: "title", pattern: "^(Repeated episode)$" },
+        ]),
+        seasonRegex: null,
+        episodeRegex: null,
+        matchingStrategy: MatchingStrategy.ItemTitleExact,
+        media: {
+          media_id: 9,
+          media_name: show.name,
+          media_type: "show",
+          media_tvdbId: show.id,
+          media_tmdbId: null,
+          media_imdbId: null,
+        },
+      };
+      mockedGetShowInfo.mockResolvedValue(show);
+      mockedRulesetsForTopic.mockReturnValue([rule]);
+      mockedRulesetsForTopicAndTvdbId.mockReturnValue([rule]);
+      mockedAllTopics.mockReturnValue([show.name]);
+      const row = Object.assign(
+        makeItem({
+          topic: show.name,
+          title: "Repeated episode",
+          filmlisteTimestamp: Date.parse("2026-09-28T00:00:00Z") / 1000,
+        }),
+        broadcastDay ? { timestamp: Date.parse(`${broadcastDay}T12:00:00Z`) / 1000 } : {}
+      );
+      mockApi([row]);
+      const xml = await fetchSearchResultsById(
+        show,
+        makeTvSearchContext({ tvdbId: show.id }),
+        100,
+        0
+      );
+      expect(xml).not.toContain("S01E02");
+      if (broadcastDay === "2026-09-27") expect(xml).toContain("S01E01");
+      else expect(xml).not.toMatch(/S01E0[12]|name="tvdbid"/);
+    }
+  );
+
   it("searches daily date candidates without a text query and filters neighbors before paging", async () => {
     const tvdbData: TvdbData = {
       id: 65432,

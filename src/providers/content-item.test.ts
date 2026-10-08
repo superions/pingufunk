@@ -24,6 +24,8 @@ it("preserves exact rendition facts and the shipped IDs across the provider adap
       language: "de",
     },
     sourceVideoDimensions: [{ url: "https://example.invalid/hd.mp4", width: 1280, height: 720 }],
+    contentDates: { catalogueUpdatedAt: 1, broadcastAt: 2000000000 },
+    sourceAvailability: { state: "unknown" },
   };
   const provider = apiResultToProviderItem(item, "mediathekview");
   expect(provider.id).toBe("Synthetic-Example-Episode-1");
@@ -38,6 +40,8 @@ it("preserves exact rendition facts and the shipped IDs across the provider adap
     audioLanguage: "de",
     sourceAudioEvidence: item.sourceAudioEvidence,
     sourceVideoDimensions: item.sourceVideoDimensions,
+    contentDates: item.contentDates,
+    sourceAvailability: item.sourceAvailability,
   });
   expect(
     providerItemToApiResult({ ...provider, id: "urn:srf:video:synthetic", providerId: "srf" }).id

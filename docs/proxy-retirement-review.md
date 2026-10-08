@@ -1978,3 +1978,31 @@ kein Retry/Grab/Delete. IAB meldet alle Vergleichtabs visible; kein tatsächlich
 hidden-Tab-Timer-Nachweis behauptet. Pollentscheidung kausal getestet.
 PG-/Fork-/Containerfinale noch offen; [Readvertrag](download-read-contract.md).
 Keine Produktionsänderung, Mainintegration oder öffentliche Imagepublikation.
+
+## Implementierungsreview P14.3 — Datums-/Rechteowner
+
+08.10.2026 auf `codex/content-availability-dates`. Upstream-main `4ebaa8e`
+besitzt weiterhin den Katalogtimestamp-/Newest-Fallback im Titelmatcher; kein
+entsprechender Quellenzeit-/Rechtevertrag. MediathekView-Parser, Indexerworker
+und SearchEngine als Primärquellen geprüft. Vollständiger betroffener Pfad
+reviewt: rohe Whitelist → validierte Datefakten → Provideradapter → ARTE-/ARD-
+Programmprüfung → Anreicherung → Renditionauswahl → tatsächliche RSS-/NZB-
+Consumer und frische ARD-Workerverifikation. Review durch Implementierer.
+
+Behoben: Katalogrefresh als falsches Airdate, erratenes Filmjahr im älteren
+Providerhelper, unmögliche/reverse Rechtezeitpunkte, Verlust von ARD-Ablaufbelegen
+zu bloß neutralen Kandidaten sowie ungebundene Übertragung von Rechtefakten.
+Datewerte sind getrennt von Produktionsjahr und Sonarr-RSS-Zeitfenster;
+unknown ist weder verfügbar noch abwesend. Kein Date-/HTTPbeweis für Sprache.
+
+Neuer tatsächlicher Routentest für sichere Vorabfolge bestätigt Einzel- und
+Staffelsuche sowie exakte NZB-URL ohne Grab. Die erste RSS-Erwartung des Tests
+musste den **bestehenden** synthetischen Validationitemvertrag berücksichtigen:
+keine Behauptung, ein Validationitem sei eine herunterladbare Vorabfolge.
+Schlussprüfung für fehlende/reverse/expired Rechte, exakte URL und unveränderte
+GUIDs. Keine UIlayoutänderung, DDL, neue Sender-HTMLabfrage oder Budgeterhöhung.
+
+Offener Reviewbefund: ganze RSS-Antwortcaches umgehen die erneute Auswahl und
+deren Rechteprüfung. P14.2 besitzt die gemeinsame Frischegrenze; vor deren
+Schließung und neuen Fork-/Backend-/Containergates keine P14.3-Vollabnahme.
+Vertrag [Quellenzeiten und Rechte](content-date-contract.md).

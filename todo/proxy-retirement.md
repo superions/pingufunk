@@ -2462,6 +2462,22 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
       fehlende Verfügbarkeitsangabe und widersprüchliche Datumswerte; RSS behält
       sein bisheriges eigenes Vergangenheitsfenster. Eine automatische RSS-
       Vorabfreigabe wäre eine eigene Produktentscheidung, nicht dieses Refactoring.
+      Entwicklungscheckpoint 08.10.2026: Quellenbroadcast, Katalogupdate,
+      unspezifizierte SRF-Date, Metadaten-Airdate und Filmjahr getrennt;
+      bestehende IDs/RSS-pubDate erhalten. ARTE-/ARD-Rechte aus vorhandenen
+      JSON-Ownern als exakte URL-gebundene Fakten, unmögliche/reverse Daten
+      abgelehnt; expired/not-yet nicht serialisiert, fehlende Rechte unknown.
+      Mehrfach identische Episodentitel nicht mehr über Katalogtimestamp/
+      neueste Episode zugeordnet. Tatsächlicher Newznab→NZB-Regressionstest
+      bestätigt zukünftiges Airdate in Einzel-/Staffelsuche, kein RSS-Advance.
+      Keine UIlayoutänderung, neuen Sendercrawler, Budgeterhöhung oder DDL.
+      Vertrag in `docs/content-date-contract.md`. Ganze alte RSS-Antwortcaches
+      können erneute Rechteprüfung umgehen; Frischegrenze P14.2 und finale
+      Fork-/Backend-/Containerabnahme bleiben offen, Checkbox nicht geschlossen.
+      1212 finale lokale Tests (19 separate Backendtests lokal nicht aktiv),
+      Lint, Typecheck, Formatcheck, Productionbuild und Diffcheck erfolgreich.
+      Neue Beobachtungszeit im Order-Invariant-Test auf gleichen Moment
+      fixiert; Edition-/URL-/Rechteassertions nicht abgeschwächt.
 
 ## Phase P15 — Robuster Einzelworker und begrenzte Betriebsoberfläche
 

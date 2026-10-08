@@ -5,6 +5,12 @@ import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-ide
 import { stableUrlIdentity } from "./language-editions";
 import type { ApiResultItem, TvdbData } from "@/types";
 import { queryMediathekView, MEDIATHEK_VIEW_MAX_PAGE_SIZE } from "@/lib/mediathek-client";
+import {
+  sourceInstant,
+  sourceAvailabilityState,
+  type SourceAvailability,
+} from "@/lib/content-dates";
+import { recordDecision } from "@/server/decision-diagnostics";
 
 const videoIdPattern = /^\d{6}-\d{3}-[AF]$/;
 
@@ -40,7 +46,7 @@ const playerSchema = z.object({
             .optional(),
         })
         .optional(),
-      rights: z.object({ begin: z.string().optional(), end: z.string().optional() }),
+      rights: z.object({ begin: z.string().optional(), end: z.string().optional() }).optional(),
       metadata: z.object({
         providerId: z.string(),
         title: z.string(),
@@ -171,19 +177,61 @@ export async function resolveArteSeriesEditions(
       const { metadata, rights } = attributes;
       if (metadata.providerId !== id || arteVideoId(metadata.link.url) !== id) return null;
       if (attributes.live || attributes.restriction?.geoblocking?.restrictedArea) continue;
-      if (!Object.keys(rights).length) continue;
-      const now = Date.now();
+      const checkedAt = Date.now() / 1000;
+      const beginsAt = sourceInstant(rights?.begin);
+      const endsAt = sourceInstant(rights?.end);
       if (
-        [rights.begin, rights.end].some(
-          (value) => value !== undefined && !Number.isFinite(Date.parse(value))
-        )
-      )
+        (rights?.begin !== undefined && beginsAt === null) ||
+        (rights?.end !== undefined && endsAt === null) ||
+        (beginsAt !== null && endsAt !== null && beginsAt > endsAt)
+      ) {
+        recordDecision("availability", "rights_conflict", "conflicting");
         return null;
-      if (
-        (rights.begin && Date.parse(rights.begin) > now) ||
-        (rights.end && Date.parse(rights.end) < now)
-      )
-        continue;
+      }
+      const sourceAvailability: SourceAvailability =
+        beginsAt === null && endsAt === null
+          ? { state: "unknown" }
+          : {
+              state: "declared_rights",
+              provenance: "arte_player",
+              checkedAt,
+              beginsAt,
+              endsAt,
+              urls: [
+                ...new Set(
+                  candidates
+                    .flatMap((candidate) => [
+                      candidate.url_video,
+                      candidate.url_video_low,
+                      candidate.url_video_hd,
+                    ])
+                    .filter(Boolean)
+                ),
+              ],
+            };
+      const rightsState = sourceAvailabilityState(
+        sourceAvailability,
+        sourceAvailability.state === "declared_rights" ? sourceAvailability.urls[0] : "",
+        checkedAt
+      );
+      recordDecision(
+        "availability",
+        rightsState === "unknown"
+          ? "rights_unknown"
+          : rightsState === "expired"
+            ? "rights_expired"
+            : rightsState === "not_yet"
+              ? "rights_not_yet"
+              : rightsState === "conflicting"
+                ? "rights_conflict"
+                : "rights_current",
+        rightsState === "unknown"
+          ? "missing"
+          : rightsState === "conflicting"
+            ? "conflicting"
+            : "proven"
+      );
+      if (["expired", "not_yet", "conflicting"].includes(rightsState)) continue;
       const metadataItem = {
         ...candidates[0],
         title: [metadata.title, metadata.subtitle].filter(Boolean).join(": "),
@@ -206,6 +254,7 @@ export async function resolveArteSeriesEditions(
           ...candidates.map((candidate) => ({
             ...candidate,
             arteVerifiedVideoId: id,
+            sourceAvailability,
             duration: metadata.duration.seconds,
           }))
         );
@@ -283,6 +332,11 @@ export async function resolveArteSeriesEditions(
           ...source,
           ...edition,
           arteVerifiedVideoId: id,
+          // Player identity was verified above; bind rights to this exact fresh URL.
+          sourceAvailability:
+            sourceAvailability.state === "unknown"
+              ? sourceAvailability
+              : { ...sourceAvailability, urls: [stream.url] },
           signLanguage: false,
           clearSpeech: false,
           title: metadataItem.title,

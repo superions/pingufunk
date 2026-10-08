@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ApiResultItem, MatchedEpisodeInfo } from "@/types";
 import type { LanguagePolicy } from "@/lib/language-policy";
 import { selectRenditions, type QualityPreference } from "./rendition-quality";
-import { ardVideoId, getArdMedia, ardEdition } from "./ard-source-audio";
+import { ardVideoId, getArdMedia, getArdSource, ardEdition } from "./ard-source-audio";
 import type { SourceAudioEvidence } from "@/lib/media-expectations";
 import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
@@ -131,7 +131,7 @@ export async function enrichSourceAudio(
   maxIdentities: 4 | 16 = 4
 ): Promise<Map<ApiResultItem, ApiResultItem[]>> {
   const arte = new Map<string, ArteStreams>();
-  const ard = new Map<string, Awaited<ReturnType<typeof getArdMedia>>>();
+  const ard = new Map<string, Awaited<ReturnType<typeof getArdSource>>>();
   const mp4 = new Map<string, Mp4MediaFacts>();
   const output = new Map<ApiResultItem, ApiResultItem[]>();
   let probes = 0;
@@ -213,9 +213,11 @@ export async function enrichSourceAudio(
       ) {
         if (!ard.has(ardId) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
-          ard.set(ardId, await getArdMedia(ardId, budget));
+          ard.set(ardId, await getArdSource(ardId, budget));
         }
-        const media = ard.get(ardId) ?? [];
+        const source = ard.get(ardId);
+        const media = source?.media ?? [];
+        if (source) split.sourceAvailability = source.availability;
         edition = ardEdition(media, url);
         language = edition?.audioLanguage ?? null;
         split.sourceVideoDimensions = media

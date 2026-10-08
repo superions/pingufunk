@@ -33,6 +33,7 @@ import {
 } from "./newznab";
 import { matchMovieItems, movieSourceTitle, normalizeMovieTitle } from "./movie-matcher";
 import { recordDecision } from "@/server/decision-diagnostics";
+import { sourceEpoch } from "@/lib/content-dates";
 
 /** A cached feed is not a newly performed match or current asset evidence. */
 function cachedFeed(response: string): string {
@@ -507,21 +508,20 @@ async function matchesItemTitleExact(
   if (matchedEpisodes.length === 1) {
     matchedEpisode = matchedEpisodes[0];
   } else if (matchedEpisodes.length > 1) {
-    // Try to match by aired date
-    const itemDate = new Date(item.filmlisteTimestamp * 1000);
-    matchedEpisode = matchedEpisodes.find((ep) => {
-      if (!ep.aired) return false;
-      const epDate = new Date(ep.aired);
-      return epDate.toDateString() === itemDate.toDateString();
-    });
-    // Fallback to newest
-    if (!matchedEpisode) {
-      matchedEpisode = matchedEpisodes.sort((a, b) => {
-        const aDate = a.aired ? new Date(a.aired).getTime() : 0;
-        const bDate = b.aired ? new Date(b.aired).getTime() : 0;
-        return bDate - aDate;
-      })[0];
-    }
+    // A catalogue refresh cannot disambiguate two identically named episodes.
+    // Use an explicit source broadcast day only when it selects exactly one.
+    const broadcastAt = sourceEpoch(item.contentDates?.broadcastAt);
+    const sourceDay = broadcastAt ? new Date(broadcastAt * 1000).toISOString().slice(0, 10) : null;
+    const sameDay = sourceDay
+      ? matchedEpisodes.filter(
+          (ep) =>
+            ep.aired &&
+            Number.isFinite(new Date(ep.aired).getTime()) &&
+            new Date(ep.aired).toISOString().slice(0, 10) === sourceDay
+        )
+      : [];
+    if (sameDay.length === 1) matchedEpisode = sameDay[0];
+    else recordDecision("identity", "identity_ambiguous", "conflicting");
   }
 
   if (!matchedEpisode) return null;

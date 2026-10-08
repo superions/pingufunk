@@ -13,6 +13,7 @@
 import { fetchWithRetry, requestDeadline, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import type { ApiResultItem, MediathekApiResponse, TvdbData } from "@/types";
+import { sourceEpoch } from "./content-dates";
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -141,6 +142,18 @@ export async function queryMediathekView(
       title: item.title,
       description: item.description,
       filmlisteTimestamp: item.filmlisteTimestamp,
+      // FilmlisteParser's timestamp is the source broadcast date. The indexer
+      // separately adds filmlisteTimestamp for the catalogue update. Neither is rights.
+      ...(sourceEpoch(Reflect.get(item, "timestamp"))
+        ? {
+            contentDates: {
+              ...(sourceEpoch(item.filmlisteTimestamp)
+                ? { catalogueUpdatedAt: item.filmlisteTimestamp }
+                : {}),
+              broadcastAt: sourceEpoch(Reflect.get(item, "timestamp")),
+            },
+          }
+        : {}),
       duration: item.duration,
       size: item.size,
       url_website: item.url_website,

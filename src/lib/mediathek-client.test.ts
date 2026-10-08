@@ -74,6 +74,8 @@ it("does not promote uncontracted response properties to language or resolution 
             subtitleLanguage: "de",
             originalVersion: true,
             sourceVideoDimensions: [{ url: validItem.url_video, width: 1920, height: 1080 }],
+            sourceAvailability: { state: "declared_rights", beginsAt: 1, endsAt: 9999999999 },
+            contentDates: { broadcastAt: 9999999999, productionYear: 2026 },
           },
         ],
       },
@@ -82,6 +84,29 @@ it("does not promote uncontracted response properties to language or resolution 
 
   expect(await queryMediathekView([], 10)).toEqual([validItem]);
 });
+
+it("separates the real broadcast timestamp from the catalogue update without accepting arbitrary rights", async () => {
+  const broadcastAt = Date.parse("2026-12-25T20:15:00Z") / 1000;
+  vi.mocked(fetchWithRetry).mockResolvedValue(
+    Response.json({
+      result: {
+        results: [{ ...validItem, timestamp: broadcastAt, rights: { end: "2099-01-01" } }],
+      },
+    })
+  );
+  expect(await queryMediathekView([], 10)).toEqual([
+    { ...validItem, contentDates: { catalogueUpdatedAt: 1, broadcastAt } },
+  ]);
+});
+it.each([0, null, -1, "2026-01-01", NaN])(
+  "keeps unproven broadcast timestamp %s unknown",
+  async (timestamp) => {
+    vi.mocked(fetchWithRetry).mockResolvedValue(
+      Response.json({ result: { results: [{ ...validItem, timestamp }] } })
+    );
+    expect(await queryMediathekView([], 10)).toEqual([validItem]);
+  }
+);
 
 it.each([
   null,

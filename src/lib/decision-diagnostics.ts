@@ -5,6 +5,7 @@ export const DECISION_STAGES = [
   "runtime",
   "language",
   "rendition",
+  "availability",
   "transfer",
   "media",
   "request",
@@ -50,6 +51,11 @@ export const DECISION_REASONS = [
   "request_invalid",
   "request_failed",
   "cached_response",
+  "rights_unknown",
+  "rights_current",
+  "rights_expired",
+  "rights_not_yet",
+  "rights_conflict",
 ] as const;
 export type DecisionStage = (typeof DECISION_STAGES)[number];
 export type DecisionReason = (typeof DECISION_REASONS)[number];
