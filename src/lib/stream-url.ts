@@ -24,7 +24,18 @@ export function isStreamingUrl(value: string): boolean {
 
 /** HLS manifests and stable SRF references are eligible only when enabled. */
 export function isRenditionAllowed(value: string, hlsEnabled: boolean): boolean {
-  return value.length > 0 && (hlsEnabled || !isStreamingUrl(value));
+  if (!value || /\s/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return (
+      ["http:", "https:"].includes(url.protocol) &&
+      !url.username &&
+      !url.password &&
+      (hlsEnabled || !isStreamingUrl(value))
+    );
+  } catch {
+    return false;
+  }
 }
 
 export type StreamHeight = 480 | 720 | 1080;

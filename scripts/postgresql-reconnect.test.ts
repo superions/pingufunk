@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 const required = process.env.PINGUFUNK_REQUIRE_PG_RECONNECT_TESTS === "1";
 const configured = process.env.PINGUFUNK_TEST_DATABASE_URL;
@@ -19,7 +20,8 @@ it.skipIf(!required)(
       !["postgres:", "postgresql:"].includes(url.protocol) ||
       url.hostname !== "127.0.0.1" ||
       url.pathname !== "/pingufunk_qa" ||
-      url.username !== "pingufunk_qa_runtime"
+      url.username !== "pingufunk_qa_runtime" ||
+      url.searchParams.get("schema") !== "p15_reconnect"
     )
       throw new Error("Owned disposable reconnect target required");
     const published = execFileSync("docker", ["port", container, "5432/tcp"], {
@@ -36,30 +38,58 @@ it.skipIf(!required)(
     vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
     const { prisma, databaseProvider } = await import("@/lib/db");
     const { GET } = await import("@/app/api/system/route");
+    const { GET: health } = await import("@/app/api/health/route");
     const inspection = new PrismaClient({ datasourceUrl: url.href, log: [] });
+    const { acquireWorkerLease } = await import("@/server/worker-lease");
     const sqlite = path.resolve("prisma/data/rundfunkarr.db");
     const fingerprint = () =>
       existsSync(sqlite) ? createHash("sha256").update(readFileSync(sqlite)).digest("hex") : null;
     let paused = false;
+    let lease: Awaited<ReturnType<typeof acquireWorkerLease>> = null;
     try {
       const beforeSqlite = fingerprint();
+      expect((await GET()).status).toBe(200);
+      expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(200);
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      lease = await acquireWorkerLease();
+      expect(lease).not.toBeNull();
       const count = await prisma.config.count();
       const checkpoint = await inspection.migrationCheckpoint.count();
-      expect((await GET()).status).toBe(200);
       execFileSync("docker", ["pause", container], { timeout: 5000, stdio: "ignore" });
       paused = true;
+      await expect(
+        lease!.mutate((tx) =>
+          tx.config.create({ data: { key: "qa-worker-outage-never-commit", value: "synthetic" } })
+        )
+      ).rejects.toThrow();
+      expect(lease!.signal.aborted).toBe(true);
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
       expect((await GET()).status).toBe(500);
+      expect((await health(new NextRequest("http://localhost/api/health?mode=live"))).status).toBe(
+        200
+      );
+      expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(503);
       expect(databaseProvider).toBe("postgresql");
       expect(fingerprint()).toBe(beforeSqlite);
       execFileSync("docker", ["unpause", container], { timeout: 5000, stdio: "ignore" });
       paused = false;
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      await lease!.release();
+      lease = null;
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+      expect(
+        await prisma.config.findUnique({ where: { key: "qa-worker-outage-never-commit" } })
+      ).toBeNull();
       expect((await GET()).status).toBe(200);
+      expect((await health(new NextRequest("http://localhost/api/health"))).status).toBe(200);
       expect(await prisma.config.count()).toBe(count);
       expect(await inspection.migrationCheckpoint.count()).toBe(checkpoint);
       expect(fingerprint()).toBe(beforeSqlite);
     } finally {
       if (paused)
         execFileSync("docker", ["unpause", container], { timeout: 5000, stdio: "ignore" });
+      vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      await lease?.release();
       await prisma.$disconnect();
       await inspection.$disconnect();
       vi.unstubAllEnvs();

@@ -203,7 +203,7 @@ it.each(["bootstrap", "migrated"])(
         await POST(
           new NextRequest("http://localhost/api/settings", {
             method: "POST",
-            body: JSON.stringify({ key: "qa.config", value: "client-roundtrip" }),
+            body: JSON.stringify({ key: "matching.movie.yearTolerance", value: "2" }),
           })
         )
       ).status
@@ -223,8 +223,11 @@ it.each(["bootstrap", "migrated"])(
       )
     ).rejects.toThrow("Application writes are disabled");
     expect((await prisma.config.findUnique({ where: { key: "qa.config" } }))?.value).toBe(
-      "client-roundtrip"
+      "synthetic-persisted"
     );
+    expect(
+      (await prisma.config.findUnique({ where: { key: "matching.movie.yearTolerance" } }))?.value
+    ).toBe("2");
     expect((await GET(new NextRequest("http://localhost/api/settings?key=qa.config"))).status).toBe(
       200
     );
@@ -234,7 +237,7 @@ it.each(["bootstrap", "migrated"])(
     expect((await response.json()).database).toMatchObject({
       shows: 1,
       episodes: 2,
-      configEntries: 1,
+      configEntries: 2,
     });
     vi.stubEnv("DATABASE_URL", `file:${filename}-other`);
     vi.resetModules();
@@ -247,8 +250,12 @@ it.each(["bootstrap", "migrated"])(
     const restarted = await import("@/lib/db");
     disconnect = () => restarted.prisma.$disconnect();
     expect((await restarted.prisma.config.findUnique({ where: { key: "qa.config" } }))?.value).toBe(
-      "client-roundtrip"
+      "synthetic-persisted"
     );
+    expect(
+      (await restarted.prisma.config.findUnique({ where: { key: "matching.movie.yearTolerance" } }))
+        ?.value
+    ).toBe("2");
     expect(
       (await restarted.prisma.download.findUnique({ where: { id: "original-job" } }))?.size
     ).toBe(BigInt("9007199254741115"));

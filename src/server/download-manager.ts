@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/db";
+import { DOWNLOAD_CONCURRENCY, getDownloadWorkerState } from "./download-worker-state";
+import { acquireWorkerLease, WorkerOwnershipError, type WorkerLease } from "./worker-lease";
 import { assertWritesEnabled } from "@/lib/write-gate";
-import { getSetting, isMkvConversionEnabled } from "@/lib/settings";
-import { readPersistedMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
-import { probeJobMedia } from "./media-probe";
+import { isMkvConversionEnabled } from "@/lib/settings";
+import { readPersistedMediaExpectations } from "@/lib/media-expectations";
+import { MediaProbeError } from "./media-probe";
+import { recordDecision } from "./decision-diagnostics";
+import { parseDecisionEvent } from "@/lib/decision-diagnostics";
 import { downloadHlsStream } from "./ytdlp";
 import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
 import {
@@ -16,215 +20,201 @@ import {
   safeReleaseName,
 } from "@/lib/download-paths";
 import * as fs from "fs/promises";
-import { constants, createWriteStream } from "fs";
+import { createHash } from "node:crypto";
 import * as path from "path";
-
-const MAX_CONCURRENT_DOWNLOADS = 1;
+import { transferFailureMessage } from "./download-failure";
+import { completeValidatedDownload, moveIntoJobDir } from "./download-completion";
+import { downloadFile } from "./download-transfer";
 
 async function getDownloadTempPath(): Promise<string> {
   const basePath = await getDownloadBasePath();
   return process.env.DOWNLOAD_TEMP_PATH || path.join(basePath, "incomplete");
 }
 
-// Semaphore implementation for limiting concurrent downloads
-class Semaphore {
-  private permits: number;
-  private queue: Array<() => void> = [];
+const runtime = getDownloadWorkerState();
 
-  constructor(permits: number) {
-    this.permits = permits;
-  }
-
-  async acquire(): Promise<void> {
-    if (this.permits > 0) {
-      this.permits--;
-      return;
-    }
-
-    return new Promise((resolve) => {
-      this.queue.push(resolve);
-    });
-  }
-
-  release(): void {
-    this.permits++;
-    const next = this.queue.shift();
-    if (next) {
-      this.permits--;
-      next();
-    }
-  }
+/** Closed observation, never exposing lease owner/fence or database values. */
+export function getWorkerRuntimeState() {
+  return {
+    state:
+      runtime.pendingFailures.size > 0
+        ? "paused"
+        : runtime.processingPromise || runtime.directWork.size
+          ? "draining"
+          : "idle",
+    configuredConcurrency: DOWNLOAD_CONCURRENCY,
+    exclusiveOwnership: runtime.activeLease
+      ? runtime.activeLease.ownershipLost
+        ? "lost"
+        : "held"
+      : runtime.ownershipState,
+  };
 }
 
-const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
-let processingPromise: Promise<void> | null = null;
-let rerunRequested = false;
-// A failed DB write pauses the drain. Reconcile only this worker's interrupted jobs
-// before the next explicit wakeup; cold-start recovery covers process loss.
-const pendingFailures = new Map<string, string>();
-
-/** Only the single production worker calls this once at a cold start. */
-export async function recoverInterruptedDownloads(): Promise<number> {
+/** Recovery is legal only after exclusive acquisition; a busy owner is untouched. */
+export async function recoverInterruptedDownloads(owned?: WorkerLease): Promise<number> {
   assertWritesEnabled();
-  const result = await prisma.download.updateMany({
-    where: { status: { in: ["downloading", "converting"] } },
-    data: {
-      status: "failed",
-      error: "Interrupted by server restart; retry this job",
-      completedAt: new Date(),
-    },
-  });
-  return result.count;
+  const lease = owned ?? (await acquireWorkerLease());
+  if (!lease) return 0;
+  try {
+    const result = await lease.mutate((tx) =>
+      tx.download.updateMany({
+        where: { status: { in: ["downloading", "converting"] } },
+        data: {
+          status: "failed",
+          error: "Interrupted by server restart; retry this job",
+          completedAt: new Date(),
+        },
+      })
+    );
+    return result.count;
+  } finally {
+    if (!owned) await lease.release();
+  }
 }
 
 export async function startDownloadProcessing(): Promise<void> {
   assertWritesEnabled();
-  if (processingPromise) {
+  if (runtime.shuttingDown) throw new Error("Worker is shutting down");
+  if (runtime.processingPromise) {
     // A new queue row can arrive just after the last empty poll. Run one
     // additional pass after the current drain rather than losing that wakeup.
-    rerunRequested = true;
-    return processingPromise;
+    runtime.rerunRequested = true;
+    return runtime.processingPromise;
   }
 
-  processingPromise = (async () => {
+  runtime.processingPromise = (async () => {
     try {
       do {
-        rerunRequested = false;
+        runtime.rerunRequested = false;
         await processQueue();
-      } while (rerunRequested);
+      } while (runtime.rerunRequested);
     } finally {
-      processingPromise = null;
+      runtime.processingPromise = null;
     }
   })();
-  return processingPromise;
+  return runtime.processingPromise;
 }
 
 async function processQueue(): Promise<void> {
-  for (const [id, error] of pendingFailures) {
-    const row = await prisma.download.findUnique({ where: { id } });
-    if (row && ["queued", "downloading", "converting"].includes(row.status))
-      await markAsFailed(id, error);
-    else pendingFailures.delete(id);
-  }
-  while (true) {
-    // Get next queued download
-    const nextDownload = await prisma.download.findFirst({
-      where: { status: "queued" },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!nextDownload) {
-      // No more items in queue
-      break;
+  let lease: WorkerLease | null = null;
+  while (!runtime.shuttingDown && !lease) {
+    lease = await acquireWorkerLease();
+    if (!lease) {
+      runtime.ownershipState = "waiting";
+      if (!(await prisma.download.findFirst({ where: { status: "queued" }, select: { id: true } })))
+        return;
+      // Waiting follows only a proved busy lease, never an ambiguous DB mutation.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-
-    // The configured concurrency is one; await status persistence before
-    // polling again so the same queued row cannot be scheduled repeatedly.
-    await processDownload(nextDownload.id);
   }
-}
-
-/** All transfer/mux paths converge here before exposing import-ready history. */
-async function completeValidatedDownload(
-  id: string,
-  filePath: string,
-  jobDirectory: string,
-  expectations: MediaExpectations | null
-): Promise<void> {
-  const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
-  if (!Number.isSafeInteger(tolerance) || tolerance < 0 || tolerance > 25)
-    throw new Error("Invalid media validation policy");
-  const facts = await probeJobMedia(filePath, jobDirectory, expectations, tolerance);
-  const stats = await fs.lstat(filePath);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)
-    throw new Error("Invalid completed media file");
-  // A statement timeout must not leave an unacknowledged autocommit write queued
-  // on a suspended connection. Commit only after the verified write returned.
-  // A lost COMMIT acknowledgement can still be ambiguous; reconcile by reading
-  // the durable row on the next wakeup, never by redownloading or provider fallback.
-  await prisma.$transaction(
-    async (tx) => {
-      await tx.download.update({
-        where: { id },
-        data: {
-          status: "completed",
-          progress: 100,
-          size: stats.size,
-          filePath,
-          completedAt: new Date(),
-          mediaValidation: JSON.stringify({ version: 1, ...facts }),
-        },
-      });
-    },
-    { maxWait: 5000, timeout: 5000 }
-  );
-}
-
-/**
- * Move a finished file into its private job folder.
- *
- * The folder was created when the download started, but *arr apps remove the
- * imported file from the category folder while later downloads are still
- * running, and delete the folder once it is empty -- so it is re-created
- * right before the move. That still leaves a moment between mkdir and link;
- * if an import deletes the folder in exactly that instant, the ENOENT is
- * answered with one more re-create and retry. A missing SOURCE file also
- * surfaces as ENOENT and fails the retry identically, which is correct.
- */
-async function moveIntoJobDir(
-  sourcePath: string,
-  targetPath: string,
-  tempJobDir: string,
-  basePath: string,
-  categoryDir: string,
-  jobDir: string
-): Promise<void> {
-  if (path.dirname(path.resolve(sourcePath)) !== path.resolve(tempJobDir)) {
-    throw new Error("Download result is outside its temporary job directory");
-  }
-  const sourceStat = await fs.lstat(sourcePath);
-  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
-    throw new Error("Download result is not a regular job file");
-  }
-  const ensureTarget = async () => {
-    await ensureOwnedDirectory(basePath, categoryDir);
-    await ensureOwnedDirectory(categoryDir, jobDir);
-  };
-  await ensureTarget();
-  const move = async () => {
-    try {
-      // link creates the target without replacing an existing file or symlink.
-      await fs.link(sourcePath, targetPath);
-    } catch (error) {
-      // Cross-device moves and filesystems without hard-link support still
-      // create a fresh target exclusively before removing the source.
-      if (
-        !["EXDEV", "EPERM", "EOPNOTSUPP", "ENOTSUP"].includes(
-          (error as NodeJS.ErrnoException).code ?? ""
-        )
-      ) {
-        throw error;
-      }
-      await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
-    }
-    await fs.unlink(sourcePath);
-  };
+  if (!lease) return;
+  runtime.activeLease = lease;
+  runtime.ownershipState = "held";
   try {
-    await move();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await ensureTarget();
-    await move();
+    for (const [id, error] of runtime.pendingFailures) {
+      const row = await prisma.download.findUnique({ where: { id } });
+      if (row && ["queued", "downloading", "converting"].includes(row.status))
+        await markAsFailed(id, error, lease);
+      else runtime.pendingFailures.delete(id);
+    }
+    await recoverInterruptedDownloads(lease);
+    while (!runtime.shuttingDown) {
+      lease.checkTransfer();
+      // Get next queued download
+      const nextDownload = await prisma.download.findFirst({
+        where: { status: "queued" },
+        orderBy: { createdAt: "asc" },
+      });
+
+      if (!nextDownload) {
+        // No more items in queue
+        break;
+      }
+
+      // The configured concurrency is one; await status persistence before
+      // polling again so the same queued row cannot be scheduled repeatedly.
+      await processOwnedDownload(nextDownload.id, lease);
+    }
+  } finally {
+    // Transfers/children have settled before ownership can pass to another process.
+    try {
+      await lease.release();
+    } finally {
+      runtime.activeLease = null;
+      runtime.ownershipState = "idle";
+    }
   }
+}
+
+/** Stop scheduling and abort only this process's transfers; do not re-grab. */
+export async function shutdownDownloadProcessing(): Promise<void> {
+  runtime.shuttingDown = true;
+  runtime.activeLease?.abort();
+  await runtime.processingPromise;
+  await Promise.all(runtime.directWork);
+}
+
+export function installWorkerShutdownHandlers(): void {
+  if (runtime.shutdownHandlersInstalled) return;
+  runtime.shutdownHandlersInstalled = true;
+  for (const signal of ["SIGINT", "SIGTERM"] as const)
+    process.once(signal, () => {
+      // This exact process owns the worker and tools. If persistence is unavailable,
+      // leave expiry/recovery to the next owner instead of pretending a release.
+      const limit = setTimeout(() => process.exit(1), 12_000);
+      void shutdownDownloadProcessing()
+        .then(async () => {
+          await prisma.$disconnect();
+          clearTimeout(limit);
+          process.exit(signal === "SIGINT" ? 130 : 143);
+        })
+        .catch(() => {
+          clearTimeout(limit);
+          process.exit(1);
+        });
+    });
 }
 
 async function processDownload(downloadId: string): Promise<void> {
   assertWritesEnabled();
-  await downloadSemaphore.acquire();
+  const work = executeSingleDownload(downloadId);
+  runtime.directWork.add(work);
+  try {
+    await work;
+  } finally {
+    runtime.directWork.delete(work);
+  }
+}
+
+async function executeSingleDownload(downloadId: string): Promise<void> {
+  assertWritesEnabled();
+  await runtime.semaphore.acquire();
+  let lease: WorkerLease | null = null;
+  try {
+    if (runtime.shuttingDown) throw new Error("Worker is shutting down");
+    lease = await acquireWorkerLease();
+    if (!lease) throw new WorkerOwnershipError();
+    runtime.activeLease = lease;
+    await recoverInterruptedDownloads(lease);
+    await processOwnedDownload(downloadId, lease);
+  } finally {
+    try {
+      await lease?.release();
+    } finally {
+      if (runtime.activeLease === lease) runtime.activeLease = null;
+      runtime.semaphore.release();
+    }
+  }
+}
+
+async function processOwnedDownload(downloadId: string, lease: WorkerLease): Promise<void> {
+  lease.checkTransfer();
 
   const startTime = Date.now();
   let tempJobDir: string | null = null;
   let completeJobDir: string | null = null;
+  let failureMessage = "Download processing failed";
 
   try {
     // Get download info
@@ -240,10 +230,12 @@ async function processDownload(downloadId: string): Promise<void> {
     console.log(`[Download] Starting: ${download.title}`);
 
     // Mark as downloading
-    await prisma.download.update({
-      where: { id: downloadId },
-      data: { status: "downloading" },
-    });
+    await lease.mutate((tx) =>
+      tx.download.update({
+        where: { id: downloadId, status: "queued" },
+        data: { status: "downloading" },
+      })
+    );
 
     // A job owns both staging and completed output, even if another job has
     // the same public release title or a consumer removes an imported folder.
@@ -286,27 +278,32 @@ async function processDownload(downloadId: string): Promise<void> {
         streamUrl,
         tempMkvPath,
         async (progress, downloadedBytes, totalBytes, speed) => {
-          await prisma.download.update({
-            where: { id: downloadId },
-            data: {
-              progress,
-              downloadedBytes,
-              totalSize: totalBytes,
-              speed,
-            },
-          });
+          lease.checkTransfer();
+          await lease.mutate((tx) =>
+            tx.download.update({
+              where: { id: downloadId },
+              data: {
+                progress,
+                downloadedBytes,
+                totalSize: totalBytes,
+                speed,
+              },
+            })
+          );
         },
         container,
-        maxHeight
+        maxHeight,
+        lease.signal
       );
 
       if (!hlsResult.success) {
-        await markAsFailed(downloadId, hlsResult.error || "HLS download failed");
+        await markAsFailed(downloadId, hlsResult.error || "HLS download failed", lease);
         return;
       }
 
       // Move to final location
       const outputPath = hlsResult.outputPath || tempMkvPath;
+      lease.checkTransfer();
       console.log(`[Download] Moving HLS result to final location: ${finalMkvPath}`);
       await moveIntoJobDir(
         outputPath,
@@ -323,7 +320,14 @@ async function processDownload(downloadId: string): Promise<void> {
       // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
+      await completeValidatedDownload(
+        downloadId,
+        finalMkvPath,
+        completeJobDir,
+        expectations,
+        download.url,
+        lease
+      );
 
       console.log(
         `[Download] HLS completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
@@ -340,24 +344,34 @@ async function processDownload(downloadId: string): Promise<void> {
     const mp4Path = tempMp4Path;
 
     // Download the file
-    const downloadSuccess = await downloadFile(
+    const downloadFailure = await downloadFile(
       download.url,
       mp4Path,
       async (progress, downloadedBytes, totalBytes, speed) => {
-        await prisma.download.update({
-          where: { id: downloadId },
-          data: {
-            progress,
-            downloadedBytes,
-            totalSize: totalBytes,
-            speed,
-          },
-        });
-      }
+        lease.checkTransfer();
+        await lease.mutate((tx) =>
+          tx.download.update({
+            where: { id: downloadId },
+            data: {
+              progress,
+              downloadedBytes,
+              totalSize: totalBytes,
+              speed,
+            },
+          })
+        );
+      },
+      lease.signal
     );
 
-    if (!downloadSuccess) {
-      await markAsFailed(downloadId, "Download failed");
+    if (downloadFailure) {
+      recordDecision("transfer", "transfer_failed", "unavailable");
+      console.error("[Download] Transfer failure", {
+        jobRef: createHash("sha256").update(downloadId).digest("hex").slice(0, 16),
+        ...downloadFailure,
+      });
+      failureMessage = transferFailureMessage(downloadFailure);
+      await markAsFailed(downloadId, failureMessage, lease);
       return;
     }
 
@@ -372,24 +386,28 @@ async function processDownload(downloadId: string): Promise<void> {
 
       console.log(`[Download] Converting to MKV: ${tempMkvPath}`);
 
-      await prisma.download.update({
-        where: { id: downloadId },
-        data: { status: "converting" },
-      });
+      lease.checkTransfer();
+      await lease.mutate((tx) =>
+        tx.download.update({
+          where: { id: downloadId },
+          data: { status: "converting" },
+        })
+      );
 
       const { convertMp4ToMkv } = await import("./ffmpeg");
-      const conversionResult = await convertMp4ToMkv(mp4Path, tempMkvPath);
+      const conversionResult = await convertMp4ToMkv(mp4Path, tempMkvPath, undefined, lease.signal);
 
       if (!conversionResult.success) {
         // Clean up temp file on failure
         await fs.unlink(mp4Path).catch(() => {});
-        await markAsFailed(downloadId, conversionResult.error || "Conversion failed");
+        await markAsFailed(downloadId, conversionResult.error || "Conversion failed", lease);
         return;
       }
 
       // Move completed MKV to final location; see moveIntoJobDir for why
       // the category directory is re-created here.
       console.log(`[Download] Moving to final location: ${finalMkvPath}`);
+      lease.checkTransfer();
       await moveIntoJobDir(
         tempMkvPath,
         finalMkvPath,
@@ -408,7 +426,14 @@ async function processDownload(downloadId: string): Promise<void> {
       // Persist completion only after the local media gate.
       const downloadTime = Math.floor((Date.now() - startTime) / 1000);
 
-      await completeValidatedDownload(downloadId, finalMkvPath, completeJobDir, expectations);
+      await completeValidatedDownload(
+        downloadId,
+        finalMkvPath,
+        completeJobDir,
+        expectations,
+        download.url,
+        lease
+      );
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
@@ -416,6 +441,7 @@ async function processDownload(downloadId: string): Promise<void> {
     } else {
       // Keep non-MP4 files and MP4 files with disabled conversion unchanged.
       const finalPath = path.join(completeJobDir, `${filename}${fileExtension}`);
+      lease.checkTransfer();
       await moveIntoJobDir(
         mp4Path,
         finalPath,
@@ -427,15 +453,39 @@ async function processDownload(downloadId: string): Promise<void> {
 
       const stats = await fs.stat(finalPath);
 
-      await completeValidatedDownload(downloadId, finalPath, completeJobDir, expectations);
+      await completeValidatedDownload(
+        downloadId,
+        finalPath,
+        completeJobDir,
+        expectations,
+        download.url,
+        lease
+      );
 
       console.log(
         `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB)`
       );
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof MediaProbeError) {
+      // Closed probe facts survive persistence; never copy arbitrary exception messages.
+      const event = parseDecisionEvent({
+        stage: "media",
+        reason: error.reason,
+        evidence: error.evidence,
+        count: 1,
+      });
+      if (event)
+        failureMessage = `Local media validation failed: ${JSON.stringify({ version: 1, stage: event.stage, reason: event.reason, evidence: event.evidence })}`;
+    }
     console.error(`[Download] Error processing download ${downloadId}`);
-    await markAsFailed(downloadId, "Download processing failed");
+    await markAsFailed(
+      downloadId,
+      runtime.shuttingDown
+        ? "Worker interrupted; retry this job explicitly"
+        : (runtime.pendingFailures.get(downloadId) ?? failureMessage),
+      lease
+    );
   } finally {
     // Remove only empty directories owned by this job. A failed tool's
     // unexpected leftovers remain visible for diagnosis, never swept broadly.
@@ -447,158 +497,29 @@ async function processDownload(downloadId: string): Promise<void> {
         }
       });
     }
-    downloadSemaphore.release();
   }
 }
 
-async function markAsFailed(downloadId: string, error: string): Promise<void> {
-  pendingFailures.set(downloadId, error);
+async function markAsFailed(downloadId: string, error: string, lease: WorkerLease): Promise<void> {
+  runtime.pendingFailures.set(downloadId, error);
   // A lost transaction acknowledgement is not proof of rollback. Preserve an
   // already durable terminal row instead of overwriting a verified completion.
   const row = await prisma.download.findUnique({ where: { id: downloadId } });
   if (!row || ["completed", "failed"].includes(row.status)) {
-    pendingFailures.delete(downloadId);
+    runtime.pendingFailures.delete(downloadId);
     return;
   }
-  await prisma.download.update({
-    where: { id: downloadId },
-    data: {
-      status: "failed",
-      error,
-      completedAt: new Date(),
-    },
-  });
-  pendingFailures.delete(downloadId);
-}
-
-// CDN streams (confirmed live: a 3sat direct-download URL) can stop sending
-// data mid-transfer without closing the connection or erroring - fetch()'s
-// reader.read() then just hangs forever, since fetch has no built-in
-// stall/read timeout. That leaves a download stuck at whatever percent it
-// reached, with no error, no retry, and nothing for Radarr/Sonarr to act on
-// even once they can see the queue (see formatSabnzbdTimeleft's doc comment
-// for the separate bug that hid this from them entirely). Abort if no data
-// arrives for this long.
-const STALL_TIMEOUT_MS = 60_000;
-
-async function downloadFile(
-  url: string,
-  destPath: string,
-  onProgress?: (
-    percent: number,
-    downloadedBytes: number,
-    totalBytes: number,
-    speed: number
-  ) => Promise<void>
-): Promise<boolean> {
-  const abortController = new AbortController();
-  let fileStream: ReturnType<typeof createWriteStream> | undefined;
-  let fileCreated = false;
-  let completed = false;
-  let stallTimer: ReturnType<typeof setTimeout> | undefined;
-  const resetStallTimer = () => {
-    if (stallTimer) clearTimeout(stallTimer);
-    stallTimer = setTimeout(() => {
-      console.error(`[Download] No data received for ${STALL_TIMEOUT_MS / 1000}s, aborting`);
-      abortController.abort();
-    }, STALL_TIMEOUT_MS);
-  };
-
-  try {
-    resetStallTimer();
-    const response = await fetch(url, { redirect: "error", signal: abortController.signal });
-
-    if (!response.ok || !response.body) {
-      console.error(`[Download] HTTP error: ${response.status}`);
-      return false;
-    }
-
-    const lengthHeader = response.headers.get("content-length");
-    const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
-    // Fetch may decode an encoded body: its wire Content-Length is not the
-    // resulting file length. Compare only an unencoded, fully valid length.
-    const reliableLength = lengthHeader !== null && (!encoding || encoding === "identity");
-    if (
-      reliableLength &&
-      (!/^\d+$/.test(lengthHeader) || !Number.isSafeInteger(Number(lengthHeader)))
-    )
-      return false;
-    const contentLength = reliableLength ? Number(lengthHeader) : 0;
-    fileStream = createWriteStream(destPath, { flags: "wx" });
-    fileStream.once("open", () => {
-      fileCreated = true;
-    });
-    fileStream.on("error", () => abortController.abort());
-
-    const reader = response.body.getReader();
-    let downloadedBytes = 0;
-    let lastProgressUpdate = 0;
-    let lastSpeedCheck = Date.now();
-    let lastSpeedBytes = 0;
-    let currentSpeed = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      resetStallTimer();
-
-      if (done) {
-        break;
-      }
-      if (reliableLength && downloadedBytes + value.length > contentLength) return false;
-
-      await new Promise<void>((resolve, reject) => {
-        fileStream!.write(Buffer.from(value), (error) => (error ? reject(error) : resolve()));
-      });
-      downloadedBytes += value.length;
-
-      // Calculate speed every second
-      const now = Date.now();
-      const timeDiff = now - lastSpeedCheck;
-      if (timeDiff >= 1000) {
-        const bytesDiff = downloadedBytes - lastSpeedBytes;
-        currentSpeed = Math.round(bytesDiff / (timeDiff / 1000));
-        lastSpeedCheck = now;
-        lastSpeedBytes = downloadedBytes;
-      }
-
-      // Update progress (throttled to every 1%)
-      if (contentLength > 0 && onProgress) {
-        const percent = Math.floor((downloadedBytes / contentLength) * 100);
-        if (percent > lastProgressUpdate) {
-          lastProgressUpdate = percent;
-          await onProgress(percent, downloadedBytes, contentLength, currentSpeed);
-        }
-      }
-    }
-
-    if (reliableLength && downloadedBytes !== contentLength) return false;
-
-    completed = await new Promise<boolean>((resolve) => {
-      fileStream!.once("finish", () => resolve(true));
-      fileStream!.once("error", () => {
-        console.error("[Download] Write error");
-        resolve(false);
-      });
-      fileStream!.end();
-    });
-    return completed;
-  } catch {
-    console.error("[Download] Error downloading file");
-    return false;
-  } finally {
-    clearTimeout(stallTimer);
-    if (!completed) {
-      abortController.abort();
-      if (fileStream) {
-        await new Promise<void>((resolve) => {
-          if (fileStream!.closed) return resolve();
-          fileStream!.once("close", resolve);
-          fileStream!.destroy();
-        });
-        if (fileCreated) await fs.unlink(destPath).catch(() => {});
-      }
-    }
-  }
+  await lease.mutate((tx) =>
+    tx.download.update({
+      where: { id: downloadId },
+      data: {
+        status: "failed",
+        error,
+        completedAt: new Date(),
+      },
+    })
+  );
+  runtime.pendingFailures.delete(downloadId);
 }
 
 // Export for use in API routes

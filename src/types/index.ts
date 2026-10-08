@@ -2,6 +2,20 @@
 /** Server-authored NZBs selected by rendition; clients treat the payload as opaque. */
 export type UiNzbDownloads = Partial<Record<"hd" | "sd" | "low", string>>;
 
+/** Bounded retrieval coverage, not a total count of a provider's catalogue. */
+export interface UiSearchCoverage {
+  complete: boolean;
+  candidateWindowLimited: boolean;
+  resultLimitReached: boolean;
+  eligibleCount: number;
+  returnedCount: number;
+  sources: Array<{
+    providerId: "mediathekview" | "orf" | "srf";
+    state: "complete" | "failed" | "disabled";
+    candidateCount: number;
+  }>;
+}
+
 export interface MediathekApiResponse {
   result: MediathekApiResult;
   err: unknown | null;
@@ -25,7 +39,11 @@ export interface ApiResultItem {
   topic: string;
   title: string;
   description: string;
+  /** Shipped catalogue-update timestamp; preserved for IDs/pubDate, never an aired date or film year. */
   filmlisteTimestamp: number;
+  /** Transient validated adapter facts; never accepted wholesale from a catalogue response. */
+  contentDates?: import("@/lib/content-dates").ContentDates;
+  sourceAvailability?: import("@/lib/content-dates").SourceAvailability;
   duration: number;
   size: number;
   url_website: string;
@@ -41,6 +59,14 @@ export interface ApiResultItem {
   clearSpeech?: boolean;
   /** Transient adapter proof, never accepted from raw MediathekView fields. */
   arteVerifiedVideoId?: string;
+  /** Server-only exact-rendition proof; untrusted catalogue fields never supply this. */
+  sourceAudioEvidence?: import("@/lib/media-expectations").SourceAudioEvidence;
+  /** Preserve shipped rendition identity when better evidence adds release labels. */
+  releaseVariantKey?: string;
+  /** Server-authored dimensions bound to the exact rendition, never catalogue slot names. */
+  sourceVideoDimensions?: Array<{ url: string; width: number; height: number }>;
+  /** Internal source owner only, never accepted from raw catalogue properties. */
+  sourceProviderId?: "mediathekview" | "orf" | "srf";
 }
 
 // TVDB Types
@@ -52,6 +78,8 @@ export interface TvdbData {
   episodes: TvdbEpisode[];
   /** Transient provenance only; never persisted as authoritative base metadata. */
   sonarrBlockedCoordinates?: string[];
+  /** Validated instance coordinates; base episode values themselves stay untouched. */
+  sonarrVerifiedCoordinates?: string[];
   sonarrUnavailable?: boolean;
 }
 
@@ -75,6 +103,7 @@ export interface TvdbAlias {
 
 export interface TvdbEpisode {
   name: string;
+  /** Metadata episode airdate, independent of source publication/rights and not an explicit-search cutoff. */
   aired: Date | null;
   runtime: number | null;
   seasonNumber: number;

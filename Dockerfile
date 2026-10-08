@@ -14,6 +14,7 @@ RUN npm ci
 # Explicit one-shot migration runner, built from the same schema and pinned CLI.
 # This target is never part of a normal application container startup.
 FROM deps AS migrator
+COPY scripts/postgresql-transport.mjs ./scripts/
 COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/database-migrate.mjs scripts/load-database-environment.mjs scripts/sqlite-schema.mjs scripts/check-sqlite-schema.mjs scripts/check-postgresql-schema.mjs scripts/sqlite-baseline.mjs scripts/migrate-entrypoint.sh scripts/postgresql-preflight.mjs scripts/postgresql-snapshot.mjs scripts/postgresql-row-transform.mjs scripts/postgresql-import.mjs scripts/postgresql-prepare.mjs scripts/postgresql-verify.mjs scripts/postgresql-run-manifest.mjs scripts/postgresql-migration-cli.mjs ./scripts/
 RUN apk add --no-cache su-exec && chmod +x ./scripts/migrate-entrypoint.sh \
     && rm -rf /usr/local/lib/node_modules/npm \
@@ -102,11 +103,11 @@ COPY --from=builder /app/prisma/legacy/sqlite ./prisma/legacy/sqlite
 COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/check-database-schema.mjs scripts/check-sqlite-schema.mjs scripts/sqlite-schema.mjs scripts/check-postgresql-schema.mjs ./scripts/
+COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/check-database-schema.mjs scripts/check-sqlite-schema.mjs scripts/sqlite-schema.mjs scripts/check-postgresql-schema.mjs scripts/download-directories.mjs ./scripts/
 
 # Create directories for data and downloads
 # Symlink system FFmpeg and yt-dlp so the app finds them at expected locations
-RUN mkdir -p /app/prisma/data /app/downloads /app/ffmpeg /app/ytdlp \
+RUN mkdir -p /app/prisma/data /app/ffmpeg /app/ytdlp \
     && ln -s /usr/bin/ffmpeg /app/ffmpeg/ffmpeg \
     && ln -s /usr/bin/ffprobe /app/ffmpeg/ffprobe \
     && ln -s /usr/local/bin/yt-dlp /app/ytdlp/yt-dlp \
@@ -125,7 +126,7 @@ ENV HOSTNAME="0.0.0.0"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:6767/api/download?mode=queue || exit 1
+    CMD wget -q --spider http://localhost:6767/api/health?mode=ready || exit 1
 
 # Start the application with entrypoint for PUID/PGID support
 ENTRYPOINT ["/entrypoint.sh"]

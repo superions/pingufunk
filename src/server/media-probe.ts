@@ -3,12 +3,33 @@ import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { isGermanLanguageCode } from "@/lib/language-policy";
-import { parseMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
+import {
+  parseMediaExpectations,
+  durationExpectations,
+  sourceAudioExpectation,
+  type MediaExpectations,
+} from "@/lib/media-expectations";
 import { verifiedDurationCheck } from "@/lib/verified-duration";
+import { type SourceAudioEvidence } from "@/lib/media-expectations";
+import { verifySourceAudio } from "@/services/source-audio";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { recordDecision } from "./decision-diagnostics";
+import {
+  parseDecisionEvent,
+  DecisionFailure,
+  type DecisionReason,
+  type EvidenceStatus,
+} from "@/lib/decision-diagnostics";
 
 export class MediaProbeError extends Error {
-  constructor() {
+  readonly reason: DecisionReason;
+  readonly evidence: EvidenceStatus;
+  constructor(reason: DecisionReason = "media_invalid", evidence: EvidenceStatus = "unavailable") {
     super("Local media validation failed");
+    const event = parseDecisionEvent({ stage: "media", reason, evidence, count: 1 });
+    this.reason = event?.reason ?? "media_invalid";
+    this.evidence = event?.evidence ?? "unavailable";
+    recordDecision("media", this.reason, this.evidence);
   }
 }
 
@@ -46,9 +67,16 @@ export interface MediaProbeFacts {
   durationSeconds: number;
   video: { width: number; height: number }[];
   audioLanguages: string[];
+  sourceAudioEvidence?: SourceAudioEvidence;
+  durationChecks?: {
+    provenance: "source_catalogue" | "episode_metadata";
+    seconds: number;
+    tolerancePercent: number;
+    result: "passed";
+  }[];
   expectedChecks: {
     duration: "unknown" | "passed";
-    audio: "unknown" | "passed";
+    audio: "unknown" | "passed" | "passed_provider";
     resolution: "unknown" | "passed";
   };
 }
@@ -57,19 +85,20 @@ export interface MediaProbeFacts {
 export function validateMediaProbe(
   value: unknown,
   expected: MediaExpectations | null,
-  tolerancePercent: number
+  tolerancePercent: number,
+  sourceAudioEvidence?: SourceAudioEvidence
 ): MediaProbeFacts {
   try {
     const probe = probeSchema.parse(value);
     if (!probe.format.format_name.split(",").some((format) => formats.has(format)))
-      throw new MediaProbeError();
+      throw new MediaProbeError("media_invalid", "conflicting");
     const durationSeconds = Number(probe.format.duration);
     if (
       !/^\d+(?:\.\d+)?$/.test(probe.format.duration) ||
       !Number.isFinite(durationSeconds) ||
       durationSeconds <= 0
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("runtime_invalid", "missing");
     const usableCodec = (name: string | undefined) => !!name && !["unknown", "none"].includes(name);
     const video = probe.streams
       .filter(
@@ -97,18 +126,43 @@ export function validateMediaProbe(
           .filter((tag): tag is string => tag !== null)
       ),
     ];
-    const contract = expected === null ? null : parseMediaExpectations(expected);
+    let contract: MediaExpectations | null;
+    try {
+      contract = expected === null ? null : parseMediaExpectations(expected);
+    } catch {
+      throw new MediaProbeError("expectations_invalid", "conflicting");
+    }
+    const references = durationExpectations(contract, tolerancePercent);
     if (
-      !verifiedDurationCheck(
-        durationSeconds,
-        contract?.duration?.seconds ?? null,
-        0,
-        tolerancePercent
-      ).accepted
+      (contract?.version !== 3 &&
+        !verifiedDurationCheck(durationSeconds, null, 0, tolerancePercent).accepted) ||
+      references.some(
+        (reference) =>
+          !verifiedDurationCheck(durationSeconds, reference.seconds, 0, reference.tolerancePercent)
+            .accepted
+      )
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("runtime_outside_tolerance", "conflicting");
     if (contract?.audio && !audioLanguages.includes(languageTag(contract.audio.language)!))
-      throw new MediaProbeError();
+      throw new MediaProbeError(
+        audioLanguages.length ? "language_conflict" : "language_unknown",
+        audioLanguages.length ? "conflicting" : "missing"
+      );
+    const providerExpectation = sourceAudioExpectation(contract);
+    if (providerExpectation) {
+      if (
+        !sourceAudioEvidence ||
+        sourceAudioEvidence.provider !== providerExpectation.provider ||
+        sourceAudioEvidence.videoId !== providerExpectation.videoId ||
+        sourceAudioEvidence.mediaIdentity !== providerExpectation.mediaIdentity ||
+        sourceAudioEvidence.language !== providerExpectation.language
+      )
+        throw new MediaProbeError("source_evidence_mismatch", "missing");
+      // Independent provider evidence can fill absent tags, never contradict a
+      // known foreign track or relabel the probed track list as German.
+      if (audioLanguages.some((language) => language !== languageTag(sourceAudioEvidence.language)))
+        throw new MediaProbeError("language_conflict", "conflicting");
+    }
     if (
       contract?.resolution &&
       !video.some(
@@ -117,19 +171,31 @@ export function validateMediaProbe(
           stream.height === contract.resolution!.height
       )
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("rendition_unverified", "conflicting");
+    recordDecision("media", "media_verified", "proven");
     return {
       durationSeconds,
       video,
       audioLanguages,
+      ...(providerExpectation ? { sourceAudioEvidence } : {}),
+      ...(contract?.version === 3
+        ? {
+            durationChecks: references.map((reference) => ({
+              ...reference,
+              result: "passed" as const,
+            })),
+          }
+        : {}),
       expectedChecks: {
-        duration: contract?.duration ? "passed" : "unknown",
-        audio: contract?.audio ? "passed" : "unknown",
+        duration: references.length ? "passed" : "unknown",
+        audio: contract?.audio ? "passed" : providerExpectation ? "passed_provider" : "unknown",
         resolution: contract?.resolution ? "passed" : "unknown",
       },
     };
-  } catch {
-    throw new MediaProbeError();
+  } catch (error) {
+    throw error instanceof MediaProbeError
+      ? error
+      : new MediaProbeError("probe_invalid", "unavailable");
   }
 }
 
@@ -138,9 +204,12 @@ export async function probeJobMedia(
   filePath: string,
   jobDirectory: string,
   expected: MediaExpectations | null,
-  tolerancePercent: number
+  tolerancePercent: number,
+  sourceUrl?: string,
+  signal?: AbortSignal
 ): Promise<MediaProbeFacts> {
   try {
+    signal?.throwIfAborted();
     const file = path.resolve(filePath);
     const directory = path.resolve(jobDirectory);
     if (
@@ -148,7 +217,7 @@ export async function probeJobMedia(
       !path.isAbsolute(jobDirectory) ||
       path.dirname(file) !== directory
     )
-      throw new MediaProbeError();
+      throw new MediaProbeError("file_unsafe", "conflicting");
     const [stat, directoryStat, actualFile, actualDirectory] = await Promise.all([
       lstat(file),
       lstat(directory),
@@ -164,14 +233,31 @@ export async function probeJobMedia(
       actualFile !== file ||
       actualDirectory !== directory
     )
-      throw new MediaProbeError();
-    const binary =
-      process.env.PINGUFUNK_FFPROBE_PATH ||
-      path.join(process.cwd(), "ffmpeg", process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
-    if (!path.isAbsolute(binary)) throw new MediaProbeError();
-    const output = await readLocalProbe(binary, file);
+      throw new MediaProbeError("file_unsafe", "conflicting");
+    const binary = getFfprobePath();
+    if (!path.isAbsolute(binary)) throw new MediaProbeError("tool_unavailable", "unavailable");
+    const output = await readLocalProbe(binary, file, signal);
+    const sourceExpectation = sourceAudioExpectation(expected);
+    let proof: SourceAudioEvidence | undefined;
+    if (sourceExpectation) {
+      try {
+        proof = await verifySourceAudio(
+          sourceExpectation,
+          sourceUrl ?? "",
+          new HttpRequestBudget(1),
+          signal
+        );
+      } catch (error) {
+        const event = error instanceof DecisionFailure ? error.diagnostic : null;
+        throw new MediaProbeError(
+          event?.reason ?? "source_failed",
+          event?.evidence ?? "unavailable"
+        );
+      }
+    }
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);
+    signal?.throwIfAborted();
     if (
       !after.isFile() ||
       after.isSymbolicLink() ||
@@ -180,14 +266,24 @@ export async function probeJobMedia(
       after.size !== stat.size ||
       after.mtimeMs !== stat.mtimeMs
     )
-      throw new MediaProbeError();
-    return validateMediaProbe(JSON.parse(output), expected, tolerancePercent);
-  } catch {
-    throw new MediaProbeError();
+      throw new MediaProbeError("file_changed", "conflicting");
+    return validateMediaProbe(JSON.parse(output), expected, tolerancePercent, proof);
+  } catch (error) {
+    throw error instanceof MediaProbeError
+      ? error
+      : new MediaProbeError("probe_invalid", "unavailable");
   }
 }
 
-function readLocalProbe(binary: string, file: string): Promise<string> {
+/** Shared with read-only capability checks; this never installs a binary. */
+export function getFfprobePath(): string {
+  return (
+    process.env.PINGUFUNK_FFPROBE_PATH ||
+    path.join(process.cwd(), "ffmpeg", process.platform === "win32" ? "ffprobe.exe" : "ffprobe")
+  );
+}
+
+function readLocalProbe(binary: string, file: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       binary,
@@ -213,6 +309,7 @@ function readLocalProbe(binary: string, file: string): Promise<string> {
     let settled = false;
     let bytes = 0;
     let hasDiagnostics = false;
+    let terminating: DecisionReason | undefined;
     const chunks: Buffer[] = [];
     const killOwnedTree = () => {
       if (child.pid && process.platform !== "win32") {
@@ -231,30 +328,40 @@ function readLocalProbe(binary: string, file: string): Promise<string> {
         child.kill("SIGKILL");
       }
     };
-    const finish = (ok: boolean, terminate = false) => {
+    const finish = (ok: boolean, terminate = false, reason: DecisionReason = "probe_invalid") => {
       if (settled) return;
+      if (terminate) {
+        terminating = reason;
+        killOwnedTree();
+        return; // A kill request is not proof that the child has stopped writing.
+      }
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       if (!ok) {
-        if (terminate) killOwnedTree();
-        reject(new MediaProbeError());
+        reject(new MediaProbeError(reason));
       } else resolve(Buffer.concat(chunks).toString("utf8"));
     };
-    const timer = setTimeout(() => finish(false, true), 30_000);
+    const timer = setTimeout(() => finish(false, true, "tool_timeout"), 30_000);
+    const abort = () => finish(false, true);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
     child.stdout.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > 1024 * 1024 || chunks.length >= 8192) {
         finish(false, true);
         return;
       }
-      if (!settled) chunks.push(Buffer.from(chunk));
+      if (!settled && !terminating) chunks.push(Buffer.from(chunk));
     });
     child.stderr.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (chunk.length) hasDiagnostics = true;
       if (bytes > 1024 * 1024) finish(false, true);
     });
-    child.on("error", () => finish(false, true));
-    child.on("close", (code) => finish(code === 0 && !hasDiagnostics && bytes > 0));
+    child.on("error", () => finish(false, false, "tool_unavailable"));
+    child.on("close", (code) =>
+      finish(!terminating && code === 0 && !hasDiagnostics && bytes > 0, false, terminating)
+    );
   });
 }

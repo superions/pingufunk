@@ -1,6 +1,8 @@
 import { expect, it } from "vitest";
-import { unknownMediaExpectations } from "@/lib/media-expectations";
-import { validateMediaProbe } from "./media-probe";
+import { unknownMediaExpectations, unknownJobMediaExpectations } from "@/lib/media-expectations";
+import { validateMediaProbe, MediaProbeError } from "./media-probe";
+import { withDecisionDiagnostics } from "./decision-diagnostics";
+import { mediaSourceIdentity } from "@/services/source-audio";
 
 interface TestStream {
   codec_type: string;
@@ -24,6 +26,91 @@ const media = (): { format: { format_name: string; duration: string }; streams: 
     },
     { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 2 },
   ],
+});
+
+it("preserves a closed causal media reason instead of flattening it in the exception boundary", async () => {
+  const { report } = await withDecisionDiagnostics(async () => {
+    try {
+      validateMediaProbe(
+        media(),
+        { ...unknownMediaExpectations(), audio: { language: "de", provenance: "provider_audio" } },
+        10
+      );
+      throw new Error("must fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MediaProbeError);
+      expect((error as MediaProbeError).reason).toBe("language_unknown");
+      expect((error as Error).message).toBe("Local media validation failed");
+    }
+  });
+  expect(report.events).toContainEqual({
+    stage: "media",
+    reason: "language_unknown",
+    evidence: "missing",
+    count: 1,
+  });
+  const injected = new MediaProbeError("https://secret.invalid/token" as never, "private" as never);
+  expect(injected.reason).toBe("media_invalid");
+  expect(JSON.stringify(injected)).not.toMatch(/secret|token|private/);
+});
+
+it("checks both frozen v3 references independently and ignores later GUI/legacy tolerance", () => {
+  const expected = {
+    ...unknownJobMediaExpectations(),
+    mediaKind: "series" as const,
+    durations: {
+      source: {
+        seconds: 120,
+        provenance: "source_catalogue" as const,
+        tolerancePercent: 10 as const,
+      },
+      metadata: { seconds: 120, provenance: "episode_metadata" as const, tolerancePercent: 15 },
+    },
+  };
+  const probe = (duration: string) => ({ ...media(), format: { ...media().format, duration } });
+  expect(validateMediaProbe(probe("130"), expected, 0).durationChecks).toEqual([
+    { ...expected.durations.source, result: "passed" },
+    { ...expected.durations.metadata, result: "passed" },
+  ]);
+  expect(() => validateMediaProbe(probe("134"), expected, 25)).toThrow(); // Episode passes, asset fails.
+  expect(() =>
+    validateMediaProbe(
+      probe("122"),
+      {
+        ...expected,
+        durations: {
+          ...expected.durations,
+          metadata: { ...expected.durations.metadata, tolerancePercent: 0 },
+        },
+      },
+      25
+    )
+  ).toThrow(); // Asset passes, exact episode fails.
+});
+
+it("never applies the current series slider to a frozen v3 film or unknown source", () => {
+  for (const mediaKind of ["movie", "unknown"] as const) {
+    const expected = {
+      ...unknownJobMediaExpectations(),
+      mediaKind,
+      durations: {
+        source: {
+          seconds: 120,
+          provenance: "source_catalogue" as const,
+          tolerancePercent: 10 as const,
+        },
+        metadata: null,
+      },
+    };
+    expect(() =>
+      validateMediaProbe(
+        { ...media(), format: { ...media().format, duration: "134" } },
+        expected,
+        25
+      )
+    ).toThrow();
+    expect(validateMediaProbe(media(), expected, 0).expectedChecks.duration).toBe("passed");
+  }
 });
 
 it("allows a valid legacy or explicitly unknown-v1 file without claiming expected checks", () => {
@@ -126,3 +213,45 @@ it("rejects HTML, absent audio, cover-only video and invalid codecs", () => {
   invalid.streams[1] = { ...invalid.streams[1], codec_name: "unknown" };
   expect(() => validateMediaProbe(invalid, null, 10)).toThrow();
 });
+
+it.each(["arte_hbbtv", "ard_media"] as const)(
+  "accepts fresh %s proof with unknown tracks, never fabricating track tags",
+  (provider) => {
+    const proof = {
+      provider,
+      videoId:
+        provider === "ard_media"
+          ? Buffer.from("crid://example.invalid/synthetic/one").toString("base64url")
+          : "123456-001-A",
+      language: "de",
+      mediaIdentity: mediaSourceIdentity("https://fixture.akamaized.net/movie.mp4"),
+    };
+    const expected = {
+      ...unknownMediaExpectations(),
+      version: 2 as const,
+      audio: null,
+      sourceAudio: proof,
+      resolution: { width: 1280, height: 720, provenance: "provider_dimensions" as const },
+    };
+    const facts = validateMediaProbe(media(), expected, 10, proof);
+    expect(facts.audioLanguages).toEqual([]);
+    expect(facts.sourceAudioEvidence).toEqual(proof);
+    expect(facts.expectedChecks.audio).toBe("passed_provider");
+    expect(facts.expectedChecks.resolution).toBe("passed");
+    for (const dimensions of [
+      { width: 1920, height: 1080 },
+      { width: 1920, height: 720 },
+    ]) {
+      const wrong = media();
+      wrong.streams[0] = { ...wrong.streams[0], ...dimensions };
+      expect(() => validateMediaProbe(wrong, expected, 10, proof)).toThrow();
+    }
+    expect(() => validateMediaProbe(media(), expected, 10)).toThrow();
+    expect(() => validateMediaProbe(media(), expected, 10, { ...proof, language: "fr" })).toThrow();
+    const foreign = media();
+    foreign.streams[1].tags = { language: "fra" };
+    expect(() => validateMediaProbe(foreign, expected, 10, proof)).toThrow();
+    const noAudio = { ...media(), streams: [media().streams[0]] };
+    expect(() => validateMediaProbe(noAudio, expected, 10, proof)).toThrow();
+  }
+);

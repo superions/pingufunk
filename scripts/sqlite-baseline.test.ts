@@ -12,7 +12,9 @@ afterEach(() => {
   for (const dir of owned.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 const hash = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
-function fixture(variant: "bootstrap" | "migrated" | "seriesTopic" | "current") {
+function fixture(
+  variant: "bootstrap" | "migrated" | "seriesTopic" | "mediaValidation" | "current"
+) {
   const dir = mkdtempSync(join(tmpdir(), "pingufunk-baseline-"));
   owned.push(dir);
   const snapshotPath = join(dir, "snapshot.sqlite");
@@ -25,7 +27,11 @@ function fixture(variant: "bootstrap" | "migrated" | "seriesTopic" | "current") 
           (name) =>
             /^\d{14}_/.test(name) &&
             (variant === "current" ||
-              (variant === "seriesTopic" ? name < "20261001" : /^20260[17]/.test(name)))
+              (variant === "mediaValidation"
+                ? name < "20261008"
+                : variant === "seriesTopic"
+                  ? name < "20261001"
+                  : /^20260[17]/.test(name)))
         )
         .sort())
         db.exec(readFileSync(`prisma/legacy/sqlite/migrations/${name}/migration.sql`, "utf8"));
@@ -54,12 +60,16 @@ function fixture(variant: "bootstrap" | "migrated" | "seriesTopic" | "current") 
       BigInt("9007199254741115"),
       instant
     );
-    if (variant === "current") {
+    if (variant === "current" || variant === "mediaValidation") {
       db.prepare("UPDATE Download SET mediaExpectations=?,mediaValidation=? WHERE id='job'").run(
         '{"version":1,"duration":null,"audio":null,"resolution":null}',
         '{"version":1,"durationSeconds":2,"audioLanguages":[]}'
       );
     }
+    if (variant === "current")
+      db.prepare(
+        "INSERT INTO EnqueueIntent(id,payloadHash,downloadId,expiresAt) VALUES (?,?,?,?)"
+      ).run("synthetic-intent", "synthetic-hash", "job", instant);
     db.prepare(
       "INSERT INTO GeneratedRuleset(id,topic,tvdbId,showName,filters,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?)"
     ).run("rule", "Shared", 7, "Synthetic", '[{"regex":"\\\\d+"}]', instant, instant);
@@ -79,7 +89,7 @@ function fixture(variant: "bootstrap" | "migrated" | "seriesTopic" | "current") 
 
 // Real Prisma CLI startup is an integration cost, not a 5-second unit-test budget.
 // Keep all preservation assertions and the migrator's subprocess bounds intact.
-it.each(["bootstrap", "migrated", "seriesTopic", "current"] as const)(
+it.each(["bootstrap", "migrated", "seriesTopic", "mediaValidation", "current"] as const)(
   "transitions %s to a new ledger without modifying source and repeats read-only",
   (variant) => {
     const options = fixture(variant);
@@ -101,15 +111,30 @@ it.each(["bootstrap", "migrated", "seriesTopic", "current"] as const)(
         db
           .prepare("SELECT count(*) AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL")
           .get()?.n
-      ).toBe(BigInt(5));
+      ).toBe(BigInt(6));
       const facts = db.prepare("SELECT mediaExpectations,mediaValidation FROM Download").get();
       expect(facts?.mediaExpectations).toBe(
-        variant === "current"
+        variant === "current" || variant === "mediaValidation"
           ? '{"version":1,"duration":null,"audio":null,"resolution":null}'
           : null
       );
       expect(facts?.mediaValidation).toBe(
-        variant === "current" ? '{"version":1,"durationSeconds":2,"audioLanguages":[]}' : null
+        variant === "current" || variant === "mediaValidation"
+          ? '{"version":1,"durationSeconds":2,"audioLanguages":[]}'
+          : null
+      );
+      const receipts = db.prepare("SELECT * FROM EnqueueIntent").all();
+      expect(receipts).toEqual(
+        variant === "current"
+          ? [
+              {
+                id: "synthetic-intent",
+                payloadHash: "synthetic-hash",
+                downloadId: "job",
+                expiresAt: BigInt(1790769600123),
+              },
+            ]
+          : []
       );
       expect(
         db

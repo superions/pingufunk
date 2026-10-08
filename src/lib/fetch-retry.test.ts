@@ -124,10 +124,17 @@ it("cannot renew an expired operation deadline with a new request timeout", asyn
 
 it.each([
   [0, 10],
-  [11, 10],
+  [33, 10],
   [1, 0],
   [1, 15_001],
   [NaN, 10],
 ])("rejects invalid operation caps %s/%s", (attempts, timeout) => {
   expect(() => new HttpRequestBudget(attempts, timeout)).toThrow(FetchBudgetError);
+});
+
+it("keeps the default/RSS cap at ten and permits only the explicit 32-attempt foreground cap", () => {
+  expect(new HttpRequestBudget().remainingAttempts).toBe(10);
+  const foreground = new HttpRequestBudget(32);
+  for (let i = 0; i < 32; i++) foreground.takeAttempt();
+  expect(() => foreground.takeAttempt()).toThrow(FetchBudgetError);
 });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fsp from "fs/promises";
+import { WriteStream } from "fs";
 import { access, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "fs/promises";
 
 // Everything stays the real implementation; only `link` is wrapped in a
@@ -11,6 +12,8 @@ vi.mock("fs/promises", async (importOriginal) => {
 });
 import { tmpdir } from "os";
 import path from "path";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { jobDirectoryName } from "@/lib/download-paths";
 
 const {
@@ -53,6 +56,26 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// Transfer unit fixtures exercise file/media behavior with an injected lease.
+// Exclusivity is proved separately by real two-process SQLite/PG runtime tests.
+vi.mock("./worker-lease", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./worker-lease")>();
+  return {
+    ...original,
+    acquireWorkerLease: vi.fn(async () => ({
+      signal: new AbortController().signal,
+      check: () => {},
+      checkTransfer: () => {},
+      mutate: async (operation: (tx: unknown) => Promise<unknown>) =>
+        operation({
+          download: { update: downloadUpdate, updateMany: downloadUpdateMany },
+        }),
+      release: async () => {},
+      abort: () => {},
+    })),
+  };
+});
+
 vi.mock("./ffmpeg", () => {
   ffmpegModuleLoaded();
   return { convertMp4ToMkv };
@@ -64,7 +87,9 @@ vi.mock("./media-probe", async (importOriginal) => ({
   probeJobMedia,
 }));
 import { unknownMediaExpectations } from "@/lib/media-expectations";
-import { validateMediaProbe } from "./media-probe";
+import { mediaSourceIdentity } from "@/services/source-audio";
+import { validateMediaProbe, MediaProbeError } from "./media-probe";
+import type { TransferFailure } from "./download-failure";
 
 const basicFacts = {
   durationSeconds: 120,
@@ -111,6 +136,7 @@ const syntheticProbe = {
 };
 
 import { clearSettingsCache } from "@/lib/settings";
+import { unknownJobMediaExpectations } from "@/lib/media-expectations";
 import {
   processDownload,
   recoverInterruptedDownloads,
@@ -118,6 +144,297 @@ import {
 } from "./download-manager";
 
 let testRoot: string;
+
+function failedTransfer(): TransferFailure {
+  const call = downloadUpdate.mock.calls.find(([call]) => call.data.status === "failed")?.[0];
+  expect(call).toBeDefined();
+  expect(probeJobMedia).not.toHaveBeenCalled();
+  expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(false);
+  return JSON.parse(call.data.error.slice("Download failed: ".length));
+}
+
+it("persists the media probe's closed cause through the real worker failure path", async () => {
+  const job = progressiveJob();
+  downloadUpdate.mockImplementation(async ({ data }) => Object.assign(job, data));
+  probeJobMedia.mockRejectedValueOnce(
+    new MediaProbeError("runtime_outside_tolerance", "conflicting")
+  );
+  const { processDownload } = await import("./download-manager");
+  await processDownload(job.id);
+  const failed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "failed")?.[0];
+  expect(job.status).toBe("failed");
+  expect(JSON.parse(failed.data.error.slice("Local media validation failed: ".length))).toEqual({
+    version: 1,
+    stage: "media",
+    reason: "runtime_outside_tolerance",
+    evidence: "conflicting",
+  });
+  expect(failed.data.error).not.toContain(testRoot);
+});
+
+it("classifies a progress DB failure separately and redacts both history and logs", async () => {
+  const job = progressiveJob();
+  const secret = "secret-in-prisma-meta";
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  downloadUpdate.mockImplementation(async ({ data }) => {
+    if (data.downloadedBytes)
+      throw Object.assign(new Error(`postgresql://${secret}`), {
+        code: "P1008",
+        meta: { query: secret },
+      });
+    return {};
+  });
+  try {
+    await processDownload(job.id);
+    expect(failedTransfer()).toMatchObject({
+      phase: "progress",
+      reason: "exception",
+      code: "P1008",
+      receivedBytes: 4,
+      writtenBytes: 4,
+      expectedBytes: 4,
+      httpStatus: 200,
+    });
+    expect(JSON.stringify(downloadUpdate.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(errors.mock.calls)).not.toContain(secret);
+    const temp = path.join(
+      testRoot,
+      "incomplete",
+      jobDirectoryName(job.title, job.id),
+      job.title + ".mp4"
+    );
+    await expect(access(temp)).rejects.toThrow();
+  } finally {
+    errors.mockRestore();
+  }
+});
+
+it("retains the transfer diagnostic through a failed status write and later reconciliation", async () => {
+  const job = progressiveJob("db-reconnect-diagnostic");
+  let available = false;
+  downloadUpdate.mockImplementation(async ({ data }) => {
+    if (data.downloadedBytes || (!available && data.status === "failed"))
+      throw Object.assign(new Error("private DB details"), { code: "P1001" });
+    if (data.status) job.status = data.status;
+    return job;
+  });
+  downloadFindFirst.mockImplementation(async () => (job.status === "queued" ? job : null));
+  await expect(startDownloadProcessing()).rejects.toThrow("private DB details");
+  available = true;
+  await startDownloadProcessing();
+  expect(job.status).toBe("failed");
+  expect(failedTransfer()).toMatchObject({ phase: "progress", code: "P1001" });
+});
+
+it.each([503, 403])(
+  "records numeric HTTP %s without response text or credentials",
+  async (status) => {
+    const job = progressiveJob();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("private response body", {
+            status,
+            statusText: "private status text",
+          })
+      )
+    );
+    await processDownload(job.id);
+    expect(failedTransfer()).toMatchObject({
+      phase: "response",
+      reason: "http_status",
+      httpStatus: status,
+    });
+    expect(JSON.stringify(downloadUpdate.mock.calls)).not.toContain("private");
+  }
+);
+
+it("classifies an exclusive-open race and preserves the preexisting file", async () => {
+  const job = progressiveJob();
+  const file = path.join(
+    testRoot,
+    "incomplete",
+    jobDirectoryName(job.title, job.id),
+    `${job.title}.mp4`
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      await writeFile(file, "neighbor-content");
+      return new Response(new Uint8Array([1, 2, 3, 4]), { headers: { "content-length": "4" } });
+    })
+  );
+  await processDownload(job.id);
+  expect(failedTransfer()).toMatchObject({
+    phase: "file_open",
+    code: "EEXIST",
+    writtenBytes: 0,
+    receivedBytes: 0,
+  });
+  expect(await readFile(file, "utf8")).toBe("neighbor-content");
+});
+
+it("classifies an injected write error without exposing paths or treating it as a network error", async () => {
+  const job = progressiveJob();
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const write = vi.spyOn(WriteStream.prototype, "write").mockImplementationOnce((...args) => {
+    const callback = args.at(-1);
+    if (typeof callback !== "function") throw Error("Test requires the real write callback");
+    callback(
+      Object.assign(new Error("private-destination-path"), {
+        code: "ENOSPC",
+        path: "private-destination-path",
+      })
+    );
+    return false;
+  });
+  try {
+    await processDownload(job.id);
+    expect(failedTransfer()).toMatchObject({
+      phase: "file_write",
+      code: "ENOSPC",
+      receivedBytes: 4,
+      writtenBytes: 0,
+    });
+    expect(JSON.stringify(errors.mock.calls)).not.toContain("private-destination-path");
+    expect(JSON.stringify(downloadUpdate.mock.calls)).not.toContain("private-destination-path");
+    await expect(
+      access(
+        path.join(testRoot, "incomplete", jobDirectoryName(job.title, job.id), `${job.title}.mp4`)
+      )
+    ).rejects.toThrow();
+  } finally {
+    write.mockRestore();
+    errors.mockRestore();
+  }
+});
+
+it("does not mislabel a timeout during progress persistence as a network stall", async () => {
+  const job = progressiveJob();
+  let resume!: () => void;
+  downloadUpdate.mockImplementation(async ({ data }) => {
+    if (data.downloadedBytes)
+      await new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+    return {};
+  });
+  vi.useFakeTimers();
+  try {
+    const work = processDownload(job.id);
+    await vi.waitFor(() => expect(resume).toBeDefined());
+    await vi.advanceTimersByTimeAsync(60001);
+    resume();
+    await work;
+    expect(failedTransfer()).toMatchObject({
+      phase: "progress",
+      reason: "inactivity_timeout",
+      writtenBytes: 4,
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+describe("isolated native HTTP transfer reproduction", () => {
+  let server: Server;
+  const nativeFetch = globalThis.fetch;
+  let requests: string[];
+  beforeEach(async () => {
+    requests = [];
+    server = createServer((req, res) => {
+      requests.push(req.url!.split("?")[0]);
+      if (req.url!.startsWith("/reset")) {
+        res.writeHead(200, { "Content-Length": "4096" });
+        res.write(Buffer.alloc(1024, 1));
+        const timer = setTimeout(() => res.destroy(), 30);
+        res.once("close", () => clearTimeout(timer));
+      } else if (req.url!.startsWith("/redirect")) {
+        res.writeHead(302, { Location: "/private-target?token=synthetic-secret" });
+        res.end();
+      } else if (req.url!.startsWith("/gzip")) {
+        void import("node:zlib").then(({ gzipSync }) => {
+          const encoded = gzipSync(Buffer.alloc(1024, 2));
+          res.writeHead(200, {
+            "Content-Length": String(encoded.length),
+            "Content-Encoding": "gzip",
+          });
+          res.end(encoded);
+        });
+      } else {
+        res.writeHead(200, { "Content-Length": "1024" });
+        res.end(Buffer.alloc(1024, 3));
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  });
+  afterEach(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  });
+
+  it("reproduces a socket abort after real received bytes and removes only its partial file", async () => {
+    const job = progressiveJob();
+    job.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/reset.mp4?token=synthetic-secret`;
+    vi.stubGlobal("fetch", nativeFetch);
+    await processDownload(job.id);
+    expect(failedTransfer()).toMatchObject({
+      phase: "body_read",
+      code: "UND_ERR_SOCKET",
+      receivedBytes: 1024,
+      writtenBytes: 1024,
+      expectedBytes: 4096,
+      httpStatus: 200,
+    });
+    expect(JSON.stringify(downloadUpdate.mock.calls)).not.toContain("synthetic-secret");
+    expect(requests).toEqual(["/reset.mp4"]);
+    await expect(
+      access(
+        path.join(testRoot, "incomplete", jobDirectoryName(job.title, job.id), job.title + ".mp4")
+      )
+    ).rejects.toThrow();
+  });
+
+  it("rejects redirects without requesting their target or exposing Location", async () => {
+    const job = progressiveJob();
+    job.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/redirect.mp4`;
+    vi.stubGlobal("fetch", nativeFetch);
+    await processDownload(job.id);
+    expect(failedTransfer()).toMatchObject({
+      phase: "request",
+      code: "UNKNOWN",
+      reason: "exception",
+    });
+    expect(requests).toEqual(["/redirect.mp4"]);
+    expect(JSON.stringify(downloadUpdate.mock.calls)).not.toContain("synthetic-secret");
+  });
+
+  it.each(["valid", "gzip"])(
+    "finishes %s real HTTP bytes through the same worker/probe boundary",
+    async (source) => {
+      const job = progressiveJob();
+      job.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/${source}.mp4`;
+      vi.stubGlobal("fetch", nativeFetch);
+      await processDownload(job.id);
+      expect(probeJobMedia).toHaveBeenCalledTimes(1);
+      const completed = downloadUpdate.mock.calls.find(
+        ([call]) => call.data.status === "completed"
+      )?.[0];
+      expect(completed.data.size).toBe(1024);
+      const file = path.join(
+        testRoot,
+        job.category,
+        jobDirectoryName(job.title, job.id),
+        job.title + ".mp4"
+      );
+      expect(await readFile(file)).toEqual(Buffer.alloc(1024, source === "gzip" ? 2 : 3));
+      expect(requests).toEqual([`/${source}.mp4`]);
+    }
+  );
+});
 
 it("does not report legacy completion until the probe resolves and persists unknown checks", async () => {
   const job = progressiveJob();
@@ -135,7 +452,9 @@ it("does not report legacy completion until the probe resolves and persists unkn
     expect.stringContaining(jobDirectoryName(job.title, job.id)),
     expect.any(String),
     null,
-    10
+    10,
+    undefined,
+    expect.any(AbortSignal)
   );
   finishProbe(basicFacts);
   await work;
@@ -145,6 +464,41 @@ it("does not report legacy completion until the probe resolves and persists unkn
   expect(completed.filePath).toBe(
     path.join(testRoot, job.category, jobDirectoryName(job.title, job.id), `${job.title}.mp4`)
   );
+});
+
+it("passes v2 source URL to the media owner and persists separate evidence without invented track tags", async () => {
+  const url = "https://fixture.akamaized.net/movie.mp4";
+  const sourceAudio = {
+    provider: "arte_hbbtv" as const,
+    videoId: "123456-001-A",
+    language: "de",
+    mediaIdentity: mediaSourceIdentity(url),
+  };
+  const expected = { ...unknownMediaExpectations(), version: 2, sourceAudio };
+  const job = progressiveJob("v2-source", JSON.stringify(expected));
+  job.url = url;
+  probeJobMedia.mockResolvedValue({
+    ...basicFacts,
+    sourceAudioEvidence: sourceAudio,
+    expectedChecks: { ...basicFacts.expectedChecks, audio: "passed_provider" },
+  });
+  await processDownload(job.id);
+  expect(probeJobMedia).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expected,
+    10,
+    url,
+    expect.any(AbortSignal)
+  );
+  const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
+    .data;
+  expect(JSON.parse(completed.mediaValidation)).toMatchObject({
+    version: 2,
+    audioLanguages: [],
+    sourceAudioEvidence: sourceAudio,
+    expectedChecks: { audio: "passed_provider" },
+  });
 });
 
 it.each(["missing-audio", "html", "sample", "probe-timeout"])(
@@ -215,6 +569,15 @@ it.each(["3", "5", "4junk", "0"])(
     expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(
       false
     );
+    expect(failedTransfer()).toMatchObject({
+      reason:
+        length === "4junk"
+          ? "invalid_length"
+          : length === "5"
+            ? "length_mismatch"
+            : "length_overflow",
+      expectedBytes: length === "4junk" ? null : Number(length),
+    });
   }
 );
 
@@ -295,7 +658,9 @@ it("passes the persisted v1 expectations and configured P06 tolerance to the com
     expect.any(String),
     expect.any(String),
     expectations,
-    0
+    0,
+    undefined,
+    expect.any(AbortSignal)
   );
   const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
     .data;
@@ -304,6 +669,47 @@ it("passes the persisted v1 expectations and configured P06 tolerance to the com
     audio: "unknown",
     resolution: "unknown",
   });
+});
+
+it("uses frozen v3 references without reading or repairing current series policy", async () => {
+  const expectations = {
+    ...unknownJobMediaExpectations(),
+    mediaKind: "series" as const,
+    durations: {
+      source: {
+        seconds: 120,
+        provenance: "source_catalogue" as const,
+        tolerancePercent: 10 as const,
+      },
+      metadata: { seconds: 120, provenance: "episode_metadata" as const, tolerancePercent: 15 },
+    },
+  };
+  const job = progressiveJob("frozen-v3", JSON.stringify(expectations));
+  const lookup = configFindUnique.getMockImplementation()!;
+  configFindUnique.mockImplementation(async (args) =>
+    args.where.key === "matching.sonarr.tolerancePercent" ? { value: "invalid" } : lookup(args)
+  );
+  probeJobMedia.mockImplementation(async (_file, _dir, expected, tolerance) =>
+    validateMediaProbe(syntheticProbe, expected, tolerance)
+  );
+  await processDownload(job.id);
+  expect(
+    configFindUnique.mock.calls.some(
+      ([args]) => args.where.key === "matching.sonarr.tolerancePercent"
+    )
+  ).toBe(false);
+  expect(probeJobMedia).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expectations,
+    0,
+    undefined,
+    expect.any(AbortSignal)
+  );
+  expect(
+    downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")?.[0].data
+      .mediaValidation
+  ).toContain('"version":3');
 });
 
 it.each(["mkv", "mp4"])(
@@ -340,7 +746,8 @@ it.each(["mkv", "mp4"])(
       expect.stringContaining(`Rundschau.${container}`),
       expect.any(Function),
       container,
-      480
+      480,
+      expect.any(AbortSignal)
     );
     const finalPath = path.join(
       testRoot,
@@ -368,6 +775,7 @@ beforeEach(async () => {
   downloadFindUnique.mockReset();
   downloadUpdate.mockReset();
   downloadUpdateMany.mockReset();
+  downloadUpdateMany.mockResolvedValue({ count: 0 });
   convertMp4ToMkv.mockReset();
   probeJobMedia.mockReset().mockResolvedValue(basicFacts);
 
@@ -933,6 +1341,13 @@ it.each(["network error", "stall"])("removes partial files after a %s", async (f
     expect(downloadUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
     );
+    expect(failedTransfer()).toMatchObject({
+      phase: "body_read",
+      reason: failure === "stall" ? "inactivity_timeout" : "exception",
+      writtenBytes: 3,
+      receivedBytes: 3,
+      expectedBytes: 100,
+    });
   } finally {
     vi.useRealTimers();
   }

@@ -60,6 +60,59 @@ afterEach(() => {
 });
 
 describe("Sonarr read-only provider", () => {
+  it("does not let caller fields override the instance-verified series identity", async () => {
+    const session = (await openSonarrSession())!;
+    const result = await session.episodes(
+      {
+        sonarrId: 12,
+        tvdbId: 123,
+        title: "Unverified title",
+        aliases: ["Unverified alias"],
+        monitored: false,
+      },
+      new HttpRequestBudget()
+    );
+    expect(result.series).toEqual({
+      sonarrId: 12,
+      tvdbId: 123,
+      title: series.title,
+      monitored: true,
+    });
+  });
+  it("refreshes a stale inventory once for a newly added verified series without changing IDs", async () => {
+    let added = false;
+    fetchMock.mockImplementation(async (value: string) => {
+      const url = new URL(value);
+      if (url.pathname.endsWith("/system/status")) return Response.json({ version: "4.0.20.3014" });
+      if (url.pathname.endsWith("/series"))
+        return Response.json(url.search || added ? [series] : []);
+      if (url.pathname.endsWith("/episode")) return Response.json([episode]);
+      throw Error("Unexpected synthetic request");
+    });
+    const session = (await openSonarrSession())!;
+    expect(await session.inventory(new HttpRequestBudget())).toEqual([]);
+    added = true;
+    const budget = new HttpRequestBudget();
+    expect((await session.show(123, budget))?.series.sonarrId).toBe(12);
+    expect(budget.remainingAttempts).toBe(7);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/series"))).toHaveLength(2);
+  });
+  it("does not cache an absent series across its addition", async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ version: "4.0.20.3014" }))
+      .mockResolvedValueOnce(Response.json([]));
+    const session = (await openSonarrSession())!;
+    expect(await session.show(123)).toBeNull();
+    expect((await session.show(123))?.series.sonarrId).toBe(12);
+  });
+  it("merges verified aliases without inventing a German language or overwriting base metadata", async () => {
+    const supplemental = (await (await openSonarrSession())!.show(123))!;
+    supplemental.series.aliases = ["Deutscher Titel"];
+    expect(mergeSonarrShow(null, supplemental)).toMatchObject({
+      germanName: null,
+      aliases: [{ name: "Deutscher Titel", language: "und" }],
+    });
+  });
   it("does no HTTP or credential access when disabled", async () => {
     state.settings.set("integration.sonarr.enabled", "false");
     vi.stubEnv("PINGUFUNK_SONARR_API_KEY_FILE", "/missing/synthetic-file");
@@ -250,6 +303,20 @@ describe("non-destructive episode supplementation", () => {
     const result = mergeSonarrShow(base, show)!;
     expect(result.episodes).toEqual(base.episodes);
     expect(result.sonarrBlockedCoordinates).toEqual(["1:1"]);
+  });
+
+  it("treats a placeholder as missing title evidence without replacing base metadata", async () => {
+    const show = (await (await openSonarrSession())!.show(123))!;
+    show.episodes[0].seasonNumber = 1;
+    show.episodes[0].episodeNumber = 1;
+    show.episodes[0].title = "TBA";
+    show.episodes[0].aired = base.episodes[0].aired;
+    const result = mergeSonarrShow(base, show)!;
+    expect(result.episodes[0]).toBe(base.episodes[0]);
+    expect(result.sonarrBlockedCoordinates).toEqual([]);
+    expect(result.sonarrVerifiedCoordinates).toEqual(["1:1"]);
+    show.episodes[0].aired = new Date("2027-01-01T12:00:00Z");
+    expect(mergeSonarrShow(base, show)!.sonarrBlockedCoordinates).toEqual(["1:1"]);
   });
 
   it("permits a fully verified Sonarr-only show and rejects mismatched base identity", async () => {

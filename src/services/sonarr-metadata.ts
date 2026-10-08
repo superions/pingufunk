@@ -12,6 +12,15 @@ const seriesSchema = z.object({
   tvdbId: positiveId,
   title: z.string().trim().min(1),
   monitored: z.boolean().nullish(),
+  alternateTitles: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(1024),
+        seasonNumber: z.number().int().min(-1).max(2_147_483_647),
+      })
+    )
+    .max(256)
+    .nullish(),
 });
 const episodeSchema = z.object({
   id: positiveId,
@@ -28,6 +37,8 @@ export interface SonarrSeriesMetadata {
   tvdbId: number;
   title: string;
   monitored: boolean;
+  /** Only series-wide aliases; season-scoped scene titles are not global identities. */
+  aliases?: string[];
 }
 
 export interface SonarrEpisodeMetadata {
@@ -65,6 +76,17 @@ export function parseSonarrSeries(payload: unknown): SonarrSeriesMetadata[] {
       tvdbId: series.tvdbId,
       title: series.title,
       monitored: series.monitored === true,
+      ...(series.alternateTitles
+        ? {
+            aliases: [
+              ...new Set(
+                series.alternateTitles
+                  .filter((alias) => alias.seasonNumber === -1)
+                  .map((alias) => alias.title)
+              ),
+            ],
+          }
+        : {}),
     };
   });
 }

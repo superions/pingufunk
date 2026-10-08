@@ -1,15 +1,15 @@
 import { LRUCache } from "lru-cache";
 import { prisma } from "@/lib/db";
 import { createHash } from "node:crypto";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type CacheValue = Record<string, any>;
+import { productSettingsContext } from "./product-settings-context";
+import { SETTING_DEFINITIONS } from "./settings-schema";
+import type { TvdbData, TmdbMovieData, Ruleset } from "@/types";
 
 // Default TTL values (in seconds)
-const DEFAULT_SEARCH_TTL = 3600; // 1 hour
-const DEFAULT_METADATA_TTL = 86400; // 24 hours
-const MAX_SEARCH_TTL = 86400;
-const MAX_METADATA_TTL = 604800;
+const DEFAULT_SEARCH_TTL = Number(SETTING_DEFINITIONS["cache.ttl.search"].defaultValue);
+const DEFAULT_METADATA_TTL = Number(SETTING_DEFINITIONS["cache.ttl.metadata"].defaultValue);
+const MAX_SEARCH_TTL = SETTING_DEFINITIONS["cache.ttl.search"].max!;
+const MAX_METADATA_TTL = SETTING_DEFINITIONS["cache.ttl.metadata"].max!;
 
 function boundedTTL(value: string | undefined, fallback: number, maximum: number): number {
   if (value === undefined) return fallback;
@@ -58,10 +58,14 @@ async function fetchTTLSettings(): Promise<{ searchTTL: number; metadataTTL: num
 
 // Synchronous TTL getters (use cached values)
 export function getSearchTTL(): number {
+  const snapshot = productSettingsContext.getStore();
+  if (snapshot) return Number(snapshot.values["cache.ttl.search"]);
   return cachedSearchTTL ?? DEFAULT_SEARCH_TTL;
 }
 
 export function getMetadataTTL(): number {
+  const snapshot = productSettingsContext.getStore();
+  if (snapshot) return Number(snapshot.values["cache.ttl.metadata"]);
   return cachedMetadataTTL ?? DEFAULT_METADATA_TTL;
 }
 
@@ -80,21 +84,21 @@ export function clearTTLCache(): void {
 }
 
 // Cache with custom TTL stored per entry
-interface CacheEntry {
-  value: CacheValue;
+interface CacheEntry<T> {
+  value: T;
   expiresAt: number;
 }
 
-class DynamicTTLCache {
-  private cache: LRUCache<string, CacheEntry>;
+class DynamicTTLCache<T> {
+  private cache: LRUCache<string, CacheEntry<T>>;
   private getTTL: () => number;
 
   constructor(max: number, getTTL: () => number) {
-    this.cache = new LRUCache<string, CacheEntry>({ max });
+    this.cache = new LRUCache<string, CacheEntry<T>>({ max });
     this.getTTL = getTTL;
   }
 
-  get(key: string): CacheValue | undefined {
+  get(key: string): T | undefined {
     const entry = this.cache.get(key);
     if (!entry) return undefined;
 
@@ -107,7 +111,8 @@ class DynamicTTLCache {
     return entry.value;
   }
 
-  set(key: string, value: CacheValue): void {
+  set(key: string, value: T): void {
+    if (productSettingsContext.getStore()?.isCurrent() === false) return;
     const ttlMs = this.getTTL() * 1000;
     if (ttlMs <= 0) {
       this.cache.delete(key);
@@ -128,11 +133,42 @@ class DynamicTTLCache {
   }
 }
 
-// Cache for Mediathek API results (configurable TTL)
-export const mediathekCache = new DynamicTTLCache(500, getSearchTTL);
+/** Only a successfully empty catalogue window may outlive its request (at most 15s).
+ * Positive rows include expiring media URLs and adapter proof; never reuse them
+ * as current source evidence. Metadata identity keeps its separate TTL owner.
+ */
+class EmptyCatalogueCache {
+  private entries = new LRUCache<string, number>({ max: 128 });
+  get(key: string): { results: [] } | undefined {
+    const until = this.entries.get(key);
+    if (until === undefined) return undefined;
+    if (Date.now() >= until) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    return { results: [] };
+  }
+  set(key: string, value: { results: import("@/types").ApiResultItem[] }): void {
+    if (productSettingsContext.getStore()?.isCurrent() === false) return;
+    if (!Array.isArray(value.results) || value.results.length !== 0) return;
+    const ttl = Math.min(getSearchTTL(), 15) * 1000;
+    if (ttl <= 0) {
+      this.entries.delete(key);
+      return;
+    }
+    this.entries.set(key, Date.now() + ttl);
+  }
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
+  clear(): void {
+    this.entries.clear();
+  }
+}
+export const mediathekCache = new EmptyCatalogueCache();
 
-// Cache for TVDB data (configurable TTL)
-export const tvdbCache = new DynamicTTLCache(1000, getMetadataTTL);
+// Shared bounded metadata storage; readers narrow the series/film union before use.
+export const tvdbCache = new DynamicTTLCache<TvdbData | TmdbMovieData>(1000, getMetadataTTL);
 
 // Only definitive provider misses belong here. Authentication/network failures
 // remain retryable and never become an empty-success cache entry.
@@ -196,7 +232,7 @@ export function clearMetadataCaches(): void {
 }
 
 // Cache for rulesets (1 hour TTL - not configurable)
-export const rulesetsCache = new LRUCache<string, CacheValue>({
+export const rulesetsCache = new LRUCache<string, Ruleset[]>({
   max: 10,
   ttl: 60 * 60 * 1000, // 1 hour
 });

@@ -1,16 +1,27 @@
 # Pingufunk PostgreSQL: Migrations-Runbook (Entwicklungsstand)
 
-Stand: 01.10.2026. Dies ist ein **noch nicht produktiv freigegebenes** Runbook
-für P11.3–P11.8. Die Befehle für Snapshot, Import, Verifikation und Sequences
-entsprechen den implementierten CLI-Einstiegen im `migrator`-Image. Sie wurden
-mit synthetischen Daten gegen disposable PostgreSQL 17 erprobt, aber **nicht**
-gegen eine konkrete produktive Netz-/DB-Topologie. P10.2 muss bei PG-Wahl die
-unten benannten Betriebswerte, Image-Digests, Rolle und Rollbacks konkret
-einsetzen; P10.3–P10.7
-brauchen jeweils ihre eigene Freigabe. Bis dahin: kein Deployment, keine echte
-SQLite-Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
+Stand: 04.10.2026. Dieses portable Runbook für P11.3–P11.8 beschreibt die
+implementierten CLI-Einstiege im `migrator`-Image. Synthetische Proben und ein
+separat freigegebener produktiver Cutover einschließlich Maintenancepause,
+ausdrücklicher Writerfreigabe und Restart sind abgenommen; der konkrete
+Abnahmestatus steht ausschließlich in P10.2–P10.5, private Betriebswerte im
+privaten Runbook. Die Beispiele unten bleiben Platzhalter, keine universellen
+Produktionsbefehle. P10.2 muss für jede weitere Installation die Betriebswerte,
+Image-Identitäten, Rollen und Rollbacks konkret einsetzen; P10.3–P10.7 brauchen
+ihre jeweiligen Freigaben. Ohne diese: kein Deployment, keine echte SQLite-
+Quelle öffnen und keine produktive PostgreSQL-Datenbank beschreiben.
 
 ## Haltelinien vor jeder Ausführung
+
+Transportnachtrag 03.10.2026: TLS ist keine zwingende Infrastrukturvoraussetzung.
+App-, DDL- und Import-Secret wählen konsistent `sslmode=require` (TLS) oder
+`sslmode=disable` (ausdrücklich unverschlüsselt). Ohne Parameter verlangt der
+Migrationsgate TLS; `prefer` ist kein zulässiger Cutovermodus. Kein automatischer
+Fallback. Der CLI-Preflight löst auch `DATABASE_URL_FILE` auf; Vorbereitung,
+Import, Verify und Sequences prüfen dieselbe tatsächliche Transportwahl.
+Identität, Berechtigungen, Integrity, Datenvergleich und Rollback bleiben Pflicht.
+Die folgenden historischen TLS-Proben bleiben gültige TLS-Abnahmen; ergänzende
+Klartext-CLI-Proben sind im regulären disposable PG-Harness enthalten.
 
 1. Tatsächliche Quelle, Dateisystem, Journal-/WAL-/SHM-Status, Tabellenstand,
    Datenmenge, SQLite-Image-Digest und Backupablage belegen. Quell-DB nicht

@@ -6,8 +6,8 @@ services:
     environment:
       - TZ=Europe/Berlin
       - TVDB_API_KEY=${TVDB_API_KEY:-} # Optional metadata account
-      - DOWNLOAD_FOLDER_PATH=/downloads
-      - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads/completed # Path mapping for Sonarr/Radarr
+      - DOWNLOAD_FOLDER_PATH=/app/downloads
+      - DOWNLOAD_FOLDER_PATH_MAPPING=/downloads # Same bind mount in Sonarr/Radarr
       - DATABASE_URL=file:/app/prisma/data/rundfunkarr.db
       - PINGUFUNK_PUBLIC_URL=${PINGUFUNK_PUBLIC_URL:-}
     volumes:
@@ -17,7 +17,7 @@ services:
       - "6767:6767"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6767/api/download?mode=queue"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6767/api/health?mode=ready"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -65,11 +65,14 @@ for provider in sqlite postgresql; do
     --entrypoint /bin/sh "$RUNNER_IMAGE" -ec '
       mkdir -p /app/public/pingufunk-media-qa
       ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=25 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/valid.mp4
+      ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=1 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 10 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/slow-mux.mp4
+      ffmpeg -y -v error -f lavfi -i color=size=1280x720:rate=1 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/720p.mp4
       ffmpeg -y -v error -i /app/public/pingufunk-media-qa/valid.mp4 -an -c:v copy /app/public/pingufunk-media-qa/no-audio.mp4
       ffmpeg -y -v error -i /app/public/pingufunk-media-qa/valid.mp4 -c copy -hls_time 1 -hls_list_size 0 /app/public/pingufunk-media-qa/stream.m3u8
       node -e '\''require("node:fs").writeFileSync("/app/public/pingufunk-media-qa/invalid.mp4","<!doctype html><title>Synthetic error</title>")'\''
       node -e '\''const fs=require("node:fs");const file=fs.readFileSync("/app/public/pingufunk-media-qa/valid.mp4");fs.writeFileSync("/app/public/pingufunk-media-qa/truncated.mp4",file.subarray(0,Math.floor(file.length/2)))'\''
       node -e '\''require("node:fs").writeFileSync("/app/ffmpeg/ffprobe-qa","#!/bin/sh\nif [ -f /tmp/pause-next-probe ]; then mv /tmp/pause-next-probe /tmp/media-probe-ready; sleep 8; fi\nexec /usr/bin/ffprobe \"$@\"\n",{mode:0o755})'\''
+      node -e '\''const fs=require("node:fs"),p="/app/ffmpeg/ffmpeg",s="#!/bin/sh\nif [ -f /tmp/slow-next-mux ]; then mv /tmp/slow-next-mux /tmp/media-mux-ready; exec /usr/bin/ffmpeg -re \"$@\"; fi\nexec /usr/bin/ffmpeg \"$@\"\n";if(fs.lstatSync(p).isSymbolicLink()){if(fs.readlinkSync(p)!=="/usr/bin/ffmpeg")throw Error("Unexpected fixture tool");fs.unlinkSync(p);fs.writeFileSync(p,s,{mode:0o755,flag:"wx"});}else if(!fs.lstatSync(p).isFile()||fs.readFileSync(p,"utf8")!==s)throw Error("Unexpected fixture wrapper")'\''
       exec /entrypoint.sh node server.js
     ' >/dev/null
   APP_STARTED=1

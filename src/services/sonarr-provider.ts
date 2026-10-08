@@ -1,4 +1,5 @@
 import { LRUCache } from "lru-cache";
+import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { getSetting } from "@/lib/settings";
 import { externalCredential } from "@/lib/credential-settings";
 import { cacheContextEpoch, coalesceMetadata, metadataCacheKey } from "@/lib/cache";
@@ -75,10 +76,12 @@ export class SonarrSession {
       const operation = coalesceMetadata(key, async () => {
         const loaded = await load();
         this.assertCurrent(budget);
-        metadata.set(key, {
-          value: structuredClone(loaded),
-          expiresAt: Date.now() + METADATA_TTL_MS,
-        });
+        // Newly added series must not inherit a ten-minute definitive miss.
+        if (loaded !== null)
+          metadata.set(key, {
+            value: structuredClone(loaded),
+            expiresAt: Date.now() + METADATA_TTL_MS,
+          });
         return loaded;
       });
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -104,8 +107,9 @@ export class SonarrSession {
     }
   }
 
-  async inventory(budget: HttpRequestBudget): Promise<SonarrSeriesMetadata[]> {
+  async inventory(budget: HttpRequestBudget, refresh = false): Promise<SonarrSeriesMetadata[]> {
     await this.version(budget);
+    if (refresh) metadata.delete(metadataCacheKey("sonarr", "inventory", this.context));
     return this.cached("inventory", budget, async () =>
       parseSonarrSeries(await this.client("api/v3/series", undefined, { requestBudget: budget }))
     );
@@ -137,10 +141,17 @@ export class SonarrSession {
 
   async episodes(series: SonarrSeriesMetadata, budget: HttpRequestBudget): Promise<SonarrShow> {
     // Only accept a series verified by this instance, not a caller-supplied local ID.
-    const inventory = await this.inventory(budget);
-    const verified = inventory.find((item) => item.tvdbId === series.tvdbId);
+    let inventory = await this.inventory(budget);
+    let verified = inventory.find((item) => item.tvdbId === series.tvdbId);
+    // A fresh filtered lookup can see an addition before the ten-minute RSS
+    // inventory. Refresh one missing identity, sharing the caller's budget.
+    if (!verified) {
+      inventory = await this.inventory(budget, true);
+      verified = inventory.find((item) => item.tvdbId === series.tvdbId);
+    }
     if (!verified || verified.sonarrId !== series.sonarrId) throw new SonarrUnavailableError();
     return this.cached(["episodes", verified.sonarrId, verified.tvdbId], budget, async () => ({
+      // Only instance inventory may supply title/aliases, not caller fields.
       series: verified,
       episodes: parseSonarrEpisodes(
         await this.client(
@@ -173,7 +184,9 @@ export function mergeSonarrShow(
     const original = existing.get(key);
     if (original) {
       if (
-        original.name.trim().normalize("NFC") !== episode.title.trim().normalize("NFC") ||
+        (!isPlaceholderEpisodeTitle(original.name, original.episodeNumber) &&
+          !isPlaceholderEpisodeTitle(episode.title, episode.episodeNumber) &&
+          original.name.trim().normalize("NFC") !== episode.title.trim().normalize("NFC")) ||
         (original.aired &&
           episode.aired &&
           new Date(original.aired).toISOString().slice(0, 10) !==
@@ -198,7 +211,14 @@ export function mergeSonarrShow(
       germanName: null,
       aliases: [],
     }),
+    aliases: [
+      ...(base?.aliases ?? []),
+      ...(supplemental.series.aliases ?? [])
+        .filter((name) => !base?.aliases.some((alias) => alias.name === name))
+        .map((name) => ({ name, language: "und" })),
+    ],
     episodes,
+    sonarrVerifiedCoordinates: supplemental.episodes.map(coordinate),
     sonarrBlockedCoordinates: [...blocked],
   };
 }

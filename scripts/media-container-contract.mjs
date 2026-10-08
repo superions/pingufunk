@@ -1,11 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseStringPromise } from "xml2js";
+import { randomUUID } from "node:crypto";
 
 const container = process.argv[2];
 const owner = process.env.PINGUFUNK_MEDIA_QA_OWNER;
 function run(args, input) {
-  const result = spawnSync("docker", args, { input, encoding: "utf8", timeout: 10_000 });
+  const result = spawnSync("docker", args, {
+    input,
+    encoding: "utf8",
+    timeout: args[0] === "stop" ? 20_000 : 10_000,
+  });
   if (result.error || result.status !== 0) throw new Error("Disposable media command failed");
   return args[0] === "logs" ? result.stdout + result.stderr : result.stdout;
 }
@@ -21,7 +26,7 @@ if (
   ]).trim() !== owner
 )
   throw new Error("Exact harness-owned media application required");
-function request(endpoint, body) {
+function request(endpoint, body, enqueueKey) {
   const args = [
     "exec",
     ...(body === undefined ? [] : ["-i"]),
@@ -32,12 +37,13 @@ function request(endpoint, body) {
     "5",
   ];
   if (body !== undefined) args.push("-X", "POST", "--data-binary", "@-");
+  if (enqueueKey !== undefined) args.push("-H", `X-Pingufunk-Enqueue-Key: ${enqueueKey}`);
   return JSON.parse(run([...args, `http://localhost:6767/${endpoint}`], body));
 }
 function rawRequest(url) {
   return run(["exec", container, "curl", "-fsS", "--max-time", "5", url]);
 }
-function nzb(filename, duration) {
+function nzb(filename, duration, resolution = null) {
   const expected =
     duration === undefined
       ? null
@@ -46,8 +52,12 @@ function nzb(filename, duration) {
           duration:
             duration === null ? null : { seconds: duration, provenance: "source_catalogue" },
           audio: null,
-          resolution: null,
+          resolution:
+            resolution === null ? null : { ...resolution, provenance: "provider_dimensions" },
         };
+  return expectedNzb(filename, expected);
+}
+function expectedNzb(filename, expected) {
   const title = `Synthetic.${filename.replaceAll(".", "-")}`;
   const url = `http://127.0.0.1:6767/pingufunk-media-qa/${filename}`;
   return {
@@ -61,6 +71,17 @@ function readJob(id) {
   return JSON.parse(run(["exec", container, "node", "-e", code, id]));
 }
 const terminalSnapshots = new Map();
+function assertCompletedDiagnosis(id, job) {
+  const diagnosis = request(`api/downloads/${id}/diagnostics`);
+  if (
+    diagnosis.job !== "completed" ||
+    diagnosis.file !== "verified_present" ||
+    diagnosis.import.state !== "unknown" ||
+    diagnosis.import.reason !== "integration_disabled" ||
+    JSON.stringify(diagnosis).includes(job.filePath)
+  )
+    throw new Error("Closed job diagnosis lost physical evidence or invented an Arr import");
+}
 request(
   "api/settings",
   JSON.stringify({
@@ -70,6 +91,7 @@ request(
   })
 );
 let previousGuid;
+let keyedReceipt;
 for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   const rss = rawRequest(`http://localhost:6767/${endpoint}?t=search&q=Synthetic&limit=1`);
   // Parse the actual producer with the same XML library used by this product;
@@ -93,10 +115,16 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   )
     throw new Error("Unexpected source enclosure");
   const body = rawRequest(nzbUrl.href);
-  const added = request("api/download?mode=addfile&cat=sonarr", body);
+  const key = endpoint === "api/newznab" ? `${randomUUID()}:${Date.now()}` : undefined;
+  const added = request("api/download?mode=addfile&cat=sonarr", body, key);
   if (added.status !== true || added.nzo_ids.length !== 1)
     throw new Error("RSS NZB enqueue failed");
   const id = added.nzo_ids[0];
+  if (key) {
+    keyedReceipt = { key, body, id };
+    if (request("api?mode=addfile&cat=sonarr", body, key).nzo_ids[0] !== id)
+      throw new Error("Lost-response acknowledgement created another transfer");
+  }
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline && !["completed", "failed"].includes(readJob(id).status))
     await delay(200);
@@ -106,9 +134,14 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   const history = request("api?mode=history").history.slots.find((slot) => slot.nzo_id === id);
   if (
     row.status !== "completed" ||
-    expected?.duration?.seconds !== 2 ||
-    expected.duration.provenance !== "source_catalogue" ||
+    expected?.version !== 3 ||
+    expected.mediaKind !== "unknown" ||
+    expected.durations.source?.seconds !== 2 ||
+    expected.durations.source.provenance !== "source_catalogue" ||
+    expected.durations.source.tolerancePercent !== 10 ||
+    expected.durations.metadata !== null ||
     expected.audio !== null ||
+    facts?.version !== 3 ||
     facts?.expectedChecks.duration !== "passed" ||
     history?.status !== "Completed" ||
     history.storage !== row.filePath.slice(0, row.filePath.lastIndexOf("/"))
@@ -117,7 +150,69 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   terminalSnapshots.set(id, row);
 }
 console.log("Both actual Newznab paths to NZB, queue, verified file and SAB history passed");
-for (const [filename, duration, status, convert] of [
+
+// Saved v3 references, not the currently configured legacy series tolerance,
+// own completion. Keep the v1/legacy matrix below unchanged.
+request("api/settings", JSON.stringify({ "matching.sonarr.tolerancePercent": "0" }));
+for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
+  ["movie", 2, null, "completed", "valid.mp4"],
+  ["series", 2, 2, "completed", "valid.mp4"],
+  ["unknown", 2, null, "completed", "valid.mp4"],
+  ["unknown", 2, null, "completed", "stream.m3u8"],
+  ["series", 2, 120, "failed", "valid.mp4"],
+  ["series", 120, 2, "failed", "valid.mp4"],
+  ["movie", 120, null, "failed", "valid.mp4"],
+]) {
+  const expected = {
+    version: 3,
+    mediaKind,
+    durations: {
+      source: { seconds: sourceSeconds, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata:
+        metadataSeconds === null
+          ? null
+          : { seconds: metadataSeconds, provenance: "episode_metadata", tolerancePercent: 15 },
+    },
+    audio: null,
+    sourceAudio: null,
+    resolution: null,
+  };
+  const added = request("api?mode=addfile&cat=sonarr", expectedNzb(filename, expected).body);
+  if (added.status !== true || added.nzo_ids.length !== 1)
+    throw new Error("Frozen fixture enqueue failed");
+  const id = added.nzo_ids[0];
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline && !["completed", "failed"].includes(readJob(id).status))
+    await delay(200);
+  const job = readJob(id);
+  if (job.status !== status || job.expectations !== JSON.stringify(expected))
+    throw new Error("Frozen media contract mismatch");
+  const facts = JSON.parse(job.validation ?? "null");
+  if (status === "completed") {
+    assertCompletedDiagnosis(id, job);
+    const references = Object.values(expected.durations).filter(Boolean);
+    if (
+      facts?.version !== 3 ||
+      JSON.stringify(facts.durationChecks) !==
+        JSON.stringify(references.map((reference) => ({ ...reference, result: "passed" })))
+    )
+      throw new Error("Frozen duration references were not independently confirmed");
+    const physical = run([
+      "exec",
+      container,
+      "node",
+      "-e",
+      'const fs=require("node:fs");const s=fs.lstatSync(process.argv[1]);console.log(s.isFile()&&!s.isSymbolicLink()&&s.size>0)',
+      job.filePath,
+    ]).trim();
+    if (physical !== "true") throw new Error("Frozen completion has no physical file");
+  } else if (facts !== null) throw new Error("Rejected frozen reference exposed completion facts");
+  terminalSnapshots.set(id, job);
+}
+request("api/settings", JSON.stringify({ "matching.sonarr.tolerancePercent": "10" }));
+console.log("Frozen v3 film/series/unknown references, HLS and independent negative gates passed");
+
+for (const [filename, duration, status, convert, resolution] of [
   ["valid.mp4", undefined, "completed", false],
   ["valid.mp4", null, "completed", false],
   ["valid.mp4", 2, "completed", false],
@@ -128,9 +223,12 @@ for (const [filename, duration, status, convert] of [
   ["stream.m3u8", 2, "completed", false],
   ["stream.m3u8", 2, "completed", true],
   ["valid.mp4", 2, "completed", true],
+  ["720p.mp4", 2, "completed", false, { width: 1280, height: 720 }],
+  ["720p.mp4", 2, "failed", false, { width: 1920, height: 1080 }],
+  ["720p.mp4", 2, "failed", false, { width: 1920, height: 720 }],
 ]) {
   request("api/settings", JSON.stringify({ key: "download.convertToMkv", value: String(convert) }));
-  const fixture = nzb(filename, duration);
+  const fixture = nzb(filename, duration, resolution);
   const added = request("api?mode=addfile&cat=sonarr", fixture.body);
   if (added.status !== true || added.nzo_ids.length !== 1)
     throw new Error("Synthetic enqueue failed");
@@ -158,6 +256,7 @@ for (const [filename, duration, status, convert] of [
     throw new Error("SAB consumer status mismatch");
   if (status === "completed") {
     const facts = JSON.parse(job.validation);
+    assertCompletedDiagnosis(id, job);
     if (
       facts.version !== 1 ||
       !Number.isFinite(facts.durationSeconds) ||
@@ -166,12 +265,20 @@ for (const [filename, duration, status, convert] of [
       facts.audioLanguages.length !== 0 ||
       facts.expectedChecks.duration !== (duration == null ? "unknown" : "passed") ||
       facts.expectedChecks.audio !== "unknown" ||
-      facts.expectedChecks.resolution !== "unknown" ||
+      facts.expectedChecks.resolution !== (resolution ? "passed" : "unknown") ||
+      (resolution &&
+        !facts.video.some(
+          (video) => video.width === resolution.width && video.height === resolution.height
+        )) ||
       !job.filePath ||
       history.storage !== job.filePath.slice(0, job.filePath.lastIndexOf("/"))
     )
       throw new Error("Synthetic completed facts/import path mismatch");
-  } else if (job.validation !== null || history.fail_message === "") {
+  } else if (
+    job.validation !== null ||
+    history.fail_message === "" ||
+    (resolution && job.filePath !== null)
+  ) {
     throw new Error("Failed media exposed validation success");
   }
   terminalSnapshots.set(id, job);
@@ -192,6 +299,27 @@ for (const [id, before] of terminalSnapshots) {
   if (JSON.stringify(readJob(id)) !== JSON.stringify(before))
     throw new Error("Restart changed persisted terminal media facts");
 }
+if (!keyedReceipt) throw new Error("Keyed enqueue fixture missing");
+const totalJobs = () =>
+  request("api?mode=history").history.noofslots_total +
+  request("api?mode=queue").queue.noofslots_total;
+const beforeRepeat = totalJobs();
+for (const endpoint of ["api", "api/download"]) {
+  if (
+    request(`${endpoint}?mode=addfile&cat=sonarr`, keyedReceipt.body, keyedReceipt.key)
+      .nzo_ids[0] !== keyedReceipt.id
+  )
+    throw new Error("Container restart lost durable enqueue receipt");
+}
+if (
+  totalJobs() !== beforeRepeat ||
+  JSON.stringify(readJob(keyedReceipt.id)) !==
+    JSON.stringify(terminalSnapshots.get(keyedReceipt.id))
+)
+  throw new Error("Acknowledgement changed completed job/history");
+console.log(
+  "Durable keyed acknowledgement survived real container restart without another transfer"
+);
 console.log(
   "Real progressive/mux/HLS probe, negative media, queue continuation and SAB history passed"
 );
@@ -246,6 +374,83 @@ if (
 )
   throw new Error("Retry lost expectations or bypassed the failed-media gate");
 console.log("Both SAB aliases, real isolated completed-file removal and re-probed retry passed");
+
+// Stop the actual writing Next process during an actual FFmpeg stream-copy mux,
+// not merely a mocked kill call. The fixture wrapper slows only this next mux.
+request("api/settings", JSON.stringify({ "download.convertToMkv": "true" }));
+run([
+  "exec",
+  container,
+  "node",
+  "-e",
+  'const fs=require("node:fs");fs.writeFileSync("/tmp/slow-next-mux","synthetic",{flag:"wx"});fs.chownSync("/tmp/slow-next-mux",Number(process.env.PUID),Number(process.env.PGID));',
+]);
+const shutdownId = request("api?mode=addfile&cat=sonarr", nzb("slow-mux.mp4", 10).body).nzo_ids[0];
+const muxDeadline = Date.now() + 30_000;
+let actualMux = false;
+do {
+  actualMux =
+    run([
+      "exec",
+      container,
+      "node",
+      "-e",
+      'const fs=require("node:fs");console.log(fs.existsSync("/tmp/media-mux-ready")&&fs.readdirSync("/proc").filter(x=>/^\\d+$/.test(x)).some(pid=>{try{const a=fs.readFileSync("/proc/"+pid+"/cmdline","utf8").split("\\0");return a[0]==="/usr/bin/ffmpeg"&&a.includes("-re");}catch{return false}}));',
+    ]).trim() === "true";
+  if (!actualMux) await delay(100);
+} while (!actualMux && Date.now() < muxDeadline);
+if (!actualMux || readJob(shutdownId).status !== "converting")
+  throw new Error("Actual owned mux was not running before shutdown");
+const neighborBefore = run([
+  "exec",
+  container,
+  "node",
+  "-e",
+  'console.log(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))',
+  neighborPath,
+]);
+request("api/settings", JSON.stringify({ "download.convertToMkv": "false" }));
+const followingId = request("api?mode=addfile&cat=sonarr", nzb("valid.mp4", 2).body).nzo_ids[0];
+run(["stop", "--time", "15", container]);
+if (run(["inspect", "--format", "{{.State.ExitCode}}", container]).trim() !== "143")
+  throw new Error("Writer did not drain through its controlled SIGTERM handler");
+run(["start", container]);
+let afterStopReady = false;
+const afterStopDeadline = Date.now() + 30_000;
+do {
+  try {
+    request("api?mode=version");
+    afterStopReady = true;
+  } catch {
+    await delay(200);
+  }
+} while (!afterStopReady && Date.now() < afterStopDeadline);
+if (!afterStopReady) throw new Error("Writer did not restart after mux shutdown");
+const shutRow = readJob(shutdownId);
+if (shutRow.status !== "failed" || shutRow.validation !== null)
+  throw new Error(
+    `Mux shutdown left status=${shutRow.status}; validation=${shutRow.validation === null ? "absent" : "present"}`
+  );
+while (readJob(followingId).status === "queued" && Date.now() < afterStopDeadline) await delay(100);
+while (
+  !["completed", "failed"].includes(readJob(followingId).status) &&
+  Date.now() < afterStopDeadline
+)
+  await delay(100);
+if (readJob(followingId).status !== "completed" || !fileExists(readJob(followingId).filePath))
+  throw new Error("Following queue job lost progress after mux shutdown");
+if (
+  run([
+    "exec",
+    container,
+    "node",
+    "-e",
+    'console.log(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))',
+    neighborPath,
+  ]) !== neighborBefore
+)
+  throw new Error("Mux shutdown changed a neighboring file");
+console.log("Actual mux SIGTERM drain, failed persistence and following queue progress passed");
 
 const pgContainer = process.env.PINGUFUNK_MEDIA_QA_PG_CONTAINER;
 if (pgContainer) {

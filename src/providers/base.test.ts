@@ -42,6 +42,24 @@ describe("provider download filenames", () => {
 
     expect(info.filename).not.toContain("GERMAN");
     expect(info.filename).toContain("Example.programme");
+    expect(info.filename).not.toContain("2023");
+  });
+
+  it("uses only explicit production-year metadata, not a catalogue, broadcast or provider date", async () => {
+    expect(
+      (await new FixtureProvider().getDownloadInfo({ ...item, productionYear: 2014 })).filename
+    ).toContain(".2014.");
+    expect(
+      (
+        await new FixtureProvider().getDownloadInfo({
+          ...item,
+          contentDates: { broadcastAt: item.timestamp },
+        })
+      ).filename
+    ).not.toContain("2023");
+    expect(
+      (await new FixtureProvider().getDownloadInfo({ ...item, productionYear: NaN })).filename
+    ).not.toContain("NaN");
   });
 
   it("labels a filename German only with explicit German audio evidence", async () => {

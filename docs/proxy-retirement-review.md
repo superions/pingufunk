@@ -1,6 +1,9 @@
 # Review des Proxy-Ablöseplans
 
-Stand: 28.09.2026. Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
+Stand: 06.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
+Aktueller Implementierungsstatus ausschließlich im Phasen-TODO; die datierten
+folgenden Bewertungen sind keine konkurrierende Abnahme-/Deploymentfreigabe.
+Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
 Dies ist ein zweiter, quellen- und testgestützter **Selbstreview**, kein
 unabhängiger Peer-Review und keine Freigabe für produktive Änderungen.
 Der nachfolgende R9-Abschnitt dokumentiert die damalige Pflichtentscheidung
@@ -9,7 +12,7 @@ unterstützt, PostgreSQL ist optional und kein Proxy-Ablösegate. Aktuell gilt
 ausschließlich der [Phasenvertrag](../todo/proxy-retirement.md); frühere
 Pflicht-, HAProxy- und RPO-Aussagen in diesem Review sind nicht operativ.
 
-## Urteil
+## Historisches Urteil vom 28.09.2026
 
 Der Plan beschreibt einen tragfähigen Weg zur vollständigen Ablösung, wenn
 alle Abnahmegates geschlossen werden. **Heute ist die Ablösung nicht sicher.**
@@ -958,3 +961,1339 @@ SQLite-Laufzeitevidenz ersetzt nicht PostgreSQL-Evidenz; letztere stammt aus den
 unveränderten grünen Gates. **P10.2–P10.7 bleiben offen.** Keine Produktions-
 installation, Datenmigration, Proxy-Abschaltung, Routenumschaltung, Release-Tags
 oder öffentlichen Images wurden durch diese Testabnahme freigegeben.
+
+## Radarr-Filmkorrelation und Bibliothekslimit (03.10.2026)
+
+P08.2/P08.4 wurden nach dem Produktbefund ausdrücklich wiedereröffnet: die
+frühere synthetische Verbraucherprobe enthielt bereits ein Quelljahr und
+belegte die alltägliche Metadatenkorrelation deshalb nicht. Prowlarr transportiert
+Indexeranfragen, aber weder lokale Radarr-Bibliotheksmetadaten noch dessen
+API-Key. Der optionale native Metadatenzugriff benötigt eigene Konfiguration.
+
+Auf `55edcf7` erneut den vollständigen Pfad reviewt: lokale TMDB-Auflösung vor
+externem Lookup, vollständiger Titel/belegter Alias, Laufzeit in Sekunden gegen
+Metadatenminuten mit ±10 %, Produktionsjahr ±1 direkt gegen das Metadatenjahr,
+keine kumulierten Jahresabweichungen. Fehlendes Quelljahr darf erst danach
+ergänzt werden; unbekannte Dauer, Fuzzy/Clip, Konflikte und mehrdeutige RSS-
+Remakes bleiben generisch. Quell-/Fassungs-GUID und aktuelle Medien-URL bleiben
+erhalten. Explizite leere/null Quelllaufzeit bedeutet unbekannt, nicht bestanden;
+malforme numerische Angaben bleiben Fehler. RSS-Titelindex begrenzt die
+Zuordnungsarbeit, statt jedes Ziel gegen jedes Sourcefenster erneut zu parsen.
+
+Radarr-Bibliotheksantworten erhalten ein eigenes persistentes Bodylimit:
+`integration.radarr.inventoryMaxMiB`, Default 10, ganze MiB 1–64. Ungültige
+Werte scheitern vor Credential-/HTTP-I/O; Änderungen invalidieren Bibliotheks-
+und Suchcaches. Einzelne Metadatenantworten bleiben 5 MiB, Inventar höchstens
+2.000 Zeilen. Kein global höherer Response-Default und kein unbeschränkter Fetch.
+
+Abnahme: 873 reguläre Tests grün (zwölf bedingte PG-Gates separat), Lint,
+Typecheck, Formatcheck, Build und diff-check bestanden; `npm ci` und Audit ohne
+Befunde. [Fork-CI](https://github.com/superions/pingufunk/actions/runs/37135870734)
+mit nativer PostgreSQL-Prüfung und
+[Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37135870743)
+mit beiden Backends/Migration/Medien/Recovery bestanden, keine Veröffentlichung.
+Auf exakt diesem Runner bestätigt eine isolierte echte Radarr 6.4.4.10685 /
+Prowlarr 2.6.5.5623 den jahrlosen synthetischen Quelltitel direkt und vermittelt:
+korrekte Movie-ID/TMDB-ID/Jahr, keine Parse-/Unknown-Movie-Ablehnung, kein Grab.
+Der erste vor nativer Indexer-Readiness leere Versuch war keine Abnahme;
+die spätere begrenzte Read-only-Probe bestand alle Assertions. Eigene Instanzen
+anschließend gestoppt, Konfiguration erhalten; fremde Runtimes unangetastet.
+
+Unter separater Nutzerfreigabe wurde der lokale Runner im Homelab aktiviert,
+Settings per API gespeichert/readbackgeprüft und native Filmzuordnung gelesen.
+Private Betriebsparameter, tatsächliche Antworten, Secrets, Scan-/Backup-Pfade
+und Rückweg bleiben im privaten Homelab-Runbook, nicht im öffentlichen Fork.
+Korrekte Identität garantiert keine Freigabe durch das Arr-Sprachprofil:
+unbelegte Tonsprachen bleiben neutral. Keine DB-Migration, keine Testgrabs und
+keine öffentliche Imagepublikation; späterer Dokumentationscommit baut dieses
+unveränderte Produktimage nicht erneut und wiederholt dessen Tests nicht.
+
+## P03.4 — Struktureller Tonsprachenvertrag (Entwicklungsreview)
+
+Neuer Owner `source-audio.ts`: ARTE-HbbTV mit exakter Programm-/URL-Bindung,
+ZDF mit begrenztem MP4-Sound-Track-Header. Keine HTML-Parser, Konten, Fremdtoken,
+Originalsprachenheuristik oder Medienvollabfrage. Rendition-Splitting verhindert
+die Übertragung eines HD-Belegs auf fremdsprachige Standard-URLs. Film-ID, Text
+und RSS führen die Ergänzung vor Selektion/Dedupe/Pagination durch.
+
+Im Selbstreview wurde ein sachlicher Fehler behoben: Providerbelege dürfen
+nicht durch `JSON.stringify`-Schlüsselreihenfolge verglichen werden. Der Worker
+vergleicht jetzt einzelne Vertragsfelder und prüft die Dateiidentität erneut
+nach dem frischen Providerabruf. v1 bleibt streng; v2 trennt Providerbeleg und
+fehlende Tracktags. Beide Versionen müssen auf beiden Backends erhalten bleiben.
+Cacheversion v10 vermeidet veraltete Antwortverträge; bessere Sprachbelege
+ändern allein keine bisherigen Fassungs-GUIDs.
+
+Grenzen ausdrücklich dokumentiert: höchstens vier Probeidentitäten im gemeinsamen
+Budget, keine volle Katalogabdeckung und keine neue HLS-/Sender-/TV-Abdeckung.
+Die alte HD-Feld-/Auflösungsannahme ist keine Sprachinvariante und bleibt ein
+separates Risiko. Ältere Images ohne v2 sind nach v2-Writes kein sicherer Rollback.
+Abnahme und verbleibende Gates stehen ausschließlich bei P03.4 im Phasen-TODO;
+kein unabhängiger Peer-Review, produktiver Imagewechsel oder DB-Cutover behauptet.
+
+Finaler Produktstand `1f9f18e`: zusätzlich die UTF-8-Decodierung wieder in die
+absolute Bodydeadline einbezogen und kausal gegen Zeitüberschreitung getestet.
+906 reguläre Tests, Lint, Typecheck, Formatcheck, Build und Diffcheck grün;
+bedingte PostgreSQL-Prüfungen separat erfolgreich. v1/v2 über beide echten
+disposable Backends, Queue/Restart/Retry sowie native direkte und Prowlarr-
+vermittelte Radarr-Suche bestanden: Originalsprache Englisch, konkreter
+Release German, korrekte Film-ID/Jahr; kein Grab. Anlaufversuche ohne Kandidat
+waren keine Abnahme; der spätere assertierte Lauf bestand. Eigene Instanzen
+gestoppt, Konfiguration erhalten, andere Instanzen unangetastet.
+[CI](https://github.com/superions/pingufunk/actions/runs/37142390426) und
+[Docker-Abnahme](https://github.com/superions/pingufunk/actions/runs/37142390422)
+auf diesem Produktstand bestanden ohne Veröffentlichung. P03.4 ist als
+Entwicklungsabnahme geschlossen, nicht als produktiver Wechsel. Der separate
+HD-Feld-/Auflösungsbefund ist als P09.3 offen erfasst; keine stillschweigende
+Gesamtabnahme aller Qualitätszusagen.
+
+### MP4-Nachprüfung: große Sampletabellen
+
+Die bisherige begrenzte Probe verlangte einen vollständigen `moov` im
+Rangefenster. Große Sampletabellen verhinderten daher erreichbare Sound-
+Trackbelege. P03.4 wurde für diese Nachprüfung wieder geöffnet, nicht durch
+Sprachheuristik oder größere Antwortlimits umgangen. `00b2ce3` liest nur
+deklarierte, innerhalb ihrer Eltern und der unveränderten Dateilänge liegende
+Boxgrenzen und benötigte `hdlr`/`mdhd`-Felder. Sampletabellen werden übersprungen.
+Alle Trackheader müssen erreichbar sein; ein drittes nötiges Fenster bleibt
+unbekannt. Höchstens zwei 1-MiB-Antworten, 4.096 Header und gemeinsame Deadline;
+keine Zeichenkettensuche in Medienbytes, Remote-ffprobe oder Vollabfrage.
+
+Synthetische große Video-/Audio-Sampletabellen, DE/FR, gemischte/unklare weitere
+Spuren, Elternüberlauf, mdhd-Versionen und Deadline nach finaler Sprachdecodierung
+sind kausal geprüft. Nach Behebung eines Testfixture-Typfehlers bestanden
+917 reguläre Tests, Lint, Typecheck, Formatcheck, Build und Diffcheck; unveränderte
+Turbopack-Tracingwarnungen bleiben sichtbar. Aktuelle
+[CI](https://github.com/superions/pingufunk/actions/runs/37146674348) und
+[Docker-/Backend-Gates](https://github.com/superions/pingufunk/actions/runs/37146674264)
+grün. Echte isolierte native Radarr-/Prowlarr-Verbraucher auf dem neuen Runner
+prüften German trotz englischer Originalsprache direkt und vermittelt, ohne
+Grab; Auth-/Netzwerkgrenzen ebenfalls grün. Ein vorheriger Readinessfehler war
+keine Abnahme. Eigene QA gestoppt, Daten erhalten. Schema, v1/v2-Payloads und
+Worker unverändert; keine neue DB-Migration oder öffentliche Veröffentlichung.
+Private Betriebsabnahme und echte Importdaten bleiben im Homelab-Runbook.
+
+### Nachprüfung: auseinanderliegende Track-Trailer
+
+Der größere `moov` allein war nicht die vollständige Ursache. Zusätzlich
+entfernte Trailer nach großen Sampletabellen können weitere Headerfenster
+benötigen. Auch eine tiefenorientierte Reihenfolge garantiert dann nicht, dass
+alle Trackgrenzen in zwei Bereichen liegen. Die sichere Unknown-Antwort darf
+nicht durch das Überspringen möglicher weiterer `mdia`-/Audiotracks ersetzt
+werden. Die bestehenden Tests und die native ARTE-Verbraucherabnahme bleiben
+gültig, belegen aber diese MP4-Struktur nicht. P03.4 ist deshalb erneut offen;
+synthetische Trailer-Regression und begrenzte Leseplanung bzw. ehrliche
+Abdeckungsgrenze sind beim bestehenden Owner zu bearbeiten. Keine privaten
+Quellantworten oder operatorseitigen Einzelgrabs als Produktfixture/Abnahme.
+
+## P09.4 — Secret-sichere progressive Transferdiagnose
+
+Der explizite Diagnose-/Reproduktionsauftrag ergänzt den bestehenden
+`download-manager.ts`-Owner, keine zweite Downloadpipeline. Upstream main
+`e62ed90` wurde frisch geprüft: dort werden rohe Transferausnahmen ausgegeben;
+ein gleichwertiger geschlossener secret-sicherer Diagnosevertrag ist nicht
+vorhanden. Diese Rohfehlerausgabe wird nicht in den Fork übernommen.
+
+Der bisherige Boolean verliert nun keine gesamte Fehlerphase mehr:
+ein typisierter Transferbeleg unterscheidet Request/Response, Open/Write/Finish,
+Body-Read und Fortschrittspersistenz. Geschlossene Code-Allowlist mit vier
+Cause-Ebenen; keinerlei Message/Stack/URL/Dateipfad/Response-/Prisma-Metadaten.
+Eine durch Dateifehler ausgelöste Reader-Abortion behält die Dateiphase.
+Inaktivität während eines DB-Callbacks wird nicht zum Netzwerkbeweis umgedeutet.
+Zuverlässige Content-Length und dekodierte Gzip-Bytes bleiben getrennt.
+Das bestehende Error-Textfeld und SAB-History tragen denselben safe Vertrag;
+DB-Ausfall/Reconnect darf ihn nicht zu einem generischen Folgefehler verlieren.
+Keine Schemamigration, neue Retries oder Änderung der Inaktivitätsdauer.
+
+Native Loopback-HTTP-Tests reproduzieren einen tatsächlichen Socket-Abbruch nach
+Byteempfang, Redirect-Ablehnung ohne Zielabruf, Gzip sowie gültige Dateiübertragung.
+Gezielte DB-/Write-/Open-Race-/Timer-/Längen-Faults schützen Fehlerphase,
+Secret-Negativfälle, Partialbereinigung, Nachbarfileerhalt und Queuefortsetzung.
+Die DB und Medienprobe dieses Transferharness sind gemockt; dies ist weder eine
+neue Medienabnahme noch der Beweis einer historischen Produktionsursache.
+Reproduktionsvertrag und Grenzen: `docs/download-failure-diagnostics.md`.
+Produktive Dienste, Quellen, Bibliothek und bestehende Aufträge bleiben
+unangetastet. P03.4 und P09.3 bleiben unabhängig offen.
+
+Lokale Entwicklungs-Gates: nach `npm ci` 930 reguläre Tests und 48 fokussierte
+Owner-Tests; 13 PostgreSQL-Gates bedingt und lokal nicht ausgeführt. Lint,
+Typecheck, Formatcheck, Build und Diffcheck bestanden mit Node 26.10.0.
+Der zuerst gefundene Open-Listener-Typfehler ist behoben; relevante Gates danach
+erneut grün. Bestehende 14 Turbopack-Tracingwarnungen bleiben unverändert.
+[Fork-CI](https://github.com/superions/pingufunk/actions/runs/37150444785) auf
+Produktstand `fc99caf` ist zusätzlich mit Node 24 erfolgreich, einschließlich
+separater PostgreSQL-Integration. P09.4 entwicklungsseitig abgenommen; kein
+Produktiv-Rollout oder historischer Root-Cause-Nachweis. Die automatische
+Docker-Validierung ist ein eigenes Release-Gate und keine Deploymentfreigabe.
+
+## P09.3 — Quellenauflösung und historische Slotidentität (04.10.2026)
+
+Der neue gemeinsame Renditionowner ersetzt die drei pauschalen Katalog-
+Slotstempel. Optionale strukturierte ARTE-Maße müssen an die exakte Medien-URL
+gebunden sein; fehlende, fremde und widersprüchliche Angaben bleiben unbekannt.
+Keine zusätzlichen Probeabfragen oder Senderseiten. Audiosprache und Maße
+werden getrennt klassifiziert. Ein 720p-Beleg im HD-Slot produziert 720p,
+nicht 1080p; Unbekannt erhält keine SD-/HD-Unterkategorie und keinen WEB-Hint,
+den Arr selbst als SD lesen würde. Der [Auflösungsvertrag](rendition-quality-contract.md)
+benennt bewusst begrenzte Abdeckung und die alte Auswahlhinweis-Semantik.
+
+Nachreview: dieselbe URL in HD-/Standard-Slots erst **nach** konkreter Auswahl
+deduplizieren, damit unbekannte Standardfassung weiter auswählbar bleibt.
+UI-NZB erwartete zuvor die Default-URL statt der angeklickten Rendition;
+jetzt tragen alle NZBs nur die jeweiligen Maße. Bestehende v1/v2-Verträge
+prüfen lokale Breite **und** Höhe vor Completed. Die historischen Slot-GUIDs
+bleiben erhalten; neue Dimensionsbelege allein erzeugen keine neue Identität.
+Keine Altdateien, History, Profile oder gespeicherten Jobs umschreiben.
+
+Lokale Gates nach `npm ci` mit Node 26.10.0 bestanden: 965 reguläre Tests,
+Lint, Typecheck, Formatcheck, Build und Diffcheck. 13 bedingte PostgreSQL-Tests
+werden lokal übersprungen; der gesonderte
+[Fork-CI-Lauf](https://github.com/superions/pingufunk/actions/runs/37167389069)
+auf `38836c5` ist mit Node 24 einschließlich PostgreSQL-Integration erfolgreich.
+
+Der native Qualitätsgate auf demselben Runnerstand ist bestanden: Radarr
+6.4.4.10685 direkt und durch Prowlarr 2.6.5.5623 klassifiziert den HD-Slot mit
+1280×720 als `WEBDL-720p`, fehlende oder widersprüchliche Maße als `Unknown`.
+Sonarr 4.0.20.3014 prüft jeweils den tatsächlichen Producer-Qualitätssuffix
+über seinen nativen Parser, nicht eine lokale Parserkopie. Filmzuordnung,
+TMDB-ID/Jahr und unabhängiger deutscher Tonsprachenbeleg bleiben erhalten.
+Alle drei Varianten laufen in neu angelegten internen Testnetzen; kein Grab.
+Das ist kein neuer vollständiger Sonarr-Importnachweis.
+
+Die vollständige
+[Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37167389065)
+für `38836c5` ist ebenfalls erfolgreich, ohne Image-Publikation. Eine real
+erzeugte 1280×720-Datei besteht mit passenden Sollmaßen; abweichende Sollmaße
+1920×1080 sowie 1920×720 werden vor Completed abgewiesen. Die Unit-Regressionen
+prüfen auch den umgekehrten Fall abweichender lokaler Maße. Beide disposable Backends prüfen
+die echte Datei/SAB-History und erhalten die v1/v2-Erwartungen über Restart und
+Retry. Bestehende TLS-Migrations-/post-write-Rollback-, SQLite-Persistenz- und
+PG-Ausfallgates bleiben grün. P09.3 ist entwicklungsseitig abgenommen.
+
+Die ersten Treiberläufe wurden **nicht** als Abnahme gewertet: Prozessstart
+war noch keine API-Readiness, ID-Suchen brauchen den eigenen verifizierten
+Radarr-Metadatenkontext, und der absichtlich fehlgeschlagene Empty-Feed-Test
+kann einen nativen Indexer-Cooldown hinterlassen. Der Treiber wartet nun
+begrenzt und lesend auf tatsächliche API-Readiness und Cooldownablauf. Kein
+Indexerstatus wird gelöscht, keine fehlgeschlagene Suchassertion wiederholt
+und keine Assertion für ein grünes Ergebnis abgeschwächt.
+
+Dimensionsabdeckung bleibt auf bereits gelesene, passende strukturierte
+ARTE-Maße begrenzt. Unbekannte Fassungen dürfen weiterhin über den historischen
+Slot-Auswahlhinweis sichtbar bleiben; dieser ist kein Mindestauflösungsfilter.
+Korrigierte konkrete Auswahl oder `best` kann eine andere vorhandene URL
+sichtbar machen; stabile GUIDs allein verhindern kein Upgrade gegenüber einer
+bereits geladenen Fassung. Profile/Auswahl/History vor einem gesonderten Rollout
+gemeinsam prüfen. P03.4s MP4-Sprachbefund ist unabhängig; keine Produktivfreigabe
+oder vollständige Sprachabdeckung behauptet.
+
+## Autorisierte Betriebsumschaltung und nachfolgender PG-Halt (03.10.2026)
+
+Nach gesonderter Nutzerfreigabe: Proxy-Ausstieg zuerst auf SQLite, PostgreSQL
+danach; ausschließlich lokal übertragene Images. Betriebswerte, Geheimdateien,
+Backups und tatsächliche Controllerrevisionen stehen ausschließlich im privaten
+Betriebsrunbook, nicht in diesem öffentlichen Fork.
+
+- OCI-Hardening `23ad4b1`: globales npm/npx aus Runtime und Migrator entfernt,
+  nicht aus Buildstages. Frische exakte Archivscans einschließlich ungefixter
+  HIGH/CRITICAL auf unterstütztem Alpine ohne Findings. Kein Lockfilewechsel.
+  [CI](https://github.com/superions/pingufunk/actions/runs/37075947430) und
+  [Dockerprüfung](https://github.com/superions/pingufunk/actions/runs/37075947435)
+  erfolgreich, einschließlich nativer SQLite-/PG-/TLS-/Rollbackgates.
+- Legacy-SQLite mit leerem Ledger über den geprüften Baselineowner in eine
+  separate Datei überführt, nie neue App gegen die alte Bootstrapdatei gestartet.
+  Sechs Modelle erhalten; Original und finaler Snapshot zeilenweise gleich.
+  Aktive Datei integrity_check `ok`, keine FK-Verletzungen, fünf Migrationen,
+  zwei weiterhin abgeschlossene Downloads. Nur zwei neue Integration-Settings.
+- Prowlarr-Indexer und alle drei SAB-Verbindungstests bestanden; vorhandene
+  Consumer-IDs/Keys, Pfade und Kategorien erhalten. Native Adressen und originale
+  Such-/Enableflags nach Freigabe per API verifiziert. Prowlarr-Synchronisierung
+  reaktivierte zwischenzeitlich Sonarr-Suchflags: deaktivierte Downloadclients
+  schützen die Prüfung; ein einzelner Arr-PUT beweist keine dauerhafte Sperre.
+- Die bisher proxyseitige verifizierte Identität `Solo for Weiss` / `Solo für
+Weiss`, TVDB 319457, über den bestehenden Katalogmechanismus übernommen,
+  ohne erfundene Episoden oder Audio-Sprachbelege. [TVDB](https://thetvdb.com/series/319457-show)
+  bestätigt die Serienidentität. `1ec873e`: Datenvalidator und 58 fokussierte
+  Tests bestanden; [CI](https://github.com/superions/pingufunk/actions/runs/37078325186)
+  und [Dockerprüfung](https://github.com/superions/pingufunk/actions/runs/37078325198)
+  grün. Lokale Katalogdatei und gepinnte URL decken RSS-Erststart und Suche ab.
+- Echte native S02E01-Suche liefert Blackout. Sonarr-Interactive-API erkennt
+  Staffel/Folge und verweigert den erneuten Download wegen vorhandener Datei.
+  Negative Textsuche leer; unbekannte ID fail-closed 503. Keine produktiven
+  Testgrabs, keine neue vollständige Desktopmatrix behauptet. Vorherige
+  synthetische vollständige Import- und Desktopnachweise bleiben wiederverwendet.
+- Native App und übrige Media-Services laufen; Proxy bleibt bei null Replikaten
+  erhalten. Keine physische Proxyentfernung oder Daten-/Backupbereinigung.
+
+Verbleibende Betriebsgrenzen: täglicher Registry-only-Scanner kann lokale Tags
+nicht auflösen; frischer Archivscan ist keine dauerhafte Überwachung. Historische
+Rollbackarchive brauchen vor neuem Start die aktuelle Imagepolicy. PostgreSQL-
+Preflight fand einen gesunden unterstützten Primary, aber `ssl=off`; die
+implementierte CLI fordert TLS. Keine PG-Rolle/DB, DDL, Datenübernahme oder
+Secretanlage ausgeführt. Änderung am gemeinsamen Cluster erfordert separat
+reviewte Infrastrukturfreigabe; kein TLS-Bypass. P10.2–P10.7 bleiben wegen ihrer
+jeweils noch offenen Betriebs-/PG-/Beobachtungs-/Entfernungsgates ehrlich offen.
+
+## Expliziter PostgreSQL-Klartexttransport (03.10.2026)
+
+Auf Nutzerentscheidung ist TLS kein zwingender Installationsvertrag mehr:
+`sslmode=disable` in derselben geschützten App-/Runner-URL wählt ausdrücklich
+Klartext. Ohne Parameter bleibt die Migration TLS-pflichtig; `require` erzwingt
+TLS, `prefer` ist kein Cutovermodus. Doppelte/ungültige Werte brechen ab.
+Keine Netz-/HAProxy-Sonderannahme, kein Downgrade nach Verbindungsfehler und
+kein PostgreSQL→SQLite-Fallback. Der Runtime-Resolver erhält die gewählte
+Prisma-Option; bestehende Laufzeitdefaults werden nicht heimlich umgeschrieben.
+
+Review: Preflight, DDL-Vorbereitung, Import und Wiederaufnahme sowie tatsächliche
+Sequence-Transaktion benutzen denselben Transportowner. Der Standalone-
+Preflight löst jetzt ebenfalls Secret-Dateien auf. Tatsächliche TLS-Eigenschaft
+bleibt Bestandteil der Runidentität; Helperinhalt gehört zum Importerhash.
+Primary-, Versions-, Rollen-, Schema-, Fidelity- und Rollbackprüfungen bleiben
+unverändert. Ein TLS-Backend trotz explizitem `disable` wird ebenso abgelehnt.
+
+Neue Evidenz: `npm ci`, 842 reguläre Tests (zwölf separate PG-Gates im normalen
+Lauf nicht aktiviert), Lint, Typecheck, Formatcheck und Build bestanden.
+Vollständiger disposable PG-Harness auf dem Entwicklungshost anschließend
+grün: 15 Tests, einschließlich Bootstrap/current-Import, echte CLI prepare/
+import/verify/sequences ohne internen TLS-Testoverride, secret-backed Preflight,
+verweigerter `require`-Verbindung am TLS-losen Server, Persistenz/Write-Gate und
+Reconnect. Der zusätzliche Test hatte zunächst einen TypeScript-Env-Typfehler;
+in `96e3082` korrigiert und Typecheck erneut bestanden.
+[Aktueller Fork-CI-Lauf](https://github.com/superions/pingufunk/actions/runs/37129277696)
+erfolgreich. Docker-/TLS-Containerprüfung `37129277596` zum Zeitpunkt dieses
+Nachtrags noch laufend; nicht als frisch bestanden behauptet. Vorherige TLS-
+Containerbelege sind keine neue Containerabnahme der geänderten Skripte.
+
+Frischer unveränderter Lockfile-Audit meldet sechs HIGH-Paketbefunde in
+Entwicklungsabhängigkeiten (braces/micromatch samt ESLint-/lint-staged-Konsumenten);
+`npm audit --omit=dev` null. Kein unreviewtes audit-fix/Downgrade. Build-/Migrator-
+Reichweite und neue genaue Imagescans bleiben vor einem nächsten Rollout zu
+prüfen. Keine Produktionsdienste, Secrets oder Datenbanken in diesem Schritt
+verändert; PostgreSQL-Übernahme und reale Freigabegates bleiben offen.
+
+Container-Nachprüfung: Der zunächst laufende Docker-Gate `37129277596` scheiterte
+am fehlenden neuen Helper im expliziten Migrator-COPY. Lokaler Build zeigte
+zusätzlich die fehlende Ausnahme der Script-Allowlist in `.dockerignore`.
+Beide Verpackungsfehler in `1f5bfb5` korrigiert; keine geschwächte Assertion oder
+blinder Retry. Danach beide tatsächlichen Images auf dem Entwicklungshost neu
+gebaut und vollständige TLS-Containerprobe einschließlich Snapshot, prepare,
+Import/Verify/Sequences, Maintenance, Appstart und durablem First-write-Checkpoint
+erfolgreich. Immutable Post-write-Rollback nicht neu lokal ausgeführt;
+dieser zusätzliche Gate bleibt im noch laufenden Docker-Forklauf.
+[Fork-CI für den Verpackungsfix](https://github.com/superions/pingufunk/actions/runs/37130113142)
+erfolgreich; Dockerlauf `37130113176` noch nicht abschließend bestätigt.
+Auch die neue SQLite-Containerprobe bestand: Fresh Install, Bootstrap-Baseline,
+gespeicherte Settings, Restart/Persistenz und fail-closed Negativfälle. Keine
+produktive SQLite-Datei angesprochen und keine Testdatenbank beibehalten.
+
+## TV-Identität und renditionsgebundene Sprache (05.10.2026)
+
+Unter ausdrücklich freigegebenem Implementierungsauftrag wurden gemeinsame
+Owner korrigiert, keine serienbezogene Titel-Allowlist angelegt:
+
+- Sonarr: globale validierte Aliasse übernehmen, fehlendes Inventarelement
+  nach frischem gefiltertem Lookup einmal nachladen, Nichtfunde nicht negativ
+  cachen. Instanz-/ID-Konflikte bleiben gesperrt. Generische `Episode N`-Titel
+  erfordern weiterhin exakte Serienbindung, explizite Koordinaten und belegte
+  passende Soll-/Quelllaufzeit. Ein Bruchteil allein impliziert niemals S01.
+- ARTE: HLS-only im geprüften Player verwirft indexierte MP4s nicht. Player-
+  Identität, Titel, Koordinaten und Rechte bleiben nötig; die MP4-Tonsprache
+  stammt erst aus exakten HbbTV-Programm-/URL-/Audiocode-Deklarationen.
+- ARD: keine HTML-Parser, Seriencrawler oder Account-Fallbacks. Strukturierte
+  Audiodeklarationen für die indexierte CRID und exakte MP4-URL sind ein
+  unabhängiger Beleg, auch bei unbekannten Container-Tracktags. `main`-Stream,
+  eindeutiger identischer Player, freie Rechte und übereinstimmende bekannte
+  Audioarten sind nötig. Originalsprache/Locale sind kein Deutsch-Default.
+  Providerstatus kann veraltete Text-Fassungsmarker ersetzen; rohe Katalogdaten
+  dürfen diese internen Felder weiterhin nicht einschleusen.
+- Explizit genehmigtes Budget: TV-Suche 32 Versuche, RSS/Filme zehn, überall
+  15 Sekunden. MP4 höchstens vier 1-MiB-Fenster, vollständige Grenz-/Trackprüfung;
+  benötigtes fünftes Fenster bleibt neutral. TV-Belegprüfung vor Sprachwahl,
+  Dedupe/Pagination. Renditionsplit erhält die Bedeutung von `best`.
+- `ard_media` erweitert v2; frische Workerprüfung gegen dieselbe URL/Video-ID
+  und unverändert strenge lokale Medienprüfung. Kein Schema-/Backendwechsel.
+  Ein altes v2-Image ohne neuen Provider ist kein kompatibler Rückweg.
+
+Review von Parsergrenzen, Einheiten, Identität, Cachefrische, Request-/Body-
+Deadline, Selektionsreihenfolge, GUIDs, Medienprobe und Persistenz durchgeführt.
+Upstream `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` erneut geprüft: kein
+entsprechender Sonarr-/Quellenbelegowner vorhanden; nicht ungeprüft gemergt.
+
+Neue Evidenz: `npm ci` (Audit null), **997 reguläre Tests** in 89 Dateien;
+14 bedingte PG-Gates in der normalen Suite separat. Lint, Typecheck,
+Formatcheck und Produktionsbuild bestanden. Build enthält vorhandene Prisma-/
+yt-dlp-Tracingwarnungen, keine neue Kompatibilitätszusage daraus. Separater
+vollständiger disposable PostgreSQL-Harness erfolgreich, darunter sechs reale
+Legacy-/ARTE-/ARD-Persistenzfälle auf beiden Backends samt Queue/Restart/Retry.
+Keine produktive Datenbank verwendet. Zwei synthetische Staffeln (sechs ARD-
+Folgen und vier ARTE-Teile der zweiten Staffel) durch tatsächliche Newznab-
+Handler bis RSS/NZB/Queue geprüft, inklusive Pagination und genauer Rendition.
+Fremde IDs/URLs, gesperrte/mehrdeutige Player, gemischte/unbekannte Audios,
+Auxiliary-Streams sowie falsche lokale Tracktags bleiben abgewiesen.
+
+Kausaler Gegencheck: dieselben neuen Regressionen gegen unveränderte Owner
+von `8c3b6c3` in separater Baseline-Kopie: zehn konkrete Fehlverhalten in fünf
+Suites; bestehende 114 Fälle weiter grün. Keine Imports künstlich abgeschaltet.
+Öffentliches strukturiertes ARD-JSON zusätzlich begrenzt lesend geprüft; reale
+Antworten/URLs nicht als Fixtures persistiert. Der ARD-Extractor von yt-dlp
+bestätigt den Strukturvertrag, dessen permissiven Deutsch-Default übernehmen
+wir nicht.
+
+**Noch keine produktive Abnahme.** P06.2/P06.3/P07.3 für die neuen Befunde
+wieder geöffnet; frische Fork-CI und native Consumer-/Imageprüfung bleiben vor
+erneutem Schließen nötig. P03.4 bleibt insgesamt offen. Die Unit-/Persistenz-
+Gates beweisen keinen neuen Sonarr-Import, keine vollständige Sprachabdeckung
+und keinen Rollout. Produktive Bibliotheken, Profile, Routen, Services und
+Datenbanken in diesem Implementierungsschritt unverändert.
+
+Nachprüfung desselben Auftrags: Der öffentliche ARTE-Gegencheck zeigte zunächst
+trotz zwölf korrekter Episodenzuordnungen **null** normale Deutsch-Belege.
+Ursache war der in `progressiveUrl` ausgeschlossene tatsächliche CDN-Host
+`arteptweb-a.akamaihd.net`. Exakten Host ergänzt, keine `akamaihd.net`-Wildcard.
+Synthetische vollständige Staffelregression auf diesen Host umgestellt;
+zusätzlicher Producer-/Workercheck mit negativen Nachbardomains. Danach liefert
+der begrenzte öffentliche Gegencheck vier normal-deutsche Episoden mit
+begründeter Staffel; ARD mit demselben Owner sechs normal-deutsche Episoden.
+Das prüft Quelle, Matching und Sprache, nicht einen produktiven Arr-Import.
+Providerdimensionen der geprüften ARTE-HD-Fassung sind tatsächlich 1280×720,
+nicht aus ihrem Slothinweis erfundene 1080p.
+
+Erneute lokale Gates: **998** reguläre Tests, Lint, Typecheck, Formatcheck,
+Produktionsbuild und Diffcheck grün. Backend-Persistenznachweise unverändert
+wiederverwendet, weil kein Payload-/Schema-/Datenbankvertrag geändert wurde.
+[Fork-CI des ersten Checkpoints](https://github.com/superions/pingufunk/actions/runs/37322690901)
+auf `43b619e` bestanden einschließlich separatem PG-Harness. Dieser Beleg
+ersetzt nicht die frisch erforderliche CI/Imageabnahme der CDN-Ergänzung.
+
+## TV-Ergänzungsbefunde — frische Consumerabnahme (05.10.2026)
+
+Für `b189bf2` sind [Fork-CI](https://github.com/superions/pingufunk/actions/runs/37323756642)
+und [Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37323756720)
+erfolgreich. Die separate PG-Integration und native synthetische Consumer-/
+Medienprüfung auf beiden Backends ergänzen die 998 regulären lokalen Tests;
+die 14 bedingten PG-Fälle werden nicht als regulär lokal ausgeführt gezählt.
+Unveränderte Produktinputs erlauben Wiederverwendung von Lint/Types/Format/Build.
+
+Nach gesonderter Homelab-Rolloutfreigabe liefert das tatsächlich servierte neue
+Image in lesenden nativen Sonarr-Staffelsuchen über die bestehende Prowlarr-Route
+alle sechs regulären deutschen ARD-Episoden (WEBDL-1080p) sowie alle vier
+deutschen ARTE-Episoden (WEBDL-720p, mit Untertiteln), jeweils korrekt S01/Enn
+und ohne Rejections. Normale ARD-Fassungen sind für jede Folge vorhanden;
+zusätzliche Audiodeskriptionsfassungen bleiben als solche gekennzeichnet.
+Keine Profile, Consumer-Routen oder Bibliotheksmetadaten wurden dafür geändert;
+kein Grab und kein neuer produktiver Import. Quellenverfügbarkeit ist zeitlich
+begrenzt, kein dauerhafter Verfügbarkeitsvertrag folgt aus diesem Zeitpunkt.
+
+P06.2/P06.3/P07.3 sind für diese Ergänzungsbefunde erneut abgenommen. P03.4
+bleibt insgesamt offen: weder zwei erfolgreich belegte Staffeln noch vier
+bounded MP4-Fenster beweisen sämtliche Film-/Quellen-Sprachen. Unvollständige
+Belege bleiben neutral. Privater Image-/GitOps-/Backup-/Rollbacknachweis und
+laufende Betriebsfreigabe gehören ausschließlich ins private Homelab-Runbook;
+dieser öffentliche Review enthält keine Instanzwerte oder realen APIantworten.
+
+## Breite TV-Suche, TBA und ZDF-MP4-Maße (06.10.2026)
+
+Neue Befunde in P06.4/P09.5 getrennt erfasst; ältere Abnahmen nicht als Beweis
+dieser Ergänzung wiederverwendet. Ein genauer TBA-Platzhalter wurde bisher als
+konkreter Titel behandelt; ein bereits geladener Basis-Platzhalter konnte zudem
+die sichere Sonarr-Koordinatenzuordnung verhindern. Neue Regressionen reproduzierten
+den TBA-/TBD-/To-be-announced-Fehler vor der Korrektur. Der Merge erhält Basiswerte
+und markiert bestätigte Koordinaten transient; der Matcher verlangt gesicherte
+Serie, vollständige Quellkoordinaten und bekannte passende Dauer. Konkrete
+Titel-/Datumskonflikte bleiben gesperrt. RSS rendert den tatsächlichen Quelltitel.
+
+Der neue TV-Abfrageowner verwendet begrenzte OR-Abfragen über verifizierte Namen
+und eindeutig seriengebundene Regel-Themen. Suchtext wird nicht als Alias gespeichert;
+Sammelthemen und mehrfach gebundene Themen werden nicht Identitätsbeweis. Review
+ergänzte RSS-Dedupe und Regel-Fingerprint einschließlich late-response-Abbruch,
+damit breitere Abfragen weder Duplikate noch alte Regelentscheidungen publizieren.
+Ein benötigter fehlgeschlagener Lookup liefert keine Teilmenge. RSS-Datumsfenster
+bleibt unverändert; Vorabfolgen erfordern eine separate Nutzerentscheidung.
+
+Der bestehende ISO-BMFF-Probeowner liest kodierte Maße aus einem unterstützten
+VisualSampleEntry ohne Voll-Download, Senderseitenparser oder zusätzliche Hosts.
+Genau eine Videospur/Beschreibung und vollständige Grenzen sind Pflicht; Maße
+und kohärente Audiosprache sind unabhängig. Vier 1-MiB-Fenster/Deadline bleiben;
+Audio-only-Worker ohne neue Videoseeks. Der bestehende v1/v2-/SQLite-/PG-Vertrag,
+historische GUIDs und Altjobs ändern sich nicht.
+
+Eine synthetische ZDF-Staffel mit englischem kanonischem Namen, deutschem
+Regel-Thema und zwei TBA-Episoden wird ausschließlich über das Thema gefunden.
+Der tatsächliche Newznab-Handler, RSS, Pagination, NZB und Queue-Parser bestätigen
+belegte S/E, deutschen Ton und echte 720p-Metadaten trotz HD-Slot. Negative
+Koordinaten-/Serien-/Dauer-/konkrete Titelkonflikte, Mehrvideo, unbekannter Codec,
+verschlüsselte/beschädigte Videobeschreibung und gemischte Audios bleiben geschützt.
+
+Lokale Abnahme: Node 26.10.0, reguläres `npm ci`, **1017** Tests in 90 Suites grün;
+14 bedingte PostgreSQL-Fälle nicht als lokal ausgeführt gezählt. Lint, Typecheck,
+Formatcheck, Produktionsbuild und Diffcheck grün. Bestehende 14 Turbopack-Tracing-
+Warnungen bleiben sichtbar. Lokal kein Docker-Daemon; frisch erforderliche native
+Sonarr-TBA-Suche direkt/via Prowlarr sowie Container-/Backendgates werden durch
+den Forkworkflow ausgeführt und sind vor dem Schließen der TODOs abzuwarten.
+Neue QA-Fixture bleibt unüberwacht, Quellen synthetisch und externes Netz blockiert;
+keine Grabs, Produktivdienste, Profile, Metadaten oder produktive DB verändert.
+Kein Rollout und keine vollständige Sprach-/Importabnahme behauptet.
+
+Review-Nachtrag: Auch der TV-Quellkandidatencache muss den Regel-Fingerprint
+enthalten, weil neue Themen bereits die Abfrage ändern. Der kausale Cachetest
+verlangt Wiederverwendung bei gleichem Kontext und einen echten neuen Lookup
+nach Kontextwechsel. Nach dieser Korrektur **1018** lokale Tests, Lint, Typecheck,
+Format und Build erneut grün. [Fork-CI auf `aefa709`](https://github.com/superions/pingufunk/actions/runs/37380855999)
+inklusive separater PostgreSQL-Integration bestanden; Containerabnahme noch offen.
+
+Begrenzter öffentlicher Quellengegencheck mit demselben neuen MP4-Probeowner:
+zwei aktuelle reguläre ZDF-Folgen liefern jeweils kohärentes Deutsch und kodierte
+1920×1080. Nur Range-Metadaten gelesen, keine Voll-Downloads; reale Katalog-
+und Medienantworten weder persistiert noch als öffentliche Fixtures übernommen.
+Das ist kein produktiver Sonarr-Treffer-, Grab- oder Importnachweis.
+
+Finale Entwicklungsabnahme auf unverändertem Produktstand `aefa709`:
+[Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/37380856018)
+vollständig bestanden. Native Sonarr-TBA-Suche direkt/via Prowlarr bewahrt
+Metadaten, ordnet Quelle zu S01E01/German/720p zu und löst keinen Grab aus.
+Native 720p-/UNKNOWN-/Konfliktvarianten, beide Backend-/Mediengates, TLS-Migration
+und Post-write-Rollback grün; keine Image-Publikation. P06.4/P09.5 geschlossen,
+P03.4 und die Vorabfolgen-/Produktiventscheidung unverändert getrennt offen.
+Abschließende Dokumentationsänderungen ändern keine getesteten Produktinputs;
+Produkt-CI-Evidenz wird deshalb wiederverwendet, nicht als neuer Lauf ausgegeben.
+
+Nutzerklarstellung zum separat freigegebenen Rollout (06.10.2026): Die frühere
+Formulierung einer noch offenen Vorabfolgen-Entscheidung war für Einzel-/Staffel-
+suchen unnötig. Diese übernehmen bereits den gesamten validierten Episodenbestand
+ohne Airdate-Fenster; der Matcher verlangt konkrete Medien-/Identitätsbelege,
+keinen bereits vergangenen TV-Termin. Der RSS-Owner hat dagegen sein eigenes
+Vergangenheitsfenster. Das ist keine Voraussetzung für eine explizite Suche
+bereits verfügbarer Mediathek-Folgen. Kein zusätzlicher RSS-Grab oder zweiter
+Endpunkt wird implementiert; keine automatische Download-/Importabnahme aus
+der Rolloutfreigabe abgeleitet. Der Vertrag und P06.4 unterscheiden das nun
+ausdrücklich. Unveränderte Produktinputs: dieselben grünen Gates wiederverwendet.
+
+## Architektur-Folgeauftrag (06.10.2026)
+
+### Auftrag, Basis und Aussagegrenze
+
+Nutzerauftrag: größte Verbesserungen codegestützt priorisieren und ausführbare
+TODOs erstellen; getrennte GUI-Regler für Film-/Serien-Laufzeit sowie das
+Erscheinungsjahr sind Pflicht. **Keine Implementierung oder Betriebsänderung**
+dieses Folgepakets. Aktiver Ausgangsstand `7b03d3e` mit unverändertem Produkt
+`aefa709`. Frisch abgerufenes Upstream-main:
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49`. Dessen Settings-/UI-Suchpfade
+enthalten ebenfalls nicht den hier benötigten atomaren Settings- und gemeinsamen
+Renditionvertrag; kein ungeprüfter Merge. Upstreams zusätzliche automatische
+Such-/Downloadfunktionen sind kein Auftrag für einen zweiten Arr-Scheduler.
+
+Geprüft: Settings-API/-Context/-GUI und ihre Validatoren, Filmziel-/Quellmatcher,
+TV-/Mediathekkoordination, Quellen-/Provideradapter, Rendition-/Audio-/MP4-Belege,
+NZB-Erwartungen, Queue-/SAB-Consumer, Abschlussprobe, Startup/Entrypoint,
+System-/Logs-/Downloadoberfläche sowie bestehende Tests/CI-Owner. Gegen die
+Nutzerentscheidungen, den bisherigen Phasenvertrag und die relevanten datierten
+Reviews abgeglichen. Dies ist ein codegestützter Selbstreview, kein unabhängiger
+Peerreview, keine aktuelle Produktionsverifikation und kein vollständiger
+Security-/Dependency-Audit. Fehlerszenarien unten sind aus dem Code abgeleitet;
+dieser Dokumentationsauftrag hat sie nicht neu in einer Runtime reproduziert.
+
+### Größte Hebel und Priorität
+
+| Priorität | Verbesserung                                                               | Nutzen / Aufwand                                                     | Ausführbarer Owner  |
+| --------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------- |
+| 1         | Einheitliche, getrennte Laufzeit-/Jahresregeln und drei GUI-Regler         | Sehr hoher Alltagsnutzen; GUI klein, Jobvertrag mittel               | P12.1–P12.3         |
+| 1         | Atomare Settingswrites und kanonischer Readback                            | Verhindert inkonsistente Policy-/Cachezustände; klein–mittel         | P12.1 / P05.2       |
+| 1         | GUI verliert keine nutzbare Rendition bei Standard-HLS                     | Konkrete Suchlücke, hoher Nutzen; klein–mittel                       | P14.1 / P10.1       |
+| 2         | Fachlich sichere Gründe statt „nicht gefunden“                             | Verkürzt Diagnose erheblich, keine neuen Sprachheuristiken; mittel   | P13.1–P13.2         |
+| 2         | Gemeinsame Quellenfakten, Frische und Probe-Coalescing                     | Weniger wiederholte Arbeit, weniger Budgetabbrüche; mittel           | P14.2 / P03.4       |
+| 2         | Exklusiver Einzelworkerbesitz und kontrollierter Shutdown                  | Schutz gegen versehentlichen Doppelstart/Recoveryrace; mittel–größer | P15.1               |
+| 3         | Radarr-GUI, paginierte History, Runtime-/Volumechecks, Enqueue-Bestätigung | Bedienbarkeit und wachsende Installationen; je klein–mittel          | P12.4 / P15.2–P15.4 |
+| 3         | Ownerweise Extraktion und Vertragsbereinigung                              | Weniger Hotfix-Sonderpfade, leichterer Upstreamabgleich; mittel      | P14.3 / P16.1       |
+
+Aufwand ist eine relative Einschätzung, keine Zeitzusage. Der zentrale Hebel
+ist **eine nachvollziehbare Pipeline mit gemeinsamen Fakten und Regeln**,
+nicht mehr Senderparser, ein größerer Fuzzywert oder ein Gesamt-Rewrite.
+
+### AR1 — Toleranzen sind vorhanden, aber nicht durchgehend derselbe Vertrag
+
+- `src/lib/radarr-settings.ts` bietet `matching.movie.tolerancePercent` (10 %,
+  ganze 0–25 %). Die GUI hat dafür kein Feld; auch die übrige optionale
+  Radarr-Konfiguration ist dort nicht vollständig bedienbar.
+- `src/app/settings/page.tsx` hat den Serienwert nur innerhalb der optionalen
+  Sonarr-Karte; dessen Speichervalidierung ist mit URL-/RSS-Feldern gekoppelt.
+  Fachliche Matchingregeln gehören unabhängig davon in Matching.
+- `src/services/movie-matcher.ts::MOVIE_YEAR_TOLERANCE` ist statisch 1.
+  `movie-search-context.ts` benutzt denselben Wert bereits in Parser/Zielprüfung.
+  Nur eine Stelle konfigurierbar zu machen wäre ein neuer Widerspruch;
+  Requestjahr, Titeljahr und Quelljahr dürfen Abweichungen nicht verketten.
+- `download-manager.ts::completeValidatedDownload` liest bei jedem Job den
+  **aktuellen Serienwert**. Medienerwartungen v1/v2 enthalten weder Medienart
+  noch gespeicherten Toleranzsnapshot. Ein Settingswechsel kann daher die
+  spätere Abschlussprüfung eines bereits wartenden Jobs verändern.
+
+Wichtige Abgrenzung: Der Filmmatcher vergleicht Quelle gegen Filmmetadaten,
+die Abschlussprobe häufig die tatsächliche Datei gegen die **Quelldauer**.
+Diese Referenzen sind nicht austauschbar. Einfach jeden Filmjob mit dem
+Filmprozentwert zu probieren wäre keine vollständige Reparatur. P12.2 trennt
+Identitätsregel, Assetabschluss, Herkunft und Jobpolicy; generische Jobs werden
+nicht anhand von Kategorien oder Dateinamen zu Filmen/Serien erklärt.
+Alte unversionierte/v1/v2-Jobs und bestehende GUIDs bleiben kompatibel.
+Für neue Jobs wird die Katalogreferenz mit festgehaltenen 10 % separat geprüft;
+die Serien-Metadatenreferenz verwendet die festgehaltene Serienregel. Beide
+bekannten Referenzen bleiben erhalten. Das sind unterschiedliche Prüfzwecke,
+kein vierter Matchingregler. Die bisher dynamische Altjob-Regel bleibt als
+Legacygrenze transparent; neue Payloads benötigen einen kompatiblen Rückweg.
+
+Konkrete Planannahmen: vorhandene Film-/Serienwerte behalten; Produktdefaults
+jeweils 10 %, nicht jede Installation ungefragt auf 15 % setzen. Jahrdefault
+±1 und Minimum ±1 erhalten, zunächst 1–5 Jahre konfigurierbar. GUI-Feld heißt
+**Film-Erscheinungsjahr**, weil genau dieser fachliche Vergleich im Code
+existiert. Serien-Airdate/Vorabverfügbarkeit bleibt davon unabhängig. Unknown
+wird durch keinen Regler zu einem positiven Identitäts-/Sprachbeweis.
+
+### AR2 — Batch-Speichern kann einen Teilstand hinterlassen
+
+`src/app/api/settings/route.ts::POST` validiert den Batch vorab, führt Upserts
+dann aber mit `Promise.all` ohne Gesamttransaktion aus. Consumerinvalidierung
+folgt erst nach vollständig erfolgreichem Await. Commit eines Upserts plus
+Fehler eines anderen kann deshalb gespeicherte Teilwerte **und** alte Caches
+hinterlassen. Das ist ein codebelegtes Fehlerszenario, kein hier nachgewiesener
+Live-Datenverlust. Für einige andere Keys akzeptiert der Validator weiterhin
+`String(value)` statt eines fachlichen Typs.
+
+Der Settingscontext übernimmt nach HTTP-Erfolg das eigene Submitobjekt, nicht
+den kanonisch gespeicherten Wert; beispielsweise kann `015` gespeichert als
+`15` zunächst anders angezeigt werden. P12.1 behandelt atomaren Write,
+gemeinsame Validatoren, bestätigten Readback und Generation als einen Vertrag.
+P05.2 deshalb eng wieder geöffnet, historische Cache-Nachweise erhalten.
+Gezielte Invalidation ist sinnvoll, aber erst nach verlässlichen Abhängigkeiten;
+kein vorschnelles Entfernen heute sicherer globaler Invalidierungen.
+
+### AR3 — GUI und Indexer verlieren/interpretieren unterschiedliche Kandidaten
+
+`src/app/api/search/route.ts::handleDefaultSearch` filtert den ganzen Eintrag
+nach `url_video`, während Newznab inzwischen Renditions einzeln prüft.
+Standard-m3u8 mit nutzbarem HD-MP4 verschwindet so bei deaktiviertem HLS aus
+der GUI. `url_video_hd || url_video` füllt zusätzlich einen HD-Slot ohne
+HD-Nachweis auf. Das ist nicht automatisch ein falscher 1080p-NZB-Stempel,
+aber ein falsches/verwirrendes Auswahlmodell.
+
+Der alternative `providers=true`-/`provider`-Pfad nutzt die Registry ohne
+denselben mitgegebenen Gesamtversuchszähler; sie begrenzt Resultate und behandelt
+Sourcefehler anders. `limit` wird dort nur per `parseInt` geparst. Adaptertypen
+können keine URL-gebundenen Dimensions-/Providerbelege durchgängig ausdrücken;
+der SRF→`ApiResultItem`-Adapter übernimmt selbst das optionale Audiofeld nicht.
+Das ist keine Behauptung, SRF liefere heute bereits jeden gewünschten Beleg.
+
+P14.1 vereinheitlicht Abruf, Budget und konkrete Renditionfakten. Fachlich
+darf generisches UI-Browsing weiterhin ohne sichere Arr-Zielidentität stattfinden;
+Indexeridentität bleibt streng. Partial-GUI-Ergebnis muss als unvollständig
+sichtbar sein, kein erfolgreich leeres/partielles Indexerresultat bei benötigtem
+Sourcefehler. P10.1 für diese neue Verbraucherlücke gezielt wieder geöffnet.
+
+### AR4 — Fehlende Treffer sind schlecht erklärbar; Abdeckung ist nicht Wahrheit
+
+Matcher/Quellenproben geben meist Treffer oder Unknown zurück, nicht einen
+durchgängigen fachlichen Grund. `/logs` ist ein „Coming Soon“-Platzhalter.
+Die sichere progressive Transferdiagnose ist bereits vorhanden und wertvoll;
+sie ersetzt aber keine Erklärung für Identitätskonflikt, unbekannte Sprache,
+Laufzeitabweichung, ausgeschöpftes Quellfenster oder fehlenden Folgeabruf.
+
+P13 nutzt typisierte geschlossene Gründe mit Kapazitäts-/TTL-Grenzen und
+Redaction statt roher Docker-/Providerlogs. Ein großer Matchscore bedeutet
+keine gesicherte Identität. Completed bedeutet geprüfter Download, nicht
+Arr-Import. Optionale lesende Importdiagnose darf nur belegte Zuordnung anzeigen;
+ohne Arr-Verbindung bleibt der Importstatus unbekannt.
+
+P03.4 bleibt offen. Weitere Parametererhöhungen oder Hostwildcards sind kein
+struktureller Sprachfix. `source-audio.ts` coalesced derzeit innerhalb einer
+Anfrage, nicht dauerhaft über Suchanfragen. Der bounded MP4-Owner kontrolliert
+Rangegrenzen und gleiche Gesamtlänge, aber keine Assetversion via ETag/If-Range;
+eine gleich große Änderung zwischen Fenstern kann so nicht erkannt werden.
+P14.2 macht Frische und Cachefähigkeit explizit, ohne vier 1-MiB-Fenster oder
+32-/10-Versuche/15-Sekunden zu erhöhen. Fehlender Beleg bleibt neutral.
+
+### AR5 — Prozesslokale Queuekoordination ist keine dauerhafte Besitzgrenze
+
+`download-manager.ts` schützt einen Prozess mit Semaphore/`processingPromise`.
+`instrumentation.ts` ruft beim autorisierten Start Recovery für aktive Jobs
+auf; es gibt keinen DB-weiten Besitzer/Fencingclaim. Zwei Prozesse können
+deshalb dieselbe Queue berühren bzw. aktive Nachbarjobs als unterbrochen markieren.
+Das ist ein Architektur-/Fehlstartrisiko, kein belegter aktueller Doppelworker.
+`application-entrypoint.mjs` leitet SIGINT/SIGTERM bereits weiter; eine gezielte
+Drain-/Leasekoordination des Workers ist damit noch nicht nachgewiesen.
+
+P15.1 härtet ausdrücklich den **Einzelworker**, keine horizontale Skalierung.
+PostgreSQL allein löst Ownership, Crash-/Commit-Ungewissheit und Filesystem-
+Seiteneffekte nicht. P15.4 behandelt einen zweiten konkreten Randfall:
+`addToQueue` erstellt je Aufruf eine UUID, ohne stabilen Auftragsschlüssel;
+verlorene Bestätigung plus UI-Wiederholung kann einen zweiten Job erzeugen.
+Idempotenz gilt nur für belegte gleiche Aufträge, nicht ähnliche Filmtitel.
+
+### AR6 — Betriebsoberfläche wächst und misst teilweise die falschen Dinge
+
+- `download.ts::getHistory` liest alle completed/failed-Zeilen;
+  `/downloads` holt Queue und gesamte History alle fünf Sekunden. Größerer
+  Bestand erhöht Query-/Payload-/Browserkosten, auch ohne aktive Downloads.
+  P15.2 darf native SAB-Consumer nicht durch blindes Abschneiden gefährden.
+- `/api/system` führt zwei synchrone Toolchecks bis je fünf Sekunden aus:
+  das kann den Node-Eventloop blockieren und prüft PATH statt zwingend der vom
+  Worker benutzten Binary. Historische TVDB-Tabellen sind kein aktiver Cache.
+  P15.3 trennt Readiness, Capabilities und alte Datenstatistik.
+- `entrypoint.sh` führt bei schreibendem Boot rekursiv `chown/chmod 755`
+  auf Download-/Tempvolumes aus. Maintenance ist bereits geschützt; regulärer
+  Boot sollte vorhandene Medien-/Nachbarrechte ebenfalls nicht umschreiben.
+
+### Bereinigung, Ausbau und bewusst kein Ausbau
+
+Die großen Owner (`mediathek.ts`, `newznab.ts`, `download-manager.ts`,
+Settings-GUI) mischen Koordination und Detailentscheidungen. P16 extrahiert
+erst nach gesicherten Policy-/Faktenverträgen, nicht nach einer Zeilenquota.
+Typed Cache-/Provider-/Decisionwerte und unabhängige Serializer sind hilfreicher
+als ein neues universelles Framework. P14.3 trennt Datumsarten und Unknown;
+explizite Vorabfolgensuche bleibt ohne vorgelagerten RSS-Grab möglich.
+
+Nicht vorgesehen: weitere HTML-Mediathekcrawler, private Titelpatches, eigener
+automatischer Arr-Scheduler, zwei manuell/automatisch getrennte Endpoints,
+generischer Sprachdefault als angeblicher Trackbeleg, Redis/Microservices,
+automatische DB-Fallbacks, höhere Replikazahl oder neue Produktpflicht zu PG.
+SQLite/PG bleiben gleichwertig; P11.9 bleibt optional. Produktivrollout,
+DB-Migration, reale Grabs und physische Proxyentfernung brauchen weiterhin
+ihre konkrete Freigabe. Keine privaten Betriebsdaten in diesen Dokumenten.
+
+### Vertragsnachreview und Evidenz
+
+Nach Überführung die neuen TODOs gegen jeden Befund, bestehende Erhaltungsregeln,
+aktuelle Code-Owner, Defaults/Units, Consumer, Abhängigkeiten und Abnahmegates
+erneut geprüft. Einzige ausführbare Folgeaufträge: P12–P16 im bestehenden
+Phasenvertrag; P05.2/P09.2/P10.1 referenzieren ihre engen Folgepakete, keine
+doppelten Implementierungslisten. P03.4/P11.9/P10.6/P10.7 bleiben ehrlich offen.
+Bestehende datierte Abnahmen und IDs erhalten; veraltete globale Vollabnahme
+im TODO-Kopf und das vermeintlich aktuelle historische Reviewurteil korrigiert.
+
+Neu geprüft: Prettier für beide Dokumente, 14 lokale Links einschließlich
+des neuen Abschnittsankers, 31 vorhandene Codeanker, 14 eindeutige offene neue
+Paket-IDs, genau drei gezielte Wiederöffnungen, Scope und `git diff --check`.
+Keine Produktgates bei reinem
+TODO-Authoring gemäß Skill. Die zuletzt dokumentierten 1.018 Tests sowie
+Produkt-CI/Container-/Backendnachweise werden für unveränderten Code lediglich
+wiederverwendet; sie beweisen die **noch offenen** Folgeanforderungen nicht.
+Neue GUI-Abnahmen müssen das tatsächlich servierte disposable Desktopbundle
+bedienen; neue Persistenzverträge beide disposable Backends. Keine Tests,
+Screenshots, Produktionsabnahme oder Deployment dieser neuen Pakete behauptet.
+
+## P12-Implementierungsreview (08.10.2026)
+
+Auftrag jetzt ausdrücklich Umsetzung des Folgepakets, zunächst zusammenhängender
+P12-Checkpoint auf `codex/matching-settings-contract`. Upstream
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49` nochmals abgeglichen; kein passender
+atomarer Settings-/Jobpolicy-Ersatz übernommen. Kein Produktionszugriff,
+Deployment, Imagepublish, Main-/Upstreampush oder reale Bibliotheksoperation.
+
+### Reparierte Verträge
+
+AR1/AR2 werden gemeinsam durch `settings-schema.ts`, die transaktionale API,
+bestätigte Clientresponseordnung und einen serverseitigen Suchsnapshot behoben.
+24 nichtsecret Produktkeys haben einen gemeinsamen Typ-/Default-/Grenzowner.
+Unbekannte historische Zeilen bleiben unverändert lesbar; neue unbekannte,
+Null-/Objekt- und ungültige Werte werden vor dem Write abgelehnt. Keine stille
+Reparatur vorhandener ungültiger Matchingwerte. Der Commitfehlerpfad sagt
+ausdrücklich „unbestätigt“, statt einen verlorenen Commit-Ack als Rollback zu
+behaupten. Kontrollierter Readback und Cacheinvalidierung sind kausal getestet;
+späte GETs und konkurrierende Formularwrites überschreiben keine Bestätigung.
+
+Die drei unabhängigen Matchingregler sind unabhängig von optionalen Arr-URLs
+bedienbar. Die neue Radarr-Karte ergänzt nur vorhandene öffentliche Controls;
+HTTP/HTTPS mit Unterpfad bleibt möglich. Credentialstatus ist vorhanden/fehlend/
+ungültig, ohne Key oder Pfad. Auch historische credentialhaltige Arr-URLs
+werden nicht an den Browser ausgegeben. Keine neue Secretverwaltung.
+
+Neue `MediaExpectations` v3 trennen Medienart, technische Katalogreferenz mit
+festen 10 % und belegte Serienmetadaten mit eingefrorener Serienregel. Beide
+bekannten Referenzen bleiben erhalten und werden unabhängig geprüft. Source-
+Audio-/Dimensionsbindung, Sample-/HLS-/EXDEV-/Byte-/Datei-/Exitguards bleiben
+erhalten. Alte v1/v2/unversionierte Jobs werden nicht umgeschrieben; ihre
+dynamische Altregel bleibt dokumentiert. Kein Schemawechsel; **nach einem v3-Job
+ist ein v3-inkompatibles Image trotzdem kein sicherer App-Rollback**.
+Vertrag und Rückweggrenze: [Settings-/Jobpolicy-Referenz](settings-contract.md).
+
+### Lokaler Entwicklungscheckpoint vor Forkabnahme
+
+- `npm ci`, danach **1073 bestandene reguläre Tests / 100 Dateien**;
+  18 backendabhängige Runtimefälle regulär übersprungen. Lint, Typecheck,
+  Formatcheck, Productionbuild und Diffcheck bestanden auf Node 26.10.0.
+- Zusätzlich **14/14 echte disposable SQLite-/PG-Runtimefälle** für Settings
+  und Joberwartungen: DB-native Fehler beim zweiten Write, kein Teilstand,
+  kanonischer Readback, Unknown-/Null-/Objekt-/Rangeablehnung und Neustart;
+  v1/v2/v3-Erwartungen über Einreihung, Retry und Settingswechsel. Das ersetzt
+  weder die vollständige PG-CI noch die neue reale Mediencontainerkette.
+- Tatsächlich serviertes Desktopbundle (1440×1100), Light/Dark, Pointer/Keyboard,
+  Save/Reload/API-/DB-Readback auf beiden Backends. SQLitetrigger und PG-Constraint
+  reproduzieren den zweiten Writefehler: keine Erfolgsmeldung, alte DB-Werte,
+  ungespeicherte Eingaben bleiben. Leere, gebrochene und übergroße Werte gesperrt;
+  andere Dirty-Karten und Matchingtab bleiben beim Readback erhalten.
+- Gematchte Vorher-/Nachherbilder in beiden Themes. Dark verwendet eine temporäre
+  Root-Themefixture im tatsächlich servierten Bundle, kein Produkt-Themewechsel
+  oder DOM-Nachbearbeiten; die Fixture ist entfernt. Frische stabile Light-
+  Produktions- und Dark-Testtabs haben keine Consoleerrors/-warnings.
+  Frühere HMR-Hydrationmeldungen während laufender Quelländerungen sind kein
+  behaupteter fehlerfreier Gesamtverlauf; die Abnahme nutzt frische stabile Tabs.
+
+Die Containerharnesses sichern weiterhin unbekannte Originalsettings, schreiben
+für den Persistenztest jetzt den typisierten Filmjahreskey und bestätigen den
+kanonischen Wert. Neue v3-Worker-Matrix ergänzt (nicht ersetzt) Legacy/HLS/
+Truncation/Audio/Auflösung/Retry/Restart. **Zu diesem Zwischencheckpoint waren
+Fork-CI und Dockervalidierung noch ausstehend; P12 und P05.2/P09.2 blieben bis
+zu deren unten dokumentierter finaler Abnahme offen.**
+P13–P16 sowie P03.4 sind durch diese Arbeit nicht abgenommen.
+
+Separate bestehende Befunde: 14 Build-Tracingwarnungen; `npm ci`/Audit meldet
+einen High-Hinweis in transitivem `source-map-js` 1.2.1 (GHSA-68fv-2mgg-jv7q).
+Das ist keine nachgewiesene Runtimeausnutzbarkeit und kein behobener Befund.
+Dependencies wurden in diesem Settingspaket nicht geändert; keine behauptete
+Securityvollabnahme. Review durch denselben Implementierer, kein unabhängiger
+Peerreview. Keine Secrets, privaten APIantworten oder Topologie in Fixtures/Git.
+
+Nachreview vor Abnahme: Die zunächst inventarisierte SRF-Enablevoreinstellung
+war zu streng gegenüber dem ausgelieferten Consumer. Fehlender Enable-Key
+bedeutete dort bereits „mit Credentials und HLS nutzbar“, nicht Disabled.
+Der Snapshotdefault erhält jetzt genau das; explizites false, fehlende
+Credentials und deaktiviertes HLS bleiben gesperrt. Eine kausale Regression
+verwendet den echten SRF-Owner innerhalb des echten Settingssnapshotowners,
+ohne externe API oder Credentialdatei. Voriger Produkt-CI-Lauf ist damit nur
+historische Zwischenstandevidenz; finale Fork-/Containergates wurden erneut
+erforderlich und sind in der folgenden Abnahme aufgeführt.
+Nach der SRF-Korrektur alle lokalen regulären Gates erneut bestanden:
+**1074 Tests**, Lint, Typecheck, Format und Build. UI-/DB-Evidenz für unveränderte
+Formulare und Transaktionen wird wiederverwendet, nicht als neuer Lauf ausgegeben.
+Die erste PG-CI fand außerdem noch eine alte Runtimefixture, die einen neuen
+unbekannten Key per API schreiben wollte. Dieser muss nach P12 korrekt 400
+liefern; Fixture auf unveränderten Legacy-Read plus kanonischen typisierten
+Write umgestellt, negative Unknown-Writeprüfung ergänzt. Kein Entfernen des Gates.
+
+### Abschließende P12-Abnahme
+
+Finaler Produktstand `4dc280c89db2a5d34e07bc1aed3d61bc99f561bf`:
+[Fork-CI 37704788531](https://github.com/superions/pingufunk/actions/runs/37704788531)
+mit Lint/Build und vollständiger PostgreSQL-Integration erfolgreich;
+[Dockervalidierung 37704788439](https://github.com/superions/pingufunk/actions/runs/37704788439)
+ebenfalls erfolgreich, einschließlich nativer Arr-Renditionconsumer direkt/via
+Prowlarr, Runtimewerkzeugen, TLS-Migrations-/post-write-Rollbackprobe,
+SQLite-Start-/Restartpersistenz und realer Medienworker-Matrix auf beiden
+disposable Backends. Die neue v3-Matrix prüft Film/Serie/Unknown, beide
+Dauerreferenzen unabhängig, HLS und Retry; die Legacy-Matrix bleibt erhalten.
+Die Zwischenstandevidenz aus Dockerlauf 37704528509 ersetzt diesen finalen
+Lauf nicht. Der zunächst fehlgeschlagene CI-Lauf 37704528522 bleibt als
+Fixturefinding dokumentiert, nicht als bestandener Lauf ausgegeben.
+
+P12.1–P12.4 sowie ausschließlich die engen Wiederöffnungen P05.2/P09.2 sind
+damit abgeschlossen. Die unveränderten Desktop-/Datenbankjourneys werden
+wiederverwendet; neue reguläre lokale Tests nach SRF-Korrektur und neue finale
+Fork-/Containergates sind gesondert benannt. Eigene lokale Testserver,
+SSH-Tunnel und markierter disposable PG-Container sind beendet; keine fremden
+Prozesse, Volumes oder Datenbanken bereinigt. Produktstand bleibt auf dem
+eigenen Topicbranch; weder Main-Integration, Deployment noch Imagepublikation.
+Die separaten Warnungen sowie P13–P16 und P03.4 bleiben ausdrücklich offen.
+
+## Implementierungsreview P14.1 — gemeinsamer begrenzter Quellenabruf
+
+Entwicklungscheckpoint 08.10.2026 auf `codex/search-rendition-contract`, nach
+P12. Upstream-main `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` nochmals gelesen:
+der betreffende Ganzeintrag-HLS-Filter und die Standard-als-HD-Ersetzung sind
+dort nicht bereits behoben. Keine Produktions- oder Main-/Upstreamänderung.
+
+`queryContentWindow` koordiniert beide GUI-Abfrageformen und den strengen
+Indexerwrapper. Ein gemeinsames zehn-Versuche-/15-Sekunden-Budget begrenzt
+Quellen, Folgeseiten und Retries. Überlange Seiten und fehlgeschlagene
+Folgeseiten verwerfen den Quellbestand; die GUI darf andere erfolgreiche
+Quellen nur ausdrücklich als Teilantwort anzeigen. Der Indexer übernimmt
+keine solche Teilantwort. Bounded Counts behaupten keine Kataloggesamtzahl.
+
+Eligibility entfernt einzelne URL-Slots vor Editiondedupe und Limit. Damit
+bleibt HD-/Low-MP4 trotz Standard-HLS auswählbar und Standard-MP4 trotz HD-HLS
+erhalten. Fehlendes HD wird nicht erfunden. Der vertrauenswürdige Adapter
+erhält URL-gebundene Audio-/Dimensionsfakten; untrusted Rohzeilen dürfen keine
+Providerherkunft oder GUI-ID vorgeben. Exakte NZBs verwenden denselben
+Renditionowner wie RSS. Ein nur zur anderen URL gehörender Audiobeleg entfernt
+auch die daraus abgeleitete Sprachangabe, nicht bloß den Belegcontainer.
+Alte GUI-IDs, RSS-/NZB-GUIDs, Kategorien und v1/v2/v3-Jobs bleiben erhalten.
+
+Lokale Gates: **1121 Tests bestanden, 18 getrennt geroutete Fälle übersprungen**,
+Lint, Typecheck, Formatcheck, Productionbuild und Diffcheck grün. Darin sechs
+echte SQLite-Runtimefälle der GUI→NZB→SAB→DB-/Retrykette. Unveränderte
+Installation aus P12 wiederverwendet; kein neuer `npm ci`-Lauf behauptet.
+Die separate PG-/native Arr-/Containerabnahme ist zu diesem Checkpoint offen.
+
+Desktopabnahme am tatsächlich servierten Productionbundle, 1280×720 Light:
+gematchte Vorher-/Nachherzustände zeigen 2→3 Ergebnisse bei gemischten HLS/MP4-
+Slots; nur tatsächliche HD/SD/Low-Auswahl, Keyboard und Pointer geprüft.
+Leere Antwort heißt nun ausdrücklich „im abgerufenen Suchfenster“, eine leere
+Teilantwort ist kein bestätigter Nichtfund. Sourcefehler, 50-von-70-Fenster,
+Partial- und alle-Quellen-deaktiviert-Zustände sind sichtbar geprüft, frische
+Browserkonsole leer. Der absichtliche Buttoncheck bei Write-Gate 0 bestätigt
+Ablehnung statt Download; native DB-Zählung bleibt **0 Jobs**. Externe
+Netzsperre und synthetische Providerfixtures verhindern reale Katalog-/Grabs.
+Eigene Tabs und Testserver anschließend beendet; keine fremden Prozesse.
+
+Nachreview durch den Implementierer, kein unabhängiger Peerreview: zusätzlich
+die Eligibility-vor-Edition-Grenze, abgeleitete Audioangaben, Roh-ID-Injektion,
+übergroße Providerseite und begrenzte Counts kausal negativ geprüft. Vertrag
+unter [begrenzter Quellenabruf](bounded-search-contract.md). P14.1/P10.1 bleiben
+bis zur neuen Fork-/Containerevidenz offen; P13/P14.2/P14.3/P15/P16 und P03.4
+sind durch dieses Paket nicht abgenommen. Bestehende Build-Tracingwarnungen
+und der bereits dokumentierte transitive Auditbefund bleiben separate Befunde.
+
+### Abschließende P14.1-Abnahme
+
+Produktstand `7d9893299a807458ffa550374a6359adf0849cab` auf dem eigenen Fork:
+[CI 37707678742](https://github.com/superions/pingufunk/actions/runs/37707678742)
+inklusive vollständiger PG-Integration erfolgreich;
+[Dockervalidierung 37707678881](https://github.com/superions/pingufunk/actions/runs/37707678881)
+vollständig erfolgreich. Neue native Sonarr-/Radarr-Qualitätsconsumer direkt
+und über Prowlarr, Tooling, TLS-Migration/post-write-Rollback, SQLitepersistenz
+und reale synthetische Medienabschlüsse/Retry auf beiden Backends bestätigen
+den neuen Producerstand. Keine Wiederverwendung der P12-Containerprüfung als
+Ersatz für P14.1. Tatsächliche Desktopprüfung und 1121 lokale Tests wie oben;
+finaler Nachcheck nennt bei Leerantworten das begrenzte abgerufene Suchfenster.
+P14.1 und ausschließlich die enge Wiederöffnung P10.1 sind damit geschlossen.
+P13, P14.2/P14.3, P15/P16 sowie P03.4 bleiben offen, keine Vollabnahme oder
+Produktionsfreigabe. Keine DDL, Jobs, Imagepublikation oder Mainintegration.
+
+## Implementierungsreview P15.3 — Readiness und schonender Volume-Start
+
+Entwicklungscheckpoint 08.10.2026 auf `codex/runtime-volume-contract` nach
+P12/P14.1. Upstream-main `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` enthält
+noch synchrone Request-Toolchecks und rekursives Volume-`chown/chmod`; keine
+passende bestehende Korrektur übernommen. Kein Deployment oder Mainpush.
+
+Der vollständige Ownerpfad wurde durch den Implementierer geprüft: tatsächliche
+FFmpeg-/ffprobe-/yt-dlp-Auflösung → begrenzte Kindprozesse → geschlossenes
+DTO → Route → Desktopparser; Schema-/Verbindungsreads → Maintenance-/Writegate
+→ explizit prozesslokaler Workerzustand; persistierte Downloadpfadpriorität →
+Prepare nur neuer Verzeichnisse → actual-user Check → Entrypoint. Alte API-
+Statistikfelder/500-Vertrag bleiben erhalten, Health ergänzt 503-Readiness.
+Der Health-GET startet/installiert/migriert nichts. Zehnsekunden-Strukturcache
+beweist keine Strukturprüfung bei jedem Aufruf; aktuelle Verbindung wird
+separat live gelesen. Prozesslokaler Status ersetzt keine P15.1-Lease.
+
+Nachreview behoben: PATH statt wirklicher Binaryowner, relative ffprobe-
+Konfiguration, Konfigurationsrotation während laufender Toolprüfung,
+freie Versionsausgabe, gecachte Readiness bei aktuell ausgefallener DB und
+alte gesunde Desktopstatistiken nach Fehler. Volumepfade verwenden die reale
+Configpriorität, nicht bloß ENV. Bestehende Owner/Mode/Inhalte bleiben erhalten;
+Readonly-Writer bricht ab statt Volume-Reparatur. Das frische Composebeispiel
+entspricht dem bereits vorhandenen Bindmount, keine Bestandskonfigumschreibung.
+
+Desktop am tatsächlich servierten Productionbundle, 1280×720 Light, matched
+before/after: Pointer/Keyboard, native disposable SQLite-Tabellenunverfügbarkeit
+mit Live=200/Ready=503 und sichtbarem Fehler statt Altstatistik; Recoveryreadback
+mit null Jobs; langsame synthetische ffprobe ergibt den abgegrenzten Timeout.
+Frische Browserkonsole leer, keine horizontale Overflow-/Mobil-/Darkabnahme
+behauptet. Eigener Baselinecheckout und Testserver danach beendet/entfernt,
+Screenshots als ignorierte lokale Evidenz erhalten. Keine Produktionsdaten.
+
+Native Timeouttests beweisen Eventloopresponsivität; die UI allein ersetzt
+diesen kausalen Nachweis nicht. Windowscleanup nicht nativ getestet. Die
+await-Deadline ist keine Prisma-Cancellation oder Mutationsretry-Freigabe.
+Neue Backendcontainer-/Forkabnahme bleibt bis zum tatsächlich erfolgreichen
+Lauf offen; alte P14-Gates ersetzen sie nicht. Vertrag unter
+[Runtimeprüfung](runtime-readiness-contract.md). Kein unabhängiger Peerreview.
+P13/P14.2/P14.3/P15.1/P15.2/P15.4/P16 und P03.4 bleiben offen; bestehende
+Build-Tracingwarnungen und transitive Auditfinding separat unverändert.
+
+Container-Zwischenlauf 37709209422 brach bereits beim Build ab: die bestehende
+Script-Allowlist in `.dockerignore` schloss den neuen Volumehelper aus. Die
+Allowlist wurde gezielt ergänzt, nicht die private Script-/Datenabschirmung
+aufgehoben. Keine Containerabnahme aus diesem fehlgeschlagenen Lauf behauptet.
+Finale lokale **1141 Tests**, Lint, Typecheck, Formatcheck und Diffcheck grün;
+Productionbuild für den unveränderten Produktquellstand wiederverwendet.
+
+## Implementierungsreview P13.1 — kausale geschlossene Diagnose
+
+Entwicklungscheckpoint 08.10.2026, `codex/decision-evidence-contract` nach
+P12/P14.1/P15.3-Produktcheckpoint. Upstream-main
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49` anhand tatsächlichem Movie-/Workerowner
+erneut geprüft: kein entsprechender geschlossener Diagnosevertrag vorhanden.
+Keine Main-/Produktions-/Upstreamänderung, kein Imagepublish.
+
+Vollständiger betroffener Pfad durch den Implementierer reviewt: GUI-/Indexer-
+Requestscope → Quellen-/Folgeseiten-/Budgetentscheidungen → Movie-/Sonarrmatcher
+→ Sprach-/Rendition-/MP4-Beleg → Probeerror → Workerfailure-Write. Positive
+Belege bleiben getrennt von Scores und fehlenden Facts. Ein Medienfehler wird
+erneut vor Persistenz validiert; rohe Errorobjekte bleiben außen. Bestehende
+Transferdiagnostik und sichere Quellfehlermessages bleiben kompatibel.
+
+Nachreview behoben: bislang verlorene Probeursache, gespeicherte Berichtobjekte
+gegen Fremdmutation, Late-Tasks nach Scopeabschluss, begrenzte parallele
+Collectorzahl, TTL-/Kapazitäts-/Eventoverflow, „complete“ als missverständliches
+Berichtsfeld (jetzt `recorded`, kein Source-/Match-Erfolg), cached RSS ohne
+behauptete neue Belegprüfung. Mehrere Metadatenvergleiche sind Ownerprüfungen,
+keine deduplizierte Trefferzählung. Header bleibt neue zufällige Kennung,
+XML/Status/IDs/GUIDs unverändert; Prowlarr-Headerweiterleitung nicht behauptet.
+
+Neue Routen-/Matcher-/Probe-/Workerregressionen schützen die wirkliche Ursache
+und den Consumer; synthetische Exception-/URL-/Pfadinjektionen werden verworfen.
+Kein öffentlicher Reader oder Dockerlogzugriff. Die alten freien Logs sind
+nicht pauschal behoben; P13.2 besitzt deren Bereinigung, tatsächlichen
+Zugriffschutz, GUI und separat belegten Arr-Import-/Blockstatus.
+Fork-/Backend-/Containerabnahme bis zu neuen erfolgreichen Läufen offen.
+Vertrag [Entscheidungsdiagnose](decision-diagnostics-contract.md); kein
+unabhängiger Peerreview und keine Sprach-/Worker-/Gesamtvollabnahme.
+
+### Finale P15.3- und P13.1-Abnahmen
+
+P15.3 auf `c8ccdcc91f8bb42c2d99d8790c12c6b5c3f90853`:
+[Fork-CI 37709293171](https://github.com/superions/pingufunk/actions/runs/37709293171)
+und [Containerkette 37709293111](https://github.com/superions/pingufunk/actions/runs/37709293111)
+vollständig grün. Die eigenen Volume-Owner-/Mode-/Inhaltssentinels über
+Start/Restart/Maintenance, Readonly-Abbruch und Medienabschlüsse auf beiden
+Backends sind neu geprüft, keine ersatzweise P14-Evidenz. Erster fehlgeschlagener
+Allowlistbuild bleibt dokumentiert. Keine P15.1-Ownershipabnahme.
+
+P13.1 auf `9ed044aa1f2f32a834702a3f1a7d5d30277d3e9d`:
+[Fork-CI 37709955459](https://github.com/superions/pingufunk/actions/runs/37709955459)
+und [Containerkette 37709955519](https://github.com/superions/pingufunk/actions/runs/37709955519)
+vollständig grün, inklusive PG, nativen Arr-/Prowlarrconsumern, Tooling,
+TLS-Migration/post-write-Rollback, SQLitepersistenz und realen Medienabschlüssen.
+1152 lokale Tests und übrige Gates grün. Keine neue UI-Journey dieses
+API-/Workerpakets; P13.2 besitzt UI, Zugriffschutz, freie Logs und Arr-Import.
+Die Checkboxen sind geschlossen, Gesamt-/Sprachvollabnahme weiterhin falsch.
+
+## Implementierungsreview P15.2 — paginierte Betriebsreads
+
+08.10.2026 auf `codex/download-read-pagination`. Vollständiger Read-/Callerpfad
+durch den Implementierer reviewt: Native SAB-/Arr-Parameter → geschlossene
+Validierung → DB-Filter/Sortierung/Serializable-Snapshot → Counts/Slots →
+serverseitige Pfadprojektion → GUI-Windowack/Generation → Filter/Paging/Polling.
+Mutationen unverändert, kein DDL oder Readtimeout als Retryfreigabe.
+Upstream besitzt bereits History-Paging; die Anpassung erhält dessen Prinzip
+ohne dessen andere Queue-/Medienverträge zu kopieren.
+
+Nachreview korrigiert: native `limit=0` darf nicht abgeschnitten werden,
+verlorene historische private Kategorien im Filter, Timestamp-Gleichstände
+und NULL-Sortierung, widersprüchliche Counts beim gleichzeitigen Abschluss,
+alte Antworten nach Filterwechsel, malformed Slotdaten und vermeintlich leere
+GUI bei Readfehler. ASCII-Suchcases auf beiden DBpfaden getestet; Unicode-
+Collation nicht pauschal gleichgesetzt. Offsetseiten sind keine unbewegliche
+Historie, alte konkrete IDs bleiben gezielt lesbar.
+
+Serviertes Desktopbundle 1280×720 Light, matched before/after: 1050→50 Zeilen,
+zweite Seite, Pointer-/Keyboardfilter, Kategorie/Failed, gezielter alter Titel,
+Leer-/DB-Fehler-/Recoveryzustand, Konsole sauber. 176798→8499 HTTP-Bytes bei
+derselben 1050er Fixture. Eigene DB zurückgestellt, alle 1110 Jobs unverändert;
+kein Retry/Grab/Delete. IAB meldet alle Vergleichtabs visible; kein tatsächlicher
+hidden-Tab-Timer-Nachweis behauptet. Pollentscheidung kausal getestet.
+PG-/Fork-/Containerfinale noch offen; [Readvertrag](download-read-contract.md).
+Keine Produktionsänderung, Mainintegration oder öffentliche Imagepublikation.
+
+## Implementierungsreview P14.3 — Datums-/Rechteowner
+
+08.10.2026 auf `codex/content-availability-dates`. Upstream-main `4ebaa8e`
+besitzt weiterhin den Katalogtimestamp-/Newest-Fallback im Titelmatcher; kein
+entsprechender Quellenzeit-/Rechtevertrag. MediathekView-Parser, Indexerworker
+und SearchEngine als Primärquellen geprüft. Vollständiger betroffener Pfad
+reviewt: rohe Whitelist → validierte Datefakten → Provideradapter → ARTE-/ARD-
+Programmprüfung → Anreicherung → Renditionauswahl → tatsächliche RSS-/NZB-
+Consumer und frische ARD-Workerverifikation. Review durch Implementierer.
+
+Behoben: Katalogrefresh als falsches Airdate, erratenes Filmjahr im älteren
+Providerhelper, unmögliche/reverse Rechtezeitpunkte, Verlust von ARD-Ablaufbelegen
+zu bloß neutralen Kandidaten sowie ungebundene Übertragung von Rechtefakten.
+Datewerte sind getrennt von Produktionsjahr und Sonarr-RSS-Zeitfenster;
+unknown ist weder verfügbar noch abwesend. Kein Date-/HTTPbeweis für Sprache.
+
+Neuer tatsächlicher Routentest für sichere Vorabfolge bestätigt Einzel- und
+Staffelsuche sowie exakte NZB-URL ohne Grab. Die erste RSS-Erwartung des Tests
+musste den **bestehenden** synthetischen Validationitemvertrag berücksichtigen:
+keine Behauptung, ein Validationitem sei eine herunterladbare Vorabfolge.
+Schlussprüfung für fehlende/reverse/expired Rechte, exakte URL und unveränderte
+GUIDs. Keine UIlayoutänderung, DDL, neue Sender-HTMLabfrage oder Budgeterhöhung.
+
+Offener Reviewbefund: ganze RSS-Antwortcaches umgehen die erneute Auswahl und
+deren Rechteprüfung. P14.2 besitzt die gemeinsame Frischegrenze; vor deren
+Schließung und neuen Fork-/Backend-/Containergates keine P14.3-Vollabnahme.
+Vertrag [Quellenzeiten und Rechte](content-date-contract.md).
+
+### Finale P15.2-Abnahme
+
+`0d2d10745760cff7f2fdba63751d18af09825539`:
+[Fork-CI 37711382041](https://github.com/superions/pingufunk/actions/runs/37711382041)
+einschließlich großer PG-History-/Queueprobe und
+[Containerkette 37711382103](https://github.com/superions/pingufunk/actions/runs/37711382103)
+vollständig erfolgreich: native Arr direkt/via Prowlarr, Tooling, TLS-Migration/
+post-write-Rollback, SQLitepersistenz und echte Medienconsumer beider Backends.
+1175 lokale Tests und übrige Produktgates grün; Desktopfilter/Paging/Fehler/
+Recovery separat beobachtet. IAB-Visibilitygrenze weiter offengelegt. P15.2
+geschlossen, keine P15.1/P15.4- oder Gesamt-/Produktionsabnahme.
+
+## Implementierungsreview P14.2 — Quellenfrische
+
+08.10.2026 auf `codex/source-proof-freshness`: vollständiger betroffener
+Read-/Call-/Cache-/Writepfad durch Implementierer erneut geprüft. Positive
+Katalogzeilen/RSS-Bodies und Sonarr-Treffer dürfen aktuelle Assetfakten nicht
+ersetzen. Sonarr hält nur Metadatenziele/Cursor, actual source retrieval und
+Serialisierung bleiben frisch. Kein zweiter Sprachowner oder Sendercrawler.
+
+MP4: gleiche Größe reicht nicht; weiterer Range braucht denselben starken
+ETag plus If-Range. Versionskonflikt verwirft auch schon gelesene Audiofakten,
+kein partieller Dimensionscatch darf solche Fakten retten. Last-Modified ist
+ohne belegte Clockstärke nicht ausreichend. Zeitcache validiert immer neue
+erste Bytes, exakte URL inklusive Signaturen, Kontextgeneration und Parser;
+Flights behalten unabhängige Attempt-/Deadlinegrenzen. Typisierte begrenzte
+Caches, keine beleglosen negativen Ergebnisse. Frische Worker-/lokale
+Abschlussprüfungen unverändert. [Vertrag](source-proof-freshness.md).
+
+Regressionen und Review: gleich großer Assetwechsel zwischen Ranges, schwache/
+fehlende Validatoren, ignoriertes If-Range, Rotation/Expiry/anderer Fassung,
+parallele Caller, zu kleines/abgelaufenes Budget und späterer erfolgreicher
+Beleg; actual RSS→NZB erneuert URL/Audio/Rechte. Alte Cache-Assertions ersetzt
+durch erneute Quellenrequests und strenge Consumer-/GUID-/Expiryassertions;
+keine Tests entfernt/skipped. Die native leere RSS-Validationitemgrenze bleibt
+ausdrücklich kein normaler Treffer. Gemessene synthetische Vierfensterprobe:
+drei Requests/2.097.168 Bytes gespart, keine Provider-Vollabdeckungsbehauptung.
+
+1228 lokale Tests/übrige Produktgates grün. Finale neue Fork-/Backend-/Container-
+ketten noch offen; P14.2/P14.3 nicht vorzeitig geschlossen, P03.4 weiterhin
+separat. Keine neue UIlayout-/Schema-/Deploymentänderung.
+
+### Finale P14.2/P14.3-Abnahme
+
+08.10.2026: kumulativer Produktstand
+`2f98a1a25c3c42002fd09428652d793c7a30b9f8`,
+[Fork-CI 37713227718](https://github.com/superions/pingufunk/actions/runs/37713227718)
+und [Containerkette 37713227755](https://github.com/superions/pingufunk/actions/runs/37713227755)
+vollständig erfolgreich, einschließlich PostgreSQL, beider Medienbackends,
+nativer Arr-Consumer, TLS-Migration, Persistenz/Restart und damaligem Rollback.
+Frischegrenze beseitigt den Whole-RSS-Cacheumweg aus P14.3; beide Punkte im TODO
+geschlossen. Keine Aussage, alle Sprach-/Quellenvarianten seien nun beweisbar.
+
+## Implementierungsreview P15.4 — dauerhafte Auftragsbestätigung
+
+08.10.2026 auf `codex/enqueue-idempotency`: vollständiger Header→Bodylimit→
+NZBparser→Payloadnormalisierung→DBtransaktion→Workertrigger→ACK→GUIstorage-
+Pfad erneut durch Implementierer geprüft. Upstream-main
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49` erneut abgerufen; kein entsprechender
+Receiptowner. Kein Peer-Review oder Produktionsnachweis.
+
+Zwei ursprüngliche Reviewfindings behoben: Ein nur am Job gespeicherter Key
+ginge bei History-Delete/Retry verloren; nun unabhängige Empfangsbestätigung
+ohne FK/Cascade, atomar mit dem Job. Ein Fingerprint des ganzen NZB änderte
+sich mit dessen Transporttimestamp; nun kanonischer Jobpayload. Idempotenz
+ist explizit optional, keine native Titel-/URL-Dedupe. Unique-Race liest ACK,
+ungewisser Commit wird nicht erneut ausgeführt. Trigger nur für einen neuen
+Job, Recovery/Workerbesitz bleibt P15.1.
+
+Retention: sieben Tage, danach alter Timestampkey abgelehnt, maximal 100
+Receipt-Cleanups je Anfrage. Löscht keine Jobs/History/Dateien. Browser maximal
+64 pending opaque Keys ohne payloadhaltigen Storage, vor POST persistiert;
+kein stilles Entfernen/automatischer Retry, kein SSL/SubtleCrypto-Zwang.
+409-Konflikt, Storagefehler, Timeout und fehlende ACK werden getrennt von einem
+bewusst neuen Auftrag behandelt. Die UI-Warnung für Doppelgrab wurde mit
+Cancel/Keyboard-Confirm auf dem tatsächlich gebauten Desktopbundle geprüft.
+
+DB-/Migrationsreview: beide Clients per Generator, historische SQL unverändert,
+neue eigene Tabelle in beiden Ketten, P09-Shape separat erkannt. Vollständige
+Current-Receipts über SQLitebaseline/PGimport exakt erhalten, alte Sources
+haben leere Receipts. Erstwrite-Checkpoint vor interaktivem Transactionpool-
+Claim; Receipt und Job bleiben gemeinsam atomar. Failed-Insert-Regression,
+acht parallele Requests, verlorene Antwort und Clientrestart, anderer Payload,
+expliziter neuer Auftrag, Legacy/v1/v2/v3 und Expiry/Cleanup/Maintenance kausal
+gegen reale SQLite; dasselbe PG-Gate im Fork, plus tatsächlicher Container-
+Restart auf beiden Backends. Keine Probeläufe gegen produktive DBs.
+
+Rollbackgrenze: das historische Image kennt die neue DDL und ACK nicht.
+Seine strikte Ablehnung ist erforderlich; kein lockererer Schema-/Ledgercheck.
+Harness erweitert um Receipt-Backup-/Restoregleichheit, historische Ablehnung
+und kompatiblen Maintenance-Rollback mit exaktem aktuellem Image. Das ersetzt
+keinen noch nicht gebauten funktionalen historischen Code-Rollback. Kein
+Produktivupdate ohne eigenes kompatibles Rollbackimage/Runbook; vor Writes
+bleibt unveränderter Source mit passendem alten Image möglich.
+
+1257 lokale Tests (20 separat aktivierbare Backendtests hier nicht ausgeführt),
+Lint/Typecheck/Formatcheck/Productionbuild erfolgreich. Vorher-/Nachher-Suche/
+Filme 1280×720 Light, simulierte verlorene ACK, Reload, HD/SD/Low und Dialog
+bedient; neun Transportanforderungen ergeben fünf bewusste Simulatoraufträge,
+Wiederholungen dieselbe ID. App schreibt dabei keine Jobs, Browser-Konsole leer.
+Kein Live-Importnachweis aus diesem Simulator. Neue Fork-/PG-/Containerabnahme
+steht noch aus; P15.4 bleibt offen. [Vertrag](enqueue-intent-contract.md).
+
+## Implementierungsreview P15.1 — tatsächlicher Workerbesitz und Shutdown
+
+08.10.2026: vollständiger Start/Recovery/Claim/Progress/Probe/Completion/Failure-
+und Signalpfad durch Implementierer geprüft, kein unabhängiger Peerreview.
+DB-CAS gegen exakten versionierten Wert und DBzeit, Mutation hinter gehaltenem
+Fence, konservative Expiry/Heartbeat, keine fremden Recoverywrites und kein
+automatischer Re-Transfer nach Crash/ungewissem Commit. HTTP und eigene
+POSIX-Toolgruppen erhalten Abort; tatsächliches close vor Leasefreigabe.
+Keine DDL, keine neue Parallelität oder HA-Zusage.
+
+Die echte Zweiprozess-/Crash-/Expiry-/PG-Ausfallprobe ist im Fork grün.
+Ein anfänglicher Denied-role-Folgefehler war Testschema-Kontamination: das
+Reconnectschema wurde isoliert, Null-Checkpoint-Assertion blieb unverändert.
+Die erste kumulative Containerkette stoppte zuvor beim veralteten hardcodierten
+SQLiteledgercount; jetzt werden alle realen Namen und SQLchecksums verglichen,
+keine Schemaabnahme aufgeweicht. Die nächste Kette erreichte tatsächlichen Mux,
+scheiterte jedoch am unmittelbar terminalen Zustand nach Restart.
+
+Der servierte Turbopack-Build enthält mehrere Download-Manager-Modulgraphen.
+Moduleigene Queue-/Signalglobals können so den APIwriter vom Instrumentation-
+Drain trennen. Ein gemeinsamer versionierter Prozessslot verbindet Scheduling,
+Lease, offene Directwork, Fehlerreconciliation und einmaligen Signalhandler;
+ein Modulreloadtest schützt genau diese Trennung. DB-CAS bleibt der
+prozessübergreifende Besitzer, der Globalslot ist kein Ersatz dafür.
+Die native Muxassertion wird nicht gelockert; Fehler nennen nur geschlossenen
+Status und Vorhandensein von Validierung. Frische Containerabnahme ausstehend.
+
+## Implementierungsreview P13.2 — bedienbare geschlossene Diagnose
+
+08.10.2026 auf `4c44255`: JSON-Suche und Diagnosebericht stammen aus derselben
+Operation, kein Berichtreader mit beliebiger ID und keine Veränderung des
+nativen RSS/SAB-Bodys. `/logs` zeigt ausschließlich den begrenzten tablokalen
+Kurzzeitbericht; UUIDs sind kein Authmechanismus. Selektiver Jobreader benutzt
+die vorhandene Installations-Lesegrenze, niemals beliebige Provider-/Dateipfade,
+Rohantworten oder Shelllogs. GET-only Arr-Vertrag ist optional, standardmäßig
+aus und exakt an Download-ID, Grab/Importhistory, File-ID, Pfad, Größe und
+aktuellen Serien-/Filmbezug gebunden. Abgeschnittene/widersprüchliche History
+und unsichere Zuordnung bleiben unbekannt; API-Importmeldung ist kein physischer
+Dateibeweis auf dem Arr-Host.
+
+Tatsächliche lokale Jobdatei verlangt regulären sicheren Ownjobpfad und gleiche
+positive DB-/Dateigröße. Persistierte v1/v2/v3-Medienfakten sind historische
+Prüfung, kein erfundener neuer Mediencheck; zukünftige Version unbekannt.
+Reviewkorrekturen: geschlossene APIparser verwerfen freie Felder/Widersprüche,
+Ausfall entfernt vorherige Dateibestätigung, alte rohe Failmessages nicht in GUI,
+Diagnosebutton erhält Tastaturfokus mit aria-busy und synchroner Doppelreadsperre.
+Prüferwartung in alten Tests war einmal durch einen als Cleanup zurückgegebenen
+Vitestmock verfälscht; Testhook korrigiert, Productcatch nicht geschwächt.
+
+1299 lokale Tests, Lint, Typecheck, Formatcheck und Productionbuild grün.
+Desktop-Light 1280×720 am eigenen tatsächlich servierten Bundle: Suche/Filme/
+Shows/Downloads/Logs vor/nach, Pointer/Keyboard, leer/timeout/konflikt/unknown/
+completed/importblocked und Readback/5minExpiry. Achtsekündiger GET bestätigt
+Busyfocus und nur eine Diagnoseanforderung, keine Mutationen. Screenshots lokal,
+Browserkonsole leer. Fork-CI `37719361827` einschließlich PG grün; Containerkette
+`37719361778` scheiterte ausschließlich am beschriebenen nativen Shutdown-
+Folgezustand. Kein vorzeitiger P13.2-/Produktgesamtabschluss, keine Liveprobe.
+
+## Implementierungsreview P16.1 — konkrete Ownergrenzen
+
+08.10.2026: erster buildbarer Extraktionsstand, kein abgeschlossener Gesamtpunkt.
+`mediathek.ts` koordiniert Anfragen und Bounded Retrieval; bestehende Ruleset-
+Zuordnung und TV-Koordinaten liegen in konkreten Matchern, Kandidatenabruf und
+ARTE-Discovery in ihrem Abrufowner, Sourceproof→Releaseassembly in
+`mediathek-release.ts`. `newznab.ts` bleibt der unveränderte Titel/GUID/RSS/NZB-
+Serializer; kein zweiter Episodenparser. 33 verschobene Funktionen besitzen nach
+ASTnormalisierung identische Bodies; zusätzlich kausale Consumerregressionen,
+nicht allein Sourcegleichheit, schützen Ordering und Negativfälle.
+
+Metadatencache besitzt die echte Series/Film-Union mit Narrowing statt `any`-
+Werten/ungeprüften Callerassertions. Leerer Cataloguecache bleibt unverändert;
+keine neuen positiven Whole-RSS-/URLcaches. NZBparser liegt beim vorhandenen
+versionierten Releaseowner; öffentlicher Downloadexport bleibt kompatibel,
+UI-NZB-Producer braucht keinen statischen Queue/DBimport mehr. Kein behaupteter
+Clientbundle-Leak aus einem rein serverseitigen historischen Import.
+
+Settingskarte und lokaler Draft sind getrennt, kanonisches Schema/Server-
+Validation/Responseordering unverändert. Drei getrennte Identitätsgrenzen und
+optionale Arr-/Sprachkarten behalten IDs/Labels, keine Credentialsfelder.
+Bestätigte Karte löscht weder fremde Entwürfe noch neuere Werte desselben Keys.
+Desktopreview fand den nativen Busy-Fokusverlust: synchroner Saveguard plus
+aria-busy statt nativer Busy-Deaktivierung korrigiert, Invalidgrenzen bleiben
+gesperrt. Nachher am tatsächlich gebauten Bundle, Light 1280×720: alle vier
+Karten gematcht, Pointer/Keyboard, Werte 12/15/2 gegen Radarrentwurf 11,
+Save/Reload/API- und direkter DBreadback. Echte disposable SQLite-Schreibsperre
+verweigert den Write, Eingabe/Fokus erhalten und gespeicherter Filmwert weiterhin
+10, keine Jobs. Save und Reload bewahren Fokus; Sprachpräferenz separat
+persistiert. Keine Mobil-/Theme-/Liveprobe, Konsole ohne unerwartete Fehler.
+Transfer/Queue/Completion-Extraktion wartet auf native P15.1-Abnahme.
+Historischer Plan ausdrücklich als Analysebasis markiert, aktueller Einstieg
+bleibt ausschließlich das TODO. Upstream-main frisch
+`4ebaa8e8fa839fe44fa7862be0b49896385f5b49`, kein entsprechender Fix.
+
+### Kumulative Abnahme P13.2/P15.1/P15.4
+
+08.10.2026 auf `75b3318cb414218c624aee7c195084dda39d1d17`:
+[Fork-CI 37720415235](https://github.com/superions/pingufunk/actions/runs/37720415235)
+und [Containerkette 37720415340](https://github.com/superions/pingufunk/actions/runs/37720415340)
+erfolgreich. Die reale Muxprobe bestätigt auf SQLite und PostgreSQL kontrollierten
+SIGTERM-Abbruch, sofort failed ohne Medienvalidierung, Exit 143, folgenden
+Queueabschluss und unveränderten Nachbarhash. Zusätzlicher realer PG-Ausfall
+bestätigt Abort/paused Failurewrite und spätere Reconciliation ohne Re-Transfer.
+Die Bundleslotkorrektur beseitigt den beobachteten nativen Shutdownbefund; die
+ursprüngliche terminale Assertion bleibt unverändert. Erster Lauf dieser Revision
+scheiterte vor den Produktgates an Registry-429, genau ein begründeter Wiederlauf.
+
+1300 reguläre Tests und die vollständigen separaten PostgreSQLgates grün;
+Receipt-/ACK-/Restartketten, tatsächliche Arr-Consumer direkt/via Prowlarr,
+Tooling, vollständige SQLite-Migrationskette, TLS-Migration und Backup/Restore
+ebenfalls grün. Historische inkompatible Images werden abgewiesen; kompatible
+aktuelle Maintenance ist nicht als historische funktionale Coderücknahme
+ausgegeben. Desktop-/Readback-Evidenz von P13.2/P15.4 bleibt gültig, keine neue
+sichtbare Änderung in der Workerkorrektur. Die drei Ownerpunkte sind geschlossen;
+P16 und unabhängige P03.4-Abdeckung bleiben getrennt. Keine Produktion,
+Mainintegration, Publikation oder unabhängige Peerreview behauptet.
+
+### Letzte P16.1-Extraktion — Downloadowner
+
+Nach tatsächlicher P15.1-Abnahme: `download-transfer.ts` besitzt den bestehenden
+exklusiven Byte-/Dateifinish-Transfer samt geschlossenem Fehlervertrag und
+60s-Inaktivitätsgrenze; dies ist keine Medien- oder Importbestätigung.
+`download-completion.ts` besitzt die sichere Veröffentlichung in den eigenen
+Jobordner und den einzigen Probe→reguläre Datei→gefenceten Completionwrite.
+`download-manager.ts` bleibt Scheduler/HLS-/Muxkoordinator sowie Failure-
+Reconciliation; Prozessslot und DB-Lease bleiben ihre bestehenden Besitzer.
+Keine neue Persistenz, Public-API, Kategorie, Pfad-/GUID-/Versionssemantik oder
+Parallelität. Alle 14 ursprünglichen Funktionen zusätzlich als exakt ein Owner
+mit identischen ASTnormalisierten Bodies verglichen; kein Ersatz für Verhalten.
+
+Vollständiger Call-/Read-/Writepfad erneut durch Implementierer geprüft:
+direkter/HLS-/Muxabschluss benutzt denselben Mediaowner, Abortsignal und
+Lease bleiben durchgehend, Fehler löschen ausschließlich eigene unvollständige
+Dateien, unbekannte Commitbestätigung wird lesend reconciliert. Aussage über
+positive Sourcecache-Reuse und die inzwischen behobene historische Queue-
+Unsichtbarkeit im Inaktivitätskommentar bereinigt. 143 fokussierte Tests für
+Transfer/Files/EXDEV/HLS/Probe/Mux sowie Suchconsumer grün. Abschließende reguläre
+Gates ebenfalls erfolgreich: 1303 reguläre Tests, 21 bewusst separate
+Backendfälle im dedizierten Gate; Lint/Typecheck/Formatcheck/Productionbuild und
+Diffcheck grün. Die 14 bestehenden Tracingwarnungen bleiben, keine neuen
+Dependencies oder Schemaänderungen. Native kumulative Abnahme dieses letzten
+Extraktionsstands noch ausstehend; P16.1 bleibt offen.
+
+### Finale Architekturabnahme P12–P16
+
+08.10.2026, letzter Quellstand
+`82aef878e5caee9d593972d07909c389b6abe8c5` auf `codex/owner-boundaries`:
+[Fork-CI 37722097108](https://github.com/superions/pingufunk/actions/runs/37722097108)
+einschließlich eigenständiger PostgreSQLintegration und
+[Containerkette 37722097163](https://github.com/superions/pingufunk/actions/runs/37722097163)
+vollständig erfolgreich. 1303 reguläre Tests/119 Dateien; die 21 im regulären
+Lauf separat aktivierbaren Backendfälle sind nicht als dort ausgeführt gezählt.
+Lint/Typecheck/Formatcheck/Productionbuild/Diffcheck bestanden. `npm ci` lokal
+für unveränderten Lock-/Packageinput wiederverwendet, im frischen Forklauf neu
+ausgeführt; lokal Node 26.10.0, Fork Node 24.21.0.
+
+Die Endkette bestätigt tatsächliche Sonarr-/Radarr-/Prowlarr-Qualitäts-/TBA-
+Consumer direkt und weitergeleitet, Tooling, vollständige SQLiteledger,
+TLS-Migration und Receipt-Backup/Restore mit strengem historischen Imagereject
+und kompatibler aktueller Maintenance. Reale progressive/HLS/Mux-/v3-/Legacy-
+Medienabschlüsse und Negativfälle, SAB-Aliase/Retry/Restart, SIGTERM im Mux und
+PG-Ausfall mit Failurewrite-Pause/Reconciliation bestehen auf beiden Backends.
+Kein funktionaler historischer Code-Rollback oder Mehrworkerbetrieb behauptet.
+
+Die unveränderten Desktop-Save-/Reload-/Fokus-/Fehler-/Kartenisolationsnachweise
+des tatsächlich servierten Settings-/Diagnosebundles bleiben gültig; die letzte
+Extraktion verändert ausschließlich Serverowner. Zusätzliche Endbundleprobe
+auf eigener neuer SQLite: echte gehaltene synthetische HTTP-Suche, bestätigter
+Settingswrite währenddessen, alte Antwort 503 ohne Teilergebnis, neue Antwort
+mit der gespeicherten Mindestdauer, kanonischer API-/DBreadback, null Jobs.
+Alle Nichtfixture-Quellen blockiert, keine realen Bibliotheks-/Medienoperationen.
+Die App-Route-Settingsowner teilen den erwarteten Snapshot/Invalidierungszustand;
+mehrfach enthaltene Mapquellen allein beweisen keinen neuen Bundlefehler.
+Eigene QA-Prozessbäume kontrolliert beendet, temporäre Browserseite geschlossen.
+
+Alle 14 Architekturpakete sind nach ihrer unveränderten Abnahme geschlossen;
+31 lokale relative Referenzlinks und Paketvollständigkeit zusätzlich geprüft.
+Review durch Implementierer, keine unabhängige Peerreview. Historische Analysen
+bleiben ausdrücklich Referenzen; nur das bestehende TODO ist ausführbarer Status.
+Keine Credentials, privaten Helpers/Topologie oder QA-Daten staged. Bekannte
+14 Tracingwarnungen und der zuvor dokumentierte transitive `source-map-js`-
+Auditbefund bleiben getrennt. P03.4 ist weiterhin die offene allgemeine
+Tonsprachenabdeckung, kein Produktvollabschluss. Produktion, Main, Upstream und
+Imagepublikation unverändert; Deployment-/Rollbacksicherheitsgrenzen bleiben
+operative Freigabegates. Nach diesem Quellstand folgen nur Abnahmedokumente,
+keine dadurch ungültig gewordenen Produktgates.

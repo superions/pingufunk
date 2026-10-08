@@ -7,6 +7,7 @@ const { configFindUnique, downloadFindMany } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db", () => ({
+  databaseProvider: "sqlite",
   prisma: {
     config: { findUnique: configFindUnique },
     download: { findMany: downloadFindMany },

@@ -99,11 +99,11 @@ export function classifyLanguageEdition(item: ApiResultItem): LanguageEdition {
   const audioLanguage = normalizedLanguageCode(item.audioLanguage);
   const audioEvidence: AudioEvidence =
     audioLanguage === null ? "unknown" : isGermanLanguageCode(audioLanguage) ? "german" : "other";
-  const originalVersion = item.originalVersion === true || hasOriginalVersionMarker(item.title);
+  const originalVersion = item.originalVersion ?? hasOriginalVersionMarker(item.title);
   const germanSubtitles = hasGermanSubtitleEvidence(item);
-  const audioDescription = hasAudioDescriptionEvidence(item);
-  const signLanguage = hasSignLanguageEvidence(item);
-  const clearSpeech = hasClearSpeechEvidence(item);
+  const audioDescription = item.audioDescription ?? hasAudioDescriptionEvidence(item);
+  const signLanguage = item.signLanguage ?? hasSignLanguageEvidence(item);
+  const clearSpeech = item.clearSpeech ?? hasClearSpeechEvidence(item);
 
   const featureTokens = [
     ...(audioDescription ? ["AD"] : []),

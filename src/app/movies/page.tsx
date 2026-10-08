@@ -9,6 +9,10 @@ import { Search, Download, Film } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
 import { useContentSearch } from "@/hooks/use-content-search";
+import { SearchCoverageNotice } from "@/components/search-coverage-notice";
+import { enqueueUiNzb, UiEnqueueError, type UiEnqueueRequest } from "@/lib/ui-enqueue";
+import { UncertainEnqueue } from "@/components/uncertain-enqueue";
+import { DecisionDiagnosis } from "@/components/decision-diagnosis";
 
 interface SearchResult {
   id: string;
@@ -24,6 +28,7 @@ interface SearchResult {
   url_video_low: string;
   url_website: string;
   nzbDownloads: UiNzbDownloads;
+  nzbFingerprints: UiNzbDownloads;
 }
 
 type QualityOption = {
@@ -39,10 +44,15 @@ export default function MoviesPage() {
     isSearching,
     submittedQuery,
     error: searchError,
+    coverage,
+    diagnostics,
     search,
   } = useContentSearch<SearchResult>("movie");
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [uncertain, setUncertain] = useState<{ id: string; request: UiEnqueueRequest } | null>(
+    null
+  );
 
   const handleSearch = async () => {
     setDownloadError(null);
@@ -57,7 +67,7 @@ export default function MoviesPage() {
 
   const getQualityOptions = (result: SearchResult): QualityOption[] => {
     const options: QualityOption[] = [];
-    if (result.nzbDownloads.hd && result.url_video_hd !== result.url_video) {
+    if (result.nzbDownloads.hd) {
       options.push({ label: "HD", nzb: result.nzbDownloads.hd, key: "hd" });
     }
     if (result.nzbDownloads.sd) {
@@ -71,24 +81,27 @@ export default function MoviesPage() {
 
   const handleDownload = async (result: SearchResult, nzbContent: string, qualityKey: string) => {
     const downloadKey = `${result.id}-${qualityKey}`;
+    await submitDownload(downloadKey, {
+      nzb: nzbContent,
+      fingerprint: result.nzbFingerprints?.[qualityKey as keyof UiNzbDownloads] ?? "",
+      category: "default",
+    });
+  };
+  const submitDownload = async (
+    downloadKey: string,
+    request: UiEnqueueRequest,
+    newIntent = false
+  ) => {
     setDownloadError(null);
     setDownloadingIds((prev) => new Set(prev).add(downloadKey));
 
     try {
-      const res = await fetch("/api/download?mode=addfile&cat=default", {
-        method: "POST",
-        body: nzbContent,
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      if (!data.status) {
-        throw new Error("Download rejected");
-      }
-    } catch {
+      await enqueueUiNzb(request, newIntent);
+      setUncertain(null);
+    } catch (error) {
+      setUncertain({ id: downloadKey, request });
       setDownloadError(
-        "Der Download wurde nicht bestätigt. Queue prüfen, bevor du erneut einreihst."
+        error instanceof UiEnqueueError ? error.message : "Auftrag nicht bestätigt. Queue prüfen."
       );
     } finally {
       setDownloadingIds((prev) => {
@@ -144,8 +157,17 @@ export default function MoviesPage() {
           {searchError || downloadError}
         </p>
       )}
+      {downloadError && uncertain && (
+        <UncertainEnqueue
+          busy={downloadingIds.has(uncertain.id)}
+          retry={() => submitDownload(uncertain.id, uncertain.request)}
+          startNew={() => submitDownload(uncertain.id, uncertain.request, true)}
+        />
+      )}
 
       {/* Search Results */}
+      <SearchCoverageNotice coverage={coverage} />
+      {submittedQuery && !isSearching && <DecisionDiagnosis report={diagnostics} />}
       {searchResults.length > 0 && (
         <Card>
           <CardHeader>
@@ -213,13 +235,18 @@ export default function MoviesPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && !searchError && searchResults.length === 0 && submittedQuery && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            Keine Filme gefunden für &quot;{submittedQuery}&quot;
-          </CardContent>
-        </Card>
-      )}
+      {!isSearching &&
+        !searchError &&
+        coverage?.complete &&
+        coverage.sources.some((source) => source.state === "complete") &&
+        searchResults.length === 0 &&
+        submittedQuery && (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Keine nutzbaren Filme im abgerufenen Suchfenster für &quot;{submittedQuery}&quot;
+            </CardContent>
+          </Card>
+        )}
 
       {/* Initial State */}
       {!searchQuery && searchResults.length === 0 && (

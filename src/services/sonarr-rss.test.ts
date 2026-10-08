@@ -2,12 +2,18 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ApiResultItem, TvdbData } from "@/types";
 import type { MediathekQueryOptions } from "@/lib/mediathek-client";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+vi.mock("./rulesets", () => ({
+  getAllTopics: () => [],
+  getRulesetsForTopic: () => [],
+  getRulesetContext: () => state.rules,
+}));
 
 const state = vi.hoisted(() => ({
   epoch: 0,
   settings: new Map<string, string>(),
   pending: new Map<string, Promise<unknown>>(),
   query: vi.fn(),
+  rules: "initial-rules",
 }));
 vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn(async (key: string) => state.settings.get(key) ?? null),
@@ -31,6 +37,7 @@ vi.mock("./content-search", () => ({
   queryContent: state.query,
 }));
 import { getSonarrRssMatches } from "./sonarr-rss";
+import { generateRssItems } from "./newznab";
 
 const now = Date.parse("2026-09-30T12:00:00Z");
 const inventory = Array.from({ length: 7 }, (_, index) => ({
@@ -45,6 +52,7 @@ const base = vi.fn(async (): Promise<TvdbData | null> => null);
 
 beforeEach(() => {
   state.epoch++;
+  state.rules = "initial-rules";
   state.settings.clear();
   state.settings.set("integration.sonarr.enabled", "true");
   state.settings.set("integration.sonarr.url", "https://example.invalid/sonarr");
@@ -109,6 +117,35 @@ it("default-off performs no inventory or content requests", async () => {
   expect(state.query).not.toHaveBeenCalled();
 });
 
+it("deduplicates OR retrieval and invalidates snapshots on a rule-context change", async () => {
+  fetchMock.mockImplementation(async (value: string) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/system/status")) return Response.json({ version: "4.0.1" });
+    if (url.pathname.endsWith("/series")) return Response.json([inventory[0]]);
+    return Response.json(episodes.get(1));
+  });
+  base.mockResolvedValue({
+    id: 101,
+    name: "Synthetic 1",
+    germanName: null,
+    aliases: [{ name: "German alias", language: "de" }],
+    episodes: [],
+  });
+  const original = state.query.getMockImplementation()!;
+  state.query.mockImplementation(async (_queries, size, options) =>
+    original([{ query: "Synthetic 1" }], size, options)
+  );
+  const matches = await getSonarrRssMatches(base);
+  expect(matches).toHaveLength(1);
+  expect(state.query.mock.calls.some((call) => call[0][0].query === "German alias")).toBe(true);
+  const calls = state.query.mock.calls.length;
+  expect(await getSonarrRssMatches(base)).toEqual(matches);
+  expect(state.query).toHaveBeenCalledTimes(calls * 2);
+  state.rules = "changed-rules";
+  expect(await getSonarrRssMatches(base)).toEqual(matches);
+  expect(state.query.mock.calls.length).toBeGreaterThan(calls * 2);
+});
+
 it("publishes supplemental HLS only when the existing HLS option is explicitly enabled", async () => {
   const load = state.query.getMockImplementation()!;
   state.query.mockImplementation(async (queries, size, options) => {
@@ -141,7 +178,7 @@ it("bounds cold snapshots to the shared ten attempts and rotates monitored serie
     )
   ).toBe(true);
   expect(await getSonarrRssMatches(base)).toEqual(first);
-  expect(state.query).toHaveBeenCalledTimes(4);
+  expect(state.query).toHaveBeenCalledTimes(8);
   vi.setSystemTime(now + 60_000);
   const second = await getSonarrRssMatches(base);
   expect(second.map((match) => match.tvdbId)).toEqual([105, 106, 101, 102, 103]);
@@ -158,6 +195,39 @@ it("uses the foreground RSS budget and reserves five attempts for its source win
   // The same caller can still perform its primary five-page Recent retrieval.
   for (let page = 0; page < 5; page++) budget.takeAttempt();
   expect(budget.remainingAttempts).toBe(1);
+});
+
+it("reuses pagination goals but refreshes rotated media URLs and availability on every request", async () => {
+  const first = await getSonarrRssMatches(base);
+  const metadataCalls = fetchMock.mock.calls.length;
+  const query = state.query.getMockImplementation()!;
+  state.query.mockImplementation(async (queries, size, options) =>
+    (await query(queries, size, options)).map((item: ApiResultItem) => ({
+      ...item,
+      url_video: "https://example.invalid/fresh.mp4?token=rotated",
+    }))
+  );
+  const second = await getSonarrRssMatches(base);
+  expect(second.map((match) => match.tvdbId)).toEqual(first.map((match) => match.tvdbId));
+  expect(second.every((match) => match.item.url_video.endsWith("?token=rotated"))).toBe(true);
+  expect(first.every((match) => !match.item.url_video.endsWith("?token=rotated"))).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(metadataCalls);
+  state.query.mockImplementation(async (queries, size, options) =>
+    (await query(queries, size, options)).map((item: ApiResultItem) => ({
+      ...item,
+      sourceAvailability: {
+        state: "declared_rights",
+        provenance: "ard_player",
+        checkedAt: now / 1000,
+        beginsAt: null,
+        endsAt: now / 1000 - 1,
+        urls: [item.url_video],
+      },
+    }))
+  );
+  const expired = await getSonarrRssMatches(base);
+  expect(expired).toHaveLength(first.length);
+  expect(expired.flatMap((match) => generateRssItems(match, "all", false))).toEqual([]);
 });
 
 it("uses inclusive UTC boundaries and excludes future/missing/invalid dates", async () => {

@@ -5,6 +5,7 @@ import { selectLanguageVariants } from "./language-editions";
 import { readLanguagePolicy } from "@/lib/language-policy";
 import type { ApiResultItem, TvdbData } from "@/types";
 import { queryMediathekView } from "@/lib/mediathek-client";
+import { releaseMediaExpectations } from "./release-media-expectations";
 vi.mock("@/lib/mediathek-client", () => ({
   MEDIATHEK_VIEW_MAX_PAGE_SIZE: 1000,
   queryMediathekView: vi.fn(async () => []),
@@ -50,7 +51,7 @@ function config(streams = [stream()]) {
     },
   };
 }
-function mockPlayer(value = config(), status = 200) {
+function mockPlayer(value: unknown = config(), status = 200) {
   vi.mocked(queryMediathekView).mockResolvedValue([
     { ...item, url_video: "https://fixture.akamaized.net/german.mp4" },
     { ...item, url_video: "https://fixture.akamaized.net/ov.mp4" },
@@ -62,9 +63,35 @@ function mockPlayer(value = config(), status = 200) {
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("ARTE source and edition contracts", () => {
+  it.each(["valid", "conflict", "missing", "different-url"])(
+    "preserves only exact player rendition dimensions for TV: %s",
+    async (kind) => {
+      const entry = { ...stream(), width: 1280, height: 720 };
+      const streams: Array<ReturnType<typeof stream> & { width?: number; height?: number }> =
+        kind === "different-url" ? [stream(), { ...entry, url: entry.url + "?other=1" }] : [entry];
+      if (kind === "conflict") streams.push({ ...entry, width: 1920, height: 1080 });
+      if (kind === "missing") streams.push(stream());
+      const fetch = mockPlayer(config(streams));
+      const result = await resolveArteSeriesEditions([item], show, new HttpRequestBudget());
+      const german = result!.find((i) => i.url_video === entry.url)!;
+      expect(releaseMediaExpectations(german).resolution).toEqual(
+        kind === "valid"
+          ? {
+              width: 1280,
+              height: 720,
+              provenance: "provider_dimensions",
+            }
+          : null
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  );
   it("accepts only exact official HTTPS video pages, never locale as audio", () => {
     expect(arteVideoId(item.url_website)).toBe("123456-001-A");
     for (const url of [
@@ -121,7 +148,6 @@ describe("ARTE source and edition contracts", () => {
     "foreign-id",
     "coordinates",
     "unknown-code",
-    "hls",
     "conflicting-versions",
     "geoblocked",
     "expired",
@@ -131,7 +157,6 @@ describe("ARTE source and edition contracts", () => {
     if (kind === "foreign-id") value.data.attributes.metadata.providerId = "654321-001-A";
     if (kind === "coordinates") value.data.attributes.metadata.subtitle = "(2/6)";
     if (kind === "unknown-code") value.data.attributes.streams = [stream("VA-UNKNOWN")];
-    if (kind === "hls") value.data.attributes.streams[0].protocol = "HLS";
     if (kind === "conflicting-versions")
       value.data.attributes.streams[0].versions.push({ eStat: { ml5: "VF" } });
     if (kind === "geoblocked")
@@ -145,6 +170,65 @@ describe("ARTE source and edition contracts", () => {
       result === null ? null : selectLanguageVariants(result, readLanguagePolicy(null))
     ).toEqual(kind === "foreign-id" ? null : []);
   });
+  it("preserves indexed MP4 renditions when the verified player exposes only a multi-audio HLS stream", async () => {
+    mockPlayer(
+      config([
+        {
+          ...stream("VA"),
+          protocol: "API_HLS_NG_MA",
+          url: "https://fixture.akamaized.net/master.m3u8",
+        },
+      ])
+    );
+    const result = await resolveArteSeriesEditions([item], show, new HttpRequestBudget());
+    expect(result).toEqual([
+      {
+        ...item,
+        arteVerifiedVideoId: "123456-001-A",
+        sourceAvailability: {
+          state: "declared_rights",
+          provenance: "arte_player",
+          checkedAt: expect.any(Number),
+          beginsAt: Date.parse("2020-01-01T00:00:00Z") / 1000,
+          endsAt: Date.parse("2099-01-01T00:00:00Z") / 1000,
+          urls: [item.url_video],
+        },
+      },
+    ]);
+    expect(result![0]).not.toHaveProperty("audioLanguage");
+    expect(result![0]).not.toHaveProperty("sourceAudioEvidence");
+    expect(selectLanguageVariants(result!, readLanguagePolicy(null))).toHaveLength(1);
+  });
+
+  it.each(["empty", "missing", "reversed", "impossible", "future"])(
+    "keeps rights distinct from a current player response: %s",
+    async (kind) => {
+      const value = config([stream("VA", item.url_video)]);
+      if (kind === "empty")
+        value.data.attributes.rights = {} as typeof value.data.attributes.rights;
+      if (kind === "missing") Reflect.deleteProperty(value.data.attributes, "rights");
+      if (kind === "reversed")
+        value.data.attributes.rights = {
+          begin: "2099-01-01T00:00:00Z",
+          end: "2020-01-01T00:00:00Z",
+        };
+      if (kind === "impossible") value.data.attributes.rights.begin = "2026-02-30T00:00:00Z";
+      if (kind === "future") value.data.attributes.rights.begin = "2099-01-01T00:00:00Z";
+      mockPlayer(value);
+      const result = await resolveArteSeriesEditions(
+        [{ ...item, url_video: "", url_video_hd: item.url_video }],
+        show,
+        new HttpRequestBudget()
+      );
+      if (kind === "empty" || kind === "missing") {
+        expect(result).toHaveLength(1);
+        expect(result![0]).toMatchObject({
+          sourceAvailability: { state: "unknown" },
+          url_video_hd: item.url_video,
+        });
+      } else expect(result).toEqual(kind === "future" ? [] : null);
+    }
+  );
   it("distinguishes absent editions from provider outage without partial results", async () => {
     mockPlayer(config(), 404);
     expect(await resolveArteSeriesEditions([item], show, new HttpRequestBudget())).toEqual([]);
@@ -152,6 +236,8 @@ describe("ARTE source and edition contracts", () => {
     expect(await resolveArteSeriesEditions([item], show, new HttpRequestBudget())).toBeNull();
   });
   it("keeps verified OV and AD independently of row and stream order", async () => {
+    // Row ordering is compared at the same evidence-observation instant.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now());
     const streams = [
       stream("VOA", "https://fixture.akamaized.net/ov.mp4"),
       stream("VAAUD", "https://fixture.akamaized.net/ad.mp4"),

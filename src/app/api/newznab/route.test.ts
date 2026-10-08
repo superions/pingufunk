@@ -24,6 +24,10 @@ const tmdbMocks = vi.hoisted(() => ({
 }));
 const radarrMocks = vi.hoisted(() => ({ getRadarrMovie: vi.fn() }));
 const downloadMocks = vi.hoisted(() => ({ addToQueue: vi.fn() }));
+vi.mock("@/lib/settings", () => ({
+  getSetting: vi.fn(async () => null),
+  withSettingsSnapshot: vi.fn(async (operation: () => Promise<unknown>) => operation()),
+}));
 
 vi.mock("@/services/mediathek", () => mediathekMocks);
 vi.mock("@/services/shows", () => showMocks);
@@ -187,8 +191,13 @@ describe("one movie contract for direct and forwarded indexer requests", () => {
     );
     const content = await nzbResponse.text();
     const mediaExpectations = {
-      version: 1,
-      duration: { seconds: 5400, provenance: "source_catalogue" },
+      version: 3,
+      mediaKind: "unknown",
+      durations: {
+        source: { seconds: 5400, provenance: "source_catalogue", tolerancePercent: 10 },
+        metadata: null,
+      },
+      sourceAudio: null,
       audio: null,
       resolution: null,
     };
@@ -233,7 +242,7 @@ describe("Newznab indexer validation", () => {
 
     expect(response.status).toBe(200);
     const budget = showMocks.getShowInfoByTvdbId.mock.calls[0][1];
-    expect(budget.remainingAttempts).toBe(10);
+    expect(budget.remainingAttempts).toBe(32);
     expect(showMocks.getShowInfoByTvdbId).toHaveBeenCalledWith(12345, budget);
     expect(mediathekMocks.fetchSearchResultsById).toHaveBeenCalledWith(
       show,
@@ -349,8 +358,13 @@ describe("Newznab indexer validation", () => {
     expect(nzbContent).toContain(`<!-- ${encodedTitle} -->`);
     expect(nzbContent).toContain(Buffer.from(source.url_video).toString("base64"));
     const mediaExpectations = {
-      version: 1,
-      duration: { seconds: 2700, provenance: "source_catalogue" },
+      version: 3,
+      mediaKind: "unknown",
+      durations: {
+        source: { seconds: 2700, provenance: "source_catalogue", tolerancePercent: 10 },
+        metadata: null,
+      },
+      sourceAudio: null,
       audio: null,
       resolution: null,
     };
@@ -437,8 +451,13 @@ describe("Newznab indexer validation", () => {
       expect(encodedTitle).toBe(Buffer.from(title, "utf-8").toString("base64"));
       expect(downloadResponse.status).toBe(200);
       const mediaExpectations = {
-        version: 1,
-        duration: { seconds: 1800, provenance: "episode_metadata" },
+        version: 3,
+        mediaKind: "series",
+        durations: {
+          source: { seconds: 2700, provenance: "source_catalogue", tolerancePercent: 10 },
+          metadata: { seconds: 1800, provenance: "episode_metadata", tolerancePercent: 10 },
+        },
+        sourceAudio: null,
         audio: null,
         resolution: null,
       };

@@ -4,6 +4,7 @@ import type { ApiResultItem, Ruleset, TmdbMovieData, TvdbData, TvSearchContext }
 
 const mediathekMocks = vi.hoisted(() => ({
   getShowInfoByTvdbId: vi.fn(),
+  getRadarrMonitoredMovies: vi.fn().mockResolvedValue([]),
   cacheEntries: new Map<string, { response?: string; results?: ApiResultItem[] }>(),
   rulesets: {
     getRulesetContext: vi.fn(() => "synthetic-rules"),
@@ -44,10 +45,14 @@ vi.mock("./rulesets", () => mediathekMocks.rulesets);
 vi.mock("./tmdb", () => ({
   searchMovieByTitle: vi.fn().mockResolvedValue(null),
 }));
+vi.mock("./radarr-provider", () => ({
+  getRadarrMonitoredMovies: mediathekMocks.getRadarrMonitoredMovies,
+}));
 
 import {
   fetchMovieSearchByQuery,
   fetchMovieSearchResults,
+  fetchMovieSearchForRssSync,
   fetchSearchResultsById,
   fetchSearchResultsByString,
   fetchSearchResultsForRssSync,
@@ -108,6 +113,7 @@ function mockApi(results: ApiResultItem[]): void {
 beforeEach(() => {
   vi.clearAllMocks();
   mockedFetch.mockReset();
+  mediathekMocks.getRadarrMonitoredMovies.mockResolvedValue([]);
   mediathekMocks.cacheEntries.clear();
   mockedGetMinDuration.mockResolvedValue(300);
   mockedGetSetting.mockResolvedValue(null);
@@ -136,6 +142,21 @@ describe("Sonarr supplemental search consumer", () => {
       },
     ],
   };
+  it("refreshes TV source retrieval when bound rule topics change", async () => {
+    mockApi([
+      makeItem({ topic: supplemental.name, title: "Missing episode (S02/E03)", duration: 120 }),
+    ]);
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("before-topic-change");
+    const context = makeTvSearchContext({ tvdbId: supplemental.id, season: "2" });
+    await fetchSearchResultsById(supplemental, context, 100, 0);
+    const initialCalls = mockedFetch.mock.calls.length;
+    expect(initialCalls).toBeGreaterThan(0);
+    await fetchSearchResultsById(supplemental, context, 100, 0);
+    expect(mockedFetch).toHaveBeenCalledTimes(initialCalls * 2);
+    mediathekMocks.rulesets.getRulesetContext.mockReturnValue("after-topic-change");
+    await fetchSearchResultsById(supplemental, context, 100, 0);
+    expect(mockedFetch.mock.calls.length).toBeGreaterThan(initialCalls * 2);
+  });
 
   it("finds an exact supplemental episode via its real title on the same caller budget", async () => {
     mockedGetSetting.mockImplementation(async (key) =>
@@ -296,7 +317,7 @@ describe("shared catalogue rules preserve identity and independent candidates", 
     expect(xml).toContain('name="tvdbid" value="299964"');
     expect(xml).toContain("S02E01");
   });
-  it("does not reuse identity output after a rule-context change, while reusing source candidates", async () => {
+  it("does not reuse identity output or positive source rows after a rule-context change", async () => {
     mockApi([makeItem({ topic: rule.topic, title: "Occupied S02E01" })]);
     mediathekMocks.rulesets.getRulesetContext.mockReturnValue("rules-before");
     const context = makeTvSearchContext({ query: "Occupied" });
@@ -307,7 +328,7 @@ describe("shared catalogue rules preserve identity and independent candidates", 
     const after = await fetchSearchResultsByString(context, 100, 0);
     expect(after).not.toContain('name="tvdbid"');
     expect(after).toContain('total="1"');
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
   it.each(["bad-json", '[{"attribute":"duration","type":"GreaterThan","value":"1000"}]', "[]"])(
     "keeps independent candidates when a rule fails: %s",
@@ -552,7 +573,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     const xml = await fetchMovieSearchByQuery("Example Film 1998", 100, 0);
 
     expect(xml).toContain('total="1"');
-    expect(xml).toContain("Magazine.Feature.A.report.unrelated.to.the.requested.film.720p");
+    expect(xml).toContain("Magazine.Feature.A.report.unrelated.to.the.requested.film.UNKNOWN");
     expect(xml).not.toContain(".2024.");
     expect(xml).not.toContain(".GERMAN.");
     expect(xml).not.toMatch(/name="(?:tmdbid|imdbid)"/);
@@ -1014,6 +1035,68 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     }
   });
 
+  it.each([undefined, "2026-09-27", "2026-09-26"])(
+    "disambiguates repeated episode titles only with a unique source broadcast day: %s",
+    async (broadcastDay) => {
+      const show: TvdbData = {
+        id: 654321,
+        name: "Repeated series",
+        germanName: null,
+        aliases: [],
+        episodes: ["2026-09-27", "2026-09-28"].map((day, index) => ({
+          name: "Repeated episode",
+          aired: new Date(`${day}T00:00:00Z`),
+          runtime: 60,
+          seasonNumber: 1,
+          episodeNumber: index + 1,
+        })),
+      };
+      const rule: Ruleset = {
+        id: 9,
+        mediaId: 9,
+        topic: show.name,
+        priority: 0,
+        filters: "[]",
+        titleRegexRules: JSON.stringify([
+          { type: "regex", field: "title", pattern: "^(Repeated episode)$" },
+        ]),
+        seasonRegex: null,
+        episodeRegex: null,
+        matchingStrategy: MatchingStrategy.ItemTitleExact,
+        media: {
+          media_id: 9,
+          media_name: show.name,
+          media_type: "show",
+          media_tvdbId: show.id,
+          media_tmdbId: null,
+          media_imdbId: null,
+        },
+      };
+      mockedGetShowInfo.mockResolvedValue(show);
+      mockedRulesetsForTopic.mockReturnValue([rule]);
+      mockedRulesetsForTopicAndTvdbId.mockReturnValue([rule]);
+      mockedAllTopics.mockReturnValue([show.name]);
+      const row = Object.assign(
+        makeItem({
+          topic: show.name,
+          title: "Repeated episode",
+          filmlisteTimestamp: Date.parse("2026-09-28T00:00:00Z") / 1000,
+        }),
+        broadcastDay ? { timestamp: Date.parse(`${broadcastDay}T12:00:00Z`) / 1000 } : {}
+      );
+      mockApi([row]);
+      const xml = await fetchSearchResultsById(
+        show,
+        makeTvSearchContext({ tvdbId: show.id }),
+        100,
+        0
+      );
+      expect(xml).not.toContain("S01E02");
+      if (broadcastDay === "2026-09-27") expect(xml).toContain("S01E01");
+      else expect(xml).not.toMatch(/S01E0[12]|name="tvdbid"/);
+    }
+  );
+
   it("searches daily date candidates without a text query and filters neighbors before paging", async () => {
     const tvdbData: TvdbData = {
       id: 65432,
@@ -1205,7 +1288,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(secondPage).not.toContain("<item>");
   });
 
-  it("paginates the full generic result set and reuses successful provider data", async () => {
+  it("paginates the full generic result set while refreshing positive source rows", async () => {
     mockedGetSetting.mockImplementation(async (key) =>
       key === "download.quality" ? "720p" : null
     );
@@ -1245,11 +1328,8 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(samePageFromCache).toBe(secondPage);
     expect(thirdPage).toContain('offset="2"');
     expect(thirdPage).toContain("Example.C");
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('q_v8-shared-search-budget_["Example",null,null,null]_1_1_720p_300'),
-      expect.objectContaining({ response: secondPage })
-    );
+    expect(mockedFetch).toHaveBeenCalledTimes(3);
+    expect(mockedCacheSet.mock.calls.every(([, entry]) => !("response" in entry))).toBe(true);
   });
 
   it("does not cache a failed provider response as a successful empty search", async () => {
@@ -1266,7 +1346,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
 
     expect(retriedResponse).toContain('total="3"');
     expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(mockedCacheSet).toHaveBeenCalledTimes(2);
+    expect(mockedCacheSet).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1274,7 +1354,15 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
   it("includes movies at the configured boundary and rejects shorter results", async () => {
     mockedGetMinDuration.mockResolvedValue(2700);
     mockApi([
-      makeItem({ topic: "Too Short", title: "Documentary", duration: 2699 }),
+      makeItem({
+        topic: "Too Short",
+        title: "Documentary",
+        duration: 2699,
+        url_video: "https://example.com/short_720.mp4",
+        url_video_hd: "https://example.com/short_1080.mp4",
+        url_video_low: "https://example.com/short_480.mp4",
+        url_website: "https://example.com/short",
+      }),
       makeItem({ topic: "At Boundary", title: "Documentary", duration: 2700 }),
     ]);
 
@@ -1282,9 +1370,79 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
 
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
-    expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v8-shared-search-budget_Documentary__100_0_all_2700"),
-      expect.any(Object)
+    mockedGetMinDuration.mockResolvedValue(2699);
+    const refreshed = await fetchMovieSearchByQuery("Documentary", 100, 0);
+    expect(refreshed).toContain("Too.Short");
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockedCacheSet.mock.calls.every(([, entry]) => !("response" in entry))).toBe(true);
+  });
+});
+
+describe("movie rendition source audio consumer", () => {
+  const movie: TmdbMovieData = {
+    tmdbId: 123,
+    imdbId: null,
+    title: "Synthetic Film",
+    germanTitle: "Synthetic Film",
+    runtime: 60,
+    productionYear: 2024,
+    releaseDate: "2024-01-01",
+  };
+  function source() {
+    return makeItem({
+      channel: "ARTE.DE",
+      topic: "Kino",
+      title: "Synthetic Film",
+      url_website: "https://www.arte.tv/de/videos/123456-001-A/synthetic/",
+      url_video: "https://fixture.akamaized.net/french.mp4",
+      url_video_hd: "https://fixture.akamaized.net/german.mp4",
+      url_video_low: "",
+    });
+  }
+  it.each(["id", "text", "rss"])(
+    "selects German before the one-result limit in the actual %s film owner",
+    async (path) => {
+      const raw = source();
+      mediathekMocks.getRadarrMonitoredMovies.mockResolvedValue([movie]);
+      mockedFetch.mockImplementation(async (input, _init, options) => {
+        options?.requestBudget?.takeAttempt();
+        return Response.json(
+          String(input).includes("hbbtvv2")
+            ? {
+                videoStreams: [
+                  { programId: "123456-001-A", url: raw.url_video, audioCode: "VOF-STA" },
+                  { programId: "123456-001-A", url: raw.url_video_hd, audioCode: "VA" },
+                ],
+              }
+            : { result: { results: [raw] } }
+        );
+      });
+      const xml =
+        path === "id"
+          ? await fetchMovieSearchResults(movie, 1, 0)
+          : path === "text"
+            ? await fetchMovieSearchByQuery("Synthetic Film", 1, 0)
+            : await fetchMovieSearchForRssSync(1, 0);
+      expect(xml).toContain(".GERMAN.");
+      expect(xml).toContain("german.mp4");
+      expect(xml).not.toContain("french.mp4");
+      expect(xml.match(/<item>/g)).toHaveLength(1);
+      expect(xml).toContain('total="1"');
+      expect(raw).not.toHaveProperty("audioLanguage");
+    }
+  );
+  it("does not cache a partial successful feed after the source proof fails", async () => {
+    mockedFetch.mockImplementation(async (input) =>
+      String(input).includes("hbbtvv2")
+        ? new Response(null, { status: 503 })
+        : Response.json({ result: { results: [source()] } })
+    );
+    await expect(fetchMovieSearchResults(movie, 1, 0)).rejects.toThrow(
+      "Source evidence unavailable"
+    );
+    expect(mockedCacheSet).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^movie_/),
+      expect.anything()
     );
   });
 });
@@ -1314,10 +1472,11 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
 
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
-    expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v8-shared-search-budget_[a-f0-9]{64}_100_0_all_2700/),
-      expect.any(Object)
-    );
+    mockedGetMinDuration.mockResolvedValue(2699);
+    const refreshed = await fetchMovieSearchResults(movie, 100, 0);
+    expect(refreshed).toContain("show_720.mp4");
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockedCacheSet.mock.calls.every(([, entry]) => !("response" in entry))).toBe(true);
   });
 });
 

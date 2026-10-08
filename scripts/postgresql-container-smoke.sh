@@ -55,6 +55,23 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir "$SMOKE_ROOT/source" "$SMOKE_ROOT/backup"
+mkdir -m 750 "$SMOKE_ROOT/media"
+mkdir -m 700 "$SMOKE_ROOT/media/incomplete"
+SMOKE_VOLUME_ROOT="$SMOKE_ROOT" node --input-type=module -e '
+  import {writeFileSync} from "node:fs";import path from "node:path";
+  writeFileSync(path.join(process.env.SMOKE_VOLUME_ROOT,"media/sentinel.mkv"),"synthetic media sentinel",{mode:0o640,flag:"wx"});
+  writeFileSync(path.join(process.env.SMOKE_VOLUME_ROOT,"neighbor"),"synthetic neighbor sentinel",{mode:0o600,flag:"wx"});
+'
+volume_fingerprint() {
+  SMOKE_VOLUME_ROOT="$SMOKE_ROOT" node --input-type=module -e '
+    import {statSync,readFileSync} from "node:fs";import path from "node:path";import {createHash} from "node:crypto";
+    console.log(JSON.stringify(["media","media/incomplete","media/sentinel.mkv","neighbor"].map(name=>{
+      const file=path.join(process.env.SMOKE_VOLUME_ROOT,name),s=statSync(file);
+      return {name,uid:s.uid,gid:s.gid,mode:s.mode,content:s.isFile()?createHash("sha256").update(readFileSync(file)).digest("hex"):null};
+    })));
+  '
+}
+VOLUME_BEFORE="$(volume_fingerprint)"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
   -subj "/CN=${PG_CONTAINER}" \
   -keyout "$SMOKE_ROOT/server.key" -out "$SMOKE_ROOT/server.crt" >/dev/null 2>&1
@@ -132,7 +149,7 @@ docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_smo
   -c 'GRANT CONNECT ON DATABASE pingufunk_smoke TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
-  -c 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "TvdbSeries", "TvdbEpisode", "Download", "Config", "GeneratedRuleset", "TopicCategory" TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
+  -c 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "TvdbSeries", "TvdbEpisode", "Download", "EnqueueIntent", "Config", "GeneratedRuleset", "TopicCategory" TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
   -c 'GRANT SELECT ON TABLE "MigrationCheckpoint" TO pingufunk_smoke_import' \
   -c 'GRANT SELECT, INSERT ON TABLE "MigrationCheckpoint" TO pingufunk_smoke_runtime' \
   -c 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pingufunk_smoke_import, pingufunk_smoke_runtime' \
@@ -144,7 +161,7 @@ preflight_report="$(DATABASE_URL="$IMPORT_URL" docker run --rm --user "$(id -u):
   --mount "type=bind,src=${SMOKE_ROOT}/backup,dst=/backup,readonly" \
   "$MIGRATOR_IMAGE" /app/scripts/postgresql-preflight.mjs \
   /backup/run/source.sqlite pingufunk_smoke pingufunk_smoke_import "$PG_CONTAINER")"
-printf '%s' "$preflight_report" | node -e '
+printf '%s' "$preflight_report" | SMOKE_PREFLIGHT_VARIANT="$SOURCE_VARIANT" node -e '
   // The candidate must match the exact project pin, never merely the same major.
   const expectedClient=require("./package.json").dependencies["@prisma/client"];
   let input=""; process.stdin.on("data",chunk=>input+=chunk);
@@ -153,7 +170,7 @@ printf '%s' "$preflight_report" | node -e '
     if(report.version!==2 || !/^6\.\d+\.\d+$/.test(expectedClient) || report.prismaClient!==expectedClient ||
        Number(report.node.slice(1).split(".")[0])<24 ||
        report.target.schemaState!=="validated" || report.target.tls!==true ||
-       Object.values(report.source.counts).some(value=>value!=="1")) process.exit(1);
+       Object.entries(report.source.counts).some(([model,value])=>value!==(model==="EnqueueIntent" && process.env.SMOKE_PREFLIGHT_VARIANT==="bootstrap" ? "0" : "1"))) process.exit(1);
   });
 '
 for action in import verify sequences; do
@@ -177,6 +194,8 @@ SMOKE_SECRET="$SMOKE_ROOT/runtime-secret" SMOKE_URL="$RUNTIME_URL" node --input-
   writeFileSync(process.env.SMOKE_SECRET,process.env.SMOKE_URL,{mode:0o600,flag:"wx"});
 '
 docker run -d --name "$APP_CONTAINER" \
+  -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e DOWNLOAD_FOLDER_PATH=/qa/media \
+  --mount "type=bind,src=${SMOKE_ROOT}/media,dst=/qa/media,readonly" \
   --network "$SMOKE_NETWORK" -e DATABASE_URL_FILE=/run/secrets/database_url \
   --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
   "$RUNNER_IMAGE" >/dev/null
@@ -200,7 +219,10 @@ if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   echo "Maintenance unexpectedly marked a PostgreSQL write" >&2
   exit 1
 fi
+docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health \
+  | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==false||r.worker.state!=="disabled")process.exit(1)})'
 stop_app
+[[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'PG maintenance changed download volume metadata' >&2; exit 1; }
 
 if [[ -n "$SQLITE_ROLLBACK_IMAGE" ]]; then
   # The same full cutover rehearsal returns to its original source before the
@@ -225,6 +247,8 @@ if [[ -n "$SQLITE_ROLLBACK_IMAGE" ]]; then
 fi
 
 DATABASE_URL="$RUNTIME_URL" docker run -d --name "$APP_CONTAINER" \
+  -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e DOWNLOAD_FOLDER_PATH=/qa/media \
+  --mount "type=bind,src=${SMOKE_ROOT}/media,dst=/qa/media" \
   --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
@@ -239,12 +263,29 @@ done
 [[ "$ready" == 1 ]] || { echo "Disposable PG writer start failed" >&2; exit 1; }
 docker exec "$APP_CONTAINER" test ! -e /app/prisma/data/rundfunkarr.db
 docker exec "$APP_CONTAINER" curl -fsS -X POST -H 'Content-Type: application/json' \
-  -d '{"key":"smoke","value":"postgresql"}' http://localhost:6767/api/settings >/dev/null
+  -d '{"key":"matching.movie.yearTolerance","value":"02"}' http://localhost:6767/api/settings \
+  | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(r.success!==true||r.updated!==1||r.settings["matching.movie.yearTolerance"]!=="2")process.exit(1)})'
 if [[ "$(docker exec "$PG_CONTAINER" psql -U postgres -d pingufunk_smoke -Atc \
   'SELECT count(*) FROM "MigrationCheckpoint" WHERE key = '\''first_application_write'\''' )" != "1" ]]; then
   echo "First application write checkpoint missing" >&2
   exit 1
 fi
+docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health \
+  | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const r=JSON.parse(s);if(!r.schema.ready||r.writesEnabled!==true)process.exit(1)})'
+stop_app
+[[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'PG writer changed existing volume metadata' >&2; exit 1; }
+DATABASE_URL="$RUNTIME_URL" docker run -d --name "$APP_CONTAINER" \
+  -e "PUID=$(id -u)" -e "PGID=$(id -g)" -e DOWNLOAD_FOLDER_PATH=/qa/media \
+  --mount "type=bind,src=${SMOKE_ROOT}/media,dst=/qa/media" \
+  --network "$SMOKE_NETWORK" -e DATABASE_URL -e PINGUFUNK_WRITES_ENABLED=1 "$RUNNER_IMAGE" >/dev/null
+SMOKE_APP_STARTED=1
+ready=0
+for ((attempt=0;attempt<30;attempt++)); do
+  if docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/health >/dev/null 2>&1; then ready=1; break; fi
+  sleep 1
+done
+[[ "$ready" == 1 ]] || { echo 'PG writer restart did not become ready' >&2; exit 1; }
+[[ "$(volume_fingerprint)" == "$VOLUME_BEFORE" ]] || { echo 'PG restart changed existing volume metadata' >&2; exit 1; }
 
 if [[ -n "$ROLLBACK_IMAGE" ]]; then
   stop_app
@@ -264,6 +305,7 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
           (SELECT jsonb_agg(t ORDER BY key) FROM "Config" t),
           (SELECT jsonb_agg(t ORDER BY id) FROM "GeneratedRuleset" t),
           (SELECT jsonb_agg(t ORDER BY id) FROM "TopicCategory" t),
+          (SELECT jsonb_agg(t ORDER BY id) FROM "EnqueueIntent" t),
           (SELECT jsonb_agg(t ORDER BY key) FROM "MigrationCheckpoint" t)
         )' | node -e '
           const {createHash}=require("node:crypto"); const hash=createHash("sha256");
@@ -288,10 +330,21 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   [[ "$(domain_fingerprint pingufunk_smoke_restore)" == "$before_rollback" ]] || {
     echo "Restored PostgreSQL backup differs from the post-write state" >&2; exit 1;
   }
-  docker run -d --name "$APP_CONTAINER" --network "$SMOKE_NETWORK" \
+  # The historical image is intentionally pinned. New append-only DDL makes
+  # its strict schema/ledger gate incompatible: prove rejection, never bypass
+  # the gate or restore a stale SQLite snapshot after PostgreSQL writes.
+  if docker run --rm --network "$SMOKE_NETWORK" \
     -e DATABASE_URL_FILE=/run/secrets/database_url \
     --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
-    "$ROLLBACK_IMAGE" >/dev/null
+    --entrypoint node "$ROLLBACK_IMAGE" /app/scripts/check-database-schema.mjs >/dev/null 2>&1; then
+    echo 'Historical rollback image unexpectedly accepted newer schema' >&2; exit 1;
+  fi
+  COMPATIBLE_MAINTENANCE_IMAGE="$(docker image inspect "$RUNNER_IMAGE" --format '{{.Id}}')"
+  docker run -d --name "$APP_CONTAINER" --network "$SMOKE_NETWORK" \
+    -e PINGUFUNK_WRITES_ENABLED=0 \
+    -e DATABASE_URL_FILE=/run/secrets/database_url \
+    --mount "type=bind,src=${SMOKE_ROOT}/runtime-secret,dst=/run/secrets/database_url,readonly" \
+    "$COMPATIBLE_MAINTENANCE_IMAGE" >/dev/null
   SMOKE_APP_STARTED=1
   ready=0
   for ((attempt = 0; attempt < 30; attempt++)); do
@@ -300,7 +353,9 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   done
   [[ "$ready" == 1 ]] || { echo "PG-compatible rollback image did not become ready" >&2; exit 1; }
   docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/settings?key=smoke \
-    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="postgresql")process.exit(1)})'
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="source")process.exit(1)})'
+  docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/settings?key=matching.movie.yearTolerance \
+    | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).value!=="2")process.exit(1)})'
   docker exec "$APP_CONTAINER" curl -fsS http://localhost:6767/api/download?mode=history \
     | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(!JSON.parse(s).history.slots.some(x=>x.nzo_id==="smoke-download"))process.exit(1)})'
   docker exec "$APP_CONTAINER" test ! -e /app/prisma/data/rundfunkarr.db
@@ -309,6 +364,6 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   [[ "$(domain_fingerprint pingufunk_smoke)" == "$before_rollback" ]] || {
     echo "Rollback maintenance reads changed PostgreSQL data" >&2; exit 1;
   }
-  echo "Disposable post-write backup restore and immutable PG-compatible application rollback passed"
+  echo "Disposable post-write backup restore, incompatible old-image rejection and compatible maintenance rollback passed"
 fi
 echo "Disposable TLS container migration, maintenance read and first-write checkpoint passed"

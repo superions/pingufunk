@@ -1,81 +1,59 @@
 import { NextResponse } from "next/server";
 import { prisma, databaseSizeBytes } from "@/lib/db";
-import { execSync } from "child_process";
+import { getToolCapabilities, unavailableToolCapabilities } from "@/server/tool-capabilities";
+import { boundedRuntimeRead, getSchemaReadiness, runtimeState } from "@/server/runtime-readiness";
 
 // GET /api/system - Get system information
 export async function GET() {
+  const headers = { "Cache-Control": "no-store" };
+  const toolsPromise = boundedRuntimeRead(getToolCapabilities()).catch(unavailableToolCapabilities);
+  const schemaPromise = getSchemaReadiness();
   try {
-    // Database stats
-    const showsCount = await prisma.tvdbSeries.count();
-    const episodesCount = await prisma.tvdbEpisode.count();
-    const downloadsCompleted = await prisma.download.count({
-      where: { status: "completed" },
-    });
-    const downloadsInQueue = await prisma.download.count({
-      // The worker persists "converting"; retain legacy "processing" rows too.
-      where: { status: { in: ["queued", "downloading", "converting", "processing"] } },
-    });
-    const downloadsFailed = await prisma.download.count({
-      where: { status: "failed" },
-    });
-    const configCount = await prisma.config.count();
+    const [shows, episodes, completed, inQueue, failed, configEntries, sizeBytes, tools, schema] =
+      await boundedRuntimeRead(
+        Promise.all([
+          prisma.tvdbSeries.count(),
+          prisma.tvdbEpisode.count(),
+          prisma.download.count({ where: { status: "completed" } }),
+          // Include the current mux state and the retained legacy processing state.
+          prisma.download.count({
+            where: { status: { in: ["queued", "downloading", "converting", "processing"] } },
+          }),
+          prisma.download.count({ where: { status: "failed" } }),
+          prisma.config.count(),
+          databaseSizeBytes(),
+          toolsPromise,
+          schemaPromise,
+        ])
+      );
+    if (!schema.ready) throw new Error("Runtime schema unavailable");
 
-    const dbSizeBytes = await databaseSizeBytes();
-
-    // FFmpeg check
-    let ffmpegVersion = null;
-    try {
-      const output = execSync("ffmpeg -version", {
-        encoding: "utf-8",
-        timeout: 5000,
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      const match = output.match(/ffmpeg version ([^\s]+)/);
-      ffmpegVersion = match ? match[1] : "installed";
-    } catch {
-      ffmpegVersion = null;
-    }
-
-    // yt-dlp check
-    let ytdlpVersion = null;
-    try {
-      const output = execSync("yt-dlp --version", {
-        encoding: "utf-8",
-        timeout: 5000,
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      ytdlpVersion = output.trim();
-    } catch {
-      ytdlpVersion = null;
-    }
-
-    // Node.js version
-    const nodeVersion = process.version;
-
-    // Process uptime
-    const uptimeSeconds = process.uptime();
-
-    return NextResponse.json({
-      version: {
-        node: nodeVersion,
-        ffmpeg: ffmpegVersion,
-        ytdlp: ytdlpVersion,
+    return NextResponse.json(
+      {
+        version: {
+          node: process.version,
+          ffmpeg: tools.ffmpeg.version,
+          ffprobe: tools.ffprobe.version,
+          ytdlp: tools.ytdlp.version,
+        },
+        capabilities: tools,
+        runtime: runtimeState(schema),
+        database: {
+          sizeBytes,
+          shows,
+          episodes,
+          configEntries,
+          historicalMetadata: true,
+        },
+        downloads: { completed, inQueue, failed },
+        uptime: process.uptime(),
       },
-      database: {
-        sizeBytes: dbSizeBytes,
-        shows: showsCount,
-        episodes: episodesCount,
-        configEntries: configCount,
-      },
-      downloads: {
-        completed: downloadsCompleted,
-        inQueue: downloadsInQueue,
-        failed: downloadsFailed,
-      },
-      uptime: uptimeSeconds,
-    });
+      { headers }
+    );
   } catch {
-    console.error("Failed to get system info");
-    return NextResponse.json({ error: "Failed to get system info" }, { status: 500 });
+    return NextResponse.json(
+      { error: "System information temporarily unavailable" },
+      { status: 500, headers }
+    );
   }
 }

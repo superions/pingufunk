@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { Builder } from "xml2js";
-import { isRenditionAllowed } from "@/lib/stream-url";
+import { selectRenditions, type QualityPreference } from "./rendition-quality";
+export type { QualityPreference } from "./rendition-quality";
 import type {
   NewznabRss,
   NewznabItem,
@@ -243,6 +245,22 @@ function getPaddedEpisode(episode: TvdbEpisode): string {
   return episode.episodeNumber.toString().padStart(2, "0");
 }
 
+/** Source names may contain scene-like resolution claims; only the rendition owner adds one. */
+function withoutSourceResolution(value: string): string {
+  return value
+    .replace(/_/g, ".")
+    .replace(
+      /\b(?:360|480|540|576|720|960|1080|1440|2160)[pi]\b|\b\d{3,5}x\d{3,5}\b|\b(?:FHD|UHD|4K)\b/gi,
+      ""
+    )
+    .replace(/\.{2,}/g, ".");
+}
+
+/** Arr assumes SD for WEB without a resolution; unknown must not publish that hint. */
+function renditionSuffix(quality: string): string {
+  return `${quality}${quality === "UNKNOWN" ? "" : ".WEB"}.h264-MEDiATHEK`;
+}
+
 /** Add edition claims only after source evidence was classified, before RSS/NZB titles share it. */
 export function applyLanguageEdition(title: string, item: ApiResultItem): string {
   // Replace source markers with the normalized label set instead of carrying claims
@@ -262,7 +280,7 @@ export function applyLanguageEdition(title: string, item: ApiResultItem): string
 
   const editionSuffix = `.${tokens.join(".")}`;
   const withEdition = withoutSourceClaims.replace(
-    /\.(?=(?:480p|720p|1080p)\.)/i,
+    /\.(?=(?:480p|576p|720p|1080p|2160p|UNKNOWN)\.)/i,
     `${editionSuffix}.`
   );
   return withEdition.replace(/\.{2,}/g, ".");
@@ -278,7 +296,7 @@ export function buildReleaseGuid(
   const edition = classifyLanguageEdition(item);
   const identity = JSON.stringify([
     getLanguageSourceIdentity(item),
-    edition.variantKey,
+    item.releaseVariantKey ?? edition.variantKey,
     quality,
     stableUrlIdentity(renditionUrl),
     releaseIdentity,
@@ -294,18 +312,22 @@ function generateTitle(
   episodeType: EpisodeType
 ): string {
   const episode = info.episode;
+  // Render the actual source title for placeholders; never mutate stored metadata.
+  const episodeTitle = isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber)
+    ? parseEpisodeFromTitle(info.item.title).episodeName || episode.name
+    : episode.name;
 
   if (episodeType === "daily") {
     const aired = episode.aired ? new Date(episode.aired) : new Date();
     const dateStr = aired.toISOString().split("T")[0]; // yyyy-MM-dd
     return applyLanguageEdition(
-      `${info.showName}.${dateStr}.${episode.name}.${quality}.WEB.h264-MEDiATHEK`,
+      `${withoutSourceResolution(info.showName)}.${dateStr}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
       info.item
     ).replace(/ /g, ".");
   }
 
   return applyLanguageEdition(
-    `${info.showName}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${episode.name}.${quality}.WEB.h264-MEDiATHEK`,
+    `${withoutSourceResolution(info.showName)}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
     info.item
   ).replace(/ /g, ".");
 }
@@ -317,7 +339,8 @@ function createRssItem(
   category: string,
   categoryValues: string[],
   url: string,
-  episodeType: EpisodeType
+  episodeType: EpisodeType,
+  qualityIdentity: string
 ): NewznabItem {
   const adjustedSize = Math.floor(info.item.size * sizeMultiplier);
   const parsedTitle = generateTitle(info, quality, episodeType);
@@ -326,7 +349,7 @@ function createRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime),
+    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime, url, "series"),
   });
   const item = info.item;
 
@@ -336,13 +359,14 @@ function createRssItem(
       isPermaLink: false,
       value: buildReleaseGuid(
         item,
-        quality,
+        qualityIdentity,
         url,
         `tvdb:${info.tvdbId}:S${info.episode.seasonNumber}E${info.episode.episodeNumber}:${episodeType}`
       ),
     },
     link: url,
     comments: item.url_website,
+    // Preserve catalogue publication ordering, never reinterpret it as episode airdate.
     pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
     category: category,
     description: item.description,
@@ -361,7 +385,8 @@ function createRssItems(
   sizeMultiplier: number,
   category: string,
   categoryValues: string[],
-  url: string
+  url: string,
+  qualityIdentity: string
 ): NewznabItem[] {
   const items: NewznabItem[] = [
     createRssItem(
@@ -371,7 +396,8 @@ function createRssItems(
       category,
       categoryValues,
       url,
-      "standard" as EpisodeType
+      "standard" as EpisodeType,
+      qualityIdentity
     ),
   ];
 
@@ -385,7 +411,8 @@ function createRssItems(
         category,
         categoryValues,
         url,
-        "daily" as EpisodeType
+        "daily" as EpisodeType,
+        qualityIdentity
       )
     );
   }
@@ -393,7 +420,15 @@ function createRssItems(
   return items;
 }
 
-export type QualityPreference = "all" | "best" | "1080p" | "720p" | "480p";
+function qualityCategory(quality: string, movie: boolean, base: string[]) {
+  const kind = movie ? "Movies" : "TV";
+  if (quality === "UNKNOWN") return { category: kind, values: base };
+  const hd = Number.parseInt(quality) >= 720;
+  return {
+    category: `${kind} > ${hd ? "HD" : "SD"}`,
+    values: [...base, movie ? (hd ? "2040" : "2030") : hd ? "5040" : "5030"],
+  };
+}
 
 export function generateRssItems(
   info: MatchedEpisodeInfo,
@@ -403,77 +438,18 @@ export function generateRssItems(
   const items: NewznabItem[] = [];
   const baseCategories = ["5000", "2000"];
 
-  const has1080p = isRenditionAllowed(info.item.url_video_hd, hlsEnabled);
-  const has720p = isRenditionAllowed(info.item.url_video, hlsEnabled);
-  const has480p = isRenditionAllowed(info.item.url_video_low, hlsEnabled);
-
-  // Determine which qualities to include based on preference
-  let include1080p = false;
-  let include720p = false;
-  let include480p = false;
-
-  switch (qualityPreference) {
-    case "all":
-      include1080p = has1080p;
-      include720p = has720p;
-      include480p = has480p;
-      break;
-    case "best":
-      // Only include the best available quality
-      if (has1080p) {
-        include1080p = true;
-      } else if (has720p) {
-        include720p = true;
-      } else if (has480p) {
-        include480p = true;
-      }
-      break;
-    case "1080p":
-      include1080p = has1080p;
-      break;
-    case "720p":
-      include720p = has720p;
-      break;
-    case "480p":
-      include480p = has480p;
-      break;
-  }
-
-  if (include1080p) {
+  for (const rendition of selectRenditions(info.item, qualityPreference, hlsEnabled)) {
+    const category = qualityCategory(rendition.quality, false, baseCategories);
+    const movieCategory = qualityCategory(rendition.quality, true, []);
     items.push(
       ...createRssItems(
         info,
-        "1080p",
-        1.6,
-        "TV > HD",
-        [...baseCategories, "5040", "2040"],
-        info.item.url_video_hd
-      )
-    );
-  }
-
-  if (include720p) {
-    items.push(
-      ...createRssItems(
-        info,
-        "720p",
-        1.0,
-        "TV > HD",
-        [...baseCategories, "5040", "2040"],
-        info.item.url_video
-      )
-    );
-  }
-
-  if (include480p) {
-    items.push(
-      ...createRssItems(
-        info,
-        "480p",
-        0.4,
-        "TV > SD",
-        [...baseCategories, "5030", "2030"],
-        info.item.url_video_low
+        rendition.quality,
+        rendition.multiplier,
+        category.category,
+        [...category.values, ...movieCategory.values],
+        rendition.url,
+        rendition.identity
       )
     );
   }
@@ -508,10 +484,10 @@ function generateMovieAttributes(
 function generateMovieTitle(movieData: TmdbMovieData, quality: string): string {
   const year =
     movieData.productionYear ?? (movieData.releaseDate ? movieData.releaseDate.split("-")[0] : "");
-  const title = movieData.germanTitle || movieData.title;
+  const title = withoutSourceResolution(movieData.germanTitle || movieData.title);
   const yearPart = year ? `.${year}` : "";
 
-  return `${title}${yearPart}.${quality}.WEB.h264-MEDiATHEK`.replace(/ /g, ".");
+  return `${title}${yearPart}.${renditionSuffix(quality)}`.replace(/ /g, ".");
 }
 
 function createMovieRssItem(
@@ -521,7 +497,8 @@ function createMovieRssItem(
   sizeMultiplier: number,
   category: string,
   categoryValues: string[],
-  url: string
+  url: string,
+  qualityIdentity: string
 ): NewznabItem {
   const adjustedSize = Math.floor(item.size * sizeMultiplier);
   const parsedTitle = applyLanguageEdition(generateMovieTitle(movieData, quality), item);
@@ -530,14 +507,14 @@ function createMovieRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(item),
+    mediaExpectations: releaseMediaExpectations(item, null, url, "movie"),
   });
 
   return {
     title: formattedTitle,
     guid: {
       isPermaLink: false,
-      value: buildReleaseGuid(item, quality, url, `tmdb:${movieData.tmdbId}:movie`),
+      value: buildReleaseGuid(item, qualityIdentity, url, "candidate:movie"),
     },
     link: url,
     comments: item.url_website,
@@ -568,83 +545,35 @@ export function generateMovieRssItems(
   // Movie categories (2000 = Movies)
   const baseCategories = ["2000"];
 
-  const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
-  const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
-  const has480p = isRenditionAllowed(item.url_video_low, hlsEnabled);
-
-  let include1080p = false;
-  let include720p = false;
-  let include480p = false;
-
-  switch (qualityPreference) {
-    case "all":
-      include1080p = has1080p;
-      include720p = has720p;
-      include480p = has480p;
-      break;
-    case "best":
-      if (has1080p) {
-        include1080p = true;
-      } else if (has720p) {
-        include720p = true;
-      } else if (has480p) {
-        include480p = true;
-      }
-      break;
-    case "1080p":
-      include1080p = has1080p;
-      break;
-    case "720p":
-      include720p = has720p;
-      break;
-    case "480p":
-      include480p = has480p;
-      break;
-  }
-
-  if (include1080p) {
+  for (const rendition of selectRenditions(item, qualityPreference, hlsEnabled)) {
+    const category = qualityCategory(rendition.quality, true, baseCategories);
     items.push(
       createMovieRssItem(
         item,
         movieData,
-        "1080p",
-        1.6,
-        "Movies > HD",
-        [...baseCategories, "2040"],
-        item.url_video_hd
-      )
-    );
-  }
-
-  if (include720p) {
-    items.push(
-      createMovieRssItem(
-        item,
-        movieData,
-        "720p",
-        1.0,
-        "Movies > HD",
-        [...baseCategories, "2040"],
-        item.url_video
-      )
-    );
-  }
-
-  if (include480p) {
-    items.push(
-      createMovieRssItem(
-        item,
-        movieData,
-        "480p",
-        0.4,
-        "Movies > SD",
-        [...baseCategories, "2030"],
-        item.url_video_low
+        rendition.quality,
+        rendition.multiplier,
+        category.category,
+        category.values,
+        rendition.url,
+        rendition.identity
       )
     );
   }
 
   return items;
+}
+
+/** Only the strict matcher may enrich a source with metadata-backed identity. */
+export function generateMatchedMovieRssItems(
+  match: MovieMatchResult,
+  movie: TmdbMovieData,
+  quality: QualityPreference,
+  hlsEnabled: boolean
+): NewznabItem[] {
+  return match.identityVerified === true
+    ? generateMovieRssItems(match, movie, quality, hlsEnabled)
+    : generateGenericRssItems(match.item, quality, hlsEnabled, "movie");
 }
 
 /**
@@ -661,78 +590,18 @@ export function generateGenericRssItems(
   const movie = candidateKind === "movie";
   const baseCategories = [movie ? "2000" : "5000"];
 
-  const has1080p = isRenditionAllowed(item.url_video_hd, hlsEnabled);
-  const has720p = isRenditionAllowed(item.url_video, hlsEnabled);
-  const has480p = isRenditionAllowed(item.url_video_low, hlsEnabled);
-
-  let include1080p = false;
-  let include720p = false;
-  let include480p = false;
-
-  switch (qualityPreference) {
-    case "all":
-      include1080p = has1080p;
-      include720p = has720p;
-      include480p = has480p;
-      break;
-    case "best":
-      if (has1080p) {
-        include1080p = true;
-      } else if (has720p) {
-        include720p = true;
-      } else if (has480p) {
-        include480p = true;
-      }
-      break;
-    case "1080p":
-      include1080p = has1080p;
-      break;
-    case "720p":
-      include720p = has720p;
-      break;
-    case "480p":
-      include480p = has480p;
-      break;
-  }
-
-  if (include1080p) {
+  for (const rendition of selectRenditions(item, qualityPreference, hlsEnabled)) {
+    const category = qualityCategory(rendition.quality, movie, baseCategories);
     items.push(
       createGenericRssItem(
         item,
-        "1080p",
-        1.6,
-        movie ? "Movies > HD" : "TV > HD",
-        [...baseCategories, movie ? "2040" : "5040"],
-        item.url_video_hd,
-        candidateKind
-      )
-    );
-  }
-
-  if (include720p) {
-    items.push(
-      createGenericRssItem(
-        item,
-        "720p",
-        1.0,
-        movie ? "Movies > HD" : "TV > HD",
-        [...baseCategories, movie ? "2040" : "5040"],
-        item.url_video,
-        candidateKind
-      )
-    );
-  }
-
-  if (include480p) {
-    items.push(
-      createGenericRssItem(
-        item,
-        "480p",
-        0.4,
-        movie ? "Movies > SD" : "TV > SD",
-        [...baseCategories, movie ? "2030" : "5030"],
-        item.url_video_low,
-        candidateKind
+        rendition.quality,
+        rendition.multiplier,
+        category.category,
+        category.values,
+        rendition.url,
+        candidateKind,
+        rendition.identity
       )
     );
   }
@@ -821,11 +690,14 @@ function createGenericRssItem(
   category: string,
   categoryValues: string[],
   url: string,
-  candidateKind?: "movie" | "tv"
+  candidateKind: "movie" | "tv" | undefined,
+  qualityIdentity: string
 ): NewznabItem {
   const adjustedSize = Math.floor(item.size * sizeMultiplier);
 
   const parsed = parseEpisodeFromTitle(item.title);
+  const topic = withoutSourceResolution(item.topic);
+  const title = withoutSourceResolution(item.title);
   let rawTitle: string;
 
   if (candidateKind) {
@@ -833,8 +705,8 @@ function createGenericRssItem(
     // can only assign this candidate through its existing override dialog.
     rawTitle =
       item.topic === item.title
-        ? `${item.title}.${quality}.WEB.h264-MEDiATHEK`
-        : `${item.topic}.${item.title}.${quality}.WEB.h264-MEDiATHEK`;
+        ? `${title}.${renditionSuffix(quality)}`
+        : `${topic}.${title}.${renditionSuffix(quality)}`;
   } else if (parsed.episodes.length > 0) {
     const seasonPart =
       parsed.season === null ? "" : `S${parsed.season.toString().padStart(2, "0")}`;
@@ -844,10 +716,10 @@ function createGenericRssItem(
     // Omit the episode-name segment when the pattern consumed the whole title;
     // otherwise the source coordinate is repeated in the generated release.
     rawTitle = parsed.episodeName
-      ? `${item.topic}.${seasonPart}${episodePart}.${parsed.episodeName}.${quality}.WEB.h264-MEDiATHEK`
-      : `${item.topic}.${seasonPart}${episodePart}.${quality}.WEB.h264-MEDiATHEK`;
+      ? `${topic}.${seasonPart}${episodePart}.${withoutSourceResolution(parsed.episodeName)}.${renditionSuffix(quality)}`
+      : `${topic}.${seasonPart}${episodePart}.${renditionSuffix(quality)}`;
   } else {
-    rawTitle = `${item.topic}.${item.title}.${quality}.WEB.h264-MEDiATHEK`;
+    rawTitle = `${topic}.${title}.${renditionSuffix(quality)}`;
   }
 
   const formattedTitle = formatTitle(applyLanguageEdition(rawTitle, item));
@@ -855,7 +727,7 @@ function createGenericRssItem(
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(item),
+    mediaExpectations: releaseMediaExpectations(item, null, url),
   });
 
   const attributes: NewznabAttribute[] = categoryValues.map((v) => ({
@@ -884,7 +756,7 @@ function createGenericRssItem(
       isPermaLink: false,
       value: buildReleaseGuid(
         item,
-        quality,
+        qualityIdentity,
         url,
         candidateKind
           ? `candidate:${candidateKind}`

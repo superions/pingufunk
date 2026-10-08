@@ -3,6 +3,7 @@ import type { ApiResultItem, TvdbEpisode } from "@/types";
 import { releaseMediaExpectations } from "./release-media-expectations";
 import { generateGenericRssItems, generateMovieRssItems, generateRssItems } from "./newznab";
 import { decodeMediaExpectations } from "./nzb-release";
+import { unknownJobMediaExpectations } from "@/lib/media-expectations";
 
 const source: ApiResultItem = {
   channel: "ARD",
@@ -20,26 +21,32 @@ const source: ApiResultItem = {
 
 it("uses seconds from catalogue and converts verified episode minutes exactly once", () => {
   expect(releaseMediaExpectations(source)).toEqual({
-    version: 1,
-    duration: { seconds: 120, provenance: "source_catalogue" },
-    audio: null,
-    resolution: null,
+    ...unknownJobMediaExpectations(),
+    durations: {
+      source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata: null,
+    },
   });
-  expect(releaseMediaExpectations(source, 3).duration).toEqual({
+  const series = releaseMediaExpectations(source, 3, source.url_video, "series");
+  expect(series.durations.metadata).toEqual({
     seconds: 180,
     provenance: "episode_metadata",
+    tolerancePercent: 10,
   });
+  expect(series.durations.source).toEqual({
+    seconds: 120,
+    provenance: "source_catalogue",
+    tolerancePercent: 10,
+  });
+  expect(releaseMediaExpectations(source, 3).durations.metadata).toBeNull();
 });
 
 it.each([0, -1, NaN, Infinity])(
   "does not fabricate duration evidence from invalid seconds %s",
   (duration) => {
-    expect(releaseMediaExpectations({ ...source, duration })).toEqual({
-      version: 1,
-      duration: null,
-      audio: null,
-      resolution: null,
-    });
+    expect(releaseMediaExpectations({ ...source, duration })).toEqual(
+      unknownJobMediaExpectations()
+    );
   }
 );
 
@@ -62,7 +69,7 @@ it.each([
   });
 });
 
-it("all own RSS producer families include v1, even when every fact is unknown", () => {
+it("all own RSS producer families include v3 without inventing duration facts", () => {
   const item = { ...source, duration: 0 };
   const episode: TvdbEpisode = {
     name: "Episode",
@@ -91,16 +98,14 @@ it("all own RSS producer families include v1, even when every fact is unknown", 
     ),
   ];
   expect(releases.length).toBe(3);
-  for (const release of releases) {
+  for (const [index, release] of releases.entries()) {
     const encoded = new URL(release.enclosure.url, "http://localhost").searchParams.get(
       "encodedExpectations"
     );
     expect(encoded).not.toBeNull();
     expect(decodeMediaExpectations(encoded!)).toEqual({
-      version: 1,
-      duration: null,
-      audio: null,
-      resolution: null,
+      ...unknownJobMediaExpectations(),
+      mediaKind: index === 1 ? "series" : index === 2 ? "movie" : "unknown",
     });
   }
 });

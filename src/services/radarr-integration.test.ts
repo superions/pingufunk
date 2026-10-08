@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn(async ({ where }: { where: { key: string } }) =>
         state.settings.has(where.key) ? { value: state.settings.get(where.key) } : null
       ),
-      findMany: vi.fn(async () => []),
+      findMany: vi.fn(async () => [...state.settings].map(([key, value]) => ({ key, value }))),
     },
   },
 }));
@@ -34,6 +34,8 @@ import { GET as alias } from "@/app/api/newznab/api/route";
 import { GET as downloadNzb } from "@/app/api/newznab/fake_nzb_download/route";
 import { POST as addfile } from "@/app/api/route";
 import { parseNzbContent } from "./download";
+import { generateGenericRssItems } from "./newznab";
+import * as movieMatcher from "./movie-matcher";
 import { clearMetadataCaches, mediathekCache } from "@/lib/cache";
 import { clearSettingsCache } from "@/lib/settings";
 
@@ -85,7 +87,8 @@ beforeEach(() => {
   fetchMock = vi.fn(async (value: string, init?: RequestInit) => {
     const url = new URL(value);
     if (url.pathname.endsWith("/system/status")) return Response.json({ version: "6.0.0" });
-    if (url.pathname.endsWith("/movie")) return Response.json(inventory);
+    if (url.pathname.endsWith("/movie"))
+      return Response.json(url.searchParams.has("tmdbId") ? [movie] : inventory);
     if (url.pathname.endsWith("/movie/lookup/tmdb")) return Response.json(movie);
     if (url.hostname === "mediathekviewweb.de") {
       const offset = JSON.parse(String(init?.body)).offset;
@@ -108,10 +111,11 @@ it.each(["movie", "search&cat=2000"])(
     const body = await response.text();
     expect(response.status).toBe(200);
     expect(body).toContain('total="1"');
-    expect(body).toContain("Filmreihe.Beispielfilm");
+    expect(body).toContain("Beispielfilm.1998.UNKNOWN.h264");
     expect(body).toContain('name="category" value="2000"');
-    expect(body).not.toMatch(/name="(?:tmdbid|imdbid)"|GERMAN|Foreign.Film|Indexer.Test/);
-    expect(body).not.toContain(".1998.");
+    expect(body).toContain('name="tmdbid" value="42"');
+    expect(body).toContain('name="imdbid" value="tt0000042"');
+    expect(body).not.toMatch(/GERMAN|Foreign.Film|Indexer.Test/);
     expect(
       fetchMock.mock.calls
         .filter(([url]) => String(url).includes("/radarr/"))
@@ -137,6 +141,59 @@ it("does not announce unmonitored movies", async () => {
   );
 });
 
+it.each([
+  [4860, "Beispielfilm (1997)", true],
+  [5940, "Beispielfilm (1999)", true],
+  [4859, "Beispielfilm", false],
+  [5941, "Beispielfilm", false],
+  [5400, "Beispielfilm (1996)", false],
+  [5400, "Beispielfilm (2000)", false],
+])(
+  "applies inclusive runtime/year proof identically to targeted and RSS releases: %s/%s",
+  async (duration, title, verified) => {
+    rows = [{ ...source, duration, title }];
+    for (const query of ["t=movie", "t=movie&tmdbid=42", "t=movie&tmdbid=42&year=1999"]) {
+      const response = await GET(new NextRequest(`http://localhost/api/newznab?${query}`));
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body.includes('name="tmdbid" value="42"')).toBe(verified);
+      expect(body.includes("Beispielfilm.1998.UNKNOWN.h264")).toBe(verified);
+      expect(body).not.toContain("GERMAN");
+    }
+  }
+);
+
+it("does not enrich same-title same-runtime remakes by library ordering", async () => {
+  inventory = [movie, { ...movie, tmdbId: 43, imdbId: "tt0000043", year: 2025 }];
+  rows = [source];
+  const response = await GET(new NextRequest("http://localhost/api/newznab?t=movie"));
+  const body = await response.text();
+  expect(body).toContain("Filmreihe.Beispielfilm");
+  expect(body).not.toMatch(/name="(?:tmdbid|imdbid)"/);
+});
+
+it("does not rescan all source videos for every nonmatching film in a large RSS library", async () => {
+  inventory = [
+    ...Array.from({ length: 1000 }, (_, index) => ({
+      ...movie,
+      tmdbId: 1000 + index,
+      title: `Other Film ${index}`,
+      originalTitle: `Other Film ${index}`,
+    })),
+    movie,
+  ];
+  const matcher = vi.spyOn(movieMatcher, "matchMovieItems");
+  try {
+    const response = await GET(new NextRequest("http://localhost/api/newznab?t=movie"));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Beispielfilm.1998.UNKNOWN.h264");
+    expect(matcher).toHaveBeenCalledTimes(1);
+    expect(matcher.mock.calls[0][0]).toEqual([source]);
+  } finally {
+    matcher.mockRestore();
+  }
+});
+
 it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding and NZB consumption", async () => {
   const rssResponse = await GET(new NextRequest("http://localhost/api/newznab?t=movie"));
   const forwarded = await alias(new NextRequest("http://localhost/api/newznab/api?t=movie"));
@@ -145,8 +202,8 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
   const targeted = await GET(new NextRequest("http://localhost/api/newznab?t=movie&tmdbid=42"));
   const parsed = await parseStringPromise(rss);
   const release = parsed.rss.channel[0].item[0];
-  // Pinned Arr Newznab parsers prefer the NZB enclosure; absent external IDs
-  // are unknown, not a license to copy search IDs into the release.
+  // Pinned Arr Newznab parsers prefer the NZB enclosure. Metadata enrichment
+  // follows the strict title/year/runtime matcher, not merely the request ID.
   expect(release.enclosure[0].$.type).toBe("application/x-nzb");
   expect(Number(release.enclosure[0].$.length)).toBeGreaterThan(0);
   expect(new URL(release.enclosure[0].$.url).protocol).toMatch(/^https?:$/);
@@ -154,7 +211,11 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
   const attributes = release["newznab:attr"].map(
     (attribute: { $: { name: string } }) => attribute.$.name
   );
-  for (const unknown of ["tmdbid", "imdb", "language"]) expect(attributes).not.toContain(unknown);
+  expect(attributes).toEqual(expect.arrayContaining(["tmdbid", "imdbid"]));
+  expect(attributes).not.toContain("language");
+  expect(release.guid[0]._).toBe(
+    generateGenericRssItems(source, "720p", false, "movie")[0].guid.value
+  );
   const searchRelease = (await parseStringPromise(await targeted.text())).rss.channel[0].item[0];
   expect(searchRelease.guid).toEqual(release.guid);
   const nzb = await downloadNzb(
@@ -162,8 +223,13 @@ it("uses identical source GUIDs and URLs for ID search, direct RSS, forwarding a
   );
   const content = await nzb.text();
   const mediaExpectations = {
-    version: 1,
-    duration: { seconds: 5400, provenance: "source_catalogue" },
+    version: 3,
+    mediaKind: "movie",
+    durations: {
+      source: { seconds: 5400, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata: null,
+    },
+    sourceAudio: null,
     audio: null,
     resolution: null,
   };
@@ -239,8 +305,13 @@ it("uses an explicit public URL including its deployment prefix without altering
     title: release.title[0],
     url: source.url_video,
     mediaExpectations: {
-      version: 1,
-      duration: { seconds: 5400, provenance: "source_catalogue" },
+      version: 3,
+      mediaKind: "movie",
+      durations: {
+        source: { seconds: 5400, provenance: "source_catalogue", tolerancePercent: 10 },
+        metadata: null,
+      },
+      sourceAudio: null,
       audio: null,
       resolution: null,
     },

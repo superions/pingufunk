@@ -4,7 +4,51 @@ import {
   readPersistedMediaExpectations,
   serializeMediaExpectations,
   unknownMediaExpectations,
+  unknownJobMediaExpectations,
 } from "./media-expectations";
+
+it("keeps independent frozen source and episode references in v3", () => {
+  const value = {
+    ...unknownJobMediaExpectations(),
+    mediaKind: "series" as const,
+    durations: {
+      source: {
+        seconds: 123,
+        provenance: "source_catalogue" as const,
+        tolerancePercent: 10 as const,
+      },
+      metadata: { seconds: 120, provenance: "episode_metadata" as const, tolerancePercent: 15 },
+    },
+  };
+  expect(parseMediaExpectations(serializeMediaExpectations(value))).toEqual(value);
+  for (const malformed of [
+    { ...value, version: 4 },
+    { ...value, mediaKind: "unknown" },
+    {
+      ...value,
+      durations: {
+        ...value.durations,
+        source: { ...value.durations.source, tolerancePercent: 15 },
+      },
+    },
+    {
+      ...value,
+      durations: {
+        ...value.durations,
+        metadata: { ...value.durations.metadata, tolerancePercent: 26 },
+      },
+    },
+    {
+      ...value,
+      durations: {
+        ...value.durations,
+        metadata: { ...value.durations.metadata, tolerancePercent: 1.5 },
+      },
+    },
+    { ...value, duration: null },
+  ])
+    expect(() => parseMediaExpectations(malformed)).toThrow("Invalid media expectations");
+});
 
 it("retains nullable unknown facts through a versioned serialization round trip", () => {
   const unknown = unknownMediaExpectations();
@@ -21,6 +65,36 @@ it("preserves positive seconds, explicit audio evidence and dimensions without t
     resolution: { width: 1920, height: 1080, provenance: "provider_dimensions" as const },
   };
   expect(parseMediaExpectations(serializeMediaExpectations(expected))).toEqual(expected);
+});
+
+it("retains the separate v2 source proof and rejects mixed/forged declarations", () => {
+  const value = {
+    ...unknownMediaExpectations(),
+    version: 2 as const,
+    audio: null,
+    sourceAudio: {
+      provider: "arte_hbbtv" as const,
+      videoId: "123456-001-A",
+      mediaIdentity: "a".repeat(64),
+      language: "de",
+    },
+  };
+  expect(readPersistedMediaExpectations(serializeMediaExpectations(value))).toEqual(value);
+  expect(() =>
+    parseMediaExpectations({ ...value, audio: { language: "de", provenance: "provider_audio" } })
+  ).toThrow();
+  expect(() =>
+    parseMediaExpectations({
+      ...value,
+      sourceAudio: { ...value.sourceAudio, provider: "untrusted" },
+    })
+  ).toThrow();
+  expect(() =>
+    parseMediaExpectations({
+      ...value,
+      sourceAudio: { ...value.sourceAudio, mediaIdentity: "raw-secret-url" },
+    })
+  ).toThrow();
 });
 
 it.each([

@@ -49,6 +49,13 @@ it("preserves explicit pool and TLS settings without adding PgBouncer mode", () 
   expect(result.stdout).not.toContain("pgbouncer");
 });
 
+it("preserves explicit plaintext from a mounted secret for runtime and migration", () => {
+  const result = run({ DATABASE_URL_FILE: secret(`${disposableUrl}?sslmode=disable\n`) });
+  expect(result.status).toBe(0);
+  expect(new URL(result.stdout).searchParams.getAll("sslmode")).toEqual(["disable"]);
+  expect(result.stderr).toBe("");
+});
+
 it.each([
   () => ({ DATABASE_URL: disposableUrl, DATABASE_URL_FILE: "/run/secrets/conflict" }),
   () => ({ DATABASE_URL: "", DATABASE_URL_FILE: secret(disposableUrl) }),
@@ -58,6 +65,9 @@ it.each([
   () => ({ DATABASE_URL: `${disposableUrl}?pgbouncer=true` }),
   () => ({ DATABASE_URL: `${disposableUrl}?schema=` }),
   () => ({ DATABASE_URL: `${disposableUrl}?schema=one&schema=two` }),
+  () => ({ DATABASE_URL: `${disposableUrl}?sslmode=require&sslmode=disable` }),
+  () => ({ DATABASE_URL: `${disposableUrl}?sslmode=` }),
+  () => ({ DATABASE_URL: `${disposableUrl}?sslmode=unknown` }),
   () => ({ DATABASE_URL_FILE: "/missing/pingufunk" }),
   () => ({ DATABASE_URL_FILE: secret("\n") }),
   () => ({ DATABASE_URL_FILE: secret(`${disposableUrl}\nsecond-line`) }),

@@ -117,8 +117,8 @@ export async function getShowInfoByTvdbId(
     settings["api.tvdb.key"],
     settings["api.tvdb.pin"],
   ]);
-  const cached = tvdbCache.get(cacheKey) as TvdbData | undefined;
-  if (cached) {
+  const cached = tvdbCache.get(cacheKey);
+  if (cached && "episodes" in cached) {
     return cached;
   }
 

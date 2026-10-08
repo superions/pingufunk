@@ -7,6 +7,22 @@ their independent migration, writer, routing, and proxy-removal gates.
 
 ## RSS GUID transition
 
+Ergänzung P12 (Entwicklungsstand): Eigene neue Jobs tragen `MediaExpectations`
+v3 mit getrennten eingefrorenen Quellen-/Metadatenreferenzen. Vor einem separat
+freigegebenen Rollout den [Settings-/Jobvertrag](settings-contract.md) und einen
+v3-kompatiblen Rückweg prüfen. Ein früheres v1/v2-Image ist nach neuen v3-Writes
+kein sicherer Rollback, obwohl das Datenbankschema unverändert ist. Bestehende
+Jobs nicht umschreiben oder Erwartungen löschen; IDs/GUIDs bleiben unverändert.
+
+Ergänzung 05.10.2026: TV-Quellenbelege erweitern `MediaExpectations` v2 um
+`ard_media`. Auch ein früheres v2-fähiges Image ist danach nicht automatisch
+queuekompatibel. Vor dem ersten neuen ARD-Job einen kompatiblen Rückweg prüfen;
+neue Erwartungen weder löschen noch als Legacy/v1 umschreiben. Die bestehende
+Datenbankauswahl bleibt unverändert, PostgreSQL nicht auf einen alten SQLite-
+Stand zurücksetzen. Neuer Deutsch-/Dimensionsbeleg kann bisher abgelehnte
+TV-Releases sichtbar machen: Queue/History/aktive Downloads vor gesondertem
+Rollout abgleichen, ohne automatische neue Grabs als Smoke-Test auszulösen.
+
 P03 changes Newznab GUIDs from the old website-plus-quality value to a stable
 identity that includes source, edition, rendition, and search context. Previously
 consumed releases can consequently reappear as new feed entries and cause duplicate
@@ -73,3 +89,63 @@ einen Symlink ausbricht oder von mehreren History-Einträgen referenziert wird,
 bricht `del_files=1` ab und lässt den History-Eintrag bestehen. Solche Fälle
 müssen einzeln geklärt werden; weder Datenbankzeilen noch Dateien pauschal
 umbenennen oder löschen. Der Pfadwechsel ist keine Freigabe für produktive Jobs.
+
+## Metadatenkorrelation und schemafreier Hotfix-Rollback
+
+Eine funktionierende Prowlarr-Indexerroute ist kein Nachweis einer aktivierten
+optional separaten Sonarr-/Radarr-Metadatenanbindung. Vor deren Aktivierung
+Settings, Secret-Dateimount und tatsächliche Instanz prüfen; keine API-Keys ins
+Git oder in öffentliche Betriebsbeispiele schreiben. Filmverifikation muss
+auch jahrlosen Quelltitel gegen den nativen Verbraucher prüfen. Sprach-/
+Qualitätsablehnung nicht mit fehlerhafter Filmidentität verwechseln; neutralen
+Quellen keine Tonsprachen hinzuerfinden.
+
+Bei einem reinen, schemafreien App-/Settings-Hotfix die aktuellen Settings und
+eine konsistente SQLite-Online-Sicherung mit Integritätsnachweis aufnehmen.
+Rückweg: Aufnahme/Clients unter eigener Betriebsfreigabe pausieren, aktuelle
+Queue/History und Dateisystemeffekte abgleichen, nur betroffene Settings auf
+ihren dokumentierten Vorzustand setzen, dann geprüfte vorige App über denselben
+GitOps-Controller wieder aktivieren. Die aktuelle kompatible Datenbank erhalten:
+eine ältere Sicherung nach neuen Writes würde neue Jobs/History/Config verlieren
+und ist kein regulärer App-Rollback. Keine ungeprüfte historische App starten;
+Rollbackimage muss die aktuelle Sicherheits- und Schemafreigabe besitzen.
+Installationswerte, genaue Image-IDs, Sicherungen und Controllerrevisionen
+gehören ins private Betriebsrunbook. Dieser Vertrag ist keine DB-Cutover-
+oder allgemeine Deploymentfreigabe.
+
+## P09.3 — Auflösungskorrektur ohne neue Qualitäts-GUIDs
+
+Der [Auflösungsvertrag](rendition-quality-contract.md) trennt historische
+Katalog-Slots von tatsächlichen Maßen. Verbesserte Dimensionsbelege verändern
+Titel und NZB-Erwartungen, aber nicht den bisherigen Slotbestandteil im GUID-
+Hash. Ein altes `#1080p-…` kann deshalb eine nun korrekt als 720p veröffentlichte
+URL identifizieren. Dieses Fragment nicht als Pixelbeleg interpretieren.
+Keine gespeicherten Jobs, Dateien, GUIDs oder Consumerhistorien umschreiben.
+
+Vor separat freigegebenem Rollout neue UNKNOWN-Fälle und Qualitätsauswahl an
+den vorhandenen Consumerprofilen bewerten. Unbekannte Titel erhalten kein WEB-
+Hint, das Arr selbst pauschal als SD lesen würde; automatische Aufnahme hängt
+weiterhin von den tatsächlichen Profilen ab. Mehrfachindexer und historische
+Kontext-/Fassungs-GUID-Übergänge bleiben eigene Doppelgrabrisiken. Korrigierte
+konkrete Auswahl oder `best` kann bislang ausgeblendete URLs sichtbar machen;
+deren unveränderte Identität verhindert kein Upgrade gegenüber einer anderen
+bereits geladenen Fassung. Deshalb Auswahl, Profile und History zusammen prüfen.
+Neue Sollmaße
+werden vor Completed geprüft; Rollbackimage muss die gespeicherten v1/v2/v3-Erwartungen auf
+dem aktuellen Backend weiter verstehen. Keine Datenbankmigration, erneute
+Bibliotheksbewertung oder neue Aufnahme ist Teil dieses Qualitätsfixes.
+
+## P03.4 — Quellenbelegte Tonsprachen und v2-Jobs
+
+Der [Tonsprachenvertrag](source-audio-contract.md) ergänzt konkrete progressive
+Filmfassungen, nicht Radarrs Originalsprache. Eine durch Prowlarr erreichbare
+Indexerroute ist noch kein Beleg korrekt erkannter Audiosprache; synthetisch
+beide nativen Wege mit englischem Original und belegter deutscher Fassung prüfen.
+
+Vor Imagewechsel Queue/History und Jobvertragsversionen kontrollieren. Laufende
+Grabs nicht durch einen unvalidierten Wechsel unterbrechen. Nach neuen v2-Jobs
+kein Image ohne v2-Unterstützung als Rollback verwenden, keine gespeicherten
+Erwartungen löschen/abschwächen und keine alte DB-Sicherung über neue Writes
+legen. Ein reiner App-Rollback verlangt ein kompatibles geprüftes Image;
+SQLite/PostgreSQL-Schema und Backend bleiben unverändert. Kein DB-Cutover oder
+produktiver Rollout ist durch diese Entwicklungsabnahme autorisiert.

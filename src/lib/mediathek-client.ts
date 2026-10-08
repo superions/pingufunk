@@ -13,6 +13,7 @@
 import { fetchWithRetry, requestDeadline, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import type { ApiResultItem, MediathekApiResponse, TvdbData } from "@/types";
+import { sourceEpoch } from "./content-dates";
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -95,10 +96,18 @@ export async function queryMediathekView(
       console.error("[MediathekClient] Invalid or unsuccessful API response");
       return null;
     }
-    // HLS entries use null for an unknown byte size in the live API.
-    const items = parsed.result.results.map((item) =>
-      item && typeof item === "object" && item.size === null ? { ...item, size: 0 } : item
-    );
+    // The catalogue uses null size (HLS) and empty/null duration for unknown
+    // values. Normalize only these explicit sentinels; zero never supplies
+    // positive runtime proof. Other malformed strings still fail the page.
+    const items = parsed.result.results.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const duration: unknown = Reflect.get(item, "duration");
+      return {
+        ...item,
+        ...(item.size === null ? { size: 0 } : {}),
+        ...(duration === null || duration === "" ? { duration: 0 } : {}),
+      };
+    });
     if (
       !items.every(
         (item) =>
@@ -133,6 +142,18 @@ export async function queryMediathekView(
       title: item.title,
       description: item.description,
       filmlisteTimestamp: item.filmlisteTimestamp,
+      // FilmlisteParser's timestamp is the source broadcast date. The indexer
+      // separately adds filmlisteTimestamp for the catalogue update. Neither is rights.
+      ...(sourceEpoch(Reflect.get(item, "timestamp"))
+        ? {
+            contentDates: {
+              ...(sourceEpoch(item.filmlisteTimestamp)
+                ? { catalogueUpdatedAt: item.filmlisteTimestamp }
+                : {}),
+              broadcastAt: sourceEpoch(Reflect.get(item, "timestamp")),
+            },
+          }
+        : {}),
       duration: item.duration,
       size: item.size,
       url_website: item.url_website,

@@ -20,6 +20,9 @@ import type { TmdbMovieData, TvSearchContext } from "@/types";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { getRadarrMovie } from "@/services/radarr-provider";
 import { withIndexerUrl } from "@/lib/indexer-url";
+import { getSetting, withSettingsSnapshot } from "@/lib/settings";
+import { configuredSetting } from "@/lib/settings-schema";
+import { recordDecision, withDecisionDiagnostics } from "@/server/decision-diagnostics";
 import {
   parseMovieSearchContext,
   assertMovieSearchGoal,
@@ -76,9 +79,16 @@ function parseTvSearchContext(searchParams: URLSearchParams): {
 }
 
 export async function GET(request: NextRequest) {
+  const { result, report } = await withDecisionDiagnostics(() => handleIndexerRequest(request));
+  result.headers.set("X-Pingufunk-Diagnostic-Id", report.correlationId);
+  return result;
+}
+
+async function handleIndexerRequest(request: NextRequest) {
   try {
     return await withIndexerUrl(request.url, () => handleGet(request));
   } catch {
+    recordDecision("request", "request_failed", "unavailable");
     return NextResponse.json({ error: "Indexer configuration unavailable" }, { status: 503 });
   }
 }
@@ -89,8 +99,6 @@ async function handleGet(request: NextRequest) {
   const t = searchParams.get("t");
   const limit = parsePaginationParameter(searchParams, "limit", 100, 1, 5000);
   const offset = parsePaginationParameter(searchParams, "offset", 0, 0, 2_147_483_647);
-  const imdbid = searchParams.get("imdbid");
-  const tmdbid = searchParams.get("tmdbid");
   const categoryIds = parseNewznabCategoryIds(searchParams.get("cat"));
 
   // Handle capabilities request
@@ -126,11 +134,31 @@ async function handleGet(request: NextRequest) {
   if (limit === null || offset === null || searchParams.getAll("t").length > 1)
     return NextResponse.json({ error: "Invalid search pagination or type" }, { status: 400 });
 
+  return withSettingsSnapshot(() => handleSearch(request, limit, offset, categoryIds));
+}
+
+async function handleSearch(
+  request: NextRequest,
+  limit: number,
+  offset: number,
+  categoryIds: ReturnType<typeof parseNewznabCategoryIds>
+) {
+  const searchParams = request.nextUrl.searchParams;
+  const t = searchParams.get("t");
+  const imdbid = searchParams.get("imdbid");
+  const tmdbid = searchParams.get("tmdbid");
+
   // One contract for direct and Prowlarr-forwarded requests. No invented
   // manual/automatic detection; RSS has no concrete search goal.
   if (t === "movie" || (t === "search" && isMovieCategoryRequest(categoryIds))) {
     try {
-      const context = parseMovieSearchContext(searchParams);
+      const yearTolerance = Number(
+        configuredSetting(
+          "matching.movie.yearTolerance",
+          await getSetting("matching.movie.yearTolerance")
+        )
+      );
+      const context = parseMovieSearchContext(searchParams, yearTolerance);
       if (!context.query && context.tmdbId === null && context.imdbId === null) {
         return new NextResponse(await fetchMovieSearchForRssSync(limit, offset), {
           headers: { "Content-Type": "application/xml; charset=utf-8" },
@@ -151,7 +179,7 @@ async function handleGet(request: NextRequest) {
         if (!context.query) throw new Error("Movie metadata unavailable");
         budget.assertAvailable();
       }
-      if (movie) assertMovieSearchGoal(context, movie);
+      if (movie) assertMovieSearchGoal(context, movie, yearTolerance);
       const body = movie
         ? await fetchMovieSearchResults(movie, limit, offset, budget)
         : context.query
@@ -166,6 +194,11 @@ async function handleGet(request: NextRequest) {
         headers: { "Content-Type": "application/xml; charset=utf-8" },
       });
     } catch (error) {
+      recordDecision(
+        "request",
+        error instanceof MovieSearchContextError ? "request_invalid" : "request_failed",
+        error instanceof MovieSearchContextError ? "conflicting" : "unavailable"
+      );
       if (error instanceof MovieSearchContextError)
         return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ error: "Search temporarily unavailable" }, { status: 503 });
@@ -182,19 +215,12 @@ async function handleGet(request: NextRequest) {
       );
     }
 
-    console.log(
-      `[Newznab] TV search request: t=${t}, q=${context.query}, tvdbid=${context.tvdbId}, season=${context.season}, episode=${context.episode}`
-    );
-
     try {
       // Search by TVDB ID
       if (context.tvdbId !== null) {
-        console.log(`[Newznab] Searching by TVDB ID: ${context.tvdbId}`);
-        const requestBudget = new HttpRequestBudget();
+        const requestBudget = new HttpRequestBudget(32);
         const tvdbData = await getShowInfoByTvdbId(context.tvdbId, requestBudget);
-        console.log(
-          `[Newznab] TVDB lookup result: ${tvdbData ? `Found "${tvdbData.name}" (German: "${tvdbData.germanName}")` : "Not found"}`
-        );
+        if (!tvdbData) recordDecision("identity", "identity_missing", "missing");
 
         if (!tvdbData) {
           if (context.query || context.season || context.episode) {
@@ -253,6 +279,7 @@ async function handleGet(request: NextRequest) {
         headers: { "Content-Type": "application/xml; charset=utf-8" },
       });
     } catch {
+      recordDecision("request", "request_failed", "unavailable");
       console.error("[Newznab] TV search failed");
       return NextResponse.json({ error: "Search temporarily unavailable" }, { status: 503 });
     }

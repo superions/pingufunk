@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSettings } from "@/contexts/settings-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,51 +28,15 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import { useSettingsForm } from "./use-settings-form";
 import {
-  DEFAULT_LANGUAGE_POLICY,
-  LANGUAGE_POLICY_SETTING_KEY,
-  readLanguagePolicy,
-  serializeLanguagePolicy,
-  type LanguagePolicy,
-} from "@/lib/language-policy";
+  ToleranceSettingsCard,
+  SonarrMetadataCard,
+  RadarrMetadataCard,
+  LanguageSettingsCard,
+} from "./matching-settings-cards";
 import packageJson from "../../../package.json";
-
-const LANGUAGE_PREFERENCES: {
-  key: Exclude<keyof LanguagePolicy, "version">;
-  title: string;
-  description: string;
-}[] = [
-  {
-    key: "includeOriginalAudio",
-    title: "Originalton ohne deutsche Tonspur",
-    description: "Als neutrale OV-Fassung anbieten, niemals als GERMAN kennzeichnen.",
-  },
-  {
-    key: "includeGermanSubtitleOnly",
-    title: "Originalton mit deutschen Untertiteln",
-    description: "Als eigene Untertitel-Fassung anbieten, nicht als deutschsprachigen Ton.",
-  },
-  {
-    key: "includeAudioDescription",
-    title: "Audiodeskription",
-    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
-  },
-  {
-    key: "includeSignLanguage",
-    title: "Gebärdenfassung",
-    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
-  },
-  {
-    key: "includeClearSpeech",
-    title: "Klare Sprache",
-    description: "Nur als eigene Variante anbieten, wenn deutscher Ton nachgewiesen ist.",
-  },
-  {
-    key: "includeUnverifiedLegacy",
-    title: "Altbestand ohne belastbaren Sprachnachweis",
-    description: "Als neutrale, ungeprüfte Fassung anbieten; niemals als GERMAN kennzeichnen.",
-  },
-];
+import { parseSystemInformation, type SystemInformation } from "@/lib/system-information";
 
 // Helper functions
 function formatBytes(bytes: number): string {
@@ -94,11 +58,27 @@ function formatUptime(seconds: number): string {
 }
 
 export default function SettingsPage() {
-  const { settings, isLoading, updateSettings, refreshSettings } = useSettings();
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveFeedback, setSaveFeedback] = useState<{ error: boolean; message: string } | null>(
-    null
-  );
+  const {
+    settings,
+    isLoading,
+    error,
+    invalidKeys,
+    arrCredentials,
+    updateSettings,
+    refreshSettings,
+  } = useSettings();
+  const form = useSettingsForm({ settings, updateSettings });
+  const { getFieldValue, setFieldValue, handleSave, isSaving, saveFeedback } = form;
+  const refreshing = useRef(false);
+  const handleRefresh = async () => {
+    if (refreshing.current || isSaving) return;
+    refreshing.current = true;
+    try {
+      await refreshSettings();
+    } finally {
+      refreshing.current = false;
+    }
+  };
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearResult, setClearResult] = useState<{
@@ -110,107 +90,36 @@ export default function SettingsPage() {
     success: false,
     message: "",
   });
-  const [systemInfo, setSystemInfo] = useState<{
-    version: { node: string; ffmpeg: string | null; ytdlp: string | null };
-    database: { sizeBytes: number; shows: number; episodes: number; configEntries: number };
-    downloads: { completed: number; inQueue: number; failed: number };
-    uptime: number;
-  } | null>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInformation | null>(null);
+  const [systemError, setSystemError] = useState<string | null>(null);
+  const [isReadingSystem, setIsReadingSystem] = useState(false);
+  const systemGeneration = useRef(0);
 
   // Fetch system info when System tab is viewed
   const fetchSystemInfo = async () => {
+    const generation = ++systemGeneration.current;
+    setIsReadingSystem(true);
+    setSystemError(null);
     try {
-      const res = await fetch("/api/system");
+      const res = await fetch("/api/system", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      const data = await res.json();
-      setSystemInfo(data);
-    } catch (error) {
-      console.error("Failed to fetch system info:", error);
-    }
-  };
-
-  // Local form state
-  const [formState, setFormState] = useState<Record<string, string>>({});
-
-  const getFieldValue = (key: string) => {
-    return formState[key] ?? settings?.[key] ?? "";
-  };
-
-  const setFieldValue = (key: string, value: string) => {
-    setFormState((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const sonarrFormError = (() => {
-    const window = getFieldValue("integration.sonarr.windowDays");
-    const tolerance = getFieldValue("matching.sonarr.tolerancePercent");
-    if (!/^\d+$/.test(window) || Number(window) < 1 || Number(window) > 90)
-      return "RSS-Fenster: ganze Tage zwischen 1 und 90 eingeben.";
-    if (!/^\d+$/.test(tolerance) || Number(tolerance) < 0 || Number(tolerance) > 25)
-      return "Laufzeittoleranz: ganze Prozent zwischen 0 und 25 eingeben.";
-    const value = getFieldValue("integration.sonarr.url").trim();
-    if (!value)
-      return getFieldValue("integration.sonarr.enabled") === "true"
-        ? "Zum Aktivieren eine Sonarr-Basis-URL eingeben."
-        : null;
-    try {
-      const url = new URL(value);
-      if (
-        !["http:", "https:"].includes(url.protocol) ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash
-      )
-        throw new Error();
+      const data = parseSystemInformation(await res.json());
+      if (!data) throw new Error("System snapshot unconfirmed");
+      if (generation === systemGeneration.current) setSystemInfo(data);
     } catch {
-      return "Basis-URL: HTTP(S) ohne Zugangsdaten, Query oder Fragment eingeben.";
-    }
-    return null;
-  })();
-
-  const getLanguagePolicy = () =>
-    readLanguagePolicy(getFieldValue(LANGUAGE_POLICY_SETTING_KEY) || DEFAULT_LANGUAGE_POLICY);
-
-  const setLanguagePreference = (key: Exclude<keyof LanguagePolicy, "version">, value: boolean) => {
-    const current = getLanguagePolicy();
-    setFieldValue(
-      LANGUAGE_POLICY_SETTING_KEY,
-      serializeLanguagePolicy({ ...current, [key]: value })
-    );
-  };
-
-  const handleSave = async (keys: string[]) => {
-    setIsSaving(true);
-    setSaveFeedback(null);
-    try {
-      const updates: Record<string, string> = {};
-      for (const key of keys) {
-        if (formState[key] !== undefined) {
-          updates[key] = formState[key];
-        }
+      if (generation === systemGeneration.current) {
+        setSystemInfo(null);
+        setSystemError(
+          "Systeminformationen sind unbestätigt: Datenbank/Schema oder Antwort derzeit nicht verfügbar. Kein bestätigter gesunder Zustand."
+        );
       }
-      if (Object.keys(updates).length > 0) {
-        await updateSettings(updates);
-        // Saving one card must not discard unsaved changes in another card.
-        setFormState((previous) => {
-          const remaining = { ...previous };
-          for (const [key, value] of Object.entries(updates)) {
-            if (remaining[key] === value) delete remaining[key];
-          }
-          return remaining;
-        });
-      }
-      setSaveFeedback({ error: false, message: "Einstellungen gespeichert." });
-    } catch {
-      setSaveFeedback({
-        error: true,
-        message:
-          "Speichern fehlgeschlagen. Eingaben und Wartungsstatus prüfen; Änderungen bleiben zur Korrektur erhalten.",
-      });
     } finally {
-      setIsSaving(false);
+      if (generation === systemGeneration.current) setIsReadingSystem(false);
     }
   };
 
@@ -250,7 +159,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !settings) {
     return (
       <div className="p-4 md:p-6 lg:p-8 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin" />
@@ -277,6 +186,25 @@ export default function SettingsPage() {
         <p className="text-muted-foreground text-sm">Konfiguriere RundfunkArr</p>
       </div>
 
+      {invalidKeys.length > 0 && (
+        <p role="alert" className="text-sm text-destructive">
+          Ungültiger gespeicherter Stand: {invalidKeys.join(", ")}. Die Daten bleiben erhalten.
+          Betroffene Werte ausdrücklich korrigieren; Matching verwendet keine stillen Ersatzregeln.
+        </p>
+      )}
+      {error && !saveFeedback?.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <Button
+        variant="outline"
+        onClick={handleRefresh}
+        aria-disabled={isSaving || isLoading}
+        aria-busy={isLoading}
+      >
+        Gespeicherten Stand neu laden
+      </Button>
       {saveFeedback && (
         <p
           role={saveFeedback.error ? "alert" : "status"}
@@ -377,7 +305,8 @@ export default function SettingsPage() {
                     onClick={() =>
                       handleSave(["download.path", "download.quality", "download.convertToMkv"])
                     }
-                    disabled={isSaving}
+                    aria-disabled={isSaving}
+                    aria-busy={isSaving}
                   >
                     {isSaving ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -456,7 +385,8 @@ export default function SettingsPage() {
                         "provider.orf.enabled",
                       ])
                     }
-                    disabled={isSaving}
+                    aria-disabled={isSaving}
+                    aria-busy={isSaving}
                   >
                     {isSaving ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -615,7 +545,8 @@ export default function SettingsPage() {
                         "matching.minDuration",
                       ])
                     }
-                    disabled={isSaving}
+                    aria-disabled={isSaving}
+                    aria-busy={isSaving}
                   >
                     {isSaving ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -627,156 +558,21 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Optionale Sonarr-Metadaten</CardTitle>
-                  <CardDescription>
-                    Ergänzt fehlende Episoden aus einer Sonarr-3/4-Instanz, ohne vorhandene
-                    Metadaten zu ersetzen. Kein zusätzliches TVDB-/TMDB-Konto erforderlich.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <label className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={getFieldValue("integration.sonarr.enabled") === "true"}
-                      onChange={(event) =>
-                        setFieldValue("integration.sonarr.enabled", String(event.target.checked))
-                      }
-                      className="h-4 w-4 rounded border-input"
-                    />
-                    <span className="text-sm font-medium">Sonarr-Ergänzung aktivieren</span>
-                  </label>
-                  <div>
-                    <label htmlFor="sonarr-url" className="text-sm font-medium">
-                      Sonarr-Basis-URL
-                    </label>
-                    <Input
-                      id="sonarr-url"
-                      type="url"
-                      value={getFieldValue("integration.sonarr.url")}
-                      onChange={(event) =>
-                        setFieldValue("integration.sonarr.url", event.target.value)
-                      }
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      HTTP(S), optional mit Unterpfad. Keine Zugangsdaten oder API-Keys in der URL.
-                    </p>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    API-Key ausschließlich serverseitig über <code>PINGUFUNK_SONARR_API_KEY</code>
-                    oder <code>PINGUFUNK_SONARR_API_KEY_FILE</code> konfigurieren. Status:{" "}
-                    {settings?.["api.sonarr.key"]
-                      ? "konfiguriert (verborgen)"
-                      : "nicht konfiguriert"}
-                    . Speichern führt keine Sonarr-Abfrage aus.
-                  </p>
-                  <div>
-                    <label htmlFor="sonarr-window" className="text-sm font-medium">
-                      RSS-Aktualitätsfenster (Tage)
-                    </label>
-                    <Input
-                      id="sonarr-window"
-                      type="number"
-                      min="1"
-                      max="90"
-                      step="1"
-                      value={getFieldValue("integration.sonarr.windowDays")}
-                      onChange={(event) =>
-                        setFieldValue("integration.sonarr.windowDays", event.target.value)
-                      }
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      1–90 Tage; nur überwachte Serien. Snapshots sind zeit- und mengenbegrenzt.
-                    </p>
-                  </div>
-                  <div>
-                    <label htmlFor="sonarr-tolerance" className="text-sm font-medium">
-                      Episoden-Laufzeittoleranz (%)
-                    </label>
-                    <Input
-                      id="sonarr-tolerance"
-                      type="number"
-                      min="0"
-                      max="25"
-                      step="1"
-                      value={getFieldValue("matching.sonarr.tolerancePercent")}
-                      onChange={(event) =>
-                        setFieldValue("matching.sonarr.tolerancePercent", event.target.value)
-                      }
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      0–25 %; 0 verlangt exakte Laufzeit. Kurze Folgen werden nur mit belegter
-                      Identität und Laufzeit zugelassen. Ohne Solllaufzeit gilt weiterhin die oben
-                      eingestellte Mindestdauer.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={() =>
-                      handleSave([
-                        "integration.sonarr.enabled",
-                        "integration.sonarr.url",
-                        "integration.sonarr.windowDays",
-                        "matching.sonarr.tolerancePercent",
-                      ])
-                    }
-                    disabled={isSaving || sonarrFormError !== null}
-                  >
-                    {isSaving ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4 mr-2" />
-                    )}
-                    Sonarr-Einstellungen speichern
-                  </Button>
-                  {sonarrFormError && (
-                    <p role="alert" className="text-sm text-destructive">
-                      {sonarrFormError}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+              <ToleranceSettingsCard
+                form={form}
+                settings={settings}
+                arrCredentials={arrCredentials}
+              />
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sprache und Fassungen</CardTitle>
-                  <CardDescription>
-                    Bestimmt, welche zusätzlichen Fassungen in deutschen Feeds sichtbar sind.
-                    Deutsch als Tonspur wird ausschließlich bei belastbarem Nachweis angegeben;
-                    diese Schutzregel lässt sich hier nicht abschalten.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {LANGUAGE_PREFERENCES.map(({ key, title, description }) => (
-                    <label key={key} className="flex items-start gap-3 rounded-md border p-3">
-                      <input
-                        type="checkbox"
-                        checked={getLanguagePolicy()[key]}
-                        onChange={(event) => setLanguagePreference(key, event.target.checked)}
-                        className="mt-1 h-4 w-4 rounded border-input"
-                      />
-                      <span className="space-y-1">
-                        <span className="block text-sm font-medium">{title}</span>
-                        <span className="block text-xs text-muted-foreground">{description}</span>
-                      </span>
-                    </label>
-                  ))}
-                  <Button
-                    onClick={() => handleSave([LANGUAGE_POLICY_SETTING_KEY])}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4 mr-2" />
-                    )}
-                    Sprachpräferenzen speichern
-                  </Button>
-                </CardContent>
-              </Card>
+              <SonarrMetadataCard form={form} settings={settings} arrCredentials={arrCredentials} />
+
+              <RadarrMetadataCard form={form} settings={settings} arrCredentials={arrCredentials} />
+
+              <LanguageSettingsCard
+                form={form}
+                settings={settings}
+                arrCredentials={arrCredentials}
+              />
             </TabsContent>
 
             {/* Cache Tab */}
@@ -821,7 +617,8 @@ export default function SettingsPage() {
                   <div className="flex gap-2">
                     <Button
                       onClick={() => handleSave(["cache.ttl.search", "cache.ttl.metadata"])}
-                      disabled={isSaving}
+                      aria-disabled={isSaving}
+                      aria-busy={isSaving}
                     >
                       {isSaving ? (
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -856,15 +653,60 @@ export default function SettingsPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>System-Informationen</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={fetchSystemInfo}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchSystemInfo}
+                    disabled={isReadingSystem}
+                    aria-label="Systeminformationen aktualisieren"
+                  >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {systemError && (
+                    <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                      {systemError}
+                    </p>
+                  )}
+                  {isReadingSystem && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      Systeminformationen werden geprüft…
+                    </p>
+                  )}
+                  {systemInfo && (
+                    <div className="space-y-1 text-sm" role="status">
+                      <p>
+                        Liveness: Prozess antwortet. DB/Schema:{" "}
+                        {systemInfo.runtime.schema.ready
+                          ? "kompatibel (kurz gecachte Leseprüfung)"
+                          : "unbestätigt"}
+                        .
+                      </p>
+                      <p>
+                        Schreibbetrieb:{" "}
+                        {systemInfo.runtime.writesEnabled
+                          ? "freigegeben"
+                          : "Maintenance / gesperrt"}
+                        . Prozesslokaler Worker:{" "}
+                        {systemInfo.runtime.worker.state === "disabled"
+                          ? "deaktiviert"
+                          : systemInfo.runtime.worker.state === "idle"
+                            ? "wartend"
+                            : systemInfo.runtime.worker.state === "paused"
+                              ? "pausiert"
+                              : "Verarbeitung aktiv"}
+                        .
+                      </p>
+                      <p className="text-muted-foreground">
+                        Dies ist kein prozessübergreifender Besitz- oder Arr-Importnachweis.
+                      </p>
+                    </div>
+                  )}
                   {/* Version Info */}
                   <div>
                     <h4 className="text-sm font-medium mb-3">Versionen</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                       <div>
                         <p className="text-xs text-muted-foreground">RundfunkArr</p>
                         <p className="font-medium">{packageJson.version}</p>
@@ -879,10 +721,29 @@ export default function SettingsPage() {
                           {systemInfo?.version.ffmpeg ? (
                             <span className="text-green-500">{systemInfo.version.ffmpeg}</span>
                           ) : systemInfo ? (
-                            <span className="text-red-500">Nicht gefunden</span>
+                            <span className="text-red-500">
+                              {systemInfo.capabilities.ffmpeg.state === "missing"
+                                ? "Nicht gefunden"
+                                : systemInfo.capabilities.ffmpeg.state === "timeout"
+                                  ? "Zeitlimit"
+                                  : "Unbestätigt"}
+                            </span>
                           ) : (
                             "..."
                           )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">ffprobe</p>
+                        <p className="font-medium">
+                          {systemInfo?.capabilities.ffprobe.version ||
+                            (systemInfo
+                              ? systemInfo.capabilities.ffprobe.state === "missing"
+                                ? "Nicht gefunden"
+                                : systemInfo.capabilities.ffprobe.state === "timeout"
+                                  ? "Zeitlimit"
+                                  : "Unbestätigt"
+                              : "...")}
                         </p>
                       </div>
                       <div>
@@ -891,7 +752,13 @@ export default function SettingsPage() {
                           {systemInfo?.version.ytdlp ? (
                             <span className="text-green-500">{systemInfo.version.ytdlp}</span>
                           ) : systemInfo ? (
-                            <span className="text-red-500">Nicht gefunden</span>
+                            <span className="text-red-500">
+                              {systemInfo.capabilities.ytdlp.state === "missing"
+                                ? "Nicht gefunden"
+                                : systemInfo.capabilities.ytdlp.state === "timeout"
+                                  ? "Zeitlimit"
+                                  : "Unbestätigt"}
+                            </span>
                           ) : (
                             "..."
                           )}
@@ -909,6 +776,9 @@ export default function SettingsPage() {
                   {/* Database Stats */}
                   <div>
                     <h4 className="text-sm font-medium mb-3">Datenbank</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Historische TVDB-Zeilen sind kein aktiver Metadaten-Cache.
+                    </p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <p className="text-xs text-muted-foreground">Größe</p>

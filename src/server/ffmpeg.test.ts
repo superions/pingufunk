@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 
 const { state, access, mkdir } = vi.hoisted(() => ({
-  state: { calls: [] as string[][] },
+  state: {
+    calls: [] as string[][],
+    autoClose: true,
+    child: null as (EventEmitter & { kill: ReturnType<typeof vi.fn> }) | null,
+  },
   access: vi.fn(async () => undefined),
   mkdir: vi.fn(async () => undefined),
 }));
@@ -10,9 +14,14 @@ const { state, access, mkdir } = vi.hoisted(() => ({
 vi.mock("child_process", () => ({
   spawn: vi.fn((_command: string, args: string[]) => {
     state.calls.push(args);
-    const child = new EventEmitter() as EventEmitter & { stderr: EventEmitter };
+    const child = new EventEmitter() as EventEmitter & {
+      stderr: EventEmitter;
+      kill: ReturnType<typeof vi.fn>;
+    };
     child.stderr = new EventEmitter();
-    queueMicrotask(() => child.emit("close", 0));
+    child.kill = vi.fn();
+    state.child = child;
+    if (state.autoClose) queueMicrotask(() => child.emit("close", 0));
     return child;
   }),
 }));
@@ -27,9 +36,32 @@ import { convertMp4ToMkv, ensureFfmpegExists, mergeVideoAudio } from "./ffmpeg";
 
 beforeEach(() => {
   state.calls.length = 0;
+  state.autoClose = true;
+  state.child = null;
   access.mockReset();
   access.mockResolvedValue(undefined);
   mkdir.mockClear();
+});
+
+it("aborts a mux without claiming completion before close, even with exit code zero", async () => {
+  state.autoClose = false;
+  const controller = new AbortController();
+  const work = mergeVideoAudio(
+    "/synthetic/video.mp4",
+    "/synthetic/audio.mp4",
+    "/synthetic/out.mkv",
+    controller.signal
+  );
+  await vi.waitFor(() => expect(state.child).not.toBeNull());
+  let settled = false;
+  void work.then(() => {
+    settled = true;
+  });
+  controller.abort();
+  expect(state.child!.kill).toHaveBeenCalledWith("SIGTERM");
+  expect(settled).toBe(false);
+  state.child!.emit("close", 0);
+  expect((await work).success).toBe(false);
 });
 
 it("never installs a missing FFmpeg binary during maintenance", async () => {

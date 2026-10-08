@@ -54,6 +54,16 @@ model Download {
   @@index([status])
 }
 
+// Receipt survives deliberate history removal/retry; no FK cascade to a job.
+model EnqueueIntent {
+  id          String   @id // SHA-256 of the optional UI intent, not an authorization token.
+  payloadHash String
+  downloadId  String
+  expiresAt   DateTime @db.Timestamptz(3)
+
+  @@index([expiresAt])
+}
+
 model Config {
   key   String @id
   value String

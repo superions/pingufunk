@@ -3,7 +3,17 @@ import {
   readBoundedProviderJson,
   readBoundedProviderText,
   ProviderResponseError,
+  MAX_PROVIDER_RESPONSE_BYTES,
 } from "./bounded-provider-json";
+
+it("allows explicitly larger bounded responses but not an unbounded safety ceiling", async () => {
+  await expect(
+    readBoundedProviderJson(new Response("[1]"), Date.now() + 1000, 10 * 1024 * 1024)
+  ).resolves.toEqual([1]);
+  await expect(
+    readBoundedProviderJson(new Response("[1]"), Date.now() + 1000, MAX_PROVIDER_RESPONSE_BYTES + 1)
+  ).rejects.toBeInstanceOf(ProviderResponseError);
+});
 
 it("allows the exact byte boundary and rejects one byte over it", async () => {
   await expect(
@@ -55,4 +65,47 @@ it("uses the same byte, UTF-8 and deadline protections for public HTML", async (
   await expect(readBoundedProviderText(new Response("html"), Date.now() - 1, 100)).rejects.toThrow(
     "Invalid provider response"
   );
+});
+
+it("includes UTF-8 decoding in the original absolute operation deadline", async () => {
+  vi.useFakeTimers();
+  const response = new Response("bounded");
+  const deadline = Date.now() + 1000;
+  const decode = TextDecoder.prototype.decode;
+  vi.spyOn(TextDecoder.prototype, "decode").mockImplementation(function (
+    this: TextDecoder,
+    input,
+    options
+  ) {
+    const value = decode.call(this, input, options);
+    vi.advanceTimersByTime(1000);
+    return value;
+  });
+  try {
+    await expect(readBoundedProviderText(response, deadline, 100)).rejects.toThrow(
+      "Invalid provider response"
+    );
+  } finally {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  }
+});
+
+it("aborts a held source-proof body without waiting for its cancellation promise", async () => {
+  const controller = new AbortController();
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
+  const response = new Response(new ReadableStream({ cancel }));
+  const pending = readBoundedProviderJson(response, Date.now() + 10_000, 100, controller.signal);
+  const outcome = expect(pending).rejects.toThrow(/^Invalid provider response$/);
+  controller.abort(new Error("https://fixture.invalid/?token=synthetic"));
+  await outcome;
+  expect(cancel).toHaveBeenCalledTimes(1);
+});
+
+it("rejects an already aborted source-proof body before consuming it", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    readBoundedProviderJson(new Response("[1]"), Date.now() + 1000, 100, controller.signal)
+  ).rejects.toThrow(/^Invalid provider response$/);
 });

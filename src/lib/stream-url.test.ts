@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { isRenditionAllowed, isStreamingUrl, srfUrnFromUrl } from "./stream-url";
 
 describe("isRenditionAllowed", () => {
+  it.each([
+    "",
+    "relative.mp4",
+    "file:///tmp/video.mp4",
+    "javascript:alert(1)",
+    "https://user:password@example.invalid/video.mp4",
+    "https://example.invalid/has space.mp4",
+  ])("does not publish an unusable or credential-bearing rendition (%s)", (value) => {
+    expect(isRenditionAllowed(value, false)).toBe(false);
+    expect(isRenditionAllowed(value, true)).toBe(false);
+  });
   it("allows direct URLs regardless of the HLS setting", () => {
     const directUrl = "https://example.org/video.mp4";
 

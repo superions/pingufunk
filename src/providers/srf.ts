@@ -1,6 +1,7 @@
 import { BaseProvider } from "./base";
 import { withStreamQuality } from "@/lib/stream-url";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
+import { sourceEpoch } from "@/lib/content-dates";
 import {
   searchVideos,
   getLatestVideos,
@@ -100,7 +101,7 @@ export class SrfProvider extends BaseProvider {
       return [];
     }
 
-    console.log(`[${this.id}] Searching for: "${searchQuery}" (limit: ${limit})`);
+    console.log(`[${this.id}] Searching bounded catalogue`);
 
     try {
       // Search SRF videos
@@ -234,7 +235,12 @@ export class SrfProvider extends BaseProvider {
 
       // Include regional content; the configured proxy is applied at download time.
 
-      items.push(this.mapToContentItem(result));
+      const item = this.mapToContentItem(result);
+      // The API date has no validated rights/production-year contract here.
+      item.contentDates = {
+        ...(sourceEpoch(item.timestamp) ? { providerDate: item.timestamp } : {}),
+      };
+      items.push(item);
     }
 
     return items;

@@ -1,6 +1,6 @@
 # Filmquellen und gemeinsamer Arr-Indexer-Vertrag
 
-Stand 01.10.2026. Die Nutzerentscheidung ersetzt die vorherige Strategie:
+Stand 03.10.2026. Die Nutzerentscheidung ersetzt die vorherige Strategie:
 keine neuen Senderseiten-/HTML-/Flight-/Gateway-Filmparser. Der isolierte
 ARTE-Filmversuch ist aus dem aktiven Code entfernt und in der Git-Historie
 wiederherstellbar. Der allgemeine bounded Bodyreader und die unabhängig
@@ -17,9 +17,19 @@ abgenommene P07-Player-/Fassungsintegration bleiben erhalten.
 
 Die [MediathekViewWeb-Indexdefinition](https://github.com/mediathekview/mediathekviewweb/blob/5de3e90b53c348de2b510b8b964d7ea1a161f250/server/OpenSearchDefinitions.ts)
 belegt keinen allgemeinen Produktionsjahr-/IMDb-/TMDB-Feldvertrag.
-Daher bleiben Filmkandidaten im aktuellen Suchpfad Quellkandidaten: IDs und
-Anfragejahr werden nicht ausgegeben, auch wenn das Suchziel sicher aufgelöst ist.
-Vorhandene Jahreszahlen im Quelltitel bleiben erhalten. Die RSS-Kategorie dient
+Die freigegebene Korrelation ergänzt kanonischen Titel, Metadatenjahr und IDs
+nur bei exakt passendem vollständigem Quelltitel oder dokumentiertem Alias
+und bestätigter Laufzeit. Der erste Default ist **±10 %**, inklusive Grenzen,
+bezogen auf die Metadatenlaufzeit (Minuten werden einmal in Sekunden umgerechnet).
+Ein vorhandenes Quelljahr und das Suchjahr dürfen **±1 Jahr** vom Metadatenjahr
+abweichen; größere Abweichungen bleiben Konflikte. Ein fehlendes Quelljahr
+darf aus den verifizierten Metadaten ergänzt werden, nicht aus Ausstrahlung
+oder beiläufigen Jahreszahlen in der Beschreibung. Bekannte Fassungszusätze
+werden nur für den Titelvergleich entfernt; Quellfassung/Sprache/GUID bleiben
+erhalten. Fuzzy-, Topic-only-, Clip-, unbekannte Laufzeit- und konkurrierende
+RSS-Remakefälle erhalten keine ergänzte Identität. Ihre Quellkandidaten bleiben
+ohne angefragte IDs/Jahresstempel sichtbar, soweit der Verbraucher sie annimmt.
+Die RSS-Kategorie dient
 dem Film-Suchkanal, nicht dem Nachweis, dass jeder Kandidat ein Spielfilm ist.
 
 ## Direkte Anbindung und Prowlarr
@@ -65,12 +75,14 @@ vom Indexer-Zugriffsweg.
 
 Standardmäßig aus. Eine explizit konfigurierte Instanz, aktuell Radarr 6.x
 mit API v3; andere Hauptversionen werden nicht ohne Feld-/Versionsevidenz
-zugelassen. Es wurde keine reale Instanz aktiviert oder abgefragt.
+zugelassen. Produktregressionen verwenden ausschließlich synthetische Daten;
+installationsbezogene Betriebsprüfung und Secrets bleiben außerhalb dieses Repos.
 
 Nichtgeheime serverseitige Settings über die vorhandene Settings-API:
 
     integration.radarr.enabled = true
     integration.radarr.url = http(s)://<eigene-instanz>/<optionaler-base-url-pfad>
+    integration.radarr.inventoryMaxMiB = 10
     matching.movie.tolerancePercent = 10
 
 Die URL darf keine Zugangsdaten, Query oder Fragment enthalten. Kein
@@ -81,9 +93,17 @@ Credential-Schreibvorgänge über den Browser; kein Key in Beispielen,
 Anfrage-URLs, Git oder Fehlertexten. Die vorhandene Settings-Maskierung gilt
 auch für api.radarr.key. Es gibt noch keine neue Radarr-UI-Bedienoberfläche.
 
-GET-only: system/status, movie/lookup/tmdb oder movie/lookup/imdb.
+GET-only: system/status und zuerst movie?tmdbId für gespeicherte Metadaten;
+nur bei gültiger leerer Liste folgt movie/lookup/tmdb, IMDb nutzt movie/lookup/imdb.
+Der [versionierte Radarr-6-Controller](https://github.com/Radarr/Radarr/blob/v6.4.4.10685/src/Radarr.Api.V3/Movies/MovieController.cs)
+belegt den lokalen TMDB-Filter. Fehlerhafte/mehrdeutige lokale Antworten
+werden nicht durch einen externen Lookup kaschiert.
 Für Recent/RSS zusätzlich GET movie: nur überwachte Filme, maximal 2.000
-Bibliothekszeilen innerhalb desselben 5-MiB-Bodylimits. Monitoring muss ein
+Bibliothekszeilen innerhalb des konfigurierbaren Listenlimits (Default 10 MiB,
+ganze MiB von 1 bis 64), da Listen auch Cover-/Overview-Felder enthalten;
+einzelne Metadaten behalten 5 MiB. Das nichtgeheime Setting ist über die
+bestehende Settings-API schreibbar und invalidiert Caches; ungültige persistierte
+Werte brechen vor Secret-/HTTP-I/O ab, kein unbegrenzter Fallback. Monitoring muss ein
 Boolean sein, doppelte überwachte TMDB-IDs und unschemahafte Metadaten brechen
 den Snapshot ohne Teilergebnis ab. Keine realen Bibliotheksdaten im Git.
 Der [API-v3-Controller](https://github.com/Radarr/Radarr/blob/c90668a520664ad0c91812cfee57c41928ad2148/src/Radarr.Api.V3/Movies/MovieLookupController.cs)
@@ -96,7 +116,7 @@ mögliche Textsuche kann trotzdem ehrliche Quellkandidaten ausgeben.
 
 Alle Lookups, Suchbegriffe, Folgeseiten und Retries teilen das vorhandene
 P05-Budget: höchstens zehn HTTP-Versuche und 15 Sekunden insgesamt.
-Arr-JSON ist auf 5 MiB begrenzt; TMDB-Film/Find auf 1 MiB,
+Einzelne Arr-Metadaten sind auf 5 MiB begrenzt (Bibliothek siehe oben); TMDB-Film/Find auf 1 MiB,
 Serien-/Staffeldetails auf 5 MiB, TVDB-Serie und Showkatalog auf 8 MiB.
 Positive Radarr-Metadaten bleiben höchstens zehn Minuten im begrenzten
 Prozesscache (256 Einträge). URL, Credential, DB-/Settingkontext und
@@ -117,7 +137,9 @@ denselben Owner. Die optionale Radarr-Liste liefert überwachte Suchziele;
 ein auf höchstens 5.000 aktuelle Sourcezeilen begrenztes Mediathekfenster wird
 gegen vollständige Film-/Aliastitel geprüft. Partielles Wort-Ranking aus
 gezielter Suche wird nicht als Recent-Ankündigung übernommen. Identität bleibt
-Quellidentität, ohne angefragte IMDb-/TMDB-ID oder Jahresstempel.
+Quellidentität. Nur die oben ausdrücklich freigegebene exakte Titel-/Alias-,
+Jahr-/Laufzeitkorrelation ergänzt kanonische Namen/IDs. Bei mehreren passenden
+Werken bleibt RSS generisch statt vom ersten Bibliothekseintrag abzuhängen.
 Bibliotheks-Snapshots leben höchstens 60 Sekunden; Sourcefenster und RSS-Cache
 sind zusätzlich minutengebunden. Sprache/Fassung, Rendition und Dedupe werden
 vor total/Pagination ausgewertet; Folgeseitenfehler ergeben 503 ohne
@@ -141,6 +163,28 @@ Der zentrale Quellparser erkennt sowohl S02/E12 als auch S02E12, damit bekannte
 Nachbarfolgen nicht irrtümlich als koordinatenlos durchgehen.
 
 ## Offene Abnahmegrenzen
+
+Die am 03.10.2026 wegen unzureichender jahrtragender Consumerfixtures
+wiedereröffneten P08.2/P08.4 sind auf `55edcf7` erneut abgenommen: eine echte
+isolierte Radarr-/Prowlarr-Probe ordnet einen synthetischen Quelltitel ohne Jahr
+direkt und vermittelt korrekt zu. 873 reguläre Tests und separate PG-/
+Docker-Gates bestanden. Die optionale Radarr-Metadatenanbindung muss weiterhin
+separat konfiguriert werden; eine Prowlarr-Verbindung aktiviert sie nicht.
+Die Einstellung `integration.radarr.inventoryMaxMiB` ist serverseitig persistent
+über die bestehende Settings-API änderbar (ganze MiB 1–64, Default 10).
+Beispiel-Payload für `POST /api/settings`:
+
+```json
+{ "integration.radarr.inventoryMaxMiB": "10" }
+```
+
+Dies erweitert nur die Radarr-Bibliotheksantwort, nicht einzelne Lookups
+(weiterhin 5 MiB), Zeilencap oder Requestbudget. Werteänderungen invalidieren
+die betreffenden Caches. Ein passender Film kann trotz korrekter Identität von
+Arr wegen Sprache/Qualität abgelehnt werden; ohne Quellbeleg kein erfundenes
+GERMAN-Label. Die Laufzeittoleranz ist über
+`matching.movie.tolerancePercent` konfigurierbar, anfänglich 10; die ±1-Jahr-
+Prüfung gilt unmittelbar gegen das Metadatenjahr, nicht als kumulierbare Kette.
 
 P08.1–P08.4 sind nach vollständigem Ownerreview und synthetischen
 Vertragsproben abgenommen. Film-Text/ID-Kontext und RSS→NZB→Queue sind synthetisch

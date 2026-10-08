@@ -111,21 +111,43 @@ async function api(root, manifest, app, path, body, method, expectedStatus, cred
   return result.data;
 }
 async function up() {
+  const runnerTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE ?? "pingufunk-p10-arr-qa";
+  const migratorTag =
+    process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
+  const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
+  const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
+  const placeholderEpisode = process.env.PINGUFUNK_ARR_QA_TBA === "1";
+  const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
+  if (
+    renditionQuality &&
+    (!sourceAudio || !["720p", "unknown", "conflicting"].includes(renditionQuality))
+  )
+    throw new Error("Owned quality QA requires the bounded source-audio fixture");
+  const appImages = Object.fromEntries(
+    ["sonarr", "radarr", "prowlarr"].map((app) => [
+      app,
+      process.env[`PINGUFUNK_ARR_QA_${app.toUpperCase()}_IMAGE`] ??
+        `lscr.io/linuxserver/${app}:latest`,
+    ])
+  );
   for (const app of ["sonarr", "radarr", "prowlarr"])
-    docker(["image", "inspect", `lscr.io/linuxserver/${app}:latest`, "--format", "{{.Id}}"]);
-  docker(["image", "inspect", "pingufunk-p10-arr-qa", "--format", "{{.Id}}"]);
-  const migrator = docker([
-    "image",
-    "inspect",
-    "pingufunk-p10-arr-migrator-qa",
-    "--format",
-    "{{.Id}}",
-  ]);
+    docker(["image", "inspect", appImages[app], "--format", "{{.Id}}"]);
+  docker(["image", "inspect", runnerTag, "--format", "{{.Id}}"]);
+  const migrator = docker(["image", "inspect", migratorTag, "--format", "{{.Id}}"]);
   const parent = resolve("downloads");
   mkdirSync(parent, { recursive: true });
   const root = mkdtempSync(join(parent, "arr-qa."));
   const owner = `${process.pid}-${Date.now()}`;
-  const manifest = { owner, network: `pingufunk-arr-${owner}`, migrator, apps: {} };
+  const manifest = {
+    owner,
+    network: `pingufunk-arr-${owner}`,
+    migrator,
+    movieCorrelation,
+    sourceAudio,
+    placeholderEpisode,
+    renditionQuality,
+    apps: {},
+  };
   save(root, manifest);
   docker(["network", "create", "--internal", "--label", `${label}=${owner}`, manifest.network]);
   for (const app of ["sonarr", "radarr", "prowlarr"]) {
@@ -136,13 +158,7 @@ async function up() {
       `<Config><BindAddress>*</BindAddress><Port>${ports[app]}</Port><SslPort>0</SslPort><EnableSsl>False</EnableSsl><LaunchBrowser>False</LaunchBrowser><ApiKey>${randomBytes(16).toString("hex")}</ApiKey><AuthenticationMethod>None</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>warn</LogLevel><UpdateAutomatically>False</UpdateAutomatically><AnalyticsEnabled>False</AnalyticsEnabled><Branch>master</Branch></Config>`,
       { mode: 0o600 }
     );
-    const image = docker([
-      "image",
-      "inspect",
-      `lscr.io/linuxserver/${app}:latest`,
-      "--format",
-      "{{.Id}}",
-    ]);
+    const image = docker(["image", "inspect", appImages[app], "--format", "{{.Id}}"]);
     const name = `pingufunk-arr-${app}-${owner}`;
     manifest.apps[app] = { name, image };
     save(root, manifest);
@@ -168,6 +184,10 @@ async function up() {
   }
   const dir = join(root, "pingufunk");
   mkdirSync(dir, { mode: 0o700 });
+  if (movieCorrelation)
+    writeFileSync(join(dir, "radarr-api-key"), apiKey(root, "radarr"), { mode: 0o600 });
+  if (placeholderEpisode)
+    writeFileSync(join(dir, "sonarr-api-key"), apiKey(root, "sonarr"), { mode: 0o600 });
   // Initialize only this newly allocated SQLite test file, using the schema runner.
   docker([
     "run",
@@ -185,7 +205,7 @@ async function up() {
     migrator,
     "/app/scripts/database-migrate.mjs",
   ]);
-  const image = docker(["image", "inspect", "pingufunk-p10-arr-qa", "--format", "{{.Id}}"]);
+  const image = docker(["image", "inspect", runnerTag, "--format", "{{.Id}}"]);
   const name = `pingufunk-arr-pingufunk-${owner}`;
   manifest.apps.pingufunk = { name, image };
   save(root, manifest);
@@ -213,6 +233,17 @@ async function up() {
     `PINGUFUNK_MEDIA_QA_OWNER=${owner}`,
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
+    ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
+    ...(placeholderEpisode ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"] : []),
+    ...(renditionQuality ? ["-e", `PINGUFUNK_ARR_QA_RENDITION_QUALITY=${renditionQuality}`] : []),
+    ...(movieCorrelation
+      ? [
+          "-e",
+          "PINGUFUNK_ARR_QA_MOVIE_CORRELATION=1",
+          "-e",
+          "PINGUFUNK_RADARR_API_KEY_FILE=/qa/radarr-api-key",
+        ]
+      : []),
     "--mount",
     `type=bind,src=${dir},dst=/qa`,
     "--mount",
@@ -243,6 +274,13 @@ async function up() {
     }
     if (!ready) throw new Error(`Owned ${app} readiness failed; retained QA state at ${root}`);
   }
+  if (movieCorrelation)
+    await api(root, manifest, "pingufunk", "/api/settings", {
+      "integration.radarr.enabled": "true",
+      "integration.radarr.url": "http://radarr:7878",
+      "integration.radarr.inventoryMaxMiB": "10",
+      "matching.movie.tolerancePercent": "10",
+    });
   save(root, manifest);
   console.log(`QA_DIRECTORY=${root}`);
   await status(root, manifest);
@@ -446,6 +484,24 @@ async function bootstrap(root, manifest) {
   }
 }
 
+async function fixtureRuntimeReady(root, manifest, app) {
+  // docker start confirms process creation, not readiness of the restarted Arr API.
+  // Only this owned fixture runtime is polled; no search, command or grab is retried.
+  const deadline = Date.now() + 30_000;
+  for (let attempt = 0; attempt < 40 && Date.now() < deadline; attempt++) {
+    try {
+      const status = await api(root, manifest, app, "/api/v3/system/status");
+      if (status.version !== manifest.apps[app].version)
+        throw new Error("Owned fixture runtime version changed");
+      return;
+    } catch (error) {
+      if (error.message === "Owned fixture runtime version changed") throw error;
+      await delay(500);
+    }
+  }
+  throw new Error("Owned fixture runtime readiness failed");
+}
+
 async function movieFixture(root, manifest) {
   if ((await api(root, manifest, "radarr", "/api/v3/system/status")).version !== "6.4.4.10685")
     throw new Error("Owned Radarr fixture requires its inspected schema/version");
@@ -484,6 +540,8 @@ async function movieFixture(root, manifest) {
         VALUES (?, '[]', 'Synthetic Media', 'syntheticmedia', 'syntheticmedia', 'Synthetic Media', 'syntheticmedia', 1, 3, 0, 2024, '[]', '[]', '[]', '{}')`
         ).run(id);
       const metadata = db.prepare("SELECT Id FROM MovieMetadata WHERE TmdbId=?").get(id);
+      if (manifest.movieCorrelation)
+        db.prepare("UPDATE MovieMetadata SET Runtime=10 WHERE Id=?").run(metadata.Id);
       const profile = db.prepare("SELECT Id FROM QualityProfiles ORDER BY Id LIMIT 1").get();
       if (!profile) throw new Error("Owned Radarr fixture profile missing");
       if (!db.prepare("SELECT Id FROM Movies WHERE MovieMetadataId=?").get(metadata.Id))
@@ -503,6 +561,7 @@ async function movieFixture(root, manifest) {
   console.log(
     "radarr: unmonitored offline synthetic movie fixture seeded; backup retained; no Skyhook request or automatic grab"
   );
+  await fixtureRuntimeReady(root, manifest, "radarr");
 }
 
 async function seriesFixture(root, manifest) {
@@ -537,6 +596,11 @@ async function seriesFixture(root, manifest) {
           `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
         VALUES (?,1,1,'Synthetic Episode',0,0,'2024-01-01 20:00:00','2024-01-01',0,?,10,'[]')`
         ).run(series.Id, 2147483003);
+      if (manifest.placeholderEpisode)
+        db.prepare("UPDATE Episodes SET Title='TBA' WHERE SeriesId=? AND TvdbId=?").run(
+          series.Id,
+          2147483003
+        );
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -549,6 +613,7 @@ async function seriesFixture(root, manifest) {
   console.log(
     "sonarr: unmonitored offline synthetic series/episode seeded; backup retained; no external metadata or automatic grab"
   );
+  await fixtureRuntimeReady(root, manifest, "sonarr");
 }
 
 async function fixtureTarget(root, manifest, app) {
@@ -563,7 +628,10 @@ async function fixtureTarget(root, manifest, app) {
   );
   if (!series) throw new Error("Owned unmonitored series fixture required");
   return (await api(root, manifest, app, `/api/v3/episode?seriesId=${series.id}`)).find(
-    (row) => row.tvdbId === 2147483003 && row.title === "Synthetic Episode" && !row.monitored
+    (row) =>
+      row.tvdbId === 2147483003 &&
+      row.title === (manifest.placeholderEpisode ? "TBA" : "Synthetic Episode") &&
+      !row.monitored
   );
 }
 
@@ -571,6 +639,9 @@ async function movieSearch(root, manifest, app = "radarr") {
   await api(root, manifest, "pingufunk", "/api/settings", {
     "matching.minDuration": "0",
     "download.quality": "all",
+    ...(app === "sonarr" && manifest.placeholderEpisode
+      ? { "integration.sonarr.enabled": "true", "integration.sonarr.url": "http://sonarr:8989" }
+      : {}),
   });
   const movie = await fixtureTarget(root, manifest, app);
   if (!movie || movie.monitored) throw new Error("Owned unmonitored synthetic movie required");
@@ -583,6 +654,12 @@ async function movieSearch(root, manifest, app = "radarr") {
     indexers.some((row) => !owned.includes(row) && row.enableInteractiveSearch)
   )
     throw new Error("Owned two-indexer isolated search scope required");
+  await fixtureIndexersReady(
+    root,
+    manifest,
+    app,
+    owned.map((row) => row.id)
+  );
   try {
     for (const transport of ["direct", "forwarded"]) {
       const indexer = owned.find((row) => row.name === `Pingufunk isolated QA ${transport}`);
@@ -614,14 +691,115 @@ async function movieSearch(root, manifest, app = "radarr") {
         );
       if (!candidates[0].guid || !candidates[0].downloadUrl)
         throw new Error("Owned Radarr candidate transport identity missing");
+      if (app === "sonarr" && manifest.placeholderEpisode) {
+        const release = candidates[0];
+        if (
+          !release.title.includes(".S01E01.") ||
+          !release.title.includes("Synthetic.Episode") ||
+          release.title.includes(".TBA.") ||
+          !release.title.includes(".GERMAN.") ||
+          release.quality?.quality?.name !== "WEBDL-720p" ||
+          release.rejections.some((reason) =>
+            /unable to parse|unknown series|episode.*not found/i.test(reason)
+          )
+        )
+          throw new Error(
+            "Owned TBA source coordinates/title/language/quality not natively accepted"
+          );
+        const fresh = await fixtureTarget(root, manifest, app);
+        if (fresh?.title !== "TBA" || fresh.episodeFileId)
+          throw new Error("Owned TBA search changed fixture metadata or imported a file");
+        console.log(
+          `sonarr: ${transport} TBA source accepted as S01E01/German/720p; metadata preserved; no grab`
+        );
+      }
+      if (app === "radarr" && manifest.renditionQuality) {
+        const expected = manifest.renditionQuality === "720p" ? "WEBDL-720p" : "Unknown";
+        if (
+          candidates[0].quality?.quality?.name !== expected ||
+          (expected === "Unknown" && candidates[0].quality.quality.id !== 0)
+        )
+          throw new Error(`Owned ${transport} native resolution classification mismatch`);
+        // Feed the actual producer's quality suffix to Sonarr's native parser,
+        // not a locally reimplemented parser or an expected hard-coded title.
+        const suffix = candidates[0].title.split(".2024.")[1];
+        if (!suffix) throw new Error("Owned quality fixture title suffix unavailable");
+        const parsed = await api(
+          root,
+          manifest,
+          "sonarr",
+          `/api/v3/parse?title=${encodeURIComponent(`Synthetic.Series.S01E01.${suffix}`)}`
+        );
+        if (parsed.parsedEpisodeInfo?.quality?.quality?.name !== expected)
+          throw new Error("Owned Sonarr native resolution classification mismatch");
+        console.log(
+          `quality: ${transport} Radarr release and Sonarr parser=${expected}; original HD slot, no grab`
+        );
+      }
+      if (
+        app === "radarr" &&
+        manifest.sourceAudio &&
+        (!candidates[0].title.includes(".GERMAN.") ||
+          candidates[0].languages.length !== 1 ||
+          candidates[0].languages[0].name !== "German")
+      )
+        throw new Error("Owned rendition evidence not parsed as German by native Radarr");
+      if (
+        app === "radarr" &&
+        manifest.movieCorrelation &&
+        (candidates[0].mappedMovieId !== movie.id ||
+          candidates[0].tmdbId !== movie.tmdbId ||
+          !candidates[0].title.includes(".2024.") ||
+          candidates[0].rejections.some((reason) => /unable to parse|unknown movie/i.test(reason)))
+      )
+        throw new Error("Owned yearless source did not acquire verified native film identity");
       console.log(
-        `${app}: ${transport} native search parsed one synthetic candidate; no grab submitted`
+        `${app}: ${transport} native search parsed one synthetic candidate${app === "radarr" && manifest.sourceAudio ? "; actual audio German, fixture original language English" : ""}; no grab submitted`
       );
     }
   } finally {
     for (const row of owned)
       await api(root, manifest, app, `/api/v3/indexer/${row.id}?forceSave=true`, row, "PUT");
   }
+}
+
+async function fixtureIndexersReady(root, manifest, app, ids) {
+  // The intentional empty-feed test can persist a native indexer cooldown.
+  // Observe its expiry read-only before the one real search; never clear the
+  // status, retest the indexer or retry a failed candidate assertion.
+  const { DatabaseSync } = await import("node:sqlite");
+  const path = join(root, app, `${app}.db`);
+  if (lstatSync(path).isSymbolicLink()) throw new Error("Owned fixture database required");
+  const deadline = Date.now() + 90_000;
+  let observed = false;
+  while (Date.now() < deadline) {
+    const db = new DatabaseSync(path, { readOnly: true });
+    let pending;
+    try {
+      const rows = db
+        .prepare("SELECT ProviderId,DisabledTill FROM IndexerStatus WHERE ProviderId IN (?,?)")
+        .all(...ids);
+      pending = rows.some((row) => {
+        if (row.DisabledTill === null) return false;
+        const raw = String(row.DisabledTill);
+        const time = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : `${raw}Z`);
+        if (!Number.isFinite(time)) throw new Error("Owned indexer cooldown timestamp invalid");
+        return time > Date.now();
+      });
+    } finally {
+      db.close();
+    }
+    if (!pending) {
+      console.log(`${app}: owned indexers outside native cooldown; no status mutation`);
+      return;
+    }
+    if (!observed) {
+      console.log(`${app}: owned native indexer cooldown observed; awaiting expiry read-only`);
+      observed = true;
+    }
+    await delay(500);
+  }
+  throw new Error("Owned native indexer cooldown did not expire within the QA deadline");
 }
 
 async function forwardedSearch(root, manifest) {

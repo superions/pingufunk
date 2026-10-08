@@ -62,6 +62,7 @@ scripts/*
 !scripts/sqlite-schema.mjs
 !scripts/sqlite-baseline.mjs
 !scripts/check-postgresql-schema.mjs
+!scripts/download-directories.mjs
 !scripts/migrate-entrypoint.sh
 !scripts/postgresql-preflight.mjs
 !scripts/postgresql-snapshot.mjs
@@ -71,3 +72,4 @@ scripts/*
 !scripts/postgresql-run-manifest.mjs
 !scripts/postgresql-migration-cli.mjs
 !scripts/postgresql-prepare.mjs
+!scripts/postgresql-transport.mjs

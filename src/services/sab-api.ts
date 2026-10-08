@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { InvalidDownloadInputError, UnsafeDownloadPathError } from "@/lib/download-paths";
 import { MediaExpectationsError } from "@/lib/media-expectations";
 import { writesEnabled } from "@/lib/write-gate";
+import { DownloadReadError, parseDownloadRead } from "@/lib/download-read";
+import {
+  ENQUEUE_KEY_HEADER,
+  EnqueueConflictError,
+  EnqueueRequestError,
+  parseEnqueueKey,
+  readNzbBody,
+} from "@/lib/enqueue-request";
 import {
   getQueue,
   getHistory,
@@ -33,8 +41,12 @@ async function boundedRead<T>(operation: () => Promise<T>): Promise<T> {
 /** Both shipped SAB URLs share status, mutation and redacted failure contracts. */
 export async function GET(request: NextRequest) {
   try {
-    return await getResponse(request);
-  } catch {
+    const response = await getResponse(request);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  } catch (error) {
+    if (error instanceof DownloadReadError)
+      return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Failed to read download API");
     return NextResponse.json({ error: "Failed to read download API" }, { status: 500 });
   }
@@ -63,14 +75,15 @@ async function getResponse(request: NextRequest) {
           kbpersec: "0",
           mbleft: "0",
           mb: "0",
-          noofslots: queue.slots.length,
+          noofslots: queue.noofslots ?? queue.slots.length,
           state: "IDLE",
         },
       });
     }
 
     case "queue": {
-      const queue = await boundedRead(getQueue);
+      const options = parseDownloadRead(searchParams, "queue");
+      const queue = await boundedRead(() => getQueue(options));
       return NextResponse.json({ queue });
     }
 
@@ -117,7 +130,8 @@ async function getResponse(request: NextRequest) {
       }
 
       // Return history list
-      const history = await boundedRead(getHistory);
+      const options = parseDownloadRead(searchParams, "history");
+      const history = await boundedRead(() => getHistory(options));
       return NextResponse.json({ history });
     }
 
@@ -139,8 +153,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Read the NZB content from the request body
-    const nzbContent = await request.text();
+    if (
+      request.nextUrl.search.length > 16_384 ||
+      ["mode", "cat"].some((key) => searchParams.getAll(key).length > 1)
+    )
+      throw new EnqueueRequestError("Invalid enqueue parameters");
+    const key = parseEnqueueKey(request.headers.get(ENQUEUE_KEY_HEADER));
+    const nzbContent = await readNzbBody(request);
 
     const parsed = parseNzbContent(nzbContent);
     if (!parsed) {
@@ -151,15 +170,21 @@ export async function POST(request: NextRequest) {
 
     // Add to the download queue
     const queueItem =
-      mediaExpectations === undefined
-        ? await addToQueue(url, title, cat)
-        : await addToQueue(url, title, cat, mediaExpectations);
+      key !== undefined
+        ? await addToQueue(url, title, cat, mediaExpectations, key)
+        : mediaExpectations === undefined
+          ? await addToQueue(url, title, cat)
+          : await addToQueue(url, title, cat, mediaExpectations);
 
     return NextResponse.json({
       status: true,
       nzo_ids: [queueItem.id],
     });
   } catch (error) {
+    if (error instanceof EnqueueRequestError)
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof EnqueueConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Error adding file");
     if (error instanceof InvalidDownloadInputError || error instanceof MediaExpectationsError) {
       return NextResponse.json({ error: error.message }, { status: 400 });

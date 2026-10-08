@@ -63,7 +63,7 @@ it("caps each source page and honors its offset", async () => {
   expect(JSON.parse(request!.body as string)).toMatchObject({ size: 1000, offset: 2000 });
 });
 
-it("does not promote uncontracted response properties to language evidence", async () => {
+it("does not promote uncontracted response properties to language or resolution evidence", async () => {
   vi.mocked(fetchWithRetry).mockResolvedValue(
     Response.json({
       result: {
@@ -73,6 +73,9 @@ it("does not promote uncontracted response properties to language evidence", asy
             audioLanguage: "de",
             subtitleLanguage: "de",
             originalVersion: true,
+            sourceVideoDimensions: [{ url: validItem.url_video, width: 1920, height: 1080 }],
+            sourceAvailability: { state: "declared_rights", beginsAt: 1, endsAt: 9999999999 },
+            contentDates: { broadcastAt: 9999999999, productionYear: 2026 },
           },
         ],
       },
@@ -81,6 +84,29 @@ it("does not promote uncontracted response properties to language evidence", asy
 
   expect(await queryMediathekView([], 10)).toEqual([validItem]);
 });
+
+it("separates the real broadcast timestamp from the catalogue update without accepting arbitrary rights", async () => {
+  const broadcastAt = Date.parse("2026-12-25T20:15:00Z") / 1000;
+  vi.mocked(fetchWithRetry).mockResolvedValue(
+    Response.json({
+      result: {
+        results: [{ ...validItem, timestamp: broadcastAt, rights: { end: "2099-01-01" } }],
+      },
+    })
+  );
+  expect(await queryMediathekView([], 10)).toEqual([
+    { ...validItem, contentDates: { catalogueUpdatedAt: 1, broadcastAt } },
+  ]);
+});
+it.each([0, null, -1, "2026-01-01", NaN])(
+  "keeps unproven broadcast timestamp %s unknown",
+  async (timestamp) => {
+    vi.mocked(fetchWithRetry).mockResolvedValue(
+      Response.json({ result: { results: [{ ...validItem, timestamp }] } })
+    );
+    expect(await queryMediathekView([], 10)).toEqual([validItem]);
+  }
+);
 
 it.each([
   null,
@@ -108,6 +134,16 @@ it("normalizes the unknown size of live ORF HLS entries to zero", async () => {
     { ...validItem, size: 0, url_video: "https://example.org/orf.m3u8" },
   ]);
 });
+
+it.each([null, ""])(
+  "keeps unknown catalogue duration %j unknown without discarding the whole page",
+  async (duration) => {
+    vi.mocked(fetchWithRetry).mockResolvedValue(
+      Response.json({ result: { results: [validItem, { ...validItem, duration }] } })
+    );
+    expect(await queryMediathekView([], 10)).toEqual([validItem, { ...validItem, duration: 0 }]);
+  }
+);
 
 it("rejects an advertised oversized body without reading it", async () => {
   vi.mocked(fetchWithRetry).mockResolvedValue(

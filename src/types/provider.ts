@@ -25,14 +25,21 @@ export interface ProviderContentItem {
   title: string;
   /** Description text */
   description: string;
-  /** Unix timestamp of when the content was published */
+  /** Legacy provider sort/ID timestamp; not authoritative availability or film production year. */
   timestamp: number;
+  contentDates?: import("@/lib/content-dates").ContentDates;
+  sourceAvailability?: import("@/lib/content-dates").SourceAvailability;
+  /** Explicit production-year metadata only; never derived from timestamp. */
+  productionYear?: number;
   /** Duration in seconds */
   duration: number;
   /** File size in bytes (0 if unknown) */
   size: number;
   /** Only set from provider metadata that explicitly identifies the audio track language. */
   audioLanguage?: string | null;
+  /** Trusted adapter facts remain bound to their exact rendition, never a slot label. */
+  sourceAudioEvidence?: import("@/types").ApiResultItem["sourceAudioEvidence"];
+  sourceVideoDimensions?: import("@/types").ApiResultItem["sourceVideoDimensions"];
   /** URL to the website page for this content */
   websiteUrl: string;
   /** Available video URLs by quality */

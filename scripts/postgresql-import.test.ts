@@ -8,9 +8,13 @@ import { createSnapshot } from "./postgresql-snapshot.mjs";
 import { importSnapshot } from "./postgresql-import.mjs";
 import { synchronizeOwnedSequences } from "./postgresql-verify.mjs";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 const enabled = process.env.PINGUFUNK_REQUIRE_PG_IMPORT_TESTS === "1";
-const url = process.env.PINGUFUNK_TEST_IMPORT_URL;
+const configuredUrl = process.env.PINGUFUNK_TEST_IMPORT_URL;
+const url = configuredUrl
+  ? `${configuredUrl}${configuredUrl.includes("?") ? "&" : "?"}sslmode=disable`
+  : undefined;
 if (enabled) {
   let safe = false;
   try {
@@ -28,7 +32,7 @@ if (enabled) {
 
 for (const sourceVariant of ["bootstrap", "current"] as const) {
   it.skipIf(!enabled)(
-    `imports all six models from ${sourceVariant} atomically and refuses a nonempty repeat`,
+    `imports all supported models from ${sourceVariant} atomically and refuses a nonempty repeat`,
     async () => {
       process.env.DATABASE_URL = url;
       const dir = mkdtempSync(join(tmpdir(), "pingufunk-import-test-"));
@@ -61,10 +65,16 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
     `);
         const expectedPayload = '{ "version":1, "duration":null, "audio":null, "resolution":null }';
         const validationPayload = '{"version":1,"durationSeconds":120,"audioLanguages":[]}';
-        if (sourceVariant === "current")
+        if (sourceVariant === "current") {
           sqlite
             .prepare("UPDATE Download SET mediaExpectations=?,mediaValidation=?")
             .run(expectedPayload, validationPayload);
+          sqlite
+            .prepare(
+              "INSERT INTO EnqueueIntent(id,payloadHash,downloadId,expiresAt) VALUES (?,?,?,?)"
+            )
+            .run("synthetic-intent", "synthetic-hash", "synthetic-download", 1780228800123);
+        }
         sqlite.close();
         sqliteOpen = false;
         const snapshot = await createSnapshot(sourcePath, join(dir, "backup"));
@@ -74,7 +84,6 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
           database: "pingufunk_qa_fresh",
           role: "pingufunk_qa_import",
           host: "127.0.0.1",
-          requireTls: false,
         };
         await expect(importSnapshot({ ...args, verifyOnly: true })).rejects.toThrow(
           "No validated import manifest"
@@ -104,6 +113,18 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
         expect(await pg.tvdbEpisode.count()).toBe(1);
         expect(await pg.config.count()).toBe(1);
         expect(await pg.download.count()).toBe(1);
+        expect(await pg.enqueueIntent.findMany()).toEqual(
+          sourceVariant === "current"
+            ? [
+                {
+                  id: "synthetic-intent",
+                  payloadHash: "synthetic-hash",
+                  downloadId: "synthetic-download",
+                  expiresAt: new Date(1780228800123),
+                },
+              ]
+            : []
+        );
         expect(await pg.download.findUnique({ where: { id: "synthetic-download" } })).toMatchObject(
           {
             mediaExpectations: sourceVariant === "current" ? expectedPayload : null,
@@ -128,6 +149,33 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
         expect((await importSnapshot(args)).imported).toBe(false);
         expect((await importSnapshot({ ...args, verifyOnly: true })).imported).toBe(false);
         expect(JSON.parse(readFileSync(manifestPath, "utf8")).status).toBe("validated");
+        // Exercise the real CLI, including its sequence transaction, without
+        // the former in-process requireTls=false test override.
+        for (const action of ["import", "verify", "sequences"]) {
+          const result = spawnSync(
+            process.execPath,
+            [
+              "scripts/postgresql-migration-cli.mjs",
+              action,
+              "--snapshot",
+              snapshot.snapshotPath,
+              "--sha256",
+              snapshot.sha256,
+              "--database",
+              args.database,
+              "--role",
+              args.role,
+              "--host",
+              args.host,
+              ...(action === "verify" ? [] : ["--confirm-writers-stopped"]),
+              ...(action === "sequences" ? ["--confirm-no-app-writes-since-import"] : []),
+            ],
+            { env: process.env, encoding: "utf8", timeout: 30000 }
+          );
+          expect(result.status, result.stderr).toBe(0);
+          expect(JSON.parse(result.stdout).action).toBe(action);
+          expect(result.stdout).not.toContain("synthetic-private");
+        }
         const otherUrl = new URL(url!);
         otherUrl.searchParams.set("schema", "p11_other_target");
         process.env.DATABASE_URL = otherUrl.href;
@@ -198,6 +246,7 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
         await pg.tvdbEpisode.deleteMany({ where: { id: 37 } });
         await pg.tvdbSeries.deleteMany({ where: { id: 7123 } });
         await pg.download.deleteMany({ where: { id: "synthetic-download" } });
+        await pg.enqueueIntent.deleteMany({ where: { id: "synthetic-intent" } });
         await pg.config.deleteMany({ where: { key: "qa-secret" } });
         await pg.config.deleteMany({ where: { key: "qa-foreign" } });
         await pg.generatedRuleset.deleteMany({ where: { id: "synthetic-rule" } });

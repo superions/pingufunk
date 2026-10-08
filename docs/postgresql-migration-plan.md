@@ -5,7 +5,10 @@ Stand: 30.09.2026. Ergänzung P11 zum
 SQLite bleibt ein unterstützter Betriebsmodus.** Dieses Dokument bleibt technische Referenz mit Ausgangsbefunden
 und Daten-/Rollbackinvarianten. Einziger ausführbarer Entwicklungs- und
 Freigabevertrag: [Phasen-TODOs](../todo/proxy-retirement.md), P11 und P10.
-Keine produktive Migration ausgeführt, keine Deploymentfreigabe.
+Installationsnachtrag 04.10.2026: Ein ausdrücklich freigegebener produktiver
+Cutover ist einschließlich getrennt bestätigtem Schreibbetrieb und Restart
+abgenommen (P10.2–P10.5). Konkrete Betriebswerte und vollständige Nachweise
+bleiben im privaten Runbook. Dies ist keine allgemeine Deploymentfreigabe.
 
 Der Entwicklungsbranch unterstützt nach P11.1 wieder **beide Backendtypen**:
 Beide Backends sind gleichwertig unterstützt; ohne PG-Konfiguration wird SQLite
@@ -16,6 +19,12 @@ PG→SQLite-Rücktransfer ist damit nicht behauptet; weitere PG-Abnahmen bleiben
 im Phasenvertrag offen.
 
 ## Entscheidung, Umfang und Reihenfolge
+
+Transportentscheidung 03.10.2026: PostgreSQL muss auch ohne TLS nutzbar sein.
+Die geschützte URL wählt dafür ausdrücklich `sslmode=disable`; `require`
+erzwingt TLS. Der Migrationsstandard bleibt TLS, kein Fehlerfallback und keine
+fest verdrahtete Proxyroute. `prefer`/mehrdeutige Modi sind für den Cutover
+gesperrt. Aktueller Vertrag und Grenzen: [Backendwahl](database-backends.md).
 
 Eine Installation wählt SQLite oder PostgreSQL ausdrücklich. Der Proxy-Ausstieg
 darf mit SQLite erfolgen; er hängt nicht von P11 oder einem PG-Cutover ab.
@@ -34,8 +43,9 @@ Transport sind keine Repository-Vorgabe. Keine Übernahme fremder
 Anwendungsrollen. Networks, Mounts, Downloads und Secret-/Deployment-Konventionen
 der jeweiligen Installation bleiben erhalten.
 Konkrete private Endpunkte und Zugangsdaten stehen nicht in diesem öffentlichen
-Repository. Die tatsächlich eingesetzte PostgreSQL-Version ist hier noch
-**nicht live festgestellt** und bleibt ein verpflichtender Preflight-Gate.
+Repository. Die tatsächlich eingesetzte PostgreSQL-Version muss für jeden
+Cutover live festgestellt werden; sie wurde für die abgenommene Installation
+verifiziert und bleibt für jede weitere Installation ein Preflight-Gate.
 
 ## Verifizierter Ausgangsstand
 
@@ -130,15 +140,15 @@ kein DDL aus und gibt weder Default- noch Zeilenwerte aus.
 
 ## Datenvertrag: erhalten statt neu erzeugen
 
-| Tabelle                               | Zwingend zu erhalten / prüfen                                                                                        |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Config                                | Schlüssel und Werte exakt, inklusive vorhandener Settings/Credentials; niemals Klarwerte im Bericht                  |
+| Tabelle                               | Zwingend zu erhalten / prüfen                                                                                                                                   |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Config                                | Schlüssel und Werte exakt, inklusive vorhandener Settings/Credentials; niemals Klarwerte im Bericht                                                             |
 | Download                              | IDs, Status, Fortschritt, BigInt-Bytewerte, Kategorie, URL, lokale Pfade, Fehler und Zeitpunkte sowie nullable P09-Erwartungs-/Prüfstrings; keine neue Queue-ID |
-| GeneratedRuleset                      | IDs, Topic-Unique, Zuordnungen, Regex-/Filterstrings und Zeitpunkte; keine Regeneration als Migrationsersatz         |
-| TopicCategory                         | IDs, Topic-Unique, Kategorie, TMDB-Zuordnung und cachedAt                                                            |
-| TvdbSeries                            | Externe Serien-ID, Namen, Aliase, Cachezeiten und Beziehungen                                                        |
-| TvdbEpisode                           | IDs, Serien-FK, Staffel/Folge, Titel, Laufzeit, Datum; bestehende IDs und nächste generierte ID korrekt              |
-| \_prisma_migrations / sqlite_sequence | Nicht als Anwendungsdaten kopieren; Ziel erhält eigenes korrektes Ledger und echte PostgreSQL-Sequences              |
+| GeneratedRuleset                      | IDs, Topic-Unique, Zuordnungen, Regex-/Filterstrings und Zeitpunkte; keine Regeneration als Migrationsersatz                                                    |
+| TopicCategory                         | IDs, Topic-Unique, Kategorie, TMDB-Zuordnung und cachedAt                                                                                                       |
+| TvdbSeries                            | Externe Serien-ID, Namen, Aliase, Cachezeiten und Beziehungen                                                                                                   |
+| TvdbEpisode                           | IDs, Serien-FK, Staffel/Folge, Titel, Laufzeit, Datum; bestehende IDs und nächste generierte ID korrekt                                                         |
+| \_prisma_migrations / sqlite_sequence | Nicht als Anwendungsdaten kopieren; Ziel erhält eigenes korrektes Ledger und echte PostgreSQL-Sequences                                                         |
 
 Keine stillschweigende Cache-Löschung. Zeitfelder können in SQLite als Text oder
 Integer vorliegen: Einheiten, UTC-Konvention und Millisekunden exakt feststellen.
@@ -250,7 +260,7 @@ und semantisch vergleichen.
 Tests nur eines Backends oder nur Tabellenname-Regex belegen das andere nicht.
 Die echte Betriebsabnahme bleibt bei einem tatsächlich gewählten Cutover separat.
 
-Vor einem optionalen produktiven PG-Cutover offen: tatsächliche Serverversion,
+Vor jedem weiteren optionalen produktiven PG-Cutover konkret zu prüfen: tatsächliche Serverversion,
 Sourcepfad und Schemafingerprint, DB-/Rollenname nach bestehender Konvention,
 Secretnamen, gewählter Primary-/Transport-/TLS-Vertrag, berechtigte Runner-
 Ausführung, Wartungsfenster, Datengröße/Importdauer, Backupablage, Retention und
@@ -261,3 +271,25 @@ konkreter Endpoint oder Secret in dieses öffentliche Repository.
 Artefakte, Entscheidungen und Status werden nur in den Phasen-TODOs geführt.
 Bis zu implementiertem Runner und geprobtem Runbook gibt es hier keine
 vermeintlich fertigen Deploymentbefehle.
+
+## Append-only Erweiterung P15.4 (08.10.2026)
+
+Zusätzlich zu den sechs ursprünglichen fachlichen Modellen gehört die
+providerübergreifende `EnqueueIntent`-Tabelle zum vollständig zu erhaltenden
+Anwendungsbestand. Beide Ketten führen `20261008000000_enqueue_intent`.
+Current-Sources übernehmen Schlüssel-/Payloadhash, ursprüngliche Download-ID
+und millisekundengenaue Ablaufzeit unverändert; historische Sources ohne
+Tabelle haben null Rows, keine erfundenen Bestätigungen. Keine FK-Cascade bei
+History-Retry/-Delete; die Empfangsbestätigung ist nicht der aktuelle Jobstatus.
+
+Import, Baselinetransition, Sourceprüfung und semantische Verification beziehen
+diese Tabelle ein. Der bereits ausgelieferte P09-Shape bleibt als historische
+Quelle gesondert erkannt, dessen SQL/Checksums bleiben unverändert.
+Ein Image vor dieser Erweiterung ist kein nachgewiesen kompatibles post-write
+Rollbackimage. Der neue Harness verlangt die sichere Ablehnung des alten
+Schemas am historischen Image und prüft Backup/Restore aller Werte sowie
+Maintenance mit dem exakten kompatiblen aktuellen Image. Das ist kein
+funktionaler Code-Downgrade. Vor einem später genehmigten Rollout muss ein
+passender schema-/receipt-kompatibler Rollbackbuild geprüft werden; niemals
+Receipt-/Ledger-/Jobdaten löschen, um einen alten Build starten zu können.
+Details im [Enqueue-Vertrag](enqueue-intent-contract.md), Status nur im TODO.
