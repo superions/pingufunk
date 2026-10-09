@@ -2531,3 +2531,16 @@ prüfung, unveränderter globaler Toleranz und weiterhin blockiertem nativen NZB
 Noch keine UI-/API-Implementierung oder Desktopabnahme dieser Erweiterung.
 Die generische UI liefert bisher Source-only-NZBs ohne Episode-Metadaten;
 das ist weder der neue geprüfte Ausnahmeweg noch ein Sonarr-Identitätsnachweis.
+
+Nachlauf: Die vollständigen Fork-Containerketten
+[38004013774](https://github.com/superions/pingufunk/actions/runs/38004013774)
+(`c65bf8b`) und
+[38004221752](https://github.com/superions/pingufunk/actions/runs/38004221752)
+(`0af57a0`) sind erfolgreich, einschließlich realer Medien und PG-Ausfall-/
+Folgequeue. Damit ist der Ausfallbefund bislang umgebungsabhängig auf dev-03
+reproduziert, nicht pauschal ein Fehler aller Installationen. App dort ebenfalls
+Node 24.21.0, PG 17.11; externer Testcontroller Node 26.11.1, Forkcontroller
+Node 24.21.0. Diese Differenz ist noch keine bewiesene Ursache. Neuere unabhängige
+SQL-/Receipt-Diagnostik war in diesen zwei grünen Läufen noch nicht enthalten.
+Nicht allein wegen grüner Forkläufe den mehrfach konkret reproduzierten
+dev-03-Befund schließen; Ursachengate bleibt P15.1/P15.4.

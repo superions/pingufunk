@@ -1394,6 +1394,12 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Receipt-Nachweis beider Backends, Quellen-/Worker-Revalidation und
       desktop-only Dialog-/Fokus-/Reload-/Fehler-/Konsolenprüfung auf tatsächlich
       servierter synthetischer Testinstanz. Kein realer Grab oder Rollout dadurch.
+      Entwicklungscheckpoint: ursprünglicher TV-/MP4-Fix in `14ea228`,
+      1336 reguläre Tests sowie Produktgates bestanden; fünf native Varianten
+      direkt/via Prowlarr auf eigener Entwicklungslaufzeit bestanden, keine
+      Grabs/Imports. Fork-CI 38004013768 und vollständige Containerkette
+      38004013774 (`c65bf8b`) erfolgreich. Einzelquellenfreigabe bleibt noch
+      unimplementiert; reproduzierter dev-03-Recovery-Befund getrennt offen.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
