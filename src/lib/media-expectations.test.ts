@@ -5,7 +5,38 @@ import {
   serializeMediaExpectations,
   unknownMediaExpectations,
   unknownJobMediaExpectations,
+  hasMediaRuntimeConflict,
 } from "./media-expectations";
+
+it.each([
+  [3000, 3450, 15, false],
+  [3000, 3450.001, 15, true],
+  [3000, 2549.999, 15, true],
+  [120, 125, 1, false],
+  [120, 125.001, 1, true],
+  [120, 120, 0, false],
+  [120, 120.001, 0, true],
+])(
+  "uses the same inclusive duration gate at enqueue: reference %s/source %s/tolerance %s",
+  (metadataSeconds, sourceSeconds, tolerancePercent, conflict) => {
+    const value = unknownJobMediaExpectations();
+    value.mediaKind = "series";
+    value.durations.source = {
+      seconds: sourceSeconds,
+      provenance: "source_catalogue",
+      tolerancePercent: 10,
+    };
+    value.durations.metadata = {
+      seconds: metadataSeconds,
+      provenance: "episode_metadata",
+      tolerancePercent,
+    };
+    expect(hasMediaRuntimeConflict(parseMediaExpectations(value))).toBe(conflict);
+    value.durations.metadata = null;
+    expect(hasMediaRuntimeConflict(value)).toBe(false);
+    expect(hasMediaRuntimeConflict(unknownMediaExpectations())).toBe(false);
+  }
+);
 
 it("keeps independent frozen source and episode references in v3", () => {
   const value = {

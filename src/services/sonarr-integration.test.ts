@@ -137,6 +137,101 @@ afterEach(() => {
   mediathekCache.clear();
 });
 
+it("exposes a source-coordinate-bound future TBA duration conflict consistently without releasing its NZB", async () => {
+  const base = fetchMock.getMockImplementation()!;
+  state.settings.set("matching.sonarr.tolerancePercent", "15");
+  state.settings.set("download.quality", "best");
+  fetchMock.mockImplementation(async (value: string, init?: RequestInit) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/episode"))
+      return Response.json([
+        {
+          id: 45,
+          seriesId: 12,
+          seasonNumber: 2,
+          episodeNumber: 3,
+          title: "TBA",
+          airDateUtc: "2099-01-01T12:00:00Z",
+          runtime: 50,
+        },
+      ]);
+    if (url.hostname === "mediathekviewweb.de")
+      return Response.json({
+        result: {
+          results: [
+            {
+              ...source,
+              channel: "ZDF",
+              title: "Actual title (S02/E03)",
+              duration: 3540,
+              url_video: "https://rodlzdf-a.akamaihd.net/synthetic/episode.mp4",
+            },
+          ],
+        },
+        err: null,
+      });
+    if (url.hostname === "rodlzdf-a.akamaihd.net") return mp4RangeResponse(syntheticMp4(), init!);
+    return base(value);
+  });
+  for (const query of [
+    "tvdbid=123&season=2&ep=3",
+    "tvdbid=123&season=2",
+    "q=Synthetic.series&season=2&ep=3",
+    "q=Synthetic%20series&season=2",
+  ]) {
+    const response = await GET(new NextRequest(`http://localhost/api/newznab?t=tvsearch&${query}`));
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel.item).toHaveLength(1);
+    const release = channel.item[0];
+    expect(release.title[0]).toContain("S02E03.Actual.title");
+    expect(release.title[0]).toContain("1080p");
+    expect(release.title[0]).toContain("GERMAN");
+    expect(release.description[0]).toContain("Laufzeitkonflikt");
+    expect(release.description[0]).toContain("±15 %");
+    const nzb = await downloadNzb(
+      new NextRequest(new URL(release.enclosure[0].$.url, "http://localhost"))
+    );
+    expect(nzb.status).toBe(409);
+    expect(await nzb.text()).not.toContain("<nzb");
+  }
+  expect(state.addToQueue).not.toHaveBeenCalled();
+});
+
+it("does not bind a title-only query to either of two authoritative alias owners", async () => {
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation(async (value: string) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/series"))
+      return Response.json([
+        {
+          id: 12,
+          tvdbId: 123,
+          title: "First series",
+          monitored: true,
+          alternateTitles: [{ title: "Shared alias", seasonNumber: -1 }],
+        },
+        {
+          id: 13,
+          tvdbId: 124,
+          title: "Second series",
+          monitored: true,
+          alternateTitles: [{ title: "Shared alias", seasonNumber: -1 }],
+        },
+      ]);
+    return base(value);
+  });
+  const response = await GET(
+    new NextRequest("http://localhost/api/newznab?t=tvsearch&q=Shared%20alias&season=2&ep=3")
+  );
+  expect(response.status).toBe(200);
+  const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+  expect(channel.item ?? []).toHaveLength(0);
+  expect(
+    fetchMock.mock.calls.some(([value]) => new URL(value).hostname === "mediathekviewweb.de")
+  ).toBe(false);
+});
+
 it("finds an already listed future-airdate episode by exact/season search without granting RSS advance access", async () => {
   const base = fetchMock.getMockImplementation()!;
   const future = new Date(Date.now() + 7 * 86400_000).toISOString();

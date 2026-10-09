@@ -38,7 +38,7 @@ vi.mock("@/server/download-manager", () => ({ startDownloadProcessing: start }))
 
 import { clearSettingsCache } from "@/lib/settings";
 import { addToQueue, deleteHistoryItem, retryDownload } from "./download";
-import { unknownMediaExpectations } from "@/lib/media-expectations";
+import { unknownMediaExpectations, unknownJobMediaExpectations } from "@/lib/media-expectations";
 
 let root: string;
 let outside: string;
@@ -73,6 +73,30 @@ it("rejects unsafe public inputs before creating a queue row", async () => {
   await expect(addToQueue("https://example.org/video.mp4", title, "../sonarr")).rejects.toThrow();
   expect(downloadCreate).not.toHaveBeenCalled();
 });
+
+it.each([undefined, "synthetic-idempotency-key"])(
+  "blocks known runtime conflicts before job/intent/worker writes (%s)",
+  async (key) => {
+    const expectations = unknownJobMediaExpectations();
+    expectations.mediaKind = "series";
+    expectations.durations.source = {
+      seconds: 3540,
+      provenance: "source_catalogue",
+      tolerancePercent: 10,
+    };
+    expectations.durations.metadata = {
+      seconds: 3000,
+      provenance: "episode_metadata",
+      tolerancePercent: 15,
+    };
+    await expect(
+      addToQueue("https://example.org/video.mp4", title, category, expectations, key)
+    ).rejects.toThrow("Source duration conflicts with episode metadata");
+    expect(downloadCreate).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  }
+);
 
 it("persists a strict versioned payload and rejects corruption before queue creation", async () => {
   const mediaExpectations = unknownMediaExpectations();

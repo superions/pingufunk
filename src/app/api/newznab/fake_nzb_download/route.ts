@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decodeBase64Utf8, decodeMediaExpectations, generateFakeNzb } from "@/services/nzb-release";
+import { hasMediaRuntimeConflict } from "@/lib/media-expectations";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -24,6 +25,11 @@ export async function GET(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid media expectations" }, { status: 400 });
   }
+  if (hasMediaRuntimeConflict(mediaExpectations))
+    return NextResponse.json(
+      { error: "Episode runtime conflict; download blocked" },
+      { status: 409 }
+    );
   const nzbContent = generateFakeNzb({ title, url, mediaExpectations });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);

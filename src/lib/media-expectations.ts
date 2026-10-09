@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { verifiedDurationCheck } from "./verified-duration";
 
 const durationSchema = z
   .object({
@@ -124,6 +125,28 @@ export class MediaExpectationsError extends Error {
   constructor() {
     super("Invalid media expectations");
   }
+}
+
+export class MediaRuntimeConflictError extends Error {
+  constructor() {
+    super("Source duration conflicts with episode metadata; download requires resolved metadata");
+  }
+}
+
+/** A visible review candidate must not turn into a download through NZB/SAB. */
+export function hasMediaRuntimeConflict(value: MediaExpectations | null | undefined): boolean {
+  if (value?.version !== 3) return false;
+  const { source, metadata } = value.durations;
+  return !!(
+    source &&
+    metadata &&
+    !verifiedDurationCheck(source.seconds, metadata.seconds, 0, metadata.tolerancePercent).accepted
+  );
+}
+
+export function assertMediaRuntimeCompatible(value: MediaExpectations | null | undefined): void {
+  if (value && hasMediaRuntimeConflict(parseMediaExpectations(value)))
+    throw new MediaRuntimeConflictError();
 }
 
 /** The versioned protocol must be fully valid; corrupt v1 is never legacy. */

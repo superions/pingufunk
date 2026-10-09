@@ -85,6 +85,40 @@ for (const provider of ["sqlite", "postgresql"] as const)
         .mockRejectedValue(new Error("Network forbidden in enqueue fixture"));
       startDownloadProcessing.mockClear();
       try {
+        // A visible review candidate cannot write either a job or its receipt,
+        // through addfile on either endpoint or direct addToQueue.
+        const conflict = unknownJobMediaExpectations();
+        conflict.mediaKind = "series";
+        conflict.durations.source = {
+          seconds: 3540,
+          provenance: "source_catalogue",
+          tolerancePercent: 10,
+        };
+        conflict.durations.metadata = {
+          seconds: 3000,
+          provenance: "episode_metadata",
+          tolerancePercent: 15,
+        };
+        const conflictNzb = generateFakeNzb({ ...release, mediaExpectations: conflict });
+        for (const handler of [POST, rootPost]) {
+          expect((await post(key(), conflictNzb, "tv", handler)).status).toBe(409);
+          expect(
+            (
+              await handler(
+                new NextRequest("http://localhost/api/download?mode=addfile&cat=tv", {
+                  method: "POST",
+                  body: conflictNzb,
+                })
+              )
+            ).status
+          ).toBe(409);
+        }
+        await expect(addToQueue(release.url, release.title, "tv", conflict)).rejects.toThrow(
+          "Source duration conflicts"
+        );
+        expect(await prisma.download.count()).toBe(0);
+        expect(await prisma.enqueueIntent.count()).toBe(0);
+        expect(startDownloadProcessing).not.toHaveBeenCalled();
         const intent = key();
         const responses = await Promise.all(Array.from({ length: 8 }, () => post(intent)));
         expect(responses.map((r) => r.status)).toEqual(Array(8).fill(200));

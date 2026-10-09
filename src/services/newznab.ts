@@ -21,6 +21,7 @@ import {
 } from "./language-editions";
 import { createFakeNzbDownloadUrl } from "./nzb-release";
 import { releaseMediaExpectations } from "./release-media-expectations";
+import { hasMediaRuntimeConflict } from "@/lib/media-expectations";
 
 export { generateFakeNzb } from "./nzb-release";
 
@@ -346,10 +347,11 @@ function createRssItem(
   const parsedTitle = generateTitle(info, quality, episodeType);
   const formattedTitle = formatTitle(parsedTitle);
 
+  const expectations = releaseMediaExpectations(info.item, info.episode.runtime, url, "series");
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime, url, "series"),
+    mediaExpectations: expectations,
   });
   const item = info.item;
 
@@ -369,7 +371,9 @@ function createRssItem(
     // Preserve catalogue publication ordering, never reinterpret it as episode airdate.
     pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
     category: category,
-    description: item.description,
+    description: hasMediaRuntimeConflict(expectations)
+      ? `Laufzeitkonflikt: Quelle ${expectations.durations.source!.seconds} s, Episodenmetadaten ${expectations.durations.metadata!.seconds} s, Toleranz ±${expectations.durations.metadata!.tolerancePercent} %. Download gesperrt; Metadatenkonflikt zuerst klären.\n${item.description}`
+      : item.description,
     enclosure: {
       url: fakeDownloadUrl,
       length: adjustedSize,

@@ -20,6 +20,7 @@ import {
   serializeMediaExpectations,
   readPersistedMediaExpectations,
   type MediaExpectations,
+  assertMediaRuntimeCompatible,
 } from "@/lib/media-expectations";
 
 /**
@@ -86,6 +87,8 @@ export async function addToQueue(
   assertWritesEnabled();
   validateCategory(category);
   validateReleaseTitle(title);
+  // Reject before both the direct job write and the idempotent intent write.
+  assertMediaRuntimeCompatible(mediaExpectations);
   const data = {
     id: randomUUID(),
     title,

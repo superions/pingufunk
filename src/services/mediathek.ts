@@ -3,10 +3,10 @@ import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { configuredSetting } from "@/lib/settings-schema";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { enrichTvCandidates } from "./source-audio";
-import { getBaseShowForSonarrRss } from "./shows";
+import { getBaseShowForSonarrRss, getShowInfoByTvdbId } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
-import { SonarrUnavailableError } from "./sonarr-provider";
+import { SonarrUnavailableError, openSonarrSession } from "./sonarr-provider";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { createHash } from "node:crypto";
 import { ensureRulesetsLoaded, getRulesetContext } from "./rulesets";
@@ -54,7 +54,7 @@ import {
 const QUERY_FIELDS = ["topic", "title"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v14-fresh-source-facts";
+const CONTENT_SEARCH_CACHE_VERSION = "v15-runtime-review";
 
 export async function fetchSearchResultsById(
   tvdbData: TvdbData,
@@ -177,7 +177,8 @@ export async function fetchSearchResultsById(
     await getConfiguredLanguagePolicy(),
     hlsEnabled,
     true,
-    verifiedRuleTopics(tvdbData)
+    verifiedRuleTopics(tvdbData),
+    true
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
     [...matchedEpisodes, ...supplementalMatches],
@@ -234,6 +235,33 @@ export async function fetchSearchResultsByString(
     query: searchContext.query?.trim() || null,
   };
   const trimmedQ = context.query;
+  // Arr may forward a title search through Prowlarr without its TVDB parameter.
+  // Only a unique, exact instance title/series-wide alias can bind that request
+  // to the same metadata/duration owner as an ID search. Search words never do.
+  if (trimmedQ && context.tvdbId === null) {
+    const session = await openSonarrSession();
+    if (session) {
+      const normalize = (value: string) =>
+        value
+          .normalize("NFC")
+          .toLocaleLowerCase("de-DE")
+          .replace(/[.\s]+/g, " ")
+          .trim();
+      const requested = normalize(trimmedQ);
+      const inventory = await session.inventory(budget);
+      const owners = inventory.filter((series) =>
+        [series.title, ...(series.aliases ?? [])].some((name) => normalize(name) === requested)
+      );
+      if (owners.length === 1) {
+        const show = await getShowInfoByTvdbId(owners[0].tvdbId, budget);
+        if (!show || show.sonarrUnavailable) throw new SonarrUnavailableError();
+        return fetchSearchResultsById(show, { ...context, tvdbId: show.id }, limit, offset, budget);
+      }
+      // An ambiguous authoritative identity must not fall back to a permissive
+      // text path and thereby bypass its conflicting metadata.
+      if (owners.length > 1) return serializeRss(getEmptyRssResult(offset));
+    }
+  }
   await ensureRulesetsLoaded(budget);
   const quality = await getQualityPreference();
   const hlsEnabled = await isHlsEnabled();

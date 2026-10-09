@@ -83,6 +83,53 @@ describe("supplemental duration policy", () => {
 });
 
 describe("identity before duration/identity stamping", () => {
+  it("exposes only uniquely coordinate-bound duration conflicts for explicit review, not RSS acceptance", () => {
+    const pending = {
+      ...show,
+      episodes: [{ ...show.episodes[0], name: "TBA", runtime: 50, aired: new Date("2099-01-01") }],
+    };
+    const candidate = { ...item, title: "Source title (S02/E03)", duration: 3540 };
+    expect(matchSonarrEpisodes(pending, [candidate], 300, 15)).toEqual([]);
+    const review = (overrides: Partial<ApiResultItem> = {}) =>
+      matchSonarrEpisodes(
+        pending,
+        [{ ...candidate, ...overrides }],
+        300,
+        15,
+        undefined,
+        false,
+        false,
+        [],
+        true
+      );
+    expect(review()).toEqual([
+      expect.objectContaining({ runtimeConflict: true, episode: pending.episodes[0] }),
+    ]);
+    for (const invalid of [
+      { topic: "Unrelated series" },
+      { title: "Source title" },
+      { title: "Source title (S02/E04)" },
+      { title: "Trailer (S02/E03)" },
+      { duration: 0 },
+      { duration: NaN },
+    ])
+      expect(review(invalid)).toEqual([]);
+    expect(review({ duration: 3450 })[0].runtimeConflict).toBeUndefined();
+  });
+  it("never uses duration to select one of two same-title episodes", () => {
+    const ambiguous = {
+      ...show,
+      episodes: [
+        show.episodes[0],
+        {
+          ...show.episodes[0],
+          episodeNumber: 4,
+          runtime: 90,
+        },
+      ],
+    };
+    expect(matchSonarrEpisodes(ambiguous, [item], 300, 15)).toEqual([]);
+  });
   it("requires supplemental coordinate verification for a preserved base TBA episode", () => {
     const base = {
       ...show,

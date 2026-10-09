@@ -1314,7 +1314,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1342,6 +1342,27 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       TBA-Suche direkt und via Prowlarr, 720p/UNKNOWN-/Konfliktvarianten,
       SQLite-/PG-Persistenz, echte synthetische Medien und Rollback geprüft;
       keine Image-Publikation, Grabs oder produktive Mutationen.
+
+      Wieder geöffnet 10.10.2026: Die historische Abnahme schützt nicht die
+      Kombination Vorabfolge/TBA, positive aber widersprüchliche Episodendauer,
+      Textweiterleitung ohne ID und große reale MP4-Metadatenlayouts. Aktueller
+      Nutzerentscheid: konfliktbehaftete Quellen mit eindeutiger Serie und
+      vollständigen S/E sichtbar lassen, jedoch ohne automatische Freigabe;
+      konfigurierte Serientoleranz bleibt unverändert. Identität vor Laufzeit
+      auflösen; Dauer darf mehrdeutige Titel nicht disambiguieren. Vollständige
+      eindeutige Sonarr-Textnamen/serienweite Aliasse auf denselben ID-Suchowner
+      führen, Mehrfachaliasse fail closed; optionale Integration bleibt optional.
+      Quellen-/Metadatenkonflikt im RSS erklären; Newznab-Beschreibung allein
+      ist keine Consumersperre. Deshalb NZB-Abruf sowie SAB/direct Enqueue vor
+      Job-/Intent-Write und Workerstart sperren; manueller normaler Grab hebt
+      das nicht auf. Historische v1/v2, RSS-Datumsfenster, GUIDs, Profile und
+      Datenbestände erhalten. Owner zusätzlich `media-expectations.ts`,
+      `fake_nzb_download/route.ts`, `download.ts`, `sab-api.ts`; Dokumentation
+      `docs/tv-search-contract.md`. Neue Abnahme: ID/Text, exakt/Staffel,
+      TBA-Konflikt bis RSS/409/Nicht-Enqueue, inklusive Grenzfälle/Fremdserie/
+      Titel-/Koordinaten-/Aliasambiguität und SQLite-/PG-Nichtschreibnachweis,
+      native Sonarr/Prowlarr gegen eigene Fixture ohne Grab, Fork-CI sowie
+      bestehende Produktgates. Aktuelle Implementierung ist kein Produktivrollout.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
@@ -1867,7 +1888,7 @@ Abhängigkeit P08; B10/R7.
       Dokumentationsabnahme verändert die Produktinputs nicht; diese Evidenz
       bleibt gültig. Keine Produktivursache oder produktive Installation behauptet.
 
-- [x] **P09.5 — ZDF-/ARD-MP4-Dimensionen aus begrenzten Quellenproben.**
+- [ ] **P09.5 — ZDF-/ARD-MP4-Dimensionen aus begrenzten Quellenproben.**
       Nutzerauftrag 06.10.2026; Owner `mp4-audio-language.ts`, `source-audio.ts`,
       bestehender Rendition-/RSS-/NZB-/Workervertrag; abhängig von P09.2/P09.3.
       Im vorhandenen höchstens viermal 1-MiB-/Deadlinebudget kodierte Maße aus
@@ -1886,6 +1907,17 @@ Abhängigkeit P08; B10/R7.
       reguläre ZDF-Quellen zusätzlich begrenzt lesend als Deutsch/1920×1080
       geprüft; keine realen Antworten als Fixture oder Gitinhalt persistiert.
       Dieser Quellengegencheck ersetzt keinen produktiven Treffer/Import.
+
+      Wieder geöffnet 10.10.2026: Große Sampletabellen mit Tracktrailern können
+      fast überlappende Vor-/Rückwärtsfenster erzwingen und das Vierfensterbudget
+      vor den Belegen aufbrauchen. Fensterwahl mit begrenztem Parent-Lookbehind
+      korrigieren, Parsercachegeneration invalidieren; keine neuen Hosts,
+      höheren Budgets oder geratenen Auflösungen. Neue Abnahme: kausaler großer
+      synthetischer Track-/Trailerfall (ohne Fix unbekannt, mit Fix Sprache und
+      1080p), widersprüchliche Tracks/Assetwechsel/mehr als vier nötige Fenster
+      weiterhin neutral; positive unveränderte Native-/Worker-/Backendgates und
+      P06.4-Konfliktkette/Fork-CI. `docs/rendition-quality-contract.md` pflegen.
+      Historische Abnahme und laufende Images bleiben getrennt vom neuen Fix.
 
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und

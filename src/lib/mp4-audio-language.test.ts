@@ -80,10 +80,10 @@ it("skips a top-level mdat by its declared size, reading at most two bounded ran
       })
     )
     .mockResolvedValueOnce(
-      new Response(last, {
+      new Response(Buffer.concat([Buffer.alloc(256), last]), {
         status: 206,
         headers: {
-          "content-range": `bytes ${start}-${total - 1}/${total}`,
+          "content-range": `bytes ${start - 256}-${total - 1}/${total}`,
           etag: '"synthetic-v1"',
         },
       })
@@ -96,7 +96,9 @@ it("skips a top-level mdat by its declared size, reading at most two bounded ran
     redirect: "error",
     headers: { Range: "bytes=0-1048575", "Accept-Encoding": "identity" },
   });
-  expect(fetch.mock.calls[1][1].headers.Range).toBe(`bytes=${start}-${start + 1048575}`);
+  expect(fetch.mock.calls[1][1].headers.Range).toBe(
+    `bytes=${start - 256}-${start - 256 + 1048575}`
+  );
   expect(fetch.mock.calls[1][1].headers["If-Range"]).toBe('"synthetic-v1"');
   expect(budget.remainingAttempts).toBe(8);
 });
@@ -127,6 +129,56 @@ function stubRanges(data: Buffer) {
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
+
+it("retains parent headers across backwards seeks around distant sample tables and track trailers", async () => {
+  const sample = Buffer.alloc(78);
+  sample.writeUInt16BE(1920, 24);
+  sample.writeUInt16BE(1080, 26);
+  const description = Buffer.alloc(8);
+  description.writeUInt32BE(1, 4);
+  const handler = Buffer.alloc(12);
+  handler.write("vide", 8);
+  const trailer = atom("trgr", Buffer.alloc(8));
+  const video = atom(
+    "trak",
+    Buffer.concat([
+      atom(
+        "mdia",
+        Buffer.concat([
+          atom("hdlr", handler),
+          atom(
+            "minf",
+            atom(
+              "stbl",
+              Buffer.concat([
+                atom("stts", Buffer.alloc(1400000)),
+                atom("stsd", Buffer.concat([description, atom("avc1", sample)])),
+                atom("stsz", Buffer.alloc(1600000)),
+              ])
+            )
+          ),
+        ])
+      ),
+      trailer,
+    ])
+  );
+  const audio = largeTrack("soun", "deu", 1400000);
+  const data = atom(
+    "moov",
+    Buffer.concat([video, atom("trak", Buffer.concat([audio.subarray(8), trailer]))])
+  );
+  const fetch = stubRanges(data);
+  const budget = new HttpRequestBudget(4);
+  expect(await probeMp4MediaFacts(url, budget)).toEqual({
+    audioLanguage: "de",
+    videoDimensions: { width: 1920, height: 1080 },
+  });
+  expect(fetch.mock.calls.length).toBeLessThanOrEqual(4);
+  for (const [, init] of fetch.mock.calls) {
+    const [, start, end] = /^bytes=(\d+)-(\d+)$/.exec(new Headers(init.headers).get("range")!)!;
+    expect(Number(end) - Number(start) + 1).toBe(1024 * 1024);
+  }
+});
 
 it.each([
   [1920, 1080],
@@ -174,7 +226,10 @@ it.each(["deu", "fra"])(
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(
       fetch.mock.calls.map((call) => (call[1].headers as Record<string, string>).Range)
-    ).toEqual(["bytes=0-1048575", `bytes=${8 + video.length}-${8 + video.length + 1048575}`]);
+    ).toEqual([
+      "bytes=0-1048575",
+      `bytes=${8 + video.length - 256}-${8 + video.length - 256 + 1048575}`,
+    ]);
     expect(budget.remainingAttempts).toBe(8);
   }
 );
@@ -246,7 +301,7 @@ it("revalidates temporal facts with a fresh first range and measures the saved r
   expect(requestedStarts[2]).toBe("bytes=0-1048575");
   // The revalidation saves the final sound-track range, not the required first MiB.
   const finalStart = Number(/^bytes=(\d+)/.exec(requestedStarts[1]!)![1]);
-  expect(data.length - finalStart).toBe(68);
+  expect(data.length - finalStart).toBe(68 + 256);
 });
 
 it("refreshes a same-size changed asset, rotated URL and changed context without changing source identity", async () => {
@@ -401,11 +456,12 @@ it("reads distant track trailers within four windows but refuses a fifth without
   );
   const fetch = stubRanges(data);
   expect(await probeMp4AudioLanguage(url, new HttpRequestBudget())).toBe("de");
-  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(fetch).toHaveBeenCalledTimes(3);
   const more = atom(
     "moov",
     Buffer.concat([
       withTrailer("vide", "und"),
+      withTrailer("soun", "deu"),
       withTrailer("soun", "deu"),
       withTrailer("soun", "deu"),
       metadata(["fra"]),
@@ -416,7 +472,7 @@ it("reads distant track trailers within four windows but refuses a fifth without
   expect(capped).toHaveBeenCalledTimes(4);
 });
 
-it("revalidates a four-window audio proof with one request and the measured byte reduction", async () => {
+it("revalidates a three-window audio proof with one request and the measured byte reduction", async () => {
   const trailer = atom("trgr", Buffer.alloc(8));
   const tracks = [
     ["vide", "und"],
@@ -430,14 +486,14 @@ it("revalidates a four-window audio proof with one request and the measured byte
   const context = proofContext("four-window-byte-measurement");
   const first = await probeMp4MediaFacts(url, new HttpRequestBudget(), false, context);
   expect(first.audioLanguage).toBe("de");
-  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(fetch).toHaveBeenCalledTimes(3);
   const firstBytes = fetch.mock.calls.reduce((sum, [, init]) => {
     const from = Number(/^bytes=(\d+)/.exec(new Headers(init.headers).get("range")!)![1]);
     return sum + Math.min(1048576, data.length - from);
   }, 0);
   expect(await probeMp4MediaFacts(url, new HttpRequestBudget(), false, context)).toEqual(first);
-  expect(fetch).toHaveBeenCalledTimes(5);
-  expect(firstBytes - 1048576).toBe(2097168);
+  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(firstBytes - 1048576).toBe(1048576 + 256 + trailer.length);
 });
 
 it("accepts only the explicit ARD CDN and still verifies all tracks", async () => {

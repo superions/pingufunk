@@ -46,7 +46,8 @@ export function matchSonarrEpisodes(
   languagePolicy: LanguagePolicy = DEFAULT_LANGUAGE_POLICY,
   hlsEnabled = false,
   deferLanguageSelection = false,
-  ruleTopics: readonly string[] = []
+  ruleTopics: readonly string[] = [],
+  includeRuntimeConflicts = false
 ): MatchedEpisodeInfo[] {
   const names = [
     show.name,
@@ -179,22 +180,7 @@ export function matchSonarrEpisodes(
         );
         return false;
       }
-      const duration = sonarrDurationCheck(
-        item.duration,
-        episode.runtime === null ? null : episode.runtime * 60,
-        minimumSeconds,
-        tolerancePercent
-      );
-      recordDecision(
-        "runtime",
-        duration.accepted
-          ? duration.expectedVerified
-            ? "runtime_verified"
-            : "runtime_missing"
-          : "runtime_outside_tolerance",
-        duration.accepted ? (duration.expectedVerified ? "proven" : "missing") : "conflicting"
-      );
-      return duration.accepted;
+      return true;
     });
     // Repeated episode titles without discriminating coordinates/year never pick the newest.
     if (possible.length !== 1) {
@@ -205,13 +191,47 @@ export function matchSonarrEpisodes(
       );
       continue;
     }
+    // Resolve identity before duration: a length difference cannot disambiguate
+    // two same-title episodes, nor authorize stamping the requested coordinate.
+    const episode = possible[0];
+    const duration = sonarrDurationCheck(
+      item.duration,
+      episode.runtime === null ? null : episode.runtime * 60,
+      minimumSeconds,
+      tolerancePercent
+    );
+    recordDecision(
+      "runtime",
+      duration.accepted
+        ? duration.expectedVerified
+          ? "runtime_verified"
+          : "runtime_missing"
+        : "runtime_outside_tolerance",
+      duration.accepted ? (duration.expectedVerified ? "proven" : "missing") : "conflicting"
+    );
+    const runtimeConflict = !duration.accepted;
+    if (
+      runtimeConflict &&
+      !(
+        includeRuntimeConflicts &&
+        sourceSeason !== null &&
+        parsed.episodes.length === 1 &&
+        Number.isFinite(item.duration) &&
+        item.duration > 0 &&
+        episode.runtime !== null &&
+        Number.isFinite(episode.runtime) &&
+        episode.runtime > 0
+      )
+    )
+      continue;
     recordDecision("identity", "identity_verified", "proven");
     matches.push({
-      episode: possible[0],
+      episode,
       item,
       showName: show.germanName || show.name,
       matchedTitle: item.title,
       tvdbId: show.id,
+      ...(runtimeConflict ? { runtimeConflict: true } : {}),
     });
   }
   return matches;

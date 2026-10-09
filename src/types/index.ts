@@ -195,6 +195,8 @@ export interface MatchedEpisodeInfo {
   showName: string;
   matchedTitle: string;
   tvdbId: number;
+  /** Explicit-search review candidate; never an override of the duration policy. */
+  runtimeConflict?: boolean;
 }
 
 // Newznab Types

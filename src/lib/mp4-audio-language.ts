@@ -124,7 +124,7 @@ interface ProbeFlight {
 }
 const proofs = new LRUCache<string, AssetProof>({ max: 256 });
 const flights = new Map<string, ProbeFlight>();
-const PARSER_VERSION = "mp4-tracks-v2";
+const PARSER_VERSION = "mp4-tracks-v3";
 
 function strongEtag(value: string | null): string | null {
   // Last-Modified alone is not a strong validator: shared CDN clock provenance
@@ -227,13 +227,17 @@ async function readMp4MediaFacts(
     )
       throw new UnsupportedMetadata();
     if (requests > 0 && !validator) throw new AssetVersionChanged();
+    // Child enumeration can land just beyond a track before reading its parent
+    // metadata. Retain nearby headers instead of spending another full window
+    // on a backwards seek of only a few bytes. The byte/request caps stay fixed.
+    const windowStart = Math.max(0, start - Math.min(256, MAX_BYTES - size));
     requests++;
     onAttempt?.();
     const response = await fetchWithRetry(
       url,
       {
         headers: {
-          Range: `bytes=${start}-${start + MAX_BYTES - 1}`,
+          Range: `bytes=${windowStart}-${windowStart + MAX_BYTES - 1}`,
           "Accept-Encoding": "identity",
           ...(requests > 1 && validator ? { "If-Range": validator } : {}),
         },
@@ -255,7 +259,7 @@ async function readMp4MediaFacts(
     const [from, end, length] = range.slice(1).map(Number);
     if (
       ![from, end, length].every(Number.isSafeInteger) ||
-      from !== start ||
+      from !== windowStart ||
       end < from ||
       end >= length ||
       end - from + 1 > MAX_BYTES ||
@@ -267,9 +271,11 @@ async function readMp4MediaFacts(
     total = length;
     if (requests === 1) validator = currentValidator;
     const data = await readBoundedProviderBytes(response, budget.deadlineAt, MAX_BYTES);
-    if (data.length !== end - from + 1 || data.length < size) throw new UnsupportedMetadata();
-    windows.push({ start, data });
-    return data.subarray(0, size);
+    const relative = start - windowStart;
+    if (data.length !== end - from + 1 || data.length < relative + size)
+      throw new UnsupportedMetadata();
+    windows.push({ start: windowStart, data });
+    return data.subarray(relative, relative + size);
   }
 
   async function headerAt(start: number, parentEnd: number) {

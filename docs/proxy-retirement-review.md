@@ -2425,3 +2425,51 @@ ausschließlich im privaten Runbook.
 Ein zusätzlicher nativer Controller-/Mutable-Tag-Befund ist dort separat offen
 und dem Nutzer gemeldet. Die Abnahme des Pingufunk-Hotfixes ist keine allgemeine
 Sicherheitsabnahme aller laufenden Dienste; allgemeine P03.4 bleibt offen.
+
+## Folgeprüfung 10.10.2026 — TV-Vorabfolgen, Laufzeitkonflikte und MP4-Fenster
+
+Die frühere Vorabfolgen-Korrektur entfernt allein die TV-Termin-Sperre. Sie
+garantiert nicht, dass andere unabhängige Laufzeit-/Qualitätsgates passieren.
+Eine positive Episodenlaufzeit bei TBA ist nicht automatisch eine nachweislich
+falsche Seriendurchschnittslaufzeit: Die geprüfte Sonarr-Version reicht
+`Episode.Runtime` durch ([EpisodeResource 4.0.20.3014](https://github.com/Sonarr/Sonarr/blob/v4.0.20.3014/src/Sonarr.Api.V3/Episodes/EpisodeResource.cs),
+[SkyHook-Mapping](https://github.com/Sonarr/Sonarr/blob/v4.0.20.3014/src/NzbDrone.Core/MetadataSource/SkyHook/SkyHookProxy.cs)).
+Bei widersprüchlichen konkreten Quelldaten ist daher keine automatische
+Metadatenkorrektur begründet. Nutzerentscheidung: sichtbar, aber nicht freigeben.
+
+Der strukturierte ID-Pfad konnte bei Laufzeitkonflikt leer bleiben, während eine
+Textsuche denselben Katalogtreffer ohne denselben Episoden-Laufzeitgate ausgab.
+Eindeutig zuordenbare Sonarr-Textanfragen benutzen jetzt denselben ID-Owner;
+Suchwörter und Mehrfachaliasse begründen keine neue Identität. Der Matcher
+prüft Eindeutigkeit vor Laufzeit und bietet positiv coordinate-bound Konflikte
+nur im expliziten Suchpfad zur Prüfung an. RSS-Datums-/Dauerpolitik bleibt.
+Beschreibung und fehlende ID sind kein verlässliches Auto-Grab-Verbot. Der
+versionierte Quellen-/Metadatenkonflikt wird deshalb vor NZB-Ausgabe und vor
+beiden Enqueue-Schreibwegen gesperrt. Auch normaler manueller Grab hebt diese
+Sperre nicht auf; ein eigener Ausnahmeworkflow ist damit nicht implementiert.
+
+Der ISO-BMFF-Owner verbrauchte seine vier Fenster durch Parent-/Child-Rücksprünge
+um wenige Byte. Die begrenzte 256-Byte-Vorhaltung vermeidet fast identische
+Fenster, ohne mehr Bytes/Versuche zuzulassen. Regression mit großer synthetischer
+Sampletabelle und Tracktrailern: alte Fensterwahl liefert beide Fakten NULL;
+neue Wahl liefert kohärente Sprache und 1920×1080. Ein kontrollierter Gegencheck
+mit vorübergehend ausgeschaltetem Fix fiel genau dafür durch, nach Wiederher-
+stellung grün. Neue Parsercachegeneration, starke Assetvalidatoren, alle
+Audiotracks und Obergrenzen bleiben erhalten. Kein Senderseitenparser.
+
+Die bisherigen kleinen MP4-Fixtures und passenden TBA-Laufzeiten hatten diese
+Kombination nicht geschützt. Eine bisherige reine Titel-/NZB-Roundtrip-Fixture
+enthielt außerdem widersprüchliche Dauern (Quelle 45, Metadaten 30 Minuten),
+ohne dies zu behaupten/prüfen. Ihr positiver Encodingfall ist jetzt konsistent;
+separate negative End-to-End-Tests schützen die tatsächliche Downloadsperre.
+Kein Überspringen oder Umdeuten des Konfliktfehlers für einen grünen Lauf.
+
+Owner-/Call-/Writepfad vom Matcher über Source-Audio/RSS/NZB bis Queue/Intent
+selbst reviewt. Lokal Node 24.15.0, frisches `npm ci`, 1336 reguläre Tests grün;
+21 bedingte Gates separat, nicht als ausgeführt zählen. Lint, Typecheck,
+Formatcheck, Build und Diffcheck grün; vorhandene 14 Tracingwarnungen bleiben.
+Reale Quellen wurden separat begrenzt lesend geprüft; keine Antworten/URLs/
+Secrets/privaten Helfer als öffentliche Fixture übernommen. Kein Grab, Import,
+Produktivrollout, Profil- oder Datenbankeingriff. Die noch nötige native
+Fixture-/PG-/Fork-Abnahme steht in erneut geöffneten P06.4/P09.5. Diese Befunde
+beweisen keine vollständige Proxyparität oder allgemeine Sprachabdeckung.

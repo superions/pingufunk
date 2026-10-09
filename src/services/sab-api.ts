@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { InvalidDownloadInputError, UnsafeDownloadPathError } from "@/lib/download-paths";
-import { MediaExpectationsError } from "@/lib/media-expectations";
+import { MediaExpectationsError, MediaRuntimeConflictError } from "@/lib/media-expectations";
 import { writesEnabled } from "@/lib/write-gate";
 import { DownloadReadError, parseDownloadRead } from "@/lib/download-read";
 import {
@@ -184,6 +184,8 @@ export async function POST(request: NextRequest) {
     if (error instanceof EnqueueRequestError)
       return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof EnqueueConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof MediaRuntimeConflictError)
       return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Error adding file");
     if (error instanceof InvalidDownloadInputError || error instanceof MediaExpectationsError) {

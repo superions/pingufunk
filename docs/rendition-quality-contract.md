@@ -70,6 +70,18 @@ eine nicht vollständig gelesene Beschreibung liefert keine Maße. Unvollständi
 zwingende Trackheader liefern insgesamt keine Teilbelege.
 Audio-only-Workerproben lesen weiterhin keine zusätzlichen Videobeschreibungen.
 
+Korrektur 10.10.2026: Das Enumerieren großer Sampletabellen/Tracktrailer kann
+zuerst kurz hinter einen Track und danach zu dessen Metadaten zurückspringen.
+Ein neues Fenster beginnt deshalb bis zu 256 Byte vor der benötigten Position;
+der Rückgriff passt inklusive Nutzdaten weiterhin in höchstens 1 MiB. Damit
+kosten benachbarte Parent-/Childheader nicht unnötig zwei fast identische
+Fenster. Vier Abrufe, Bytecap, gemeinsames Budget, starke ETag-/If-Range-Bindung,
+alle Audiotracks und genau eine Videobeschreibung bleiben unverändert.
+Die Parsergeneration ist neu, damit alte unvollständige Fakten nicht als
+fertiger Beleg wiederverwendet werden. Eine synthetische große Track-/Trailer-
+Regression fällt ohne diese Fensterwahl mit unbekannten Fakten durch; mit der
+Korrektur werden echte Sample-Entry-Maße und kohärente Sprache gelesen.
+
 Bildmaße und kohärente Tonsprachen sind unabhängig: gemischte Audiospuren bleiben
 sprachlich neutral, können aber belegte Bildmaße haben. Die exakte URL ist die
 Bindung beider Fakten. Andere Hosts, HLS und übersprungene Probeidentitäten
