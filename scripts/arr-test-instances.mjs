@@ -732,8 +732,11 @@ async function movieSearch(root, manifest, app = "radarr") {
             ports[target.hostname] !== Number(target.port)
           )
             throw new Error("Conflict NZB escaped the owned QA transport");
+          // Prowlarr's /<id>/download is outside the preload's /api-only mock
+          // boundary. Use a non-redirecting HTTP GET to the validated owned URL;
+          // secrets stay on stdin and the response body is never downloaded.
           const probe =
-            'let input="";process.stdin.on("data",part=>input+=part);process.stdin.on("end",async()=>{try{const r=await fetch(JSON.parse(input),{redirect:"error",signal:AbortSignal.timeout(20000)});await r.body?.cancel();console.log(r.status);}catch{process.exitCode=1;}});';
+            'let input="";process.stdin.on("data",part=>input+=part);process.stdin.on("end",()=>{let done=false;try{const req=require("node:http").get(JSON.parse(input),r=>{done=true;console.log(r.statusCode);r.destroy();});req.setTimeout(20000,()=>req.destroy());req.on("error",()=>{if(!done)process.exitCode=1;});}catch{process.exitCode=1;}});';
           const status = Number(
             execFileSync(
               "docker",
