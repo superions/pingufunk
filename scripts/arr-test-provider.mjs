@@ -121,6 +121,7 @@ globalThis.fetch = async (input, init) => {
         ...row,
         topic: "Synthetic Series",
         title: "Synthetic Series S01E01 - Synthetic Episode",
+        ...(process.env.PINGUFUNK_ARR_QA_RUNTIME_CONFLICT === "1" ? { duration: 3540 } : {}),
       };
       if (matches(episode)) rows.push(episode);
     }

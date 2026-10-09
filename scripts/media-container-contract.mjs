@@ -26,19 +26,25 @@ if (
   ]).trim() !== owner
 )
   throw new Error("Exact harness-owned media application required");
-function request(endpoint, body, enqueueKey) {
+function request(endpoint, body, enqueueKey, expectedStatus) {
   const args = [
     "exec",
     ...(body === undefined ? [] : ["-i"]),
     container,
     "curl",
-    "-fsS",
+    expectedStatus === undefined ? "-fsS" : "-sS",
     "--max-time",
     "5",
   ];
   if (body !== undefined) args.push("-X", "POST", "--data-binary", "@-");
   if (enqueueKey !== undefined) args.push("-H", `X-Pingufunk-Enqueue-Key: ${enqueueKey}`);
-  return JSON.parse(run([...args, `http://localhost:6767/${endpoint}`], body));
+  if (expectedStatus !== undefined) args.push("-w", "\n%{http_code}");
+  const result = run([...args, `http://localhost:6767/${endpoint}`], body);
+  if (expectedStatus === undefined) return JSON.parse(result);
+  const split = result.lastIndexOf("\n");
+  if (Number(result.slice(split + 1)) !== expectedStatus)
+    throw new Error("Owned media response status mismatch");
+  return JSON.parse(result.slice(0, split));
 }
 function rawRequest(url) {
   return run(["exec", container, "curl", "-fsS", "--max-time", "5", url]);
@@ -161,13 +167,18 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
   ["unknown", 2, null, "completed", "stream.m3u8"],
   ["series", 2, 120, "failed", "valid.mp4"],
   ["series", 120, 2, "failed", "valid.mp4"],
+  ["series", null, 120, "failed", "valid.mp4"],
+  ["series", 120, null, "failed", "valid.mp4"],
   ["movie", 120, null, "failed", "valid.mp4"],
 ]) {
   const expected = {
     version: 3,
     mediaKind,
     durations: {
-      source: { seconds: sourceSeconds, provenance: "source_catalogue", tolerancePercent: 10 },
+      source:
+        sourceSeconds === null
+          ? null
+          : { seconds: sourceSeconds, provenance: "source_catalogue", tolerancePercent: 10 },
       metadata:
         metadataSeconds === null
           ? null
@@ -177,6 +188,30 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
     sourceAudio: null,
     resolution: null,
   };
+  if (
+    sourceSeconds !== null &&
+    metadataSeconds !== null &&
+    Math.abs(sourceSeconds - metadataSeconds) > Math.max(5, metadataSeconds * 0.15)
+  ) {
+    const beforeQueue = request("api?mode=queue").queue;
+    const beforeHistory = request("api?mode=history").history;
+    for (const endpoint of ["api", "api/download"]) {
+      const rejected = request(
+        `${endpoint}?mode=addfile&cat=sonarr`,
+        expectedNzb(filename, expected).body,
+        undefined,
+        409
+      );
+      if (!rejected.error?.includes("Source duration conflicts"))
+        throw new Error("Runtime conflict lost its structured rejection");
+    }
+    if (
+      JSON.stringify(request("api?mode=queue").queue) !== JSON.stringify(beforeQueue) ||
+      JSON.stringify(request("api?mode=history").history) !== JSON.stringify(beforeHistory)
+    )
+      throw new Error("Blocked known runtime conflict wrote queue/history");
+    continue;
+  }
   const added = request("api?mode=addfile&cat=sonarr", expectedNzb(filename, expected).body);
   if (added.status !== true || added.nzo_ids.length !== 1)
     throw new Error("Frozen fixture enqueue failed");
