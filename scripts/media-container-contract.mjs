@@ -610,7 +610,7 @@ if (pgContainer) {
         JSON.stringify({
           ownedSqlTrace: true,
           downloadInserts: inserts.length,
-          acknowledgementWasInserted: inserts.includes(nextId),
+          acknowledgementInsertObserved: inserts.includes(nextId),
         })
       );
     }

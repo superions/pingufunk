@@ -1368,6 +1368,33 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       native Sonarr/Prowlarr gegen eigene Fixture ohne Grab, Fork-CI sowie
       bestehende Produktgates. Aktuelle Implementierung ist kein Produktivrollout.
 
+      Nutzerentscheidung 10.10.2026: Zusätzlich eine ausdrücklich bestätigte
+      manuelle Freigabe einer konkret geprüften Einzelquelle in Pingufunk.
+      Kein zweiter Indexerendpoint, kein Auto-/Manualraten im NZB-GET und keine
+      permanente automatische Ausnahmeliste. Eigene GUI-Operation mit
+      serverseitig frischer, eindeutiger Serien-/S/E-/Quellen-/Fassungsbindung;
+      nur den belegten Laufzeitkonflikt für diesen bewussten Auftrag ausnehmen,
+      Sprache, Auflösung, Quelllaufzeit und tatsächliche Datei weiter prüfen.
+      Quelle/Metadatenlaufzeit und unveränderte globale Toleranz im Dialog
+      anzeigen; Abbruch erzeugt keinen Auftrag. Ursprüngliche Erwartungen und
+      explizite Einzelentscheidung dauerhaft an die tatsächliche Job-ID binden,
+      atomarer idempotenter UI-Auftrag samt Bestätigung; reload/lost-response
+      erzeugt keine weitere Einreihung. Normale Sonarr/Prowlarr-/SAB-Abrufe
+      bleiben gesperrt, fremde/geänderte Quellen und andere Identitäts-/Sprach-
+      oder Qualitätskonflikte sind keine Runtime-Ausnahme. Diese neue Freigabe
+      ist weder implementiert noch abgenommen. P15.1/P15.4-Ausfallbefund vorher
+      klären; bestehende gemeinsame Owner statt browserseitigem XML-Umschreiben.
+      Die bisherige generische GUI-Suche liefert Source-only-NZBs ohne
+      Sonarr-Episodenreferenz; daraus weder eine implizite Freigabe noch eine
+      belegte Episodenidentität ableiten. Verifizierbar gebundene GUI-Treffer
+      müssen den gemeinsamen Konflikt-/Reviewowner verwenden; ungebundene
+      reine Quellen bleiben ausdrücklich ungebunden, Integration optional.
+      Abnahme zusätzlich: bestätigte/abgebrochene/geänderte/fremde Einzelquelle,
+      unveränderte Settings und automatische Sperre, atomarer Job-/Audit-/
+      Receipt-Nachweis beider Backends, Quellen-/Worker-Revalidation und
+      desktop-only Dialog-/Fokus-/Reload-/Fehler-/Konsolenprüfung auf tatsächlich
+      servierter synthetischer Testinstanz. Kein realer Grab oder Rollout dadurch.
+
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
 Ergebnis: identitätsgesicherte Mehrserien-/Sprachzuordnung. Abhängigkeit P06;

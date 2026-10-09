@@ -2516,3 +2516,18 @@ Produktionsfehlers oder einer Kausalität zum Matchingfix. P15.1/P15.4 erneut
 geöffnet, P06.4/P09.5-Gesamtabnahme weiterhin offen. Fehlgeschlagene synthetische
 Medieninstanzen werden durch den eigenen begrenzten Teardown entfernt;
 Produktionsdaten/Jobs unverändert. Kein Rollout dieses Entwicklungsstands.
+
+Weitere begrenzte Diagnose: Die erwartete INSERT-Anfrage für die quittierte
+UUID wird im eigenen synthetischen PG-Serverlog beobachtet, die Zeile fehlt
+danach dennoch. Ein geloggter INSERT-Versuch ist kein Commitbeweis; Ursache
+zwischen Queryausführung, Quittierung und Recovery weiterhin offen. Rohe SQL-
+Parameter/URLs werden nicht ausgegeben, nur geschlossen korrelierte Counts/
+Booleans. Keine Änderung von Produktpool, Timeouts oder Retrypolitik.
+
+Nutzer hat inzwischen die explizite geprüfte Einzelquellenfreigabe bestätigt.
+Sie ist im bestehenden P06.4-Vertrag konkretisiert: bewusst manueller einzelner
+Auftrag mit ursprünglichem Runtime-Konflikt/Audit, frischer Quellen-/Identitäts-
+prüfung, unveränderter globaler Toleranz und weiterhin blockiertem nativen NZB.
+Noch keine UI-/API-Implementierung oder Desktopabnahme dieser Erweiterung.
+Die generische UI liefert bisher Source-only-NZBs ohne Episode-Metadaten;
+das ist weder der neue geprüfte Ausnahmeweg noch ein Sonarr-Identitätsnachweis.
