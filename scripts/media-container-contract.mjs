@@ -578,6 +578,8 @@ if (pgContainer) {
   const nextId = reconnectReceipt.nzo_ids[0];
   if (nextId === interruptedId)
     throw new Error("Owned unkeyed reconnect enqueue reused the interrupted job");
+  if (terminalSnapshots.has(nextId))
+    throw new Error("Owned reconnect enqueue returned a historical terminal receipt");
   // Independent SQL read distinguishes an acknowledged-but-missing row from
   // client/query failures after the intentional outage. The UUID is validated.
   const acknowledgedRows = run([
@@ -592,8 +594,24 @@ if (pgContainer) {
     "-c",
     `SELECT count(*) FROM "Download" WHERE id='${nextId}'`,
   ]).trim();
-  if (acknowledgedRows !== "1")
-    throw new Error("Owned reconnect acknowledged a job absent from PostgreSQL");
+  if (acknowledgedRows !== "1") {
+    const shape = run([
+      "exec",
+      pgContainer,
+      "psql",
+      "-At",
+      "-U",
+      "postgres",
+      "-d",
+      "pingufunk_media_qa",
+      "-c",
+      "SELECT count(*), count(*) FILTER (WHERE status='queued'), count(*) FILTER (WHERE status='completed'), count(*) FILTER (WHERE status='failed') FROM \"Download\"",
+    ]).trim();
+    if (!/^\d+\|\d+\|\d+\|\d+$/.test(shape)) throw new Error("Owned SQL diagnostic shape invalid");
+    throw new Error(
+      `Owned reconnect acknowledged a job absent from PostgreSQL (total|queued|completed|failed=${shape})`
+    );
+  }
   console.log("Owned reconnect acknowledgement has one independently persisted PostgreSQL row");
   const reconnectDeadline = Date.now() + 30_000;
   while (Date.now() < reconnectDeadline && readJob(nextId).status !== "completed") await delay(200);
