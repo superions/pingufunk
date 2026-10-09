@@ -2468,8 +2468,12 @@ und via Prowlarr ohne Grab-POST. Erste Containerläufe stoppten sichtbar: Die
 bekannten widersprüchlichen Referenzen benötigen nun Enqueue-409 statt späteren
 Workerfehler; außerdem blockierte der API-only-Testpreload die neuen Controller-
 Reads. Korrigiert sind getrennte Enqueue-/Worker-Negativfälle, der bestehende
-SAB-Lesealias und ein nicht-redirectender NZB-HTTP-GET ausschließlich zur vorher
-validierten internen QA-Adresse. Keine Produktbudgets oder externen Netzwerk-
+SAB-Lesealias und ein begrenzter NZB-HTTP-GET ausschließlich zu validierten
+internen QA-Adressen. Prowlarr liefert dort einen Redirect: maximal drei
+Umleitungen innerhalb der zwei erlaubten Testorigins, feste Gesamtdeadline
+und ausschließlich die konkrete Runtime-Konflikt-409-Antwort gelten als
+Downloadsperrbeleg. Beliebige 404/500 oder externe Redirects zählen nicht.
+Keine Produktbudgets oder externen Netzwerk-
 grenzen gelockert; fehlerhafte Läufe sind keine Abnahme.
 
 Die bisherigen kleinen MP4-Fixtures und passenden TBA-Laufzeiten hatten diese

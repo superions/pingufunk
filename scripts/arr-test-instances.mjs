@@ -732,11 +732,51 @@ async function movieSearch(root, manifest, app = "radarr") {
             ports[target.hostname] !== Number(target.port)
           )
             throw new Error("Conflict NZB escaped the owned QA transport");
-          // Prowlarr's /<id>/download is outside the preload's /api-only mock
-          // boundary. Use a non-redirecting HTTP GET to the validated owned URL;
-          // secrets stay on stdin and the response body is never downloaded.
-          const probe =
-            'let input="";process.stdin.on("data",part=>input+=part);process.stdin.on("end",()=>{let done=false;try{const req=require("node:http").get(JSON.parse(input),r=>{done=true;console.log(r.statusCode);r.destroy();});req.setTimeout(20000,()=>req.destroy());req.on("error",()=>{if(!done)process.exitCode=1;});}catch{process.exitCode=1;}});';
+          // Prowlarr redirects NZB GETs. Follow only validated owned origins,
+          // never a CDN or an arbitrary redirect, and never read a success body.
+          // A 404/500 is not proof of the protected runtime-conflict rejection.
+          const probe = String.raw`
+            const http = require("node:http");
+            const allowed = {pingufunk: "6767", prowlarr: "9696"};
+            const deadline = Date.now() + 20000;
+            setTimeout(() => process.exit(1), 20000).unref();
+            let input = "";
+            function get(raw, hops = 0) {
+              let received = false;
+              try {
+                const url = new URL(raw);
+                if (url.protocol !== "http:" || url.username || url.password ||
+                    allowed[url.hostname] !== url.port || hops > 3 || Date.now() >= deadline)
+                  throw new Error("Owned origin/deadline required");
+                const req = http.get(url, response => {
+                  received = true;
+                  const status = response.statusCode;
+                  if ([301,302,303,307,308].includes(status) && response.headers.location) {
+                    response.destroy();
+                    get(new URL(response.headers.location, url).href, hops + 1);
+                  } else if (status !== 409) {
+                    response.destroy(); console.log(status);
+                  } else {
+                    let body = "";
+                    response.setEncoding("utf8");
+                    response.on("data", part => {
+                      body += part;
+                      if (Buffer.byteLength(body) > 4096) response.destroy(new Error("Bounded denial required"));
+                    });
+                    response.on("end", () => {
+                      try { console.log(JSON.parse(body).error === "Episode runtime conflict; download blocked" ? 409 : 0); }
+                      catch { process.exitCode = 1; }
+                    });
+                    response.on("error", () => { process.exitCode = 1; });
+                  }
+                });
+                req.setTimeout(Math.max(1, deadline - Date.now()), () => req.destroy());
+                req.on("error", () => { if (!received) process.exitCode = 1; });
+              } catch { process.exitCode = 1; }
+            }
+            process.stdin.on("data", part => input += part);
+            process.stdin.on("end", () => { try { get(JSON.parse(input)); } catch { process.exitCode = 1; } });
+          `;
           const status = Number(
             execFileSync(
               "docker",
@@ -749,11 +789,9 @@ async function movieSearch(root, manifest, app = "radarr") {
               }
             ).trim()
           );
-          if (
-            (transport === "direct" && status !== 409) ||
-            (transport === "forwarded" && (status < 400 || status >= 600))
-          )
-            throw new Error("Native duration-conflict candidate released an NZB");
+          console.log(`sonarr: ${transport} owned conflict NZB HTTP ${status}`);
+          if (status !== 409)
+            throw new Error("Owned runtime conflict lacks its verified denial; no grab submitted");
           if (
             (await api(root, manifest, "pingufunk", "/api/download?mode=queue")).queue.noofslots !==
               0 ||
