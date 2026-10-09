@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **Alle 14 Architekturpakete P12–P16 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die unabhängige allgemeine Sprachabdeckung P03.4, optionale P11.9-Arbeit und gesonderte Betriebs-/Entfernungsgates bleiben davon getrennt. Keine Produktions-, Mainintegrations- oder Publikationsfreigabe aus dieser Entwicklungsabnahme. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Produktvollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 10.10.2026. **Die historische Architekturabnahme P12–P16 bleibt dokumentiert; P15.1/P15.4 sind nach einem frisch reproduzierten PostgreSQL-Ausfall-/Quittierungsbefund wieder offen. Ebenso sind P06.4/P09.5 für die neue Vorabfolgen-/Laufzeit-/MP4-Kombination wieder geöffnet. Die unabhängige allgemeine Sprachabdeckung P03.4, optionale P11.9-Arbeit und gesonderte Betriebs-/Entfernungsgates bleiben getrennt. Keine Produktions-, Mainintegrations- oder Publikationsfreigabe aus einer Entwicklungsabnahme. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Produktvollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 
 Gesondert beauftragte Mainintegration am 08.10.2026 über
 [PR #5](https://github.com/superions/pingufunk/pull/5): Topicstand `81404b8`
@@ -1355,8 +1355,12 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Quellen-/Metadatenkonflikt im RSS erklären; Newznab-Beschreibung allein
       ist keine Consumersperre. Deshalb NZB-Abruf sowie SAB/direct Enqueue vor
       Job-/Intent-Write und Workerstart sperren; manueller normaler Grab hebt
-      das nicht auf. Historische v1/v2, RSS-Datumsfenster, GUIDs, Profile und
-      Datenbestände erhalten. Owner zusätzlich `media-expectations.ts`,
+      das nicht auf. Historische v1/v2, RSS-Datumsfenster, bereits gebundene
+      GUIDs, Profile und Datenbestände erhalten. Erstmalig gebundene generische
+      Texttreffer wechseln ausdrücklich in den bestehenden TVDB/S/E-GUID-Raum;
+      gleiche ID/Text-/Exact-/Staffelidentität prüfen und den Cutover getrennt
+      auf Doppelgrabs prüfen, keine Altjobs oder History umschreiben.
+      Owner zusätzlich `media-expectations.ts`,
       `fake_nzb_download/route.ts`, `download.ts`, `sab-api.ts`; Dokumentation
       `docs/tv-search-contract.md`. Neue Abnahme: ID/Text, exakt/Staffel,
       TBA-Konflikt bis RSS/409/Nicht-Enqueue, inklusive Grenzfälle/Fremdserie/
@@ -2599,7 +2603,7 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
 Ergebnis: sichere Jobbesitzgrenze, skalierende Historyreads und verlässlicher
 Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhöhung.
 
-- [x] **P15.1 — Jobbesitz und Shutdown im Single-Worker-Vertrag absichern.**
+- [ ] **P15.1 — Jobbesitz und Shutdown im Single-Worker-Vertrag absichern.**
       Owner: `download-manager.ts`, `instrumentation.ts`, `download.ts`,
       `scripts/application-entrypoint.mjs` und bei Bedarf beide Prisma-Ketten.
       Prozesslokales `processingPromise`/Semaphore verhindert keinen zweiten
@@ -2653,6 +2657,15 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Assertion. Erstversuch wegen Registry-429 gescheitert; genau ein
       kontrollierter Wiederlauf nach dieser externen Pullstörung. Einzelworker,
       keine gemischten alten/neuen Writer oder produktiver Restart freigegeben.
+      Wieder geöffnet 10.10.2026: Der frische isolierte PG-Mediengate erreicht
+      alle regulären Medien-/Mux-/Restartfälle, scheitert jedoch nach der
+      gezielten DB-Unterbrechung beim Folgejob. Quittierte UUID fehlt sowohl
+      im Prisma-Read (P2025) als auch im unabhängigen SQL-Read. Ursache noch
+      nicht lokalisiert; kein nachgewiesener Produktionsfehler und keine
+      Gleichsetzung mit dem TV-/MP4-Fix. Bestehenden Ausfall-/Recoveryvertrag
+      gemeinsam mit P15.4 kausal diagnostizieren und neu abnehmen; keine
+      Wiederholungsgrabs, Connection-/Pool-/Timeoutlockerung oder grüne
+      Umdeutung einer Quittierung ohne tatsächlich vorhandenen Job.
 - [x] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
       Owner: `download.ts::{getHistory,getQueue}`, `sab-api.ts`,
       `/downloads` und beide DB-Querypfade. Aktuell wird die gesamte History
@@ -2733,7 +2746,7 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       unveränderten Quellstand wiederverwendet. Die zuvor fehlende explizite
       `.dockerignore`-Helperfreigabe korrigiert; gescheiterter erster Build
       bleibt als Befund dokumentiert. P15.1-Besitzgrenze hierdurch nicht erledigt.
-- [x] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
+- [ ] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
       Owner: `sab-api.ts::POST`, `download.ts::addToQueue`, UI-NZB-Consumer und
       bei Bedarf beide append-only DB-Ketten. Requestbody/Parameter vor Parsing
       begrenzen; kompatible NZB-Versionen und Endpoints erhalten. Eigene UI
@@ -2790,6 +2803,16 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Imageablehnung und kompatible aktuelle Maintenance geprüft, kein
       funktionaler historischer Code-Rollback behauptet. Desktopgates und
       vorhandene Produktgates wiederverwendet; keine neue DDL seit diesem Stand.
+      Wieder geöffnet 10.10.2026: Im gezielten PG-Reconnectfall bestätigt die
+      tatsächliche SAB-API HTTP-Erfolg, status=true und eine neue gültige UUID,
+      die anschließend im tatsächlichen PG-Ziel nicht vorhanden ist. Der
+      unkeyed Auftrag darf nicht als bestätigter Download gelten. Ergänzte
+      Testdiagnostik unterscheidet geschlossene Prisma-Codes, historischen
+      Receipt und unabhängigen SQL-Nachweis; keine Secrets/rohen Exceptions.
+      Reguläre keyed Restart-/Same-ID- und SQLitefälle bestehen weiterhin.
+      Vor Abschluss ursächlichen Owner lokalisieren, den bestehenden
+      Quittierungs-/Nichtwiederholungsvertrag reparieren und beide Backend-
+      sowie Ausfall-/Folgequeuegates unverändert erneut bestehen lassen.
 
 ## Phase P16 — Ownergrenzen bereinigen, ohne das Produkt neu zu schreiben
 

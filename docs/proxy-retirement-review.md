@@ -2492,3 +2492,27 @@ Secrets/privaten Helfer als öffentliche Fixture übernommen. Kein Grab, Import,
 Produktivrollout, Profil- oder Datenbankeingriff. Die noch nötige native
 Fixture-/PG-/Fork-Abnahme steht in erneut geöffneten P06.4/P09.5. Diese Befunde
 beweisen keine vollständige Proxyparität oder allgemeine Sprachabdeckung.
+
+Frische Native-Abnahme: Produktimage aus `7085448`, Testharness aus `c65bf8b`,
+auf isolierter Entwicklungslaufzeit alle fünf Qualitäts-/Konfliktvarianten
+direkt und via Prowlarr bestanden. Future-TBA bleibt sichtbar; beide echten
+NZB-GETs ergeben die konkrete 409, null Queue/History/Import. Exakte Arr-Versionen
+4.0.20.3014 / 6.4.4.10685 / 2.6.5.5623; ausschließlich unüberwachte synthetische
+Bestände. Alle eigenen Arr-Testcontainer anschließend gestoppt, Config erhalten.
+Auch Fork-Containerlauf `38004013774` hat diesen Native-Schritt erfolgreich
+abgeschlossen; seine übrige Kette ist damit noch nicht abgenommen. Fork-CI
+[38004013768](https://github.com/superions/pingufunk/actions/runs/38004013768)
+einschließlich separater PostgreSQL-Integration erfolgreich.
+
+Separater Abnahmeblocker: Der reale Mediengate auf SQLite vollständig bestanden;
+auf PostgreSQL ebenfalls reguläre Downloads, negative Quellen, v3-Referenzen,
+SAB-Remove/Retry, Receipt-Restart und tatsächlicher Mux-SIGTERM/Restart/Folgejob.
+Nach gezielter PG-Unterbrechung bestätigt die API jedoch einen weiteren
+unkeyed Auftrag mit status=true und gültiger neuer UUID, dessen Zeile sowohl
+Prisma (P2025) als auch ein unabhängiger SQL-Read nicht finden. Zusätzliche
+Receipt-/SQL-Diagnostik reproduziert den Befund; kein geschluckter Fehler,
+kein erfolgreicher Recovery-Gate. Ursache noch offen, keine Behauptung eines
+Produktionsfehlers oder einer Kausalität zum Matchingfix. P15.1/P15.4 erneut
+geöffnet, P06.4/P09.5-Gesamtabnahme weiterhin offen. Fehlgeschlagene synthetische
+Medieninstanzen werden durch den eigenen begrenzten Teardown entfernt;
+Produktionsdaten/Jobs unverändert. Kein Rollout dieses Entwicklungsstands.
