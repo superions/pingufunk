@@ -568,7 +568,16 @@ if (pgContainer) {
     throw new Error(
       `DB outage left unexpected ${interrupted.status} with validation=${interrupted.validation !== null}`
     );
-  const nextId = request("api?mode=addfile&cat=sonarr", fixture.body).nzo_ids[0];
+  const reconnectReceipt = request("api?mode=addfile&cat=sonarr", fixture.body);
+  if (
+    reconnectReceipt.status !== true ||
+    reconnectReceipt.nzo_ids?.length !== 1 ||
+    !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(reconnectReceipt.nzo_ids[0])
+  )
+    throw new Error("Owned reconnect enqueue did not acknowledge one UUID job");
+  const nextId = reconnectReceipt.nzo_ids[0];
+  if (nextId === interruptedId)
+    throw new Error("Owned unkeyed reconnect enqueue reused the interrupted job");
   const reconnectDeadline = Date.now() + 30_000;
   while (Date.now() < reconnectDeadline && readJob(nextId).status !== "completed") await delay(200);
   if (readJob(interruptedId).status !== "failed" || readJob(nextId).status !== "completed")
