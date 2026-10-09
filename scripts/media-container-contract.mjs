@@ -595,6 +595,25 @@ if (pgContainer) {
     `SELECT count(*) FROM "Download" WHERE id='${nextId}'`,
   ]).trim();
   if (acknowledgedRows !== "1") {
+    if (process.env.PINGUFUNK_MEDIA_QA_TRACE === "1") {
+      // Never emit statements/parameters: even QA logs may contain URL values.
+      // Correlate only this owned server's Download insert and UUID parameter.
+      const inserts = [];
+      const pending = new Set();
+      for (const line of run(["logs", pgContainer]).split("\n")) {
+        const pid = line.match(/\[(\d+)\]/)?.[1];
+        if (pid && /INSERT INTO "public"\."Download"/.test(line)) pending.add(pid);
+        const id = line.match(/DETAIL:\s+parameters:\s+\$1 = '([a-f0-9-]{36})'/i)?.[1];
+        if (pid && id && pending.delete(pid)) inserts.push(id);
+      }
+      console.log(
+        JSON.stringify({
+          ownedSqlTrace: true,
+          downloadInserts: inserts.length,
+          acknowledgementWasInserted: inserts.includes(nextId),
+        })
+      );
+    }
     const shape = run([
       "exec",
       pgContainer,

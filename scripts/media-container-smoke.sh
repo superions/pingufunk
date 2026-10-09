@@ -27,7 +27,9 @@ cleanup() {
 trap cleanup EXIT
 docker network create --internal "$QA_NETWORK" >/dev/null
 NETWORK_CREATED=1
-docker run -d --name "$PG_CONTAINER" --network "$QA_NETWORK" --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine >/dev/null
+pg_options=()
+if [[ "${PINGUFUNK_MEDIA_QA_TRACE:-}" == 1 ]]; then pg_options=(postgres -c log_statement=all); fi
+docker run -d --name "$PG_CONTAINER" --network "$QA_NETWORK" --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine "${pg_options[@]}" >/dev/null
 PG_STARTED=1
 ready=0
 for ((attempt=0;attempt<30;attempt++)); do
