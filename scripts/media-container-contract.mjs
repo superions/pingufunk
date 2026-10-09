@@ -11,7 +11,15 @@ function run(args, input) {
     encoding: "utf8",
     timeout: args[0] === "stop" ? 20_000 : 10_000,
   });
-  if (result.error || result.status !== 0) throw new Error("Disposable media command failed");
+  if (result.error || result.status !== 0) {
+    const closedCode = result.stderr?.match(
+      /Owned database read failed: (P1001|P1002|P2024|P2025)\b/
+    )?.[1];
+    const cause =
+      result.error?.code === "ETIMEDOUT" ? "timeout" : closedCode || `exit ${result.status}`;
+    // Command arguments, URLs and raw database exceptions can contain secrets.
+    throw new Error(`Disposable media command failed (${args[0]}: ${cause})`);
+  }
   return args[0] === "logs" ? result.stdout + result.stderr : result.stdout;
 }
 if (
@@ -73,7 +81,7 @@ function expectedNzb(filename, expected) {
 }
 function readJob(id) {
   // Inspect persisted facts inside this owned image; never emit a URL or raw diagnostics.
-  const code = `const pg=process.env.DATABASE_PROVIDER==='postgresql'; const {PrismaClient}=require(pg?'@prisma/client':'./generated/sqlite'); const db=new PrismaClient({log:[]}); (async()=>{try{const row=await db.download.findUniqueOrThrow({where:{id:process.argv[1]}});console.log(JSON.stringify({status:row.status,expectations:row.mediaExpectations,validation:row.mediaValidation,category:row.category,filePath:row.filePath}));}finally{await db.$disconnect();}})().catch(()=>{process.exitCode=1});`;
+  const code = `const pg=process.env.DATABASE_PROVIDER==='postgresql'; const {PrismaClient}=require(pg?'@prisma/client':'./generated/sqlite'); const db=new PrismaClient({log:[]}); (async()=>{try{const row=await db.download.findUniqueOrThrow({where:{id:process.argv[1]}});console.log(JSON.stringify({status:row.status,expectations:row.mediaExpectations,validation:row.mediaValidation,category:row.category,filePath:row.filePath}));}finally{await db.$disconnect();}})().catch(error=>{if(['P1001','P1002','P2024','P2025'].includes(error?.code))console.error('Owned database read failed: '+error.code);process.exitCode=1});`;
   return JSON.parse(run(["exec", container, "node", "-e", code, id]));
 }
 const terminalSnapshots = new Map();
