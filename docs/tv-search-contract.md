@@ -66,6 +66,15 @@ permissiven Textfallback. Nicht zuordenbare Suchwörter bleiben ungebundene
 Textsuche; sie sind keine neue Serienidentität. Ist die Integration abgeschaltet,
 bleibt der bisherige Textvertrag ohne Sonarr-Netzwerkzugriff erhalten.
 
+Identitätsübergang: Ein zuvor ungebundener generischer Texttreffer kann nach
+dieser eindeutigen Zuordnung erstmals die bestehende TVDB/S/E-GUID der ID-Suche
+erhalten. Die integrierte Exact-/Staffel-/ID-/Textprüfung verlangt eine einzige
+Identität für dieselbe Quelle. Das ist keine Zusage, dass die alte generische
+GUID gleich bleibt. Persistierte Altjobs/History werden nicht umgeschrieben;
+die Quellen-/Slot-GUID-Owner selbst bleiben unverändert. Vor einem Rollout
+bestehende Dateien/History und native Upgradeentscheidungen prüfen; keine
+erneuten Grabs aus dieser Entwicklungsabnahme ableiten.
+
 Prüfkandidaten tragen die wirklichen Quellkoordinaten und belegten Medienfakten.
 Ihre RSS-Beschreibung nennt beide Laufzeiten, die eingefrorene Toleranz und die
 Downloadsperre. **Eine RSS-Beschreibung ist kein Sonarr-Rejection-Flag**; Newznab

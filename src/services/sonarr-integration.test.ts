@@ -173,6 +173,7 @@ it("exposes a source-coordinate-bound future TBA duration conflict consistently 
     if (url.hostname === "rodlzdf-a.akamaihd.net") return mp4RangeResponse(syntheticMp4(), init!);
     return base(value);
   });
+  const identities = new Set<string>();
   for (const query of [
     "tvdbid=123&season=2&ep=3",
     "tvdbid=123&season=2",
@@ -184,6 +185,7 @@ it("exposes a source-coordinate-bound future TBA duration conflict consistently 
     const channel = (await parseStringPromise(await response.text())).rss.channel[0];
     expect(channel.item).toHaveLength(1);
     const release = channel.item[0];
+    identities.add(release.guid[0]._);
     expect(release.title[0]).toContain("S02E03.Actual.title");
     expect(release.title[0]).toContain("1080p");
     expect(release.title[0]).toContain("GERMAN");
@@ -195,6 +197,9 @@ it("exposes a source-coordinate-bound future TBA duration conflict consistently 
     expect(nzb.status).toBe(409);
     expect(await nzb.text()).not.toContain("<nzb");
   }
+  // Newly bound text searches enter the existing verified-ID namespace, not a
+  // second GUID per transport. Persisted legacy generic GUIDs are not rewritten.
+  expect(identities.size).toBe(1);
   expect(state.addToQueue).not.toHaveBeenCalled();
 });
 

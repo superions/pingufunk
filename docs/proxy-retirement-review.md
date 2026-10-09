@@ -2457,6 +2457,21 @@ mit vorübergehend ausgeschaltetem Fix fiel genau dafür durch, nach Wiederher-
 stellung grün. Neue Parsercachegeneration, starke Assetvalidatoren, alle
 Audiotracks und Obergrenzen bleiben erhalten. Kein Senderseitenparser.
 
+Die Bindung vormals generischer Texttreffer benutzt künftig die vorhandene
+TVDB/S/E-GUID der ID-Suche. Die Übergangsprüfung verlangt gleiche Identität für
+ID/Text und Exact/Staffel; die alte ungebundene GUID kann sich ändern. Altjobs
+und History werden nicht umgeschrieben. Dies ist ein expliziter Cutoverpunkt,
+keine pauschale Zusage unveränderter GUIDs für erstmalig gebundene Texttreffer.
+
+Die neue native Fixture prüft eine unüberwachte zukünftige TBA-Folge direkt
+und via Prowlarr ohne Grab-POST. Erste Containerläufe stoppten sichtbar: Die
+bekannten widersprüchlichen Referenzen benötigen nun Enqueue-409 statt späteren
+Workerfehler; außerdem blockierte der API-only-Testpreload die neuen Controller-
+Reads. Korrigiert sind getrennte Enqueue-/Worker-Negativfälle, der bestehende
+SAB-Lesealias und ein nicht-redirectender NZB-HTTP-GET ausschließlich zur vorher
+validierten internen QA-Adresse. Keine Produktbudgets oder externen Netzwerk-
+grenzen gelockert; fehlerhafte Läufe sind keine Abnahme.
+
 Die bisherigen kleinen MP4-Fixtures und passenden TBA-Laufzeiten hatten diese
 Kombination nicht geschützt. Eine bisherige reine Titel-/NZB-Roundtrip-Fixture
 enthielt außerdem widersprüchliche Dauern (Quelle 45, Metadaten 30 Minuten),

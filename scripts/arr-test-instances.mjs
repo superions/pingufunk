@@ -755,8 +755,10 @@ async function movieSearch(root, manifest, app = "radarr") {
           )
             throw new Error("Native duration-conflict candidate released an NZB");
           if (
-            (await api(root, manifest, "pingufunk", "/api?mode=queue")).queue.noofslots !== 0 ||
-            (await api(root, manifest, "pingufunk", "/api?mode=history")).history.noofslots !== 0 ||
+            (await api(root, manifest, "pingufunk", "/api/download?mode=queue")).queue.noofslots !==
+              0 ||
+            (await api(root, manifest, "pingufunk", "/api/download?mode=history")).history
+              .noofslots !== 0 ||
             (await api(root, manifest, "sonarr", "/api/v3/history")).totalRecords !== 0
           )
             throw new Error("Conflict fixture created a download/import/history");
