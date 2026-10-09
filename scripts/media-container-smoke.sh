@@ -38,7 +38,14 @@ done
 docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c 'CREATE ROLE pingufunk_media_qa LOGIN' -c 'CREATE DATABASE pingufunk_media_qa OWNER pingufunk_media_qa' >/dev/null
 
-for provider in sqlite postgresql; do
+providers=(sqlite postgresql)
+if [[ -n "${PINGUFUNK_MEDIA_QA_PROVIDER:-}" ]]; then
+  case "$PINGUFUNK_MEDIA_QA_PROVIDER" in
+    sqlite|postgresql) providers=("$PINGUFUNK_MEDIA_QA_PROVIDER") ;;
+    *) echo "Unsupported disposable media provider" >&2; exit 1 ;;
+  esac
+fi
+for provider in "${providers[@]}"; do
   mkdir "$QA_ROOT/$provider"
   if [[ "$provider" == sqlite ]]; then
     QA_URL=file:/qa/database.sqlite
