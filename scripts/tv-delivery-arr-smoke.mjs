@@ -158,6 +158,12 @@ try {
     }
   }
   if (journal() !== null) fail("pre-existing discovery invalidates cold gate");
+  // Native indexer validation during bootstrap may already have read the
+  // catalogue. Count the cold process's first real RSS poll relative to that
+  // setup, rather than mistaking those earlier probes for another feed fetch.
+  const setupStats = JSON.parse(
+    readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
+  );
   await command({ name: "MissingEpisodeSearch", seriesId: series.id });
   const cold = (await histories()).filter((row) => row.eventType === "grabbed");
   console.log(
@@ -175,6 +181,11 @@ try {
   if (journal().entries.some((row) => row.readyAt === null)) fail("background proof deadline");
   // No second episode/season search, manual release, retry or profile override.
   await command({ name: "RssSync" });
+  const firstPollStats = JSON.parse(
+    readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
+  );
+  if (firstPollStats.cataloguePages - (setupStats.cataloguePages ?? 0) !== 5)
+    fail("cold primary source window did not fetch exactly five complete pages");
   console.log(`Owned ${transport}: native RSS delivery completed; awaiting physical imports`);
   for (let attempt = 0; attempt < 180; attempt++) {
     const slots = (await api(root, manifest, "pingufunk", "/api/download?mode=history&limit=100"))
@@ -231,7 +242,7 @@ try {
   const stats = JSON.parse(
     readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
   );
-  if (stats.transfers !== 80 || stats.ranges < 80 || stats.cataloguePages !== 5)
+  if (stats.transfers !== 80 || stats.ranges < 80)
     fail("bounded proof/full-transfer cardinality mismatch");
   console.log(
     `Owned ${transport}: one cold bulk search (${cold.length}/80 initial grabs), background -> RSS -> 80/80 real native imports; repeat RSS produced no duplicate`
