@@ -10,6 +10,7 @@ interface CheckedFacts {
 interface PendingSource {
   url: string;
   expiresAt: number;
+  refresh?: boolean;
 }
 const key = (url: string) => createHash("sha256").update(url).digest("hex");
 
@@ -29,6 +30,9 @@ export class SourceMediaFactsStore {
   private pause?: { timer: ReturnType<typeof setTimeout>; resume: () => void };
   private startTimer?: ReturnType<typeof setTimeout>;
   private batch?: HttpRequestBudget;
+  private retained = new Map<string, { url: string; until: number; blocked: boolean }>();
+  private retentionTimer?: ReturnType<typeof setTimeout>;
+  private listeners = new Set<(url: string, result?: CheckedFacts) => void>();
 
   get generation(): number {
     return this.epoch;
@@ -39,7 +43,7 @@ export class SourceMediaFactsStore {
     return `${this.epoch}:${this.revision}:${Math.floor(Date.now() / 30_000)}`;
   }
 
-  get(url: string): CheckedFacts | undefined {
+  get(url: string, minimumFreshMs = 0): CheckedFacts | undefined {
     if (!isProbeableMp4(url)) return undefined;
     const result = this.facts.get(key(url));
     if (!result) return undefined;
@@ -47,6 +51,7 @@ export class SourceMediaFactsStore {
       this.facts.delete(key(url));
       return undefined;
     }
+    if (result.expiresAt <= Date.now() + minimumFreshMs) return undefined;
     return structuredClone({ facts: result.facts, fingerprint: result.fingerprint });
   }
 
@@ -63,27 +68,87 @@ export class SourceMediaFactsStore {
           : 30_000),
     });
     this.revision++;
+    const held = this.retained.get(key(url));
+    if (held)
+      held.blocked = !(
+        result.fingerprint &&
+        result.facts.audioLanguage &&
+        result.facts.videoDimensions
+      );
+    for (const listener of this.listeners) listener(url, structuredClone(result));
+  }
+
+  /** A delivery owner may retain successful hints, never extend their proof TTL. */
+  retain(urls: readonly string[], until: number): void {
+    const now = Date.now();
+    for (const [id, held] of this.retained) if (held.until <= now) this.retained.delete(id);
+    for (const url of urls) {
+      if (!isProbeableMp4(url) || until <= now) continue;
+      const id = key(url);
+      if (!this.retained.has(id) && this.retained.size >= 512) break;
+      this.retained.set(id, {
+        url,
+        until: Math.min(until, now + 7_200_000),
+        blocked: this.retained.get(id)?.blocked ?? false,
+      });
+    }
+    this.maintainRetained();
+  }
+
+  onChecked(listener: (url: string, result?: CheckedFacts) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /** Release only delivery-owned refresh work; keep ordinary short-lived hints. */
+  release(urls: readonly string[]): void {
+    for (const url of urls) {
+      const id = key(url);
+      this.retained.delete(id);
+      if (this.pending.get(id)?.refresh) this.pending.delete(id);
+    }
+    if (!this.retained.size && this.retentionTimer) {
+      clearTimeout(this.retentionTimer);
+      this.retentionTimer = undefined;
+    }
+  }
+
+  private maintainRetained(): void {
+    const now = Date.now();
+    const refresh: string[] = [];
+    for (const [id, held] of this.retained) {
+      if (held.until <= now) this.retained.delete(id);
+      else if (!held.blocked && !this.get(held.url, 90_000)) refresh.push(held.url);
+    }
+    this.enqueue(refresh, true);
+    if (this.retained.size && !this.retentionTimer) {
+      this.retentionTimer = setTimeout(() => {
+        this.retentionTimer = undefined;
+        this.maintainRetained();
+      }, 30_000);
+      this.retentionTimer.unref?.();
+    }
   }
 
   isActive(url: string): boolean {
     return this.active?.key === key(url);
   }
 
-  enqueue(urls: readonly string[]): void {
+  enqueue(urls: readonly string[], refresh = false): void {
     const now = Date.now();
     for (const [id, source] of this.pending) if (source.expiresAt <= now) this.pending.delete(id);
     for (const url of urls) {
       if (!isProbeableMp4(url)) continue;
       const id = key(url);
       if (
-        this.get(url) ||
+        (!refresh && this.get(url)) ||
         (this.cooldown.get(id) ?? 0) > now ||
         this.active?.key === id ||
         this.pending.has(id)
       )
         continue;
       if (this.pending.size >= 128) break;
-      this.pending.set(id, { url, expiresAt: now + 300_000 });
+      this.pending.set(id, { url, expiresAt: now + 300_000, refresh });
     }
     if (!this.pending.size || this.worker || this.startTimer) return;
     const epoch = this.epoch;
@@ -123,7 +188,7 @@ export class SourceMediaFactsStore {
       if (!next) break;
       const [id, source] = next;
       this.pending.delete(id);
-      if (source.expiresAt <= Date.now() || this.get(source.url)) continue;
+      if (source.expiresAt <= Date.now() || (!source.refresh && this.get(source.url))) continue;
       const controller = new AbortController();
       this.active = { key: id, controller };
       try {
@@ -141,7 +206,12 @@ export class SourceMediaFactsStore {
       } catch {
         // No raw exception, URL or credential enters logs or a cached proof.
         // An unavailable source is not retried automatically by this worker.
-        if (epoch === this.epoch) this.cooldown.set(id, Date.now() + 30_000);
+        if (epoch === this.epoch) {
+          this.cooldown.set(id, Date.now() + 30_000);
+          const held = this.retained.get(id);
+          if (held) held.blocked = true;
+          for (const listener of this.listeners) listener(source.url);
+        }
       } finally {
         this.active = undefined;
       }
@@ -154,6 +224,9 @@ export class SourceMediaFactsStore {
     this.facts.clear();
     this.cooldown.clear();
     this.pending.clear();
+    this.retained.clear();
+    if (this.retentionTimer) clearTimeout(this.retentionTimer);
+    this.retentionTimer = undefined;
     this.active?.controller.abort();
     if (this.startTimer) clearTimeout(this.startTimer);
     this.startTimer = undefined;

@@ -132,6 +132,34 @@ it("bounds cache capacity and keeps unsupported evidence short-lived", async () 
   expect(value.get(url(512))?.facts).toEqual(facts);
 });
 
+it("refreshes retained successful proof before expiry across a normal 30-minute RSS interval", async () => {
+  const fetch = rangeMock(),
+    value = store();
+  value.retain([url()], Date.now() + 7_200_000);
+  await vi.advanceTimersByTimeAsync(1_800_000);
+  expect(fetch.mock.calls.length).toBeGreaterThan(5);
+  expect(fetch.mock.calls.length).toBeLessThan(12);
+  expect(value.get(url(), 75_000)?.facts).toEqual(facts);
+  expect(fetch.mock.calls.every(([, init]) => new Headers(init.headers).has("Range"))).toBe(true);
+  value.release([url()]);
+  const count = fetch.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(fetch).toHaveBeenCalledTimes(count);
+  expect(value.get(url())).toBeUndefined();
+});
+
+it("does not revive a failed retained URL on repeated enrollment", async () => {
+  const fetch = vi.fn(async () => new Response(null, { status: 503 }));
+  vi.stubGlobal("fetch", fetch);
+  const value = store();
+  value.retain([url()], Date.now() + 7_200_000);
+  await vi.advanceTimersByTimeAsync(30);
+  await value.idle();
+  value.retain([url()], Date.now() + 7_200_000);
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
 it.each([{ codes: ["deu", "fra"] }, { codes: ["deu", "und"] }])(
   "never relabels incoherent tracks $codes",
   async ({ codes }) => {

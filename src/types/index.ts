@@ -62,6 +62,8 @@ export interface TvdbData {
   sonarrBlockedCoordinates?: string[];
   /** Validated instance coordinates; base episode values themselves stay untouched. */
   sonarrVerifiedCoordinates?: string[];
+  /** Delivery enrollment only; fresh instance state is checked again before RSS. */
+  sonarrMonitoredCoordinates?: string[];
   sonarrUnavailable?: boolean;
 }
 

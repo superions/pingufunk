@@ -1376,9 +1376,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(thirdPage).toContain("Example.C");
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'q_v16-coordinate-evidence-coverage_["Example",null,null,null]_1_1_720p_300'
-      ),
+      expect.stringContaining('q_v17-tv-search-delivery_["Example",null,null,null]_1_1_720p_300'),
       expect.objectContaining({ response: secondPage })
     );
   });
@@ -1414,9 +1412,7 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "movie_query_v16-coordinate-evidence-coverage_Documentary__100_0_all_2700"
-      ),
+      expect.stringContaining("movie_query_v17-tv-search-delivery_Documentary__100_0_all_2700"),
       expect.any(Object)
     );
   });
@@ -1517,7 +1513,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v16-coordinate-evidence-coverage_[a-f0-9]{64}_100_0_all_2700/),
+      expect.stringMatching(/^movie_v17-tv-search-delivery_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });

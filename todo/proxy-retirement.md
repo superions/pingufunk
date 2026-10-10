@@ -24,7 +24,8 @@ erledigte Implementierung.
   Die folgenden Checkboxen sind der einzige ausführbare Arbeitsvertrag;
   Referenztexte besitzen keine zweite Implementierungsreihenfolge.
 - P00–P09 und P11.1–P11.8 sind
-  technisch abgenommen. Beide Backend-Laufzeitketten und
+  historisch technisch abgenommen; P06.4 ist wegen der nachfolgend dokumentierten
+  kalten Verbraucher-/Nachlieferlücke erneut offen. Beide Backend-Laufzeitketten und
   die URL-/Secret-basierte Auswahl aus **P11.1** sind geprüft.
   P10.1 ist nach der genehmigten isolierten Arr-Probe erneut abgenommen:
   der dokumentierte Radarr-Einrichtungsweg und native Verbraucherketten sind
@@ -1256,7 +1257,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1373,6 +1374,45 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       abgelaufene Suchbelege können bis zur nächsten Suche neutral sein;
       automatischer Suchwiederholer, erfundene Nummerierung und vollständige
       P03.4-Sprachabnahme sind durch diesen begrenzten Fix nicht behauptet.
+      Erneut offen am 10.10.2026 nach lesender Prüfung des tatsächlichen
+      Verbrauchers: Eine kalte Staffelsuche liefert zuordenbare Quellen mit
+      UNKNOWN; Sonarr lehnt diese im bestehenden Profil ab. Nach begrenzter
+      Hintergrundprüfung liefert eine zusätzliche Suche belegte HD-Treffer,
+      aber der bereits abgeschlossene Suchauftrag verarbeitet sie nicht erneut.
+      Eine nachträgliche Belegänderung erzeugt bisher keine verlässliche
+      Nachlieferung im bestehenden RSS-Pfad; das Sonarr-Ergänzungsfenster
+      schließt alte Ausstrahlungen aus. Dies ist weder ein Cutoff- noch ein
+      Importfehler. Bisherige warme Such-/Consumerabnahmen bleiben gültige
+      Teilnachweise, nicht eine vollständige automatische Beschaffungskette.
+      Befund in `docs/proxy-retirement-review.md`. Nachliefer-/Readiness-Vertrag
+      anschließend ausdrücklich beauftragt: `tv-search-delivery.ts` hält höchstens
+      128 identitätsgesicherte, überwachte fehlende Quellen für zwei Stunden
+      in einem serverinternen, maximal 2-MiB-Config-Journal ohne DDL. Wiederholte
+      Suchen verlängern dieselbe Entdeckung nicht unbegrenzt; Instanzbindung,
+      Maintenance, Kapazität, Restart und ungültige Persistenz fail-closed.
+      Der einzelne Medienbelegworker darf erfolgreiche Hinweise vor ihrem
+      Fünf-Minuten-Ablauf begrenzt neu prüfen, nicht ihren TTL verlängern oder
+      fehlgeschlagene/unbelegte Proben automatisch wiederholen. Keine dauerhaft
+      gespeicherten Sprach-/Pixelbelege. Erst frisch belegte und erneut gegen
+      den überwachten Sonarr-Bestand/Matcher geprüfte Quellen im bestehenden
+      RSS-Pfad nachliefern. Alte bereits ausgestrahlte Folgen bleiben zulässig;
+      Vorab-RSS-Politik unverändert. PubDate ist der Downloadfähigkeitszeitpunkt,
+      nicht ein erfundenes Airdate; GUIDs/URLs bleiben erhalten. Feedabfragen
+      sind keine ACKs. Fester kurzer Snapshot schützt Pagination, begrenzter
+      Besitzer-Cursor verhindert Serienverhungern; vorhandene Dateien entfernen
+      nur eigene Nachliefermetadaten. Settings-API darf interne Einträge weder
+      lesen, ändern noch löschen. Abnahme: eine kalte native Mehrstaffelsuche,
+      danach reguläre RSS-Nachlieferung ohne zweite Suche bis zu echten
+      synthetischen Importen direkt und über Prowlarr; genau ein Grab/Import
+      je sicherer Folge, keine Doppelgrabs bei wiederholtem RSS, negative
+      Identitäts-/Monitoring-/Laufzeit-/Sprach-/Pixel-/Ausfallfälle sowie
+      Restart/Expiry/Kapazität und echte Journalpersistenz auf beiden Backends.
+      Normale Produkt-/Fork-CI-/Containergates, anschließender kompatibler
+      Image-only-Rollout und vollständiger scoped Live-Bestands-/Importaudit
+      ausdrücklich autorisiert. Keine anderen Bibliotheksaufträge.
+      Bestehende Budgets, frische Transferprüfung, GUIDs, Profile,
+      Toleranzen und Datenbankverträge bleiben unverändert; keine neuen Grabs
+      oder Betriebsänderungen durch diese Diagnose.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 

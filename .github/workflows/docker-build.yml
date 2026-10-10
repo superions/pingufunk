@@ -62,6 +62,17 @@ jobs:
           docker pull "$PINGUFUNK_ARR_QA_PROWLARR_IMAGE"
           bash scripts/rendition-quality-arr-smoke.sh
 
+      - name: Verify cold search to deferred RSS and real Sonarr imports
+        env:
+          PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+        run: |
+          node scripts/tv-delivery-arr-smoke.mjs direct
+          node scripts/tv-delivery-arr-smoke.mjs forwarded
+
       - name: Build pinned rollback checkpoints without publishing
         run: |
           git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker build --target runner -t pingufunk-sqlite-source-rollback-qa -

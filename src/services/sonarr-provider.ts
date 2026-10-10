@@ -1,4 +1,5 @@
 import { LRUCache } from "lru-cache";
+import { createHash } from "node:crypto";
 import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { getSetting } from "@/lib/settings";
 import { externalCredential } from "@/lib/credential-settings";
@@ -48,10 +49,16 @@ export class SonarrSession {
   private readonly epoch = cacheContextEpoch();
   private readonly client: ReturnType<typeof createReadOnlyArrJsonClient>;
   private readonly context: string;
+  readonly deliveryIdentity: string;
 
   constructor(baseUrl: string, credential: string) {
     this.client = createReadOnlyArrJsonClient(baseUrl, credential);
     this.context = metadataCacheKey("sonarr-context", null, [baseUrl, credential]);
+    // Discovery survives process/cache epochs, but never an instance, credential
+    // or database change. No connection detail is exposed or stored verbatim.
+    this.deliveryIdentity = createHash("sha256")
+      .update(JSON.stringify([process.env.DATABASE_URL ?? null, baseUrl, credential]))
+      .digest("hex");
   }
 
   get cacheIdentity(): string {
@@ -235,6 +242,11 @@ export function mergeSonarrShow(
     ],
     episodes,
     sonarrVerifiedCoordinates: supplemental.episodes.map(coordinate),
+    sonarrMonitoredCoordinates: supplemental.series.monitored
+      ? supplemental.episodes
+          .filter((episode) => episode.monitored && !episode.hasFile)
+          .map(coordinate)
+      : [],
     sonarrBlockedCoordinates: [...blocked],
   };
 }

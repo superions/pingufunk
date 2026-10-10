@@ -1,4 +1,7 @@
 const nativeFetch = globalThis.fetch;
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 await import("/qa/media-provider.mjs");
 const sourceFetch = globalThis.fetch;
 // The base provider validates the exact disposable DB and owner first.
@@ -6,12 +9,46 @@ const sourceFetch = globalThis.fetch;
 const ports = { sonarr: "8989", radarr: "7878", prowlarr: "9696", pingufunk: "6767" };
 const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
 const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
+const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
 const germanUrl = "https://fixture.akamaized.net/german.mp4";
 const frenchUrl = "https://fixture.akamaized.net/french.mp4";
 const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString("base64url");
 const ardUrl = "https://rbb-progressive.ard-mcdn.de/synthetic/film-1080.mp4?edition=standard";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (
+    tvDelivery &&
+    /^https:\/\/rodlzdf-a\.akamaihd\.net\/synthetic\/delivery-\d{2}-\d{2}\.mp4$/.test(url.href)
+  ) {
+    const file = readFileSync("/qa/delivery.mp4");
+    const range = new Headers(init?.headers).get("Range");
+    const statsPath = "/qa/delivery-source-stats.json";
+    const stats = existsSync(statsPath)
+      ? JSON.parse(readFileSync(statsPath, "utf8"))
+      : { ranges: 0, transfers: 0 };
+    stats[range ? "ranges" : "transfers"]++;
+    writeFileSync(statsPath, JSON.stringify(stats));
+    const headers = {
+      "Content-Type": "video/mp4",
+      ETag: `"${createHash("sha256").update(file).digest("hex")}"`,
+    };
+    if (!range)
+      return new Response(file, { headers: { ...headers, "Content-Length": String(file.length) } });
+    await delay(800); // A cold foreground + single worker cannot finish all 40 before the response.
+    const part = /^bytes=(\d+)-(\d+)$/.exec(range);
+    if (!part) throw new Error("Owned exact bounded range required");
+    const start = Number(part[1]),
+      end = Math.min(Number(part[2]), file.length - 1);
+    if (end - start >= 1_048_576) throw new Error("Owned range window exceeded");
+    return new Response(file.subarray(start, end + 1), {
+      status: 206,
+      headers: {
+        ...headers,
+        "Content-Range": `bytes ${start}-${end}/${file.length}`,
+        "Content-Length": String(end - start + 1),
+      },
+    });
+  }
   if (
     url.protocol === "http:" &&
     ports[url.hostname] === url.port &&
@@ -127,7 +164,33 @@ globalThis.fetch = async (input, init) => {
       };
       if (matches(episode)) rows.push(episode);
     }
-    data.result.results = rows;
+    if (tvDelivery && terms.some((term) => normalized(term).includes("syntheticseries"))) {
+      rows.length = 0;
+      for (let season = 1; season <= 2; season++)
+        for (let episode = 1; episode <= 40; episode++)
+          rows.push({
+            channel: "ZDF",
+            topic: "Synthetic Series",
+            title: `Synthetic Episode (S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")})`,
+            description: "Owned cold-delivery fixture",
+            filmlisteTimestamp: 1546387200,
+            duration: 60,
+            size: 0,
+            url_website: `https://example.invalid/synthetic/delivery-${season}-${episode}`,
+            url_video: "",
+            url_video_low: "",
+            url_video_hd: `https://rodlzdf-a.akamaihd.net/synthetic/delivery-${String(season).padStart(2, "0")}-${String(episode).padStart(2, "0")}.mp4`,
+          });
+      const offset = Number(body.offset ?? 0),
+        size = Number(body.size ?? 1000);
+      data.result.results = rows.slice(offset, offset + size);
+      data.result.queryInfo = {
+        totalResults: 80,
+        resultCount: data.result.results.length,
+        filmlisteTimestamp: 1546387200,
+        searchEngineTime: 0,
+      };
+    } else data.result.results = rows;
     return Response.json(data);
   }
   return sourceFetch(input, init);

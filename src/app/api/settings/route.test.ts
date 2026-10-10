@@ -92,6 +92,20 @@ function post(body: unknown) {
   );
 }
 
+it("never exposes, overwrites or deletes the internal delivery journal through Settings", async () => {
+  const key = "internal.tv-delivery.v1";
+  values.set(key, "private source discovery");
+  expect(
+    await (await GET(new NextRequest("http://localhost/api/settings"))).json()
+  ).not.toHaveProperty(key);
+  expect((await GET(new NextRequest(`http://localhost/api/settings?key=${key}`))).status).toBe(404);
+  expect((await post({ [key]: "{}" })).status).toBe(404);
+  expect((await DELETE(new NextRequest(`http://localhost/api/settings?key=${key}`))).status).toBe(
+    400
+  );
+  expect(values.get(key)).toBe("private source discovery");
+});
+
 it("masks both SRF credentials in bulk and single-setting responses", async () => {
   const all = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
   expect(JSON.stringify(all)).not.toContain("private-");

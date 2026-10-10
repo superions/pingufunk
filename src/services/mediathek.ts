@@ -4,6 +4,7 @@ import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
 import { enrichSourceAudio, enrichTvMatches, enrichTvCandidates } from "./source-audio";
+import { registerTvSearchDelivery, getTvSearchDeliveryItems } from "./tv-search-delivery";
 import { sourceMediaFacts } from "./source-media-facts";
 import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss, getShowInfoByTvdbId } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
@@ -57,7 +58,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v16-coordinate-evidence-coverage";
+const CONTENT_SEARCH_CACHE_VERSION = "v17-tv-search-delivery";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -1116,6 +1117,10 @@ export async function fetchSearchResultsById(
   );
   console.log(`[Mediathek] Matched desired episodes: ${matchedDesiredEpisodes.length}`);
 
+  // Discovery must survive the HTTP response and precede asynchronous proof work.
+  // Only monitored, verified instance coordinates may enter the delivery journal.
+  await registerTvSearchDelivery(tvdbData, matchedDesiredEpisodes, requestBudget);
+
   const newznabItems: NewznabItem[] = (
     await enrichTvMatches(
       matchedDesiredEpisodes,
@@ -1276,6 +1281,8 @@ export async function fetchSearchResultsByString(
   return response;
 }
 
+let tvRssPageSnapshot: { key: string; expiresAt: number; items: NewznabItem[] } | undefined;
+
 export async function fetchSearchResultsForRssSync(limit: number, offset: number): Promise<string> {
   const budget = new HttpRequestBudget();
   await ensureRulesetsLoaded(budget);
@@ -1285,9 +1292,26 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   const matchingSettings = await getMatchingSettings();
   const hlsEnabled = await isHlsEnabled();
   const sourceContext = await searchCacheContext();
+  const pageKey = JSON.stringify([
+    cacheContextEpoch(),
+    sourceContext,
+    rulesetContext,
+    quality,
+    minDuration,
+    matchingSettings,
+    hlsEnabled,
+  ]);
+  if (tvRssPageSnapshot?.key === pageKey && tvRssPageSnapshot.expiresAt > Date.now())
+    return convertItemsToRss(tvRssPageSnapshot.items, limit, offset);
   // Build before consulting the normal RSS response cache: otherwise its hour
   // TTL would prevent the 60s Sonarr snapshot/cursor from ever refreshing.
   let supplementalMatches: MatchedEpisodeInfo[] = [];
+  const deliveryItems = await getTvSearchDeliveryItems(
+    getBaseShowForSonarrRss,
+    budget,
+    quality,
+    hlsEnabled
+  );
   let sonarrUnavailable = false;
   try {
     supplementalMatches = await getSonarrRssMatches(getBaseShowForSonarrRss, budget);
@@ -1295,7 +1319,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
     sonarrUnavailable = true;
   }
   const supplementalContext = createHash("sha256")
-    .update(JSON.stringify(supplementalMatches))
+    .update(JSON.stringify([supplementalMatches, deliveryItems]))
     .digest("hex");
   const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${supplementalContext}_${rulesetContext}_${sourceMediaFacts.contextKey}`;
 
@@ -1342,7 +1366,18 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
       false
     )
   ).flatMap((info) => generateRssItems(info, quality, hlsEnabled));
-  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
+  // Newly download-ready events precede the raw catalogue, with their original
+  // GUID/URL and an availability pubDate, not a fabricated episode air date.
+  const items = dedupeNewznabItems([...deliveryItems, ...newznabItems]).sort(
+    (a, b) =>
+      Date.parse(b.pubDate) - Date.parse(a.pubDate) || a.guid.value.localeCompare(b.guid.value)
+  );
+  const response = convertItemsToRss(items, limit, offset);
+
+  // Freeze the combined feed, not individual offset responses: new background
+  // proofs must not move a release between pages during one consumer poll.
+  if (deliveryItems.length && !sonarrUnavailable)
+    tvRssPageSnapshot = { key: pageKey, expiresAt: Date.now() + 60_000, items };
 
   if (!sonarrUnavailable) mediathekCache.set(cacheKey, { response });
   return response;

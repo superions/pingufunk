@@ -82,6 +82,29 @@ keinen Suchhinweis. Eine kalte Suche darf neutral sein; nach abgeschlossener
 Prüfung konsumiert die nächste Suche die Belege ohne erfundene Sprache/Auflösung.
 Der Hintergrundworker startet keine erneute Sonarr-Suche und keinen Grab.
 
+Verbrauchergrenze, erneut offen in P06.4: Sonarr verarbeitet eine abgeschlossene
+Staffelsuche nicht nochmals, nur weil dieser Cache später HD-Belege enthält.
+Das normale RSS-Verfahren garantiert bisher keine Nachlieferung zuvor gefundener
+alter Episoden. Die warme Folgeabfrage beweist deshalb Auffindbarkeit, nicht
+vollständige automatische Beschaffung. Der neue Befund und der anschließend
+ausdrücklich beauftragte Readiness-/Nachliefervertrag stehen im
+[Review](proxy-retirement-review.md#erneut-offener-verbraucherbefund-kalte-suche-ohne-nachlieferung).
+
+Der neue Owner `tv-search-delivery.ts` hält höchstens 128 überwachte, noch fehlende
+und identitätsgesicherte Quellen für zwei Stunden in einem internen Config-Journal
+(maximal 2 MiB, beide Backends, kein DDL). Entdeckungs-/Bereitschaftszeitpunkt sind
+keine dauerhaft gültigen Sprach-/Pixelbelege. Der bestehende einzelne Worker
+erneuert nur erfolgreiche Hinweise vor Ablauf; nicht belegbare/fehlgeschlagene
+Quellen werden nicht automatisch wiederholt. Vor der Nachlieferung werden frische
+vollständige MP4-Belege, aktuelles Monitoring/Dateibestand und der gemeinsame
+Matcher geprüft. Das vorhandene RSS veröffentlicht alte bereits ausgestrahlte
+Folgen mit dem ersten Bereitschaftszeitpunkt, unveränderten GUIDs und konkreten
+Medien-URLs. Feedleser sind keine ACKs; 60s-Snapshots stabilisieren die komplette
+Pagination. Sonarr entscheidet weiterhin selbst über Queue, Profil und Import.
+Vorab-RSS ist dadurch nicht pauschal freigegeben. Abnahme bleibt offen bis zum
+kalten nativen Mehrstaffellauf ohne zweite Suche bis zu realen Dateiimporten,
+direkt und über Prowlarr, einschließlich Restart/Fehler-/Kapazitätsnegativen.
+
 ## Abgrenzung zu MediathekArr
 
 Geprüft wurde [MediathekArr v1.0-beta.12, Suchowner](https://github.com/PCJones/MediathekArr/blob/v1.0-beta.12/MediathekArrServer/Services/MediathekSearchService.cs):

@@ -1551,3 +1551,56 @@ Fix löst keine automatische erneute Sonarr-Suche aus. Fehlende/abweichende
 Nummerierungen und nicht in vier Fenstern beweisbare Medienmetadaten bleiben
 ungeklärt; P03.4 ist weiterhin getrennt offen. Keine vollständige Produkt- oder
 Bibliotheksabnahme aus dieser begrenzten Prüfung ableiten.
+
+### Erneut offener Verbraucherbefund: kalte Suche ohne Nachlieferung
+
+Die anschließende lesende Verbraucherprüfung zeigt eine systematische Lücke:
+Der initiale Suchlauf veröffentlicht korrekt zugeordnete Quellen noch mit
+UNKNOWN-Qualität. Das unveränderte Sonarr-Profil lehnt sie ab. Nach der begrenzten
+Hintergrundprüfung liefert eine weitere native Suche belegte HD-Treffer und
+Freigaben für zuvor fehlende Episoden. Die Dateien bereits angenommener Aufträge
+werden dagegen tatsächlich importiert; fehlende Aufträge haben weder Queue-
+Eintrag noch Grab-/Importhistorie. Der Cutoff vorhandener Dateien erklärt diesen
+Fall nicht. Private Antworten, Bestandszahlen und Betriebsdetails bleiben
+außerhalb des öffentlichen Repositorys.
+
+Sonarr verarbeitet die Antworten eines Bulk-Suchauftrags pro Staffel einmal;
+ein Hintergrundcache im Indexer ist kein neuer Suchauftrag. Gegen die tatsächlich
+eingesetzte Version geprüft: [EpisodeSearchService v4.0.20.3014](https://github.com/Sonarr/Sonarr/blob/v4.0.20.3014/src/NzbDrone.Core/IndexerSearch/EpisodeSearchService.cs).
+`SourceMediaFactsStore` hält Medienbelege, aber keine Veröffentlichungszustände
+oder Nachlieferereignisse. `getSonarrRssMatches` benutzt ein Ausstrahlungsfenster;
+die primäre RSS-Suche benutzt ein begrenztes aktuelles Katalogfenster. Keiner
+dieser Owner garantiert, dass in einer früheren Suche entdeckte alte Episoden
+nach fertiger Belegprüfung erneut im normalen Feed erscheinen. Eine lesende
+native RSS-Probe lieferte die betroffenen Serienkandidaten nicht nach. Das ist
+keine Behauptung, dass sie niemals in irgendeiner späteren RSS-Seite vorkommen.
+
+P06.4 wird deshalb erneut geöffnet. Warme Folgeabfragen und grüne Unit-/native
+Einzelfalltests bleiben Teilnachweise; sie ersetzen nicht den Erstlauf mit kaltem
+Cache bis zur automatischen Verbraucherentscheidung. P03.4, ungebundene
+Nummerierungen und Kataloglücken bleiben davon getrennt.
+
+Ursprüngliche Lösungsoption, anschließend ausdrücklich zur Implementierung und
+zum kontrollierten Image-only-Rollout beauftragt: gefundene
+identitätsgesicherte Kandidaten, laufende Prüfung, belegte Freigabe und echte
+Ablehnung als getrennte Zustände führen. Der bestehende bounded Worker braucht
+eine faire, begrenzte Readiness-Verarbeitung. Neu belegte Kandidaten aus bereits
+angeforderten Suchen müssen über den vorhandenen Newznab-/RSS-Verbraucherpfad
+verlässlich nachgeliefert werden können, unabhängig vom alten Ausstrahlungsdatum;
+keine direkten oder blinden Sonarr-Grabs und kein zweiter Indexer-Endpunkt.
+Retention, Pagination, Cache-/Instanzinvalidierung und stabile Releaseidentität
+müssen gemeinsam definiert werden. Frische Quellen-/Transferbelege und Sonarrs
+eigene Queue-/Bestandsentscheidung bleiben die Sicherheitsgrenze.
+
+Die dafür nötige kausale Regression beginnt mit kaltem Cache und einer einzigen
+nativen Mehrstaffelsuche: zunächst unbelegte Quellen, danach begrenzte
+Hintergrundprüfung und normale Nachlieferung ohne zweiten manuellen Suchklick.
+Der Consumer muss alle sicheren fehlenden Episoden genau einmal annehmen,
+bestehende/queued Dateien nicht doppelt grabben und echte Konflikte weiter
+ablehnen. Synthetische Datei-/Importnachweise direkt und über Prowlarr sowie
+Ausfall-/Expiry-/Kapazitätsnegative wären Pflicht; Produktion bleibt ein eigener
+Freigabeschritt. Keine Produkt-, Profil-, DB-, Dienst- oder Grabänderung in dieser
+Diagnose. Der neue Owner und seine Grenzen sind im aktuellen P06.4-Vertrag
+konkretisiert. Lokale Produktgates und SQLite-Journalpersistenz sind vorbereitet;
+native kalte Importketten, PostgreSQL-Persistenz, Fork-CI und Produktionsabnahme
+werden nicht aus diesen Teilnachweisen als erledigt abgeleitet.

@@ -61,6 +61,8 @@ describe("Sonarr metadata boundary (not yet connected to lookup/RSS)", () => {
         title: "A short episode",
         aired: new Date("2026-09-29T12:00:00Z"),
         expectedRuntimeSeconds: 120,
+        monitored: false,
+        hasFile: false,
       },
     ]);
   });
