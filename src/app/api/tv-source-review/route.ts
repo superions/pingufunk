@@ -66,9 +66,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Wartung: keine neuen Aufträge" }, { status: 503 });
   // Unlike SAB, this deliberate GUI decision must not be an ambient cross-site POST.
   const origin = request.headers.get("origin");
+  // Next may normalize its internal URL to the bind address. Browser origins
+  // belong to the received Host/proxy protocol, not localhost or HOSTNAME.
+  const host = request.headers.get("host") ?? request.nextUrl.host;
+  const protocol =
+    request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.slice(0, -1);
+  const expectedOrigin = `${protocol}://${host}`;
   if (
     request.headers.get("X-Pingufunk-Manual-Review") !== "1" ||
-    (origin && origin !== request.nextUrl.origin) ||
+    (origin && origin !== expectedOrigin) ||
     ["cross-site", "same-site"].includes(request.headers.get("sec-fetch-site") ?? "")
   )
     return NextResponse.json({ error: "Bestätigung nur aus Pingufunk" }, { status: 403 });

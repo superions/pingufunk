@@ -36,7 +36,7 @@ function request(endpoint, body) {
       "@-"
     );
   const text = run(
-    [...args, `http://localhost:6767/${endpoint}`],
+    [...args, `http://localhost:6767/${endpoint.replace(/^\//, "")}`],
     body ? JSON.stringify(body) : undefined
   );
   const split = text.lastIndexOf("\n");
@@ -134,7 +134,7 @@ assert.equal(evidence(id).count, 1);
 const hidden = `internal.manual-review.${value.fingerprint}`;
 assert.equal(request(`api/settings?key=${hidden}`).status, 404);
 assert.equal(request("api/settings", { key: hidden, value: "forged" }).status, 404);
-assert.equal(request(`api?mode=retry&value=${id}`, {}).status, 409);
+assert.equal(request(`api?mode=history&name=retry&value=${id}`, {}).status, 409);
 assert.equal(evidence(id).count, 1);
 console.log(
   "Synthetic source → native RSS/blocked NZB → explicit reviewed job → real worker/file/audit/receipt passed"

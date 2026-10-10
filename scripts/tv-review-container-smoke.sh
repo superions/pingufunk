@@ -7,6 +7,7 @@ owner="${RANDOM}-${RANDOM}"
 app="pingufunk-media-app-${owner}"
 pg="pingufunk-media-pg-${owner}"
 net="pingufunk-review-net-${owner}"
+mkdir -p "$(pwd)/downloads"
 root="$(mktemp -d "$(pwd)/downloads/tv-review.XXXXXXXX")"
 keep_ready=0
 cleanup() {
@@ -50,4 +51,5 @@ if [[ "${2:-}" != keep ]]; then
   exit 0
 fi
 keep_ready=1
+docker network connect bridge "$app"
 echo "{\"app\":\"$app\",\"pg\":\"$pg\",\"network\":\"$net\",\"root\":\"$root\",\"provider\":\"$provider\",\"address\":\"$(docker port "$app" 6767/tcp)\"}"

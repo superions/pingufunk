@@ -69,6 +69,20 @@ it("returns only the confirmed durable job receipt; preserves the client's inten
   expect(await response.json()).toEqual({ id: body.intentId, status: "queued" });
   expect(mocks.confirm).toHaveBeenCalledWith(selector, body.fingerprint, body.intentId);
 });
+it("accepts the received plain-HTTP or proxied origin even when Next normalizes its bind URL", async () => {
+  for (const protocol of ["http", "https"]) {
+    const headers = {
+      "X-Pingufunk-Manual-Review": "1",
+      Host: "synthetic.test:6791",
+      Origin: `${protocol}://synthetic.test:6791`,
+      "x-forwarded-proto": protocol,
+    };
+    expect((await POST(request(body, headers))).status).toBe(200);
+    expect(
+      (await POST(request(body, { ...headers, Origin: `${protocol}://foreign.test:6791` }))).status
+    ).toBe(403);
+  }
+});
 it("redacts provider exceptions and never manufactures success or a retry job", async () => {
   mocks.confirm.mockRejectedValue(new Error("token=secret private-url"));
   const response = await POST(request());
