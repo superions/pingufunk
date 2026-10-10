@@ -12,8 +12,14 @@ root="$(mktemp -d "$(pwd)/downloads/tv-review.XXXXXXXX")"
 keep_ready=0
 cleanup() {
   if [[ "$keep_ready" == 1 ]]; then return; fi
-  if docker container inspect "$app" >/dev/null 2>&1; then docker stop "$app" >/dev/null; docker rm "$app" >/dev/null; fi
-  if docker container inspect "$pg" >/dev/null 2>&1; then docker stop "$pg" >/dev/null; docker rm "$pg" >/dev/null; fi
+  for container in "$app" "$pg"; do
+    if docker container inspect "$container" >/dev/null 2>&1; then
+      [[ "$(docker inspect --format '{{index .Config.Labels "pingufunk.media-qa.owner"}}' "$container")" == "$owner" ]] || return 1
+      docker stop "$container" >/dev/null
+      # Remove only this owned fixture's anonymous volumes, never shared/named data.
+      docker rm --volumes "$container" >/dev/null
+    fi
+  done
   if docker network inspect "$net" >/dev/null 2>&1; then docker network rm "$net" >/dev/null; fi
   if [[ "$root" == "$(pwd)/downloads/tv-review."* ]]; then rm -r -- "$root"; fi
 }
@@ -50,6 +56,6 @@ if [[ "${2:-}" != keep ]]; then
   PINGUFUNK_MEDIA_QA_OWNER="$owner" node scripts/tv-review-container-contract.mjs "$app"
   exit 0
 fi
-keep_ready=1
 docker network connect bridge "$app"
+keep_ready=1
 echo "{\"app\":\"$app\",\"pg\":\"$pg\",\"network\":\"$net\",\"root\":\"$root\",\"provider\":\"$provider\",\"address\":\"$(docker port "$app" 6767/tcp)\"}"
