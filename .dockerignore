@@ -26,6 +26,12 @@ coverage
 # OS
 .DS_Store
 Thumbs.db
+._*
+
+# Release archives and OS metadata never belong in traced application output.
+*.tar
+*.tar.gz
+*.tgz
 
 # Logs
 npm-debug.log*
