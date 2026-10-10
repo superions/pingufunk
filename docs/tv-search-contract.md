@@ -120,3 +120,25 @@ v4-kompatible Runner mit Schreibgate aus; Daten/Audits unverändert erhalten,
 Aufträge kontrolliert abnehmen und einen kompatiblen Fix vor Wiederfreigabe
 prüfen. Kein SQLite-Rückfall, kein Restore eines alten Datenstands, keine
 History-/Auditlöschung und keine Profil- oder Toleranzkorrektur als Rollback.
+
+### Bedienung und Abnahme
+
+In **Suche** den eindeutigen Sonarr-Seriennamen eingeben, die konkrete Folge
+und Rendition wählen und **Quelle prüfen** anklicken. Erst der frische Dialog
+belegt Sprache, Pixel, Quelllaufzeit und abweichende Metadatenlaufzeit.
+**Diese Quelle einmal freigeben** erzeugt einen auditierten Einzelauftrag in
+Kategorie `sonarr`; **Abbrechen** erzeugt keinen Auftrag. Eine erneute Bestätigung
+derselben Entscheidung liefert dieselbe Job-ID, keinen zweiten Grab. Ein
+generischer Download oder der manuelle Sonarr-/Prowlarr-Grab ersetzt diesen
+Dialog nicht. Bei fehlgeschlagener frischer Prüfung nicht blind wiederholen:
+Queue und Belegänderung prüfen bzw. eine andere konkrete Rendition neu prüfen.
+
+Abgenommen am 10.10.2026 auf `0a37363`: echte synthetische Datei-/Workerkette auf
+beiden Backends und desktop-only Interaktion am servierten Node-24-Container,
+inklusive Fehler, Abbruch und Reload-Dedupe; Fork-CI 38041269044 sowie Docker-
+Validierung 38041269045 grün. Der separat autorisierte Produktionsrollout und
+frische Live-Dialogprüfung sind im privaten Betriebsrunbook belegt. Keine
+globale Laufzeit-/Profil-/Schemaänderung und keine Live-Grabs für UI-QA.
+Eine breite Staffelsuche teilt ihr Budget zwischen allen Fassungen: neutral
+gebliebene Sprache/Qualität wird nicht erfunden. Die einzelne GUI-Prüfung bindet
+dagegen nur die bewusst gewählte Quelle und prüft sie erneut.

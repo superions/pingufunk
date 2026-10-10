@@ -1256,7 +1256,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1302,6 +1302,26 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       neuer Grabauftrag. Der Hotfix basiert separat auf dem tatsächlichen
       Produktionsschema; spätere P15-Schema-/Ausfallbefunde werden nicht mitgerollt
       oder durch diese begrenzte Abnahme als behoben dargestellt.
+      Erneute Abnahme 10.10.2026 auf `0a37363`: 1065 reguläre Tests grün;
+      15 opt-in PG-Tests in der regulären Suite nicht ausgeführt, sondern im
+      separaten realen PG-Gate geprüft. Lint/Typecheck/Format/Produktionsbuild,
+      Fork-CI 38041269044 und Docker-Validierung 38041269045 bestanden.
+      Native RSS→409-NZB→expliziter POST→genau ein realer Worker-/Dateiabschluss
+      mit unveränderten Referenzen und Settings auf SQLite sowie PostgreSQL
+      bestanden. Desktop-Abnahme auf tatsächlich serviertem Node-24-Bundle:
+      passende Vorher-/Nachher-Suche, Dialog, Abbruch/Fokus, veränderte Quelle
+      ohne Auftrag, Bestätigung, Reload/Wiederholung mit gleicher Job-ID,
+      persistiertes Audit und reguläre geprüfte Datei; Console ohne Findings.
+      Separat autorisierter Hotfix live abgenommen: alle fünf dort verfügbaren
+      Standardquellen der gemeldeten Vorabstaffel einzeln frisch mit Sprache,
+      Pixeln und unveränderten Konfliktreferenzen geprüft; nativer Sonarr-/
+      Prowlarr-Pfad und normale NZB-Sperre bestätigt. GUI-Freigabe aktiv und
+      ohne echten Grab abgebrochen; weder Download noch Import behauptet.
+      Unveränderte Profile, globale Settings und DB-Kette per Readback geprüft;
+      private Betriebsdetails/Bilder bleiben ausschließlich ignoriert bzw. im
+      privaten Runbook. Breite Staffelsuchen dürfen bei ausgeschöpftem Belegbudget
+      weiterhin neutrale Qualität liefern; sie ersetzen nicht die frische
+      Einzelquellenprüfung und rechtfertigen kein Hochstufen ohne Beleg.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
