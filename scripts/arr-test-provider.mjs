@@ -16,6 +16,13 @@ const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString(
 const ardUrl = "https://rbb-progressive.ard-mcdn.de/synthetic/film-1080.mp4?edition=standard";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (tvDelivery && url.href === "https://rodlzdf-a.akamaihd.net/synthetic/delivery-expired.mp4") {
+    const statsPath = "/qa/delivery-source-stats.json";
+    const stats = existsSync(statsPath) ? JSON.parse(readFileSync(statsPath, "utf8")) : {};
+    stats.expiredProbes = (stats.expiredProbes ?? 0) + 1;
+    writeFileSync(statsPath, JSON.stringify(stats));
+    return new Response(null, { status: 404 });
+  }
   if (
     tvDelivery &&
     /^https:\/\/rodlzdf-a\.akamaihd\.net\/synthetic\/delivery-\d{2}-\d{2}\.mp4$/.test(url.href)
@@ -34,7 +41,7 @@ globalThis.fetch = async (input, init) => {
     };
     if (!range)
       return new Response(file, { headers: { ...headers, "Content-Length": String(file.length) } });
-    await delay(800); // A cold foreground + single worker cannot finish all 40 before the response.
+    await delay(800); // Only the bounded worker may warm this cold source.
     const part = /^bytes=(\d+)-(\d+)$/.exec(range);
     if (!part) throw new Error("Owned exact bounded range required");
     const start = Number(part[1]),
@@ -181,11 +188,18 @@ globalThis.fetch = async (input, init) => {
             url_video_low: "",
             url_video_hd: `https://rodlzdf-a.akamaihd.net/synthetic/delivery-${String(season).padStart(2, "0")}-${String(episode).padStart(2, "0")}.mp4`,
           });
+      // An expired alternative must not poison an otherwise complete season
+      // search or prevent the native consumer from requesting the next season.
+      rows.unshift({
+        ...rows[0],
+        url_website: "https://example.invalid/000-expired",
+        url_video_hd: "https://rodlzdf-a.akamaihd.net/synthetic/delivery-expired.mp4",
+      });
       const offset = Number(body.offset ?? 0),
         size = Number(body.size ?? 1000);
       data.result.results = rows.slice(offset, offset + size);
       data.result.queryInfo = {
-        totalResults: 80,
+        totalResults: 81,
         resultCount: data.result.results.length,
         filmlisteTimestamp: 1546387200,
         searchEngineTime: 0,

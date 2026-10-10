@@ -171,14 +171,18 @@ try {
   );
   if (cold.length >= 80) fail("fixture did not exercise deferred delivery");
   const initial = journal();
-  if (initial?.entries.length !== 80) fail("cold discovery incomplete");
-  for (
-    let attempt = 0;
-    attempt < 600 && journal().entries.some((row) => row.readyAt === null);
-    attempt++
-  )
+  if (initial?.entries.length !== 81)
+    fail("cold discovery incomplete (including expired alternative)");
+  const unprocessed = (row) =>
+    row.readyAt === null &&
+    ["url_video_hd", "url_video", "url_video_low"].some(
+      (field) => row.item[field] && !row.blockedUrls.includes(row.item[field])
+    );
+  for (let attempt = 0; attempt < 600 && journal().entries.some(unprocessed); attempt++)
     await delay(500);
-  if (journal().entries.some((row) => row.readyAt === null)) fail("background proof deadline");
+  if (journal().entries.some(unprocessed)) fail("background proof deadline");
+  if (journal().entries.filter((row) => row.blockedUrls.length === 1).length !== 1)
+    fail("expired alternative not quarantined independently");
   // No second episode/season search, manual release, retry or profile override.
   await command({ name: "RssSync" });
   const firstPollStats = JSON.parse(
@@ -242,7 +246,7 @@ try {
   const stats = JSON.parse(
     readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
   );
-  if (stats.transfers !== 80 || stats.ranges < 80)
+  if (stats.transfers !== 80 || stats.ranges < 80 || stats.expiredProbes !== 1)
     fail("bounded proof/full-transfer cardinality mismatch");
   console.log(
     `Owned ${transport}: one cold bulk search (${cold.length}/80 initial grabs), background -> RSS -> 80/80 real native imports; repeat RSS produced no duplicate`

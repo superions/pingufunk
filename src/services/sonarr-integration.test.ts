@@ -41,6 +41,7 @@ import { parseNzbContent } from "./download";
 import { clearMetadataCaches, mediathekCache } from "@/lib/cache";
 import { clearSettingsCache } from "@/lib/settings";
 import { mediaSourceIdentity } from "./source-audio";
+import { sourceMediaFacts } from "./source-media-facts";
 import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
 
 let fetchMock: ReturnType<typeof vi.fn<(value: string) => Promise<Response>>>;
@@ -129,7 +130,9 @@ beforeEach(() => {
   });
   vi.stubGlobal("fetch", fetchMock);
 });
-afterEach(() => {
+afterEach(async () => {
+  sourceMediaFacts.clear();
+  await sourceMediaFacts.idle();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   clearSettingsCache();
@@ -320,10 +323,21 @@ it.each(["ard", "arte", "zdf"] as const)(
       }
       return base(value);
     });
-    const response = await GET(
-      new NextRequest(`http://localhost/api/newznab?t=tvsearch&tvdbid=${tvdbId}&season=${season}`)
-    );
+    const request = () =>
+      new NextRequest(`http://localhost/api/newznab?t=tvsearch&tvdbid=${tvdbId}&season=${season}`);
+    let response = await GET(request());
     expect(response.status).toBe(200);
+    if (provider === "zdf") {
+      // Cold public MP4 evidence is deliberately deferred, not a foreground
+      // dependency of catalogue discovery. The native bulk/RSS test separately
+      // verifies real imports without this second unit-level search.
+      const cold = await response.text();
+      expect(cold.match(/\.UNKNOWN\./g)).toHaveLength(count);
+      expect(fetchMock.mock.calls.some(([url]) => url.includes("rodlzdf-a"))).toBe(false);
+      await sourceMediaFacts.idle();
+      response = await GET(request());
+      expect(response.status).toBe(200);
+    }
     const channel = (await parseStringPromise(await response.text())).rss.channel[0];
     expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: String(count) });
     expect(channel.item).toHaveLength(count);

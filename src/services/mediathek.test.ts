@@ -135,11 +135,13 @@ beforeEach(() => {
 afterEach(async () => {
   sourceMediaFacts.clear();
   await sourceMediaFacts.idle();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("Sonarr supplemental search consumer", () => {
   it("keeps localized multi-season coordinates and advances UNKNOWN through RSS/NZB without re-querying or re-grabbing", async () => {
+    vi.useFakeTimers();
     const episodes = Array.from({ length: 20 }, (_, index) => ({
       name: `English metadata ${index + 1}`,
       seasonNumber: 2 + Math.floor(index / 10),
@@ -191,6 +193,8 @@ describe("Sonarr supplemental search consumer", () => {
     expect(cold).toContain('total="20"');
     expect(cold).toContain(".UNKNOWN.");
     const sourceCalls = catalogueCalls();
+    expect(mediaFetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_100); // Three bounded eight-source rate windows.
     await sourceMediaFacts.idle();
     const second = await newznab(request());
     const warm = await second.text();

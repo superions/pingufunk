@@ -118,8 +118,10 @@ export async function verifySourceAudio(
  * RSS/film enrichment permits four identities; explicit TV searches permit
  * sixteen. Both obey the caller's shared attempts and 15-second deadline.
  * Unprobed renditions remain honestly unknown. TV search callers may reuse
- * short-lived exact-asset hints and queue missing MP4 facts. Fresh approval
- * callers use the default and never consume these cached hints.
+ * short-lived exact-asset hints and queue missing MP4 facts, never perform a
+ * cold MP4 probe in the search request. One expired/slow catalogue rendition
+ * must not fail the whole search and put the native indexer in cooldown.
+ * Fresh approval callers use the default and never consume these cached hints.
  */
 export async function enrichSourceAudio(
   items: ApiResultItem[],
@@ -242,9 +244,9 @@ export async function enrichSourceAudio(
         }
         if (
           !mp4.has(url) &&
+          !reuseSearchFacts &&
           probes < maxIdentities &&
-          budget.remainingAttempts >= (reuseSearchFacts ? 4 : 1) &&
-          !(reuseSearchFacts && sourceMediaFacts.isActive(url))
+          budget.remainingAttempts >= 1
         ) {
           probes++;
           mp4.set(
@@ -253,12 +255,6 @@ export async function enrichSourceAudio(
               assets.set(url, fingerprint)
             )
           );
-          if (reuseSearchFacts)
-            sourceMediaFacts.remember(
-              url,
-              { facts: mp4.get(url)!, fingerprint: assets.get(url) },
-              generation
-            );
         }
         if (reuseSearchFacts && !mp4.has(url)) warming.push(url);
         const facts = mp4.get(url);

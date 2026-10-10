@@ -69,6 +69,12 @@ kurze getrennte Läufe, maximal 128 wartende Quellen und 512 Cacheeinträge.
 Standardfassungen und HD-Renditions werden vor alternativen Fassungen geprüft.
 Keine Senderseiten, zusätzlichen Hosts, Voll-Downloads, Medien-Dateischreibzugriffe,
 DB-Änderungen oder zweite Downloadqueue. Ausfälle werden nicht automatisch retried.
+Kalte MP4-Proben laufen nicht synchron im TV-Such-/RSS-HTTP-Pfad. Eine bereits
+erfolgreiche Katalog-/Metadatensuche darf nicht durch eine einzelne langsame oder
+abgelaufene Medienfassung scheitern und dadurch den nativen Indexer sperren.
+Frische Einzelquellenfreigaben und Transferprüfungen umgehen diese Suchhinweise
+weiterhin. Fehlgeschlagene gehaltene Quellen bleiben auch beim normalen
+RSS-Aufwärmen gesperrt; andere Fassungen derselben Folge werden weiter geprüft.
 
 Suchhinweise binden die komplette URL inklusive stabiler und kurzlebiger
 Auswahlparameter. Positive Belege verfallen nach fünf Minuten, unbelegte Quellen
@@ -82,7 +88,7 @@ keinen Suchhinweis. Eine kalte Suche darf neutral sein; nach abgeschlossener
 Prüfung konsumiert die nächste Suche die Belege ohne erfundene Sprache/Auflösung.
 Der Hintergrundworker startet keine erneute Sonarr-Suche und keinen Grab.
 
-Verbrauchergrenze, erneut offen in P06.4: Sonarr verarbeitet eine abgeschlossene
+Historischer Verbraucherbefund, Abnahme noch offen in P06.4: Sonarr verarbeitet eine abgeschlossene
 Staffelsuche nicht nochmals, nur weil dieser Cache später HD-Belege enthält.
 Das normale RSS-Verfahren garantiert bisher keine Nachlieferung zuvor gefundener
 alter Episoden. Die warme Folgeabfrage beweist deshalb Auffindbarkeit, nicht
@@ -98,8 +104,12 @@ erneuert nur erfolgreiche Hinweise vor Ablauf; nicht belegbare/fehlgeschlagene
 Quellen werden nicht automatisch wiederholt. Vor der Nachlieferung werden frische
 vollständige MP4-Belege, aktuelles Monitoring/Dateibestand und der gemeinsame
 Matcher geprüft. Das vorhandene RSS veröffentlicht alte bereits ausgestrahlte
-Folgen mit dem ersten Bereitschaftszeitpunkt, unveränderten GUIDs und konkreten
-Medien-URLs. Feedleser sind keine ACKs; 60s-Snapshots stabilisieren die komplette
+Folgen mit dem ersten tatsächlich zulässigen Veröffentlichungszeitpunkt je
+Release-GUID, unveränderten GUIDs und konkreten Medien-URLs. Eine zuvor belegte
+fremdsprachige oder ungeeignete Rendition bestimmt diesen Zeitpunkt nicht;
+späteres HD nach SD ist ein eigenes Releaseereignis. Gespeichert werden maximal
+sechs GUID-Hashes/Zeitpunkte pro Quelleneintrag, keine Medienbelege oder ACKs.
+Feedleser sind keine ACKs; 60s-Snapshots stabilisieren die komplette
 Pagination. Sonarr entscheidet weiterhin selbst über Queue, Profil und Import.
 Vorab-RSS ist dadurch nicht pauschal freigegeben. Abnahme bleibt offen bis zum
 kalten nativen Mehrstaffellauf ohne zweite Suche bis zu realen Dateiimporten,

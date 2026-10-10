@@ -1415,6 +1415,29 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Bestehende Budgets, frische Transferprüfung, GUIDs, Profile,
       Toleranzen und Datenbankverträge bleiben unverändert; keine neuen Grabs
       oder Betriebsänderungen durch diese Diagnose.
+      Implementierungscheckpoint 10.10.2026, Produktrevision `79d946d`:
+      1.100 lokale Tests, Lint/Typecheck/Format/Build und Fork-CI einschließlich
+      echter SQLite-/PostgreSQL-Journalpersistenz grün. Zwei frische isolierte
+      native Verbraucherketten mit dem revisionsgebundenen Container bestanden:
+      je eine kalte Mehrstaffelsuche mit zunächst 39/80 Grabs, anschließend
+      begrenzte Hintergrundprüfung und reguläres RSS bis zu 80/80 physischen
+      Sonarr-Importen mit gepaarten Grab-/Import-IDs; wiederholtes RSS ohne
+      Doppelgrab. Das primäre RSS-Fenster enthielt tatsächlich 5.000 Rohzeilen
+      auf fünf Seiten. Separate vollständige Container-CI und produktiver
+      Bestands-/Importaudit bleiben bis zu ihrem Abschluss offen; keine
+      Vorwegnahme dieser Abnahme aus den grünen synthetischen Ketten.
+      Der anschließende kalte Live-Verbraucherlauf legte eine weitere Grenze
+      offen: Nach fehlgeschlagenen Suchantworten sperrte Sonarr den Indexer
+      vorübergehend und übersprang nachfolgende Staffeln. Die ursprüngliche
+      Exception ist nicht belegt; erfolgreiche Katalogsuche und anschließende
+      synchrone kalte Medienprüfung dürfen dennoch nicht gekoppelt bleiben.
+      Kalte MP4-Hinweise ausschließlich im vorhandenen begrenzten Worker
+      prüfen; Ausfälle einer Fassung dürfen weitere Staffeln nicht verhindern.
+      Native Abnahme um eine abgelaufene alternative Quelle ergänzen: 81
+      Quellzeilen, 80 Folgen, eine quarantänisierte Fassung, ein kalter Auftrag,
+      reguläres RSS und 80 reale Importe ohne Doppelgrab direkt/über Prowlarr.
+      Kein Nachweis durch eine warme zweite Suche oder blind wiederholte
+      Live-Aufträge; produktive Gesamtabnahme bleibt offen.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 

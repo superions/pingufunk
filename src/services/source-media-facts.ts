@@ -142,6 +142,7 @@ export class SourceMediaFactsStore {
       const id = key(url);
       if (
         (!refresh && this.get(url)) ||
+        this.retained.get(id)?.blocked ||
         (this.cooldown.get(id) ?? 0) > now ||
         this.active?.key === id ||
         this.pending.has(id)
