@@ -25,7 +25,7 @@ dürfen keinen alten Snapshot veröffentlichen.
 Suchwörter sind keine neuen Identitätsaliasse. Nur dedizierte Themen, deren
 sämtliche Regeln dieselbe TVDB-Serie referenzieren, dürfen die Serienbindung
 ergänzen. Sammelthemen und Themen mit mehreren Serien bleiben ausgeschlossen.
-Titel-, Staffel-, Folgen-, Jahres- und Laufzeitkonflikte werden nicht durch eine
+Metadaten-, Staffel-, Folgen-, Jahres- und Laufzeitkonflikte werden nicht durch eine
 breitere Abfrage beseitigt. Sprache stammt weiterhin aus Quellenbelegen, nicht
 aus Sender, Suchsprache oder einem pauschalen Deutsch-Default.
 
@@ -41,12 +41,45 @@ aus Sender, Suchsprache oder einem pauschalen Deutsch-Default.
   Serientoleranz;
 - keinen konkreten Titel-, Datum- oder Koordinatenkonflikt.
 
+Ein lokalisierter Quelltitel ist nicht allein ein Metadatenkonflikt: Bei unabhängig
+verifizierter Serie, vollständigen einzelnen Quell-S/E im validierten Sonarr-
+Bestand und positiver passender Laufzeit darf ein deutscher Quelltitel von einem
+englischen Episodentitel abweichen. Basiswerte bleiben unverändert; Konflikte
+zwischen Metadatenprovidern bleiben gesperrt. Fehlende Staffel/Folge wird nicht
+aus der Anfrage übernommen und Dauer entscheidet nicht zwischen mehreren Folgen.
+Explizite Bereiche wie `S02E03–E05` werden nicht auf eine Folge verkürzt; mehrfach
+oder widersprüchlich genannte Koordinaten sind kein Einzelzuordnungsbeleg.
+Abweichender konkreter Titel plus Laufzeitkonflikt eröffnet keinen kombinierten
+manuellen Ausnahmeweg. Ein bestätigter TBA-Fall bleibt separat prüfbar.
+
 Ein bestehender Basis-Platzhalter bleibt unverändert; der Merge vermerkt nur
 transient seine bestätigten Koordinaten. RSS benennt die Episode mit dem tatsäch-
 lichen Quelltitel und den belegten S/E-Koordinaten, nicht mit TBA. Keine Sonarr-
 Bibliotheksänderung, neuen Datenbankfelder oder Titel-Overrides. Die bisherigen
 engen ARTE-Bruchteilregeln bleiben bestehen; fehlende Metadaten werden nicht
 durch eine geratene Staffel ersetzt.
+
+## Begrenzte Hintergrundbelege statt dauerhaft neutraler Staffelseiten
+
+Die vorhandenen Suchbudgets bleiben unverändert. Bereits gefundene, bekannte
+öffentliche MP4-URLs der bestehenden Allowlist dürfen zusätzlich einen einzelnen
+prozessweiten Metadatenworker nutzen. Er liest ausschließlich bis vier 1-MiB-
+Range-Fenster je Quelle, höchstens 32 HTTP-Versuche je 15-Sekunden-Batch auch über
+kurze getrennte Läufe, maximal 128 wartende Quellen und 512 Cacheeinträge.
+Standardfassungen und HD-Renditions werden vor alternativen Fassungen geprüft.
+Keine Senderseiten, zusätzlichen Hosts, Voll-Downloads, Medien-Dateischreibzugriffe,
+DB-Änderungen oder zweite Downloadqueue. Ausfälle werden nicht automatisch retried.
+
+Suchhinweise binden die komplette URL inklusive stabiler und kurzlebiger
+Auswahlparameter. Positive Belege verfallen nach fünf Minuten, unbelegte Quellen
+nach 30 Sekunden; Transportfehler werden nicht als negative Fakten gespeichert.
+Neue Belege invalidieren Ergebnis-Caches, abgelaufene Hinweise dürfen höchstens
+30 Sekunden in einem bereits aufgebauten Ergebnis nachlaufen. Der Rohkatalogcache
+bleibt unabhängig davon erhalten. Unvollständige Sprache/Pixel bleiben neutral.
+Cacheinvalidierung bricht nur den eigenen Worker ab und verwirft späte Antworten.
+Freigabe, Bestätigung und Workerrevalidierung prüfen stets frisch und konsumieren
+keinen Suchhinweis. Eine kalte Suche darf neutral sein; nach abgeschlossener
+Prüfung wird dieselbe Staffel ohne erfundene Sprache/Auflösung nutzbar.
 
 ## Abgrenzung zu MediathekArr
 

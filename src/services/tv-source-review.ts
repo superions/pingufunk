@@ -25,6 +25,7 @@ import { validateReleaseTitle } from "@/lib/download-paths";
 import { triggerDownloadProcessing } from "./download";
 import { EpisodeType, type ApiResultItem, type MatchedEpisodeInfo } from "@/types";
 import { selectRenditions } from "./rendition-quality";
+import { sourceMediaFacts } from "./source-media-facts";
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 export const tvReviewSelectorSchema = z
@@ -156,6 +157,9 @@ export async function searchTvSourceReviews(
   if (owners.length === 0) return null;
   if (owners.length !== 1) throw new TvSourceReviewError();
   const { found, tolerance } = await matches(owners[0].tvdbId, budget);
+  sourceMediaFacts.enqueue(
+    Object.values(fields).flatMap((field) => found.map((info) => info.item[field]))
+  );
   return found
     .filter(
       (info) => info.episode.runtime !== null && info.episode.runtime > 0 && info.item.duration > 0

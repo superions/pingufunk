@@ -632,11 +632,29 @@ export function parseEpisodeFromTitle(title: string): {
   let episodes: number[] = [];
   let episodeName = title;
 
-  // Keep the whole E12E13 sequence; truncating it changes the release identity.
-  const sPattern = title.match(/\(?\bS(\d+)\/?E(\d+(?:E\d+)*)\)?/i);
+  // Keep complete lists/ranges. Partial parsing of E03-E04 would falsely turn
+  // a double episode into one independently verified source coordinate.
+  const coordinates = [...title.matchAll(/\(?\bS(\d+)\/?E(\d+(?:(?:\/?E|[-–]\/?E?)\d+)*)\)?/gi)];
+  if (coordinates.length > 1) return { season: null, episodes: [], episodeName: title };
+  const sPattern = coordinates[0];
   if (sPattern) {
     season = parseInt(sPattern[1], 10);
-    episodes = sPattern[2].split(/E/i).map((value) => parseInt(value, 10));
+    const parts = [...sPattern[2].matchAll(/(^|\/?E|[-–]\/?E?)(\d+)/gi)];
+    for (const part of parts) {
+      const number = Number(part[2]);
+      if (!Number.isSafeInteger(number)) return { season: null, episodes: [], episodeName: title };
+      if (/[-–]/.test(part[1])) {
+        const previous = episodes.at(-1)!;
+        if (number <= previous || number - previous > 1000)
+          return { season: null, episodes: [], episodeName: title };
+        for (let episode = previous + 1; episode <= number; episode++) episodes.push(episode);
+      } else episodes.push(number);
+    }
+    const namedSeasons = [
+      ...title.matchAll(/\b(?:Staffel|Season|Saison|Temporada|Stagione)\s+(\d+)/gi),
+    ];
+    if (namedSeasons.some((match) => Number(match[1]) !== season))
+      return { season: null, episodes: [], episodeName: title };
     episodeName = title.replace(sPattern[0], "").trim();
   }
 

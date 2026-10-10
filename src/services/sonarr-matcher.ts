@@ -61,8 +61,7 @@ export function matchSonarrEpisodes(
   const episodes = show.episodes.filter(
     (episode) =>
       (episode.metadataSource === "sonarr" ||
-        (verified.has(`${episode.seasonNumber}:${episode.episodeNumber}`) &&
-          isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber))) &&
+        verified.has(`${episode.seasonNumber}:${episode.episodeNumber}`)) &&
       !blocked.has(`${episode.seasonNumber}:${episode.episodeNumber}`)
   );
   const matches: MatchedEpisodeInfo[] = [];
@@ -115,6 +114,22 @@ export function matchSonarrEpisodes(
         .replace(/\s*\((?:klare Sprache|Gebärdensprache)\)\s*$/i, "")
         .replace(/\s*\((?:19|20)\d{2}\)\s*$/, "")
     );
+    const hasMatchingTitle = (episode: TvdbData["episodes"][number]): boolean => {
+      const full = normalized(episode.name);
+      const tail = full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)!;
+      return (
+        [...full].length >= 3 &&
+        (title === full ||
+          ([...tail].length >= 3 && title === tail) ||
+          names.some(
+            (name) =>
+              title === `${name}: ${full}` ||
+              title === `${name} - ${full}` ||
+              ([...tail].length >= 3 &&
+                (title === `${name}: ${tail}` || title === `${name} - ${tail}`))
+          ))
+      );
+    };
     const possible = episodes.filter((episode) => {
       if (sourceSeason !== null && sourceSeason !== episode.seasonNumber) return false;
       if (
@@ -128,30 +143,18 @@ export function matchSonarrEpisodes(
         )
       )
         return false;
-      const full = normalized(episode.name);
-      const tail = full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)!;
-      if ([...full].length < 3) return false;
-      const titleMatches =
-        title === full ||
-        ([...tail].length >= 3 && title === tail) ||
-        names.some(
-          (name) =>
-            title === `${name}: ${full}` ||
-            title === `${name} - ${full}` ||
-            ([...tail].length >= 3 &&
-              (title === `${name}: ${tail}` || title === `${name} - ${tail}`))
-        );
-      // An explicit source coordinate with verified series identity and runtime
-      // is stronger than translated/generic metadata titles (e.g. "Episode 3").
+      // Complete source coordinates in an independently verified series do not
+      // require a localized source title to equal the metadata language. Keep
+      // the original metadata and cross-provider conflicts; never adopt request
+      // coordinates or use runtime to guess among episodes.
       const genericMetadataTitle = isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber);
       const coordinateMatches =
-        genericMetadataTitle &&
         sourceSeason !== null &&
         parsed.episodes.length === 1 &&
         episode.runtime !== null &&
         Number.isFinite(episode.runtime) &&
         episode.runtime > 0;
-      return (!genericMetadataTitle && titleMatches) || coordinateMatches;
+      return (!genericMetadataTitle && hasMatchingTitle(episode)) || coordinateMatches;
     });
     // Repeated episode titles without discriminating coordinates/year never pick the newest.
     if (possible.length !== 1) continue;
@@ -168,6 +171,10 @@ export function matchSonarrEpisodes(
       runtimeConflict &&
       !(
         includeRuntimeConflicts &&
+        // A manual runtime exception cannot also waive a concrete title
+        // difference. Localized coordinate mapping requires matching runtime.
+        (isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber) ||
+          hasMatchingTitle(episode)) &&
         sourceSeason !== null &&
         parsed.episodes.length === 1 &&
         Number.isFinite(item.duration) &&

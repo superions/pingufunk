@@ -1453,3 +1453,47 @@ und Post-write-Rollback grün; keine Image-Publikation. P06.4/P09.5 geschlossen,
 P03.4 und die Vorabfolgen-/Produktiventscheidung unverändert getrennt offen.
 Abschließende Dokumentationsänderungen ändern keine getesteten Produktinputs;
 Produkt-CI-Evidenz wird deshalb wiederverwendet, nicht als neuer Lauf ausgegeben.
+
+## Episodenabdeckung und Suchbelege (10.10.2026)
+
+Zwei systematische Ursachen sind getrennt korrigiert: vollständig nummerierte
+lokalisierte Quelltitel wurden trotz verifizierter Serie und passender Dauer
+verworfen, während große Staffeln das gemeinsame Medienbelegbudget erschöpften.
+Die bisherigen Ergebnis-Caches konnten anschließend neutrale Treffer festhalten.
+Mehr Suchbegriffe oder ein pauschales höheres Budget beheben diese Ursachen nicht.
+
+Ausdrücklich bestätigt wurde eine Koordinatenzuordnung mit gesicherter Serie,
+vollständigem einzelnen Quell-S/E, validiertem Sonarr-Bestand und positiver
+passender Laufzeit. Originalmetadaten bleiben unverändert; Konflikte zwischen
+Metadatenprovidern, fremde Serien, fehlende/mehrdeutige Koordinaten und Jahres-
+konflikte bleiben gesperrt. Im Review zusätzlich gefunden: Episodenbereiche wurden
+auf die erste Folge verkürzt; vollständige Bereichs-/Konfliktprüfung verhindert
+jetzt falsche Einzelzuordnung. Ein Laufzeitkonflikt zusammen mit abweichendem
+konkretem Titel erhält keinen kombinierten Ausnahmeweg. Die existierende enge
+TBA-Einzelfreigabe bleibt unverändert. Auch kurze Metadatentitel dürfen eine
+anderweitig vollständig belegte Koordinatenzuordnung nicht verhindern.
+
+Der genehmigte Hintergrundowner prüft ausschließlich bekannte öffentliche MP4-
+URLs mit dem vorhandenen ISO-BMFF-Probeowner: ein Worker pro Serverprozess,
+vier 1-MiB-Range-Fenster je Quelle, maximal 32 HTTP-Versuche je 15s-Batch auch
+über getrennte Läufe, 128 wartende Quellen und 512 Cacheeinträge. Belege binden
+die komplette URL; positive Hinweise verfallen nach fünf Minuten, unbekannte
+nach 30 Sekunden. Transportfehler sind keine Fakten und kein automatischer
+Retryauftrag. Cacheinvalidierung abortiert eigene Proben und verhindert späte
+Einträge. Neue/abgelaufene Hinweise invalidieren Ergebnis-Caches, nicht den
+Rohkatalog. Freigabe und Transferowner prüfen frisch statt Suchhinweise zu nutzen.
+Keine Senderseiten, neuen Hosts, Voll-Downloads, DB-/Profil-/Toleranzänderungen.
+
+Kausale Regressionen scheiterten vor der Matchingkorrektur. Die vollständige
+synthetische 20-Folgen-/Zwei-Staffel-Kette prüft den echten Newznab-Handler,
+Aufwärmen ohne erneute Katalogabfrage, stabile GUIDs, Sprach-/Pixelbelege,
+Pagination, RSS→NZB→Queue und unveränderte Metadaten. Weitere negative Tests
+prüfen URL-/Selectorbindung, TTL/Kapazität, Ratelimit, Abbruch, Ausfall,
+gemischte/unbekannte Audiotracks und frische Einzelprüfung trotz widersprechendem
+Suchcache. Lokal 1082 reguläre Tests grün; 15 opt-in PG-Tests separat zu prüfen.
+Lint, Typecheck, Format, Produktionsbuild und Diffcheck grün; bestehende 14
+Turbopack-Tracingwarnungen unverändert. Der native Containerharness ergänzt eine
+unüberwachte lokalisierte Quellfolge direkt und über Prowlarr gegen unveränderten
+englischen Sonarr-Titel. Fork-CI, native Container-/beide Backendgates und der
+autorisierte Live-Rollout sind noch offen.
+Es wird weder vollständige Katalogabdeckung noch ein neuer Grab/Import behauptet.

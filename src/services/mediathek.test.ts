@@ -1,4 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { sourceMediaFacts } from "./source-media-facts";
+import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
+import { NextRequest } from "next/server";
+import { GET as newznab } from "@/app/api/newznab/route";
+import { generateFakeNzb } from "./newznab";
+import { decodeMediaExpectations } from "./nzb-release";
+import { parseNzbContent } from "./download";
 import { MatchingStrategy } from "@/types";
 import type { ApiResultItem, Ruleset, TmdbMovieData, TvdbData, TvSearchContext } from "@/types";
 
@@ -111,6 +118,7 @@ function mockApi(results: ApiResultItem[]): void {
 }
 
 beforeEach(() => {
+  sourceMediaFacts.clear();
   vi.clearAllMocks();
   mockedFetch.mockReset();
   mediathekMocks.getRadarrMonitoredMovies.mockResolvedValue([]);
@@ -124,8 +132,108 @@ beforeEach(() => {
   mockedAllTopics.mockReturnValue([]);
   mockedGenerateRuleset.mockResolvedValue(null);
 });
+afterEach(async () => {
+  sourceMediaFacts.clear();
+  await sourceMediaFacts.idle();
+  vi.unstubAllGlobals();
+});
 
 describe("Sonarr supplemental search consumer", () => {
+  it("keeps localized multi-season coordinates and advances UNKNOWN through RSS/NZB without re-querying or re-grabbing", async () => {
+    const episodes = Array.from({ length: 20 }, (_, index) => ({
+      name: `English metadata ${index + 1}`,
+      seasonNumber: 2 + Math.floor(index / 10),
+      episodeNumber: (index % 10) + 1,
+      aired: new Date("2026-09-29T12:00:00Z"),
+      runtime: 2,
+      metadataSource: "sonarr" as const,
+    }));
+    const show: TvdbData = {
+      id: 123,
+      name: "Synthetic series",
+      germanName: null,
+      aliases: [],
+      episodes,
+    };
+    const unchanged = structuredClone(show);
+    const sources = episodes.map((episode, index) =>
+      makeItem({
+        topic: show.name,
+        title: `Lokalisierter Titel ${index + 1} (S0${episode.seasonNumber}/E${String(episode.episodeNumber).padStart(2, "0")})`,
+        duration: 120,
+        url_website: `https://example.invalid/source/${index}`,
+        url_video_hd: `https://rodlzdf-a.akamaihd.net/synthetic/coverage-${index}.mp4`,
+        url_video: "",
+        url_video_low: "",
+      })
+    );
+    mockedGetShowInfo.mockResolvedValue(show);
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "best" : null
+    );
+    const mediaFetch = vi.fn(async (_input: string, init: RequestInit) => {
+      const response = mp4RangeResponse(syntheticMp4(), init);
+      response.headers.set("etag", '"synthetic-coverage"');
+      return response;
+    });
+    mockedFetch.mockImplementation(async (input, init, options) => {
+      options?.requestBudget?.takeAttempt();
+      if (new Headers(init?.headers).has("range")) return mediaFetch(String(input), init!);
+      return Response.json({ result: { results: sources } });
+    });
+    const catalogueCalls = () =>
+      mockedFetch.mock.calls.filter(([, init]) => !new Headers(init?.headers).has("range")).length;
+    const request = () =>
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&limit=100");
+    const first = await newznab(request());
+    const cold = await first.text();
+    expect(first.status).toBe(200);
+    expect(cold).toContain('total="20"');
+    expect(cold).toContain(".UNKNOWN.");
+    const sourceCalls = catalogueCalls();
+    await sourceMediaFacts.idle();
+    const second = await newznab(request());
+    const warm = await second.text();
+    expect(second.status).toBe(200);
+    expect(warm).toContain('total="20"');
+    expect(warm).not.toContain(".UNKNOWN.");
+    expect(
+      warm.match(
+        /<title>Synthetic.series.S0[23]E\d+.English.metadata.\d+.GERMAN.1080p.WEB.h264-MEDiATHEK<\/title>/g
+      )
+    ).toHaveLength(20);
+    expect(catalogueCalls()).toBe(sourceCalls);
+    expect(mediaFetch).toHaveBeenCalledTimes(20);
+    expect(show).toEqual(unchanged);
+    const guids = (xml: string) =>
+      [...xml.matchAll(/<guid[^>]*>(.*?)<\/guid>/g)].map((match) => match[1]).sort();
+    expect(guids(warm)).toEqual(guids(cold));
+    const paged = await newznab(
+      new NextRequest(
+        "http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=3&limit=2&offset=8"
+      )
+    );
+    const page = await paged.text();
+    expect(page).toContain('offset="8" total="10"');
+    expect(page.match(/<item>/g)).toHaveLength(2);
+    expect(page).not.toContain(".S02E");
+    const enclosure = new URL(
+      [...warm.matchAll(/<enclosure url="([^"]*)"/g)][0][1].replaceAll("&amp;", "&"),
+      "http://localhost"
+    );
+    const expectations = decodeMediaExpectations(
+      enclosure.searchParams.get("encodedExpectations")!
+    );
+    const mediaUrl = Buffer.from(enclosure.searchParams.get("encodedUrl")!, "base64").toString();
+    const title = Buffer.from(enclosure.searchParams.get("encodedTitle")!, "base64").toString();
+    const parsed = parseNzbContent(
+      generateFakeNzb({ title, url: mediaUrl, mediaExpectations: expectations })
+    );
+    expect(parsed).toMatchObject({
+      url: mediaUrl,
+      mediaExpectations: { audio: { language: "de" }, resolution: { width: 1920, height: 1080 } },
+    });
+  });
   const supplemental: TvdbData = {
     id: 123,
     name: "Synthetic series",
@@ -1269,7 +1377,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedCacheSet).toHaveBeenCalledWith(
       expect.stringContaining(
-        'q_v15-runtime-review-hotfix_["Example",null,null,null]_1_1_720p_300'
+        'q_v16-coordinate-evidence-coverage_["Example",null,null,null]_1_1_720p_300'
       ),
       expect.objectContaining({ response: secondPage })
     );
@@ -1306,7 +1414,9 @@ describe("fetchMovieSearchByQuery – configured minimum duration", () => {
     expect(xml).toContain("At.Boundary");
     expect(xml).not.toContain("Too.Short");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining("movie_query_v15-runtime-review-hotfix_Documentary__100_0_all_2700"),
+      expect.stringContaining(
+        "movie_query_v16-coordinate-evidence-coverage_Documentary__100_0_all_2700"
+      ),
       expect.any(Object)
     );
   });
@@ -1407,7 +1517,7 @@ describe("fetchMovieSearchResults – configured minimum duration", () => {
     expect(xml).toContain("boundary_720.mp4");
     expect(xml).not.toContain("show_720.mp4");
     expect(mockedCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^movie_v15-runtime-review-hotfix_[a-f0-9]{64}_100_0_all_2700/),
+      expect.stringMatching(/^movie_v16-coordinate-evidence-coverage_[a-f0-9]{64}_100_0_all_2700/),
       expect.any(Object)
     );
   });

@@ -107,7 +107,8 @@ export async function probeMp4MediaFacts(
   url: string,
   budget: HttpRequestBudget,
   includeDimensions = true,
-  onVerifiedAsset?: (fingerprint: string) => void
+  onVerifiedAsset?: (fingerprint: string) => void,
+  signal?: AbortSignal
 ): Promise<Mp4MediaFacts> {
   if (!isProbeableMp4(url)) return unknownFacts();
   let total: number | undefined;
@@ -137,6 +138,7 @@ export async function probeMp4MediaFacts(
     const response = await fetchWithRetry(
       url,
       {
+        signal,
         headers: {
           Range: `bytes=${rangeStart}-${rangeStart + MAX_BYTES - 1}`,
           "Accept-Encoding": "identity",
@@ -145,6 +147,10 @@ export async function probeMp4MediaFacts(
       },
       { requestBudget: budget, maxRetries: 0 }
     );
+    if (response.status === 429 || response.status >= 500) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error("Source evidence unavailable");
+    }
     const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get("content-range") ?? "");
     const encoding = response.headers.get("content-encoding");
     const etag = response.headers.get("etag");

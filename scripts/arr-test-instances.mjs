@@ -117,7 +117,10 @@ async function up() {
   const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
   const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
   const placeholderEpisode = process.env.PINGUFUNK_ARR_QA_TBA === "1";
+  const localizedEpisode = process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1";
   const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
+  if (localizedEpisode && (placeholderEpisode || !sourceAudio || renditionQuality !== "720p"))
+    throw new Error("Owned localized episode QA requires its positive source-audio fixture");
   if (
     renditionQuality &&
     (!sourceAudio || !["720p", "unknown", "conflicting", "ard-1080p"].includes(renditionQuality))
@@ -145,6 +148,7 @@ async function up() {
     movieCorrelation,
     sourceAudio,
     placeholderEpisode,
+    localizedEpisode,
     renditionQuality,
     apps: {},
   };
@@ -186,7 +190,7 @@ async function up() {
   mkdirSync(dir, { mode: 0o700 });
   if (movieCorrelation)
     writeFileSync(join(dir, "radarr-api-key"), apiKey(root, "radarr"), { mode: 0o600 });
-  if (placeholderEpisode)
+  if (placeholderEpisode || localizedEpisode)
     writeFileSync(join(dir, "sonarr-api-key"), apiKey(root, "sonarr"), { mode: 0o600 });
   // Initialize only this newly allocated SQLite test file, using the schema runner.
   docker([
@@ -234,7 +238,10 @@ async function up() {
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
     ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
-    ...(placeholderEpisode ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"] : []),
+    ...(placeholderEpisode || localizedEpisode
+      ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"]
+      : []),
+    ...(localizedEpisode ? ["-e", "PINGUFUNK_ARR_QA_LOCALIZED_EPISODE=1"] : []),
     ...(renditionQuality ? ["-e", `PINGUFUNK_ARR_QA_RENDITION_QUALITY=${renditionQuality}`] : []),
     ...(movieCorrelation
       ? [
@@ -639,7 +646,7 @@ async function movieSearch(root, manifest, app = "radarr") {
   await api(root, manifest, "pingufunk", "/api/settings", {
     "matching.minDuration": "0",
     "download.quality": "all",
-    ...(app === "sonarr" && manifest.placeholderEpisode
+    ...(app === "sonarr" && (manifest.placeholderEpisode || manifest.localizedEpisode)
       ? { "integration.sonarr.enabled": "true", "integration.sonarr.url": "http://sonarr:8989" }
       : {}),
   });
@@ -691,11 +698,13 @@ async function movieSearch(root, manifest, app = "radarr") {
         );
       if (!candidates[0].guid || !candidates[0].downloadUrl)
         throw new Error("Owned Radarr candidate transport identity missing");
-      if (app === "sonarr" && manifest.placeholderEpisode) {
+      if (app === "sonarr" && (manifest.placeholderEpisode || manifest.localizedEpisode)) {
         const release = candidates[0];
         if (
           !release.title.includes(".S01E01.") ||
-          !release.title.includes("Synthetic.Episode") ||
+          !release.title.includes(
+            manifest.localizedEpisode ? "Lokalisierter.Quelltitel" : "Synthetic.Episode"
+          ) ||
           release.title.includes(".TBA.") ||
           !release.title.includes(".GERMAN.") ||
           release.quality?.quality?.name !== "WEBDL-720p" ||
@@ -707,10 +716,13 @@ async function movieSearch(root, manifest, app = "radarr") {
             "Owned TBA source coordinates/title/language/quality not natively accepted"
           );
         const fresh = await fixtureTarget(root, manifest, app);
-        if (fresh?.title !== "TBA" || fresh.episodeFileId)
+        if (
+          fresh?.title !== (manifest.placeholderEpisode ? "TBA" : "Synthetic Episode") ||
+          fresh.episodeFileId
+        )
           throw new Error("Owned TBA search changed fixture metadata or imported a file");
         console.log(
-          `sonarr: ${transport} TBA source accepted as S01E01/German/720p; metadata preserved; no grab`
+          `sonarr: ${transport} ${manifest.localizedEpisode ? "localized" : "TBA"} source accepted as S01E01/German/720p; metadata preserved; no grab`
         );
       }
       if (app === "radarr" && manifest.renditionQuality) {

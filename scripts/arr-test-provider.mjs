@@ -120,7 +120,10 @@ globalThis.fetch = async (input, init) => {
       const episode = {
         ...row,
         topic: "Synthetic Series",
-        title: "Synthetic Series S01E01 - Synthetic Episode",
+        title:
+          process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1"
+            ? "Lokalisierter Quelltitel (S01E01)"
+            : "Synthetic Series S01E01 - Synthetic Episode",
       };
       if (matches(episode)) rows.push(episode);
     }

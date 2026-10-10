@@ -1256,7 +1256,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1322,6 +1322,36 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       privaten Runbook. Breite Staffelsuchen dürfen bei ausgeschöpftem Belegbudget
       weiterhin neutrale Qualität liefern; sie ersetzen nicht die frische
       Einzelquellenprüfung und rechtfertigen kein Hochstufen ohne Beleg.
+      Wieder geöffnet 10.10.2026 mit ausdrücklicher Nutzerentscheidung:
+      vollständige einzelne Quell-S/E innerhalb einer unabhängig verifizierten
+      Serie und eines validierten Sonarr-Bestands dürfen trotz lokalisiertem
+      Episodentitel zugeordnet werden, wenn die positive Laufzeit passt.
+      Originalmetadaten und providerübergreifende Titel-/Datumskonflikte erhalten;
+      unbekannte, mehrdeutige oder widersprüchliche Koordinaten nicht erfinden.
+      Ein Laufzeitkonflikt plus abweichender konkreter Titel erhält keinen
+      kombinierten Ausnahmeweg; der bisherige enge TBA-Freigabeweg bleibt erhalten.
+      Bereits gefundene öffentliche MP4-URLs der bestehenden Allowlist begrenzt
+      im Hintergrund prüfen: ein Prozessworker, höchstens 32 HTTP-Versuche je
+      15s-Batch auch über getrennte Läufe, höchstens vier 1-MiB-Range-Fenster pro
+      Quelle, 128 wartende Quellen und 512 Cacheeinträge. Positive Belege maximal
+      fünf Minuten, unbelegte Quellen 30 Sekunden; Transportfehler sind keine
+      Belege und werden nicht automatisch wiederholt. Ganze URL inklusive
+      Auswahlparameter bindet den Cache. Keine Senderseiten, Voll-Downloads,
+      zusätzlichen Hosts, DB- oder Downloadworkeränderungen. Abbruch/Invalidierung
+      verhindert verspätete Cacheeinträge; frische Freigabe/Workerprüfung umgeht
+      Suchhinweise. Ergebnis-Caches müssen neue/abgelaufene Belege berücksichtigen.
+      Abnahme: kausale positive/negative Koordinaten- und Range-Regressionen;
+      20 lokalisierte Folgen aus zwei Staffeln durch echten Newznab-Handler,
+      RSS→NZB→Queue, Pagination und stabile GUIDs vor/nach Hintergrundbelegen;
+      URL-Bindung, TTL, Rate, Kapazität, Abbruch, Fehler und frische Prüfung
+      trotz widersprechendem Cache testen. Normale Produktgates, Fork-CI,
+      bestehende native Sonarr/Prowlarr-/Medien-/SQLite-/PG-Containergates grün.
+      Rollout ausdrücklich beauftragt: nur kompatibles lokal übertragenes Image,
+      v4-Audits/PG/Profile/Toleranzen/DB-Kette erhalten, kompatibles Rollback.
+      Live Auffindbarkeit und Sonarr/Prowlarr-Consumer lesend gegenprüfen; keine
+      neuen Grabs/Importe. Katalogzeilen, eindeutige Episoden, belegte Renditions
+      und fehlende Metadaten getrennt zählen; verbleibende Nummerierungs- oder
+      Quellenlücken nicht als vollständige Produktabnahme darstellen.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 

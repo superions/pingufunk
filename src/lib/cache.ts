@@ -1,6 +1,7 @@
 import { LRUCache } from "lru-cache";
 import { prisma } from "@/lib/db";
 import { createHash } from "node:crypto";
+import { sourceMediaFacts } from "@/services/source-media-facts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CacheValue = Record<string, any>;
@@ -189,6 +190,7 @@ export function coalesceMetadata<T>(key: string, load: () => Promise<T>): Promis
 
 export function clearMetadataCaches(): void {
   cacheEpoch++;
+  sourceMediaFacts.clear();
   tvdbCache.clear();
   metadataMissCache.clear();
   // Keep old in-flight entries counted until they settle; their epoch-bound

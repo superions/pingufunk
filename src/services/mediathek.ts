@@ -4,6 +4,7 @@ import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
 import { enrichSourceAudio, enrichTvMatches, enrichTvCandidates } from "./source-audio";
+import { sourceMediaFacts } from "./source-media-facts";
 import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss, getShowInfoByTvdbId } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
@@ -56,7 +57,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v15-runtime-review-hotfix";
+const CONTENT_SEARCH_CACHE_VERSION = "v16-coordinate-evidence-coverage";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -1038,7 +1039,7 @@ export async function fetchSearchResultsById(
   const rulesetContext = getRulesetContext();
   const sourceContext = await searchCacheContext();
   const metadataContext = createHash("sha256").update(JSON.stringify(tvdbData)).digest("hex");
-  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${metadataContext}_${rulesetContext}`;
+  const cacheKey = `tvdb_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${metadataContext}_${rulesetContext}_${sourceMediaFacts.contextKey}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && typeof cached === "object" && "response" in cached) {
@@ -1198,7 +1199,7 @@ export async function fetchSearchResultsByString(
   const hlsEnabled = await isHlsEnabled();
   const contextKey = tvSearchContextKey(context);
   const sourceContext = await searchCacheContext();
-  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${rulesetContext}`;
+  const cacheKey = `q_${CONTENT_SEARCH_CACHE_VERSION}_${contextKey}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${rulesetContext}_${sourceMediaFacts.contextKey}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached) {
@@ -1296,7 +1297,7 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   const supplementalContext = createHash("sha256")
     .update(JSON.stringify(supplementalMatches))
     .digest("hex");
-  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${supplementalContext}_${rulesetContext}`;
+  const cacheKey = `rss_${CONTENT_SEARCH_CACHE_VERSION}_${limit}_${offset}_${quality}_${minDuration}_${matchingSettings.threshold}_${hlsEnabled}_${sourceContext}_${supplementalContext}_${rulesetContext}_${sourceMediaFacts.contextKey}`;
 
   const cached = mediathekCache.get(cacheKey);
   if (cached && !sonarrUnavailable) {
