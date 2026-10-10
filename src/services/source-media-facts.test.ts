@@ -76,12 +76,35 @@ it("caps pending URLs and rate across separate worker runs without resetting the
   await vi.advanceTimersByTimeAsync(30);
   value.enqueue(Array.from({ length: 150 }, (_, i) => url(i + 1)));
   await vi.advanceTimersByTimeAsync(30);
-  expect(fetch).toHaveBeenCalledTimes(29);
+  expect(fetch).toHaveBeenCalledTimes(8);
   await vi.advanceTimersByTimeAsync(15_000);
-  expect(fetch).toHaveBeenCalledTimes(58);
-  await vi.advanceTimersByTimeAsync(50_000);
+  expect(fetch).toHaveBeenCalledTimes(16);
+  await vi.advanceTimersByTimeAsync(240_000);
   expect(fetch).toHaveBeenCalledTimes(129);
   expect(new Set(fetch.mock.calls.map(([input]) => input)).size).toBe(129);
+});
+
+it("finishes a healthy source across the rate-window boundary without blocking or retrying it", async () => {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    const response = mp4RangeResponse(syntheticMp4(), init);
+    response.headers.set("etag", '"synthetic-asset"');
+    return response;
+  });
+  vi.stubGlobal("fetch", fetch);
+  const value = store(),
+    checked = vi.fn();
+  value.onChecked(checked);
+  value.retain(
+    Array.from({ length: 10 }, (_, i) => url(i)),
+    Date.now() + 7_200_000
+  );
+  await vi.advanceTimersByTimeAsync(21_000);
+  await value.idle();
+  expect(fetch).toHaveBeenCalledTimes(10);
+  expect(checked).toHaveBeenCalledTimes(10);
+  for (let i = 0; i < 10; i++) expect(value.get(url(i))?.facts).toEqual(facts);
+  expect(checked.mock.calls.every(([, result]) => result?.fingerprint)).toBe(true);
 });
 
 it("runs one warm probe and invalidates late replies without touching other processes", async () => {

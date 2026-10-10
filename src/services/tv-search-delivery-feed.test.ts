@@ -119,7 +119,7 @@ it("delivers old cold discoveries only with fresh complete proof/current monitor
     const feed = () =>
       getTvSearchDeliveryItems(async () => null, new HttpRequestBudget(), "best", false);
     expect(await feed()).toEqual([]); // This successful cold request is not an ACK.
-    await vi.advanceTimersByTimeAsync(16_000);
+    await vi.advanceTimersByTimeAsync(100_000);
     await sourceMediaFacts.idle();
     await tvSearchDelivery.idle();
     const ready = await feed();

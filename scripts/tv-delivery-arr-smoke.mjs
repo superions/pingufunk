@@ -168,7 +168,7 @@ try {
   if (initial?.entries.length !== 80) fail("cold discovery incomplete");
   for (
     let attempt = 0;
-    attempt < 180 && journal().entries.some((row) => row.readyAt === null);
+    attempt < 600 && journal().entries.some((row) => row.readyAt === null);
     attempt++
   )
     await delay(500);

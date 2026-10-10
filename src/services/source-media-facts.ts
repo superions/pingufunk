@@ -176,14 +176,16 @@ export class SourceMediaFactsStore {
 
   private async run(epoch: number): Promise<void> {
     while (epoch === this.epoch && this.pending.size) {
-      // Reserve all four possible windows before a source. At most 32 actual
-      // HTTP attempts per 15-second batch, even when metadata replies are fast.
+      // Reserve all four possible windows before starting one atomic source.
+      // The rate window must not become that source's almost-expired deadline:
+      // a healthy response at the batch boundary is not a failed asset.
       if (!this.batch || this.batch.remainingAttempts < 4 || Date.now() >= this.batch.deadlineAt) {
         if (this.batch && Date.now() < this.batch.deadlineAt)
           await this.wait(this.batch.deadlineAt - Date.now());
         if (epoch !== this.epoch) break;
         this.batch = new HttpRequestBudget(32);
       }
+      for (let window = 0; window < 4; window++) this.batch.takeAttempt();
       const next = this.pending.entries().next().value;
       if (!next) break;
       const [id, source] = next;
@@ -195,7 +197,7 @@ export class SourceMediaFactsStore {
         let fingerprint: string | undefined;
         const facts = await probeMp4MediaFacts(
           source.url,
-          this.batch,
+          new HttpRequestBudget(4),
           true,
           (value) => {
             fingerprint = value;

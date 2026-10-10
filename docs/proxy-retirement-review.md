@@ -1604,3 +1604,13 @@ Diagnose. Der neue Owner und seine Grenzen sind im aktuellen P06.4-Vertrag
 konkretisiert. Lokale Produktgates und SQLite-Journalpersistenz sind vorbereitet;
 native kalte Importketten, PostgreSQL-Persistenz, Fork-CI und Produktionsabnahme
 werden nicht aus diesen Teilnachweisen als erledigt abgeleitet.
+
+Der native kalte Mehrstaffeltest deckte zusätzlich eine Rate-/Deadline-Verwechslung
+im Medienbelegworker auf: Die letzte Probe eines fast abgelaufenen 15-Sekunden-
+Batches konnte eine gesunde Quelle dauerhaft als fehlgeschlagen kennzeichnen.
+Der Worker reserviert deshalb vor jeder atomaren Quellenprüfung konservativ
+alle vier möglichen Range-Versuche im unvergrößerten 32er-Ratebudget; die konkrete
+Quelle erhält ein eigenes, weiterhin höchstens 15 Sekunden langes Viererbudget.
+Eine langsame erfolgreiche Probe über die Ratefenstergrenze ist kausal getestet.
+Echte Ausfälle bleiben ohne automatischen Retry gesperrt. Die kalte native
+Importabnahme wird nach dieser Produktkorrektur mit frischen Instanzen wiederholt.
