@@ -62,11 +62,12 @@ it("defers cold MP4 evidence without making a gone asset or slow probe fail the 
   const unsubscribe = sourceMediaFacts.onChecked(checked);
   sourceMediaFacts.retain([url], Date.now() + 7_200_000);
   try {
-    const budget = new HttpRequestBudget(1);
+    // At least four attempts keep the former foreground branch reachable in a mutation test.
+    const budget = new HttpRequestBudget(8);
     const [neutral] = (await enrichSourceAudio([source], budget, 16, true)).get(source)!;
     expect(neutral.audioLanguage).toBeUndefined();
     expect(neutral.sourceVideoDimensions).toBeUndefined();
-    expect(budget.remainingAttempts).toBe(1);
+    expect(budget.remainingAttempts).toBe(8);
     expect(fetch).not.toHaveBeenCalled();
     await sourceMediaFacts.idle();
     expect(fetch).toHaveBeenCalledTimes(1);
