@@ -2,7 +2,8 @@ import type { ApiResultItem } from "@/types";
 import {
   unknownMediaExpectations,
   parseMediaExpectations,
-  type MediaExpectations,
+  type LegacyMediaExpectations,
+  type NewMediaExpectations,
 } from "@/lib/media-expectations";
 import { classifyLanguageEdition } from "./language-editions";
 import { mediaSourceIdentity } from "./source-audio";
@@ -13,7 +14,7 @@ export function releaseMediaExpectations(
   item: ApiResultItem,
   episodeRuntimeMinutes: number | null = null,
   renditionUrl: string = item.url_video || item.url_video_hd || item.url_video_low
-): MediaExpectations {
+): LegacyMediaExpectations {
   const expected = unknownMediaExpectations();
   const dimensions = renditionDimensions(item, renditionUrl);
   if (dimensions) expected.resolution = { ...dimensions, provenance: "provider_dimensions" };
@@ -41,7 +42,7 @@ export function releaseMediaExpectations(
       ...expected,
       version: 2,
       sourceAudio: item.sourceAudioEvidence,
-    });
+    }) as LegacyMediaExpectations;
   }
   if (edition.audioEvidence === "german")
     expected.audio = { language: "de", provenance: "provider_audio" };
@@ -55,5 +56,26 @@ export function releaseMediaExpectations(
     }
   }
   // Only exact-URL evidence above supplies dimensions, never a quality label.
-  return parseMediaExpectations(expected);
+  return parseMediaExpectations(expected) as LegacyMediaExpectations;
+}
+
+/** Review carries both original references; legacy producers remain unchanged. */
+export function tvReviewMediaExpectations(
+  item: ApiResultItem,
+  runtimeMinutes: number,
+  url: string,
+  tolerancePercent: number
+): NewMediaExpectations {
+  const facts = releaseMediaExpectations(item, null, url);
+  return parseMediaExpectations({
+    version: 3,
+    mediaKind: "series",
+    durations: {
+      source: { seconds: item.duration, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata: { seconds: runtimeMinutes * 60, provenance: "episode_metadata", tolerancePercent },
+    },
+    audio: facts.audio,
+    sourceAudio: facts.version === 2 ? facts.sourceAudio : null,
+    resolution: facts.resolution,
+  }) as NewMediaExpectations;
 }

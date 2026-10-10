@@ -45,7 +45,8 @@ export function matchSonarrEpisodes(
   languagePolicy: LanguagePolicy = DEFAULT_LANGUAGE_POLICY,
   hlsEnabled = false,
   deferLanguageSelection = false,
-  ruleTopics: readonly string[] = []
+  ruleTopics: readonly string[] = [],
+  includeRuntimeConflicts = false
 ): MatchedEpisodeInfo[] {
   const names = [
     show.name,
@@ -150,24 +151,42 @@ export function matchSonarrEpisodes(
         episode.runtime !== null &&
         Number.isFinite(episode.runtime) &&
         episode.runtime > 0;
-      return (
-        ((!genericMetadataTitle && titleMatches) || coordinateMatches) &&
-        sonarrDurationCheck(
-          item.duration,
-          episode.runtime === null ? null : episode.runtime * 60,
-          minimumSeconds,
-          tolerancePercent
-        ).accepted
-      );
+      return (!genericMetadataTitle && titleMatches) || coordinateMatches;
     });
     // Repeated episode titles without discriminating coordinates/year never pick the newest.
     if (possible.length !== 1) continue;
+    // Duration cannot disambiguate identity. Review is restricted to complete
+    // source coordinates and two positive references, never guessed episodes.
+    const episode = possible[0];
+    const runtimeConflict = !sonarrDurationCheck(
+      item.duration,
+      episode.runtime === null ? null : episode.runtime * 60,
+      minimumSeconds,
+      tolerancePercent
+    ).accepted;
+    if (
+      runtimeConflict &&
+      !(
+        includeRuntimeConflicts &&
+        sourceSeason !== null &&
+        parsed.episodes.length === 1 &&
+        Number.isFinite(item.duration) &&
+        item.duration > 0 &&
+        episode.runtime !== null &&
+        Number.isFinite(episode.runtime) &&
+        episode.runtime > 0
+      )
+    )
+      continue;
     matches.push({
-      episode: possible[0],
+      episode,
       item,
       showName: show.germanName || show.name,
       matchedTitle: item.title,
       tvdbId: show.id,
+      ...(runtimeConflict
+        ? { runtimeConflict: true, runtimeTolerancePercent: tolerancePercent }
+        : {}),
     });
   }
   return matches;

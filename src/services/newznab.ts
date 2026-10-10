@@ -20,7 +20,7 @@ import {
   stableUrlIdentity,
 } from "./language-editions";
 import { createFakeNzbDownloadUrl } from "./nzb-release";
-import { releaseMediaExpectations } from "./release-media-expectations";
+import { releaseMediaExpectations, tvReviewMediaExpectations } from "./release-media-expectations";
 
 export { generateFakeNzb } from "./nzb-release";
 
@@ -214,7 +214,7 @@ export function getValidationRss(requestedCategoryIds: string[], now: Date = new
 }
 
 // Title formatting utilities
-function formatTitle(title: string): string {
+export function formatTitle(title: string): string {
   // Replace German Umlaute and special characters
   let formatted = title
     .replace(/ä/g, "ae")
@@ -306,7 +306,7 @@ export function buildReleaseGuid(
   return `${permalink}#${quality}-${fingerprint}`;
 }
 
-function generateTitle(
+export function generateTitle(
   info: MatchedEpisodeInfo,
   quality: string,
   episodeType: EpisodeType
@@ -346,10 +346,18 @@ function createRssItem(
   const parsedTitle = generateTitle(info, quality, episodeType);
   const formattedTitle = formatTitle(parsedTitle);
 
+  const expectations = info.runtimeConflict
+    ? tvReviewMediaExpectations(
+        info.item,
+        info.episode.runtime!,
+        url,
+        info.runtimeTolerancePercent ?? 10
+      )
+    : releaseMediaExpectations(info.item, info.episode.runtime, url);
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime, url),
+    mediaExpectations: expectations,
   });
   const item = info.item;
 
@@ -368,7 +376,9 @@ function createRssItem(
     comments: item.url_website,
     pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
     category: category,
-    description: item.description,
+    description: info.runtimeConflict
+      ? `Laufzeitkonflikt: Quelle ${item.duration} s, Episodenmetadaten ${info.episode.runtime! * 60} s, Toleranz ±${info.runtimeTolerancePercent ?? 10} %. Automatischer Download gesperrt; Einzelquelle in Pingufunk prüfen.\n${item.description}`
+      : item.description,
     enclosure: {
       url: fakeDownloadUrl,
       length: adjustedSize,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { MediaRuntimeConflictError } from "@/lib/media-expectations";
 import { InvalidDownloadInputError, UnsafeDownloadPathError } from "@/lib/download-paths";
 import { MediaExpectationsError } from "@/lib/media-expectations";
 import { writesEnabled } from "@/lib/write-gate";
@@ -108,7 +109,8 @@ async function getResponse(request: NextRequest) {
         } catch (error) {
           if (
             error instanceof InvalidDownloadInputError ||
-            error instanceof MediaExpectationsError
+            error instanceof MediaExpectationsError ||
+            error instanceof MediaRuntimeConflictError
           ) {
             return NextResponse.json({ status: false, error: error.message }, { status: 409 });
           }
@@ -160,6 +162,9 @@ export async function POST(request: NextRequest) {
       nzo_ids: [queueItem.id],
     });
   } catch (error) {
+    if (error instanceof MediaRuntimeConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("Error adding file");
     if (error instanceof InvalidDownloadInputError || error instanceof MediaExpectationsError) {
       return NextResponse.json({ error: error.message }, { status: 400 });

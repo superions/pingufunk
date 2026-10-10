@@ -80,6 +80,7 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
 docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa \
   -c 'CREATE SCHEMA p07_identity AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p09_runtime AUTHORIZATION pingufunk_qa_runtime' \
+  -c 'CREATE SCHEMA p09_review AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p11_prepare AUTHORIZATION pingufunk_qa_runtime' \
   -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_runtime' \
@@ -102,7 +103,7 @@ PINGUFUNK_REQUIRE_PG_TESTS=1 \
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
   DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  npx vitest run scripts/media-expectations-runtime.test.ts
+  npx vitest run scripts/media-expectations-runtime.test.ts scripts/tv-source-review-runtime.test.ts
 
 # Pause only this harness-owned container, after the parallel CRUD suites finish.
 PINGUFUNK_REQUIRE_PG_RECONNECT_TESTS=1 \

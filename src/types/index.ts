@@ -43,6 +43,8 @@ export interface ApiResultItem {
   arteVerifiedVideoId?: string;
   /** Server-only exact-rendition proof; untrusted catalogue fields never supply this. */
   sourceAudioEvidence?: import("@/lib/media-expectations").SourceAudioEvidence;
+  /** Bounded MP4 metadata windows/version, never accepted from raw catalogue fields. */
+  sourceAssetFingerprint?: string;
   /** Preserve shipped rendition identity when better evidence adds release labels. */
   releaseVariantKey?: string;
   /** Server-authored dimensions bound to the exact rendition, never catalogue slot names. */
@@ -174,6 +176,9 @@ export interface MatchedEpisodeInfo {
   showName: string;
   matchedTitle: string;
   tvdbId: number;
+  /** Visible explicit-search review, not permission to enqueue. */
+  runtimeConflict?: boolean;
+  runtimeTolerancePercent?: number;
 }
 
 // Newznab Types

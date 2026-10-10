@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/db";
 import { assertWritesEnabled } from "@/lib/write-gate";
 import { getSetting, isMkvConversionEnabled } from "@/lib/settings";
-import { readPersistedMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
+import {
+  readPersistedMediaExpectations,
+  sourceAudioExpectation,
+  type MediaExpectations,
+} from "@/lib/media-expectations";
 import { probeJobMedia } from "./media-probe";
 import { downloadHlsStream } from "./ytdlp";
 import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
@@ -142,10 +146,9 @@ async function completeValidatedDownload(
   const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
   if (!Number.isSafeInteger(tolerance) || tolerance < 0 || tolerance > 25)
     throw new Error("Invalid media validation policy");
-  const facts =
-    expectations?.version === 2
-      ? await probeJobMedia(filePath, jobDirectory, expectations, tolerance, sourceUrl)
-      : await probeJobMedia(filePath, jobDirectory, expectations, tolerance);
+  const facts = sourceAudioExpectation(expectations)
+    ? await probeJobMedia(filePath, jobDirectory, expectations, tolerance, sourceUrl)
+    : await probeJobMedia(filePath, jobDirectory, expectations, tolerance);
   const stats = await fs.lstat(filePath);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)
     throw new Error("Invalid completed media file");
@@ -248,6 +251,12 @@ async function processDownload(downloadId: string): Promise<void> {
       return;
     }
     const expectations = readPersistedMediaExpectations(download.mediaExpectations);
+    if (expectations?.version === 4) {
+      // Approval belongs to this durable job and exact source, including after
+      // restart. Revalidate before transferring any bytes, not just at UI time.
+      const { revalidateApprovedTvJob } = await import("@/services/tv-source-review");
+      await revalidateApprovedTvJob(download, expectations);
+    }
 
     console.log(`[Download] Starting: ${download.title}`);
 

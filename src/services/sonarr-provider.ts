@@ -123,10 +123,18 @@ export class SonarrSession {
     );
   }
 
-  async show(tvdbId: number, budget = new HttpRequestBudget()): Promise<SonarrShow | null> {
+  async show(
+    tvdbId: number,
+    budget = new HttpRequestBudget(),
+    refresh = false
+  ): Promise<SonarrShow | null> {
     if (!Number.isSafeInteger(tvdbId) || tvdbId < 1 || tvdbId > 2_147_483_647)
       throw new SonarrUnavailableError();
     await this.version(budget);
+    if (refresh) {
+      metadata.delete(metadataCacheKey("sonarr", ["show", tvdbId], this.context));
+      await this.inventory(budget, true);
+    }
     return this.cached(["show", tvdbId], budget, async () => {
       const series = parseSonarrSeries(
         await this.client("api/v3/series", new URLSearchParams({ tvdbId: String(tvdbId) }), {
@@ -135,11 +143,15 @@ export class SonarrSession {
       );
       if (series.length === 0) return null;
       if (series.length !== 1 || series[0].tvdbId !== tvdbId) throw new SonarrUnavailableError();
-      return this.episodes(series[0], budget);
+      return this.episodes(series[0], budget, refresh);
     });
   }
 
-  async episodes(series: SonarrSeriesMetadata, budget: HttpRequestBudget): Promise<SonarrShow> {
+  async episodes(
+    series: SonarrSeriesMetadata,
+    budget: HttpRequestBudget,
+    refresh = false
+  ): Promise<SonarrShow> {
     // Only accept a series verified by this instance, not a caller-supplied local ID.
     let inventory = await this.inventory(budget);
     let verified = inventory.find((item) => item.tvdbId === series.tvdbId);
@@ -150,6 +162,10 @@ export class SonarrSession {
       verified = inventory.find((item) => item.tvdbId === series.tvdbId);
     }
     if (!verified || verified.sonarrId !== series.sonarrId) throw new SonarrUnavailableError();
+    if (refresh)
+      metadata.delete(
+        metadataCacheKey("sonarr", ["episodes", verified.sonarrId, verified.tvdbId], this.context)
+      );
     return this.cached(["episodes", verified.sonarrId, verified.tvdbId], budget, async () => ({
       // Only instance inventory may supply title/aliases, not caller fields.
       series: verified,

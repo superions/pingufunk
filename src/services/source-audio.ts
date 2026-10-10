@@ -126,6 +126,7 @@ export async function enrichSourceAudio(
   const arte = new Map<string, ArteStreams>();
   const ard = new Map<string, Awaited<ReturnType<typeof getArdMedia>>>();
   const mp4 = new Map<string, Mp4MediaFacts>();
+  const assets = new Map<string, string>();
   const output = new Map<ApiResultItem, ApiResultItem[]>();
   let probes = 0;
   const ordered = [...items].sort(
@@ -226,9 +227,15 @@ export async function enrichSourceAudio(
       } else if (isProbeableMp4(url)) {
         if (!mp4.has(url) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
-          mp4.set(url, await probeMp4MediaFacts(url, budget));
+          mp4.set(
+            url,
+            await probeMp4MediaFacts(url, budget, true, (fingerprint) =>
+              assets.set(url, fingerprint)
+            )
+          );
         }
         const facts = mp4.get(url);
+        if (assets.has(url)) split.sourceAssetFingerprint = assets.get(url);
         language = facts?.audioLanguage ?? null;
         if (facts?.videoDimensions)
           split.sourceVideoDimensions = [{ url, ...facts.videoDimensions }];

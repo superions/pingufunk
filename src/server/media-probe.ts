@@ -3,7 +3,12 @@ import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { isGermanLanguageCode } from "@/lib/language-policy";
-import { parseMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
+import {
+  parseMediaExpectations,
+  durationExpectations,
+  sourceAudioExpectation,
+  type MediaExpectations,
+} from "@/lib/media-expectations";
 import { verifiedDurationCheck } from "@/lib/verified-duration";
 import { type SourceAudioEvidence } from "@/lib/media-expectations";
 import { verifySourceAudio } from "@/services/source-audio";
@@ -50,6 +55,8 @@ export interface MediaProbeFacts {
   video: { width: number; height: number }[];
   audioLanguages: string[];
   sourceAudioEvidence?: SourceAudioEvidence;
+  runtimeApproval?: Extract<MediaExpectations, { version: 4 }>["approval"];
+  metadataDurationCheck?: "explicitly_exempted";
   expectedChecks: {
     duration: "unknown" | "passed";
     audio: "unknown" | "passed" | "passed_provider";
@@ -104,23 +111,31 @@ export function validateMediaProbe(
     ];
     const contract = expected === null ? null : parseMediaExpectations(expected);
     if (
-      !verifiedDurationCheck(
-        durationSeconds,
-        contract?.duration?.seconds ?? null,
-        0,
-        tolerancePercent
-      ).accepted
+      durationExpectations(contract, tolerancePercent).some(
+        (reference) =>
+          !verifiedDurationCheck(durationSeconds, reference.seconds, 0, reference.tolerancePercent)
+            .accepted
+      )
     )
       throw new MediaProbeError();
     if (contract?.audio && !audioLanguages.includes(languageTag(contract.audio.language)!))
       throw new MediaProbeError();
-    if (contract?.version === 2) {
+    if (
+      contract?.version === 4 &&
+      contract.audio &&
+      audio.some(
+        (stream) => languageTag(stream.tags?.language) !== languageTag(contract.audio!.language)
+      )
+    )
+      throw new MediaProbeError();
+    const providerExpectation = sourceAudioExpectation(contract);
+    if (providerExpectation) {
       if (
         !sourceAudioEvidence ||
-        sourceAudioEvidence.provider !== contract.sourceAudio.provider ||
-        sourceAudioEvidence.videoId !== contract.sourceAudio.videoId ||
-        sourceAudioEvidence.mediaIdentity !== contract.sourceAudio.mediaIdentity ||
-        sourceAudioEvidence.language !== contract.sourceAudio.language
+        sourceAudioEvidence.provider !== providerExpectation.provider ||
+        sourceAudioEvidence.videoId !== providerExpectation.videoId ||
+        sourceAudioEvidence.mediaIdentity !== providerExpectation.mediaIdentity ||
+        sourceAudioEvidence.language !== providerExpectation.language
       )
         throw new MediaProbeError();
       // Independent provider evidence can fill absent tags, never contradict a
@@ -141,10 +156,16 @@ export function validateMediaProbe(
       durationSeconds,
       video,
       audioLanguages,
-      ...(contract?.version === 2 ? { sourceAudioEvidence } : {}),
+      ...(providerExpectation ? { sourceAudioEvidence } : {}),
+      ...(contract?.version === 4
+        ? {
+            runtimeApproval: contract.approval,
+            metadataDurationCheck: "explicitly_exempted" as const,
+          }
+        : {}),
       expectedChecks: {
-        duration: contract?.duration ? "passed" : "unknown",
-        audio: contract?.audio ? "passed" : contract?.version === 2 ? "passed_provider" : "unknown",
+        duration: durationExpectations(contract, tolerancePercent).length ? "passed" : "unknown",
+        audio: contract?.audio ? "passed" : providerExpectation ? "passed_provider" : "unknown",
         resolution: contract?.resolution ? "passed" : "unknown",
       },
     };
@@ -191,10 +212,10 @@ export async function probeJobMedia(
       path.join(process.cwd(), "ffmpeg", process.platform === "win32" ? "ffprobe.exe" : "ffprobe");
     if (!path.isAbsolute(binary)) throw new MediaProbeError();
     const output = await readLocalProbe(binary, file);
-    const proof =
-      expected?.version === 2
-        ? await verifySourceAudio(expected.sourceAudio, sourceUrl ?? "", new HttpRequestBudget(1))
-        : undefined;
+    const sourceExpectation = sourceAudioExpectation(expected);
+    const proof = sourceExpectation
+      ? await verifySourceAudio(sourceExpectation, sourceUrl ?? "", new HttpRequestBudget(1))
+      : undefined;
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);
     if (

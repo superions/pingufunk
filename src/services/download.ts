@@ -18,6 +18,7 @@ import {
   serializeMediaExpectations,
   readPersistedMediaExpectations,
   type MediaExpectations,
+  assertMediaRuntimeCompatible,
 } from "@/lib/media-expectations";
 
 /**
@@ -127,6 +128,7 @@ export async function addToQueue(
   assertWritesEnabled();
   validateCategory(category);
   validateReleaseTitle(title);
+  assertMediaRuntimeCompatible(mediaExpectations);
   const download = await prisma.download.create({
     data: {
       id: randomUUID(),
@@ -148,7 +150,7 @@ export async function addToQueue(
 }
 
 // Trigger download processing without blocking
-function triggerDownloadProcessing(): void {
+export function triggerDownloadProcessing(): void {
   // Use dynamic import to load the download manager only on server-side
   import("@/server/download-manager")
     .then(({ startDownloadProcessing }) => {
@@ -304,7 +306,7 @@ export async function retryDownload(nzoId: string): Promise<{ id: string } | nul
   validateReleaseTitle(download.title);
 
   // Do not let a retry downgrade corrupt v1 data or inherit a prior probe result.
-  readPersistedMediaExpectations(download.mediaExpectations);
+  assertMediaRuntimeCompatible(readPersistedMediaExpectations(download.mediaExpectations));
 
   // A failed insertion must not discard the old history entry; a new ID owns
   // the retry so its temp and completed paths cannot collide with the old job.

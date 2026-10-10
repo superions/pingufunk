@@ -8,6 +8,7 @@ import { queryContent } from "@/services/content-search";
 import { isStreamingUrl } from "@/lib/stream-url";
 import { createUiNzbDownloads } from "@/services/ui-nzb";
 import type { UiNzbDownloads } from "@/types";
+import { searchTvSourceReviews } from "@/services/tv-source-review";
 
 async function isHlsEnabled(): Promise<boolean> {
   const setting = await getSetting("download.enableHLS");
@@ -81,12 +82,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [], error: "Query too short" });
   }
 
-  // Use new provider system if requested
-  if (useProviders || providerId) {
-    return handleProviderSearch(q, limit, type, providerId);
-  }
-
   // UI searches and Newznab use the same enabled sources.
+  if (!type || type === "series") {
+    try {
+      const bound = await searchTvSourceReviews(q);
+      if (bound !== null) {
+        // A provider selector cannot bypass an already verified series conflict.
+        // This review follows the common enabled-source owner, not a separate indexer.
+        if (providerId)
+          return NextResponse.json(
+            { results: [], error: "Für die Quellenprüfung bitte alle aktivierten Quellen wählen" },
+            { status: 409 }
+          );
+        return NextResponse.json(
+          {
+            results: bound.slice(0, Math.min(limit, 100)).map(({ info, review }) => ({
+              id: review.selector.sourceId,
+              channel: info.item.channel,
+              topic: info.item.topic,
+              title: info.item.title,
+              description: info.item.description,
+              timestamp: info.item.filmlisteTimestamp,
+              duration: info.item.duration,
+              size: info.item.size,
+              url_website: info.item.url_website,
+              category: "tv",
+              tvReview: review,
+              nzbDownloads: review.runtimeConflict ? {} : createUiNzbDownloads(info.item, false),
+            })),
+          },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+    } catch {
+      // A bound but unverifiable series must not escape through generic source-only NZBs.
+      return NextResponse.json(
+        { results: [], error: "Serienquellen nicht eindeutig verifiziert" },
+        { status: 502 }
+      );
+    }
+  }
+  if (useProviders || providerId) return handleProviderSearch(q, limit, type, providerId);
   return handleDefaultSearch(q, limit, type);
 }
 

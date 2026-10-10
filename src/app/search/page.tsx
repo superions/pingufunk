@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,22 @@ import { Search, Download } from "lucide-react";
 import { formatDuration, formatSize, formatDate } from "@/lib/formatters";
 import type { UiNzbDownloads } from "@/types";
 import { useContentSearch } from "@/hooks/use-content-search";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import type {
+  TvReviewPreview,
+  TvReviewSummary,
+  TvReviewSelector,
+} from "@/services/tv-source-review";
+import { submitTvReview } from "@/lib/tv-review-client";
 
 interface SearchResult {
   id: string;
@@ -24,6 +40,7 @@ interface SearchResult {
   url_website: string;
   category?: "movie" | "tv" | "unknown";
   nzbDownloads: UiNzbDownloads;
+  tvReview?: TvReviewSummary;
 }
 
 export default function SearchPage() {
@@ -37,9 +54,17 @@ export default function SearchPage() {
   } = useContentSearch<SearchResult>();
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<TvReviewPreview | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [renditions, setRenditions] = useState<Record<string, TvReviewSelector["rendition"]>>({});
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLButtonElement | null>(null);
 
   const handleSearch = async () => {
     setDownloadError(null);
+    setConfirmation(null);
     await search(searchQuery);
   };
 
@@ -50,6 +75,37 @@ export default function SearchPage() {
   };
 
   const handleDownload = async (result: SearchResult) => {
+    if (result.tvReview?.runtimeConflict) {
+      setDownloadError(null);
+      setConfirmation(null);
+      setReviewError(null);
+      setDownloadingIds((prev) => new Set(prev).add(result.id));
+      try {
+        const selector = {
+          ...result.tvReview.selector,
+          rendition: renditions[result.id] ?? result.tvReview.selector.rendition,
+        };
+        const response = await fetch(
+          `/api/tv-source-review?selector=${encodeURIComponent(JSON.stringify(selector))}`,
+          { cache: "no-store", signal: AbortSignal.timeout(25_000) }
+        );
+        if (!response.ok) throw new Error("Quelle nicht verifiziert");
+        const next = (await response.json()) as TvReviewPreview;
+        if (!next.runtimeConflict) throw new Error("Konflikt inzwischen geändert");
+        setPreview(next);
+      } catch {
+        setDownloadError(
+          "Diese Fassung konnte nicht frisch verifiziert werden. Erneut suchen oder eine andere Rendition prüfen; keine Freigabe erteilt."
+        );
+      } finally {
+        setDownloadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(result.id);
+          return next;
+        });
+      }
+      return;
+    }
     const nzbContent = result.nzbDownloads.hd || result.nzbDownloads.sd || result.nzbDownloads.low;
     if (!nzbContent) return;
     setDownloadError(null);
@@ -80,6 +136,26 @@ export default function SearchPage() {
         next.delete(result.id);
         return next;
       });
+    }
+  };
+
+  const confirmSource = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    if (!preview || confirming) return;
+    setConfirming(true);
+    setReviewError(null);
+    try {
+      const result = await submitTvReview(preview);
+      setConfirmation(
+        `Einzelauftrag bestätigt: ${result.id} (${result.status}). Dies ist noch kein Download- oder Importabschluss.`
+      );
+      setPreview(null);
+    } catch {
+      setReviewError(
+        "Nicht bestätigt oder Quelle geändert. Queue prüfen. Erneute Bestätigung verwendet dieselbe Entscheidung und erzeugt keinen zweiten Auftrag. Bei geändertem Beleg abbrechen und erneut suchen."
+      );
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -120,6 +196,70 @@ export default function SearchPage() {
           {searchError || downloadError}
         </p>
       )}
+      {confirmation && (
+        <p role="status" className="text-sm">
+          {confirmation}
+        </p>
+      )}
+      <AlertDialog
+        open={preview !== null}
+        onOpenChange={(open) => {
+          if (!open && !confirming) setPreview(null);
+        }}
+      >
+        <AlertDialogContent
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            cancelRef.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocus.current?.focus();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Geprüfte Einzelquelle freigeben</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nur der Laufzeitkonflikt dieses konkreten Auftrags wird ausgenommen. Keine
+              automatische Ausnahme, keine Änderung der globalen Toleranz oder von Sonarr-Profilen.
+              Sprache, Auflösung, Quelllaufzeit und tatsächliche Datei werden weiterhin geprüft.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {preview && (
+            <div className="space-y-2 text-sm break-words">
+              <p className="font-medium">{preview.title}</p>
+              <p>
+                Quelle: {formatDuration(preview.sourceSeconds)} ({preview.sourceSeconds} s)
+              </p>
+              <p>
+                Episodenmetadaten: {formatDuration(preview.metadataSeconds)} (
+                {preview.metadataSeconds} s)
+              </p>
+              <p>Unveränderte Serientoleranz: ±{preview.tolerancePercent} %</p>
+              <p>
+                Geprüfte Rendition: {preview.width} × {preview.height}, Ton: {preview.language}
+              </p>
+              <p>
+                Der normale Sonarr-/Prowlarr-Grab bleibt gesperrt. Die Bestätigung reiht einen
+                Download in Kategorie sonarr ein; Sonarr entscheidet anschließend über den Import.
+              </p>
+            </div>
+          )}
+          {reviewError && (
+            <p role="alert" className="text-sm text-destructive">
+              {reviewError}
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={cancelRef} disabled={confirming}>
+              Abbrechen
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSource} disabled={confirming}>
+              {confirming ? "Wird frisch geprüft…" : "Diese Quelle einmal freigeben"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Search Results */}
       {searchResults.length > 0 && (
@@ -164,16 +304,51 @@ export default function SearchPage() {
                       {formatDate(result.timestamp)} &bull; {formatDuration(result.duration)} &bull;{" "}
                       {formatSize(result.size)}
                     </p>
+                    {result.tvReview?.runtimeConflict && (
+                      <p className="text-sm mt-2 text-amber-600 dark:text-amber-400">
+                        Laufzeitkonflikt: Quelle {formatDuration(result.tvReview.sourceSeconds)},
+                        Metadaten {formatDuration(result.tvReview.metadataSeconds)}, Toleranz ±
+                        {result.tvReview.tolerancePercent} %. Automatischer Download gesperrt.
+                      </p>
+                    )}
                   </div>
+                  {result.tvReview?.runtimeConflict && (
+                    <select
+                      aria-label={`Rendition für ${result.title}`}
+                      className="border rounded bg-background text-sm p-1"
+                      value={renditions[result.id] ?? result.tvReview.selector.rendition}
+                      onChange={(event) =>
+                        setRenditions((prev) => ({
+                          ...prev,
+                          [result.id]: event.target.value as TvReviewSelector["rendition"],
+                        }))
+                      }
+                    >
+                      {result.tvReview.availableRenditions.map((key) => (
+                        <option key={key} value={key}>
+                          {key.toUpperCase()}-Quelle prüfen
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <Button
                     size="sm"
-                    onClick={() => handleDownload(result)}
+                    onClick={(event) => {
+                      returnFocus.current = event.currentTarget;
+                      void handleDownload(result);
+                    }}
                     disabled={
-                      downloadingIds.has(result.id) || Object.keys(result.nzbDownloads).length === 0
+                      downloadingIds.has(result.id) ||
+                      (!result.tvReview?.runtimeConflict &&
+                        Object.keys(result.nzbDownloads).length === 0)
                     }
                   >
                     <Download className="w-4 h-4 mr-1" />
-                    {downloadingIds.has(result.id) ? "..." : "Download"}
+                    {downloadingIds.has(result.id)
+                      ? "Prüfe…"
+                      : result.tvReview?.runtimeConflict
+                        ? "Quelle prüfen"
+                        : "Download"}
                   </Button>
                 </div>
               </Card>

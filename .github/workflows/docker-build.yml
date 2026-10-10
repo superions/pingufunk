@@ -94,3 +94,11 @@ jobs:
           PINGUFUNK_SMOKE_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_SMOKE_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
         run: bash scripts/media-container-smoke.sh
+
+      - name: Verify explicit TV source review and real worker on both backends
+        env:
+          PINGUFUNK_SMOKE_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_SMOKE_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+        run: |
+          bash scripts/tv-review-container-smoke.sh sqlite
+          bash scripts/tv-review-container-smoke.sh postgresql

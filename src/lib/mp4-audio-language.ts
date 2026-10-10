@@ -1,4 +1,5 @@
 import { readBoundedProviderBytes } from "./bounded-provider-json";
+import { createHash } from "node:crypto";
 import { FetchBudgetError, fetchWithRetry, type HttpRequestBudget } from "./fetch-retry";
 
 const MAX_BYTES = 1024 * 1024;
@@ -105,12 +106,14 @@ const unknownFacts = (): Mp4MediaFacts => ({ audioLanguage: null, videoDimension
 export async function probeMp4MediaFacts(
   url: string,
   budget: HttpRequestBudget,
-  includeDimensions = true
+  includeDimensions = true,
+  onVerifiedAsset?: (fingerprint: string) => void
 ): Promise<Mp4MediaFacts> {
   if (!isProbeableMp4(url)) return unknownFacts();
   let total: number | undefined;
   const windows: Array<{ start: number; data: Buffer }> = [];
   let requests = 0;
+  let validator: string | null = null;
   let boxes = 0;
   async function read(start: number, size: number): Promise<Buffer> {
     if (Date.now() >= budget.deadlineAt) throw new FetchBudgetError();
@@ -127,18 +130,30 @@ export async function probeMp4MediaFacts(
     )
       throw new UnsupportedMetadata();
     requests++;
+    if (requests > 1 && !validator) throw new UnsupportedMetadata();
+    // Parent metadata may precede a trailer seek by a few bytes. Include that
+    // small look-behind instead of spending a second overlapping 1-MiB window.
+    const rangeStart = Math.max(0, start - Math.min(256, MAX_BYTES - size));
     const response = await fetchWithRetry(
       url,
       {
         headers: {
-          Range: `bytes=${start}-${start + MAX_BYTES - 1}`,
+          Range: `bytes=${rangeStart}-${rangeStart + MAX_BYTES - 1}`,
           "Accept-Encoding": "identity",
+          ...(validator ? { "If-Range": validator } : {}),
         },
       },
       { requestBudget: budget, maxRetries: 0 }
     );
     const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get("content-range") ?? "");
     const encoding = response.headers.get("content-encoding");
+    const etag = response.headers.get("etag");
+    const strong = etag && etag.length <= 256 && /^"[\x21\x23-\x7e]*"$/.test(etag) ? etag : null;
+    if (requests > 1 && strong !== validator) {
+      void response.body?.cancel().catch(() => {});
+      throw new UnsupportedMetadata();
+    }
+    if (requests === 1) validator = strong;
     if (response.status !== 206 || !range || (encoding && encoding !== "identity")) {
       void response.body?.cancel().catch(() => {});
       throw new UnsupportedMetadata();
@@ -146,7 +161,7 @@ export async function probeMp4MediaFacts(
     const [from, end, length] = range.slice(1).map(Number);
     if (
       ![from, end, length].every(Number.isSafeInteger) ||
-      from !== start ||
+      from !== rangeStart ||
       end < from ||
       end >= length ||
       end - from + 1 > MAX_BYTES ||
@@ -157,9 +172,10 @@ export async function probeMp4MediaFacts(
     }
     total = length;
     const data = await readBoundedProviderBytes(response, budget.deadlineAt, MAX_BYTES);
-    if (data.length !== end - from + 1 || data.length < size) throw new UnsupportedMetadata();
-    windows.push({ start, data });
-    return data.subarray(0, size);
+    if (data.length !== end - from + 1 || data.length < start - from + size)
+      throw new UnsupportedMetadata();
+    windows.push({ start: from, data });
+    return data.subarray(start - from, start - from + size);
   }
 
   async function headerAt(start: number, parentEnd: number) {
@@ -261,6 +277,20 @@ export async function probeMp4MediaFacts(
         languages.push(language);
       }
       if (Date.now() >= budget.deadlineAt) throw new FetchBudgetError();
+      onVerifiedAsset?.(
+        createHash("sha256")
+          .update(
+            JSON.stringify([
+              validator,
+              total,
+              windows.map((window) => [
+                window.start,
+                createHash("sha256").update(window.data).digest("hex"),
+              ]),
+            ])
+          )
+          .digest("hex")
+      );
       return {
         audioLanguage:
           languages.length && languages.every((language) => language && language === languages[0])

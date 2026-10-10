@@ -4,10 +4,10 @@ import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
 import { enrichSourceAudio, enrichTvMatches, enrichTvCandidates } from "./source-audio";
-import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss } from "./shows";
+import { getBaseShowInfoByTvdbId, getBaseShowForSonarrRss, getShowInfoByTvdbId } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
-import { SonarrUnavailableError } from "./sonarr-provider";
+import { SonarrUnavailableError, openSonarrSession } from "./sonarr-provider";
 import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-identity";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { arteVideoId, resolveArteSeriesEditions } from "./arte-editions";
@@ -56,7 +56,7 @@ const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
 const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v13-tv-source-facts";
+const CONTENT_SEARCH_CACHE_VERSION = "v15-runtime-review-hotfix";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,
   februar: 1,
@@ -676,6 +676,31 @@ async function applyRulesetFilters(
           break;
       }
 
+      if (
+        matchInfo &&
+        tvdbData &&
+        (matchInfo.episode.metadataSource === "sonarr" ||
+          tvdbData.sonarrVerifiedCoordinates?.includes(
+            `${matchInfo.episode.seasonNumber}:${matchInfo.episode.episodeNumber}`
+          ))
+      ) {
+        const strict = matchSonarrEpisodes(
+          tvdbData,
+          [item],
+          await getMinDurationSeconds(),
+          Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10"),
+          await getConfiguredLanguagePolicy(),
+          hlsEnabled,
+          true,
+          verifiedRuleTopics(tvdbData)
+        );
+        matchInfo =
+          strict.find(
+            (info) =>
+              info.episode.seasonNumber === matchInfo!.episode.seasonNumber &&
+              info.episode.episodeNumber === matchInfo!.episode.episodeNumber
+          ) ?? null;
+      }
       if (matchInfo) {
         matchedEpisodes.push(matchInfo);
         const idx = unmatchedItems.indexOf(item);
@@ -941,6 +966,50 @@ function applyDesiredEpisodeFilter(
   });
 }
 
+/** One bounded retrieval owner for native indexer searches and manual review. */
+export async function queryTvSourceCandidates(
+  tvdbData: TvdbData,
+  context: TvSearchContext,
+  requestBudget: HttpRequestBudget
+): Promise<ApiResultItem[] | null> {
+  await ensureRulesetsLoaded(requestBudget);
+  const desiredEpisodes = getDesiredEpisodes(tvdbData, context);
+  const searchQuery = context.query || tvdbData.germanName || tvdbData.name;
+  const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
+    (episode) => episode.metadataSource === "sonarr"
+  );
+  const searchQueries = tvSearchQueries(
+    tvdbData,
+    searchQuery,
+    desiredEpisodes?.length === 1 ? desiredEpisodes[0].name : undefined
+  );
+  const windows = await Promise.all(
+    searchQueries.map((query) =>
+      queryContent([query], TV_SEARCH_CANDIDATE_LIMIT, {
+        arteSeries: tvdbData,
+        deferLanguageSelection: true,
+        ...(supplemented
+          ? {
+              requestBudget,
+              progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
+                (episode) => episode.metadataSource === "sonarr"
+              ),
+            }
+          : { requestBudget }),
+      })
+    )
+  );
+  const results = windows.some((window) => window === null)
+    ? null
+    : [
+        ...new Map(
+          windows.flatMap((window) => window ?? []).map((item) => [JSON.stringify(item), item])
+        ).values(),
+      ];
+
+  return results;
+}
+
 export async function fetchSearchResultsById(
   tvdbData: TvdbData,
   searchContext: TvSearchContext,
@@ -1000,38 +1069,7 @@ export async function fetchSearchResultsById(
     results = (cachedApi as { results: ApiResultItem[] }).results;
   } else {
     console.log(`[Mediathek] Searching MediathekView API with query: "${searchQuery}"`);
-    const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
-      (episode) => episode.metadataSource === "sonarr"
-    );
-    const searchQueries = tvSearchQueries(
-      tvdbData,
-      searchQuery,
-      desiredEpisodes?.length === 1 ? desiredEpisodes[0].name : undefined
-    );
-    const windows = await Promise.all(
-      searchQueries.map((query) =>
-        queryContent([query], TV_SEARCH_CANDIDATE_LIMIT, {
-          arteSeries: tvdbData,
-          deferLanguageSelection: true,
-          ...(supplemented
-            ? {
-                requestBudget,
-                progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
-                  (episode) => episode.metadataSource === "sonarr"
-                ),
-              }
-            : { requestBudget }),
-        })
-      )
-    );
-    results = windows.some((window) => window === null)
-      ? null
-      : [
-          ...new Map(
-            windows.flatMap((window) => window ?? []).map((item) => [JSON.stringify(item), item])
-          ).values(),
-        ];
-
+    results = await queryTvSourceCandidates(tvdbData, context, requestBudget);
     if (results === null) throw new Error("Search provider unavailable");
     if (results.length === 0) {
       return serializeRss(getEmptyRssResult(offset));
@@ -1067,7 +1105,8 @@ export async function fetchSearchResultsById(
     await getConfiguredLanguagePolicy(),
     hlsEnabled,
     true,
-    verifiedRuleTopics(tvdbData)
+    verifiedRuleTopics(tvdbData),
+    true
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
     [...matchedEpisodes, ...supplementalMatches],
@@ -1128,6 +1167,29 @@ export async function fetchSearchResultsByString(
     query: searchContext.query?.trim() || null,
   };
   const trimmedQ = context.query;
+  // Title forwarding without an ID must reach the same verified episode owner.
+  if (trimmedQ && context.tvdbId === null) {
+    const session = await openSonarrSession();
+    if (session) {
+      const normalize = (value: string) =>
+        value
+          .normalize("NFC")
+          .toLocaleLowerCase("de-DE")
+          .replace(/[.\s]+/g, " ")
+          .trim();
+      const owners = (await session.inventory(budget)).filter((series) =>
+        [series.title, ...(series.aliases ?? [])].some(
+          (name) => normalize(name) === normalize(trimmedQ)
+        )
+      );
+      if (owners.length === 1) {
+        const show = await getShowInfoByTvdbId(owners[0].tvdbId, budget);
+        if (!show || show.sonarrUnavailable) throw new SonarrUnavailableError();
+        return fetchSearchResultsById(show, { ...context, tvdbId: show.id }, limit, offset, budget);
+      }
+      if (owners.length > 1) return serializeRss(getEmptyRssResult(offset));
+    }
+  }
   await ensureRulesetsLoaded(budget);
   const rulesetContext = getRulesetContext();
   const quality = await getQualityPreference();

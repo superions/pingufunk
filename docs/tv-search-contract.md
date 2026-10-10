@@ -1,7 +1,8 @@
 # Breite TV-Suche ohne erfundene Identität
 
-Stand: 06.10.2026. Technischer Vertrag; ausführbare Abnahme ausschließlich
-in [P06.4/P09.5](../todo/proxy-retirement.md). Kein Produktionsrollout.
+Stand: 10.10.2026. Technischer Vertrag; ausführbare Abnahme ausschließlich
+in [P06.4/P09.5](../todo/proxy-retirement.md). Ein Produktionsrollout braucht
+weiterhin eine gesonderte, konkrete Freigabe.
 
 ## Mehr Kandidaten finden, danach dieselben strengen Belege verlangen
 
@@ -70,3 +71,52 @@ offene Nutzerentscheidung und eigene Regressionen.
 Entwicklungsprüfungen verwenden ausschließlich synthetische Metadaten und Medien.
 Echte Trefferprüfung, Produktivrollout, neue Grabs und Importabnahme sind eigene
 Schritte; erfolgreiche Tests behaupten keine vollständig importierte Bibliothek.
+
+## Einmalige manuelle Laufzeitentscheidung
+
+Ein vollständiger, identitätsgesicherter S/E-Treffer mit zwei positiven
+Laufzeitreferenzen bleibt in expliziten Suchen sichtbar, auch bei Konflikt.
+RSS behält seine strengen automatischen Laufzeit-/Zeitfenstergrenzen.
+Unklare Titel, Serien, Koordinaten oder fehlende Laufzeit erhalten diesen Weg
+nicht. Textsuche mit eindeutigem Sonarr-Namen/Serienalias und ID-Suche benutzen
+denselben Kandidaten-/Matcherowner; ein Providerselector darf die Sperre nicht
+umgehen. Ohne optionale Sonarr-Anbindung bleibt das ungebundene Browsing unverändert.
+
+Normale NZB-/SAB-Anfragen unterscheiden manuell/automatisch nicht zuverlässig.
+Konflikt-NZBs liefern daher HTTP 409. Die Suche bietet stattdessen „Quelle prüfen“:
+ausgewählte Rendition, volle S/E, beide Laufzeiten, unveränderte Serientoleranz,
+frisch belegte Pixel und Sprache. Abbrechen erzeugt keinen Auftrag. Erst
+„Diese Quelle einmal freigeben“ bestätigt genau eine erneut geprüfte Entscheidung.
+API nimmt nur strikte Koordinaten, opaque Source-/Belegfingerprints und Intent-ID
+entgegen, niemals vom Client gelieferte Medien-URL oder fertige Erwartungen.
+Same-origin Header, begrenzter Body/Deadline und Maintenance-Gate gelten auch
+auf HTTP ohne SSL. Dies ist kein zusätzlicher Indexer-Endpunkt.
+
+Der Server speichert den v4-Vertrag mit beiden originalen Laufzeitreferenzen,
+Zeitpunkt, Quelle/Rendition, Belegfingerprint und exakter Job-ID. Auditreceipt
+und queued Download entstehen atomar in den vorhandenen Tabellen Config und
+Download. Interne Receipts sind über die Settings-API weder lesbar noch
+änderbar. Keine neue Schema-Migration, globale Einstellung oder Profiländerung.
+Ein existierendes Receipt liefert denselben Job, auch nach Reload, verlorener
+Antwort oder parallelem Klick. Entfernte Historie wird als `history_removed`
+gemeldet und nicht neu gegrabt. Eine fehlgeschlagene Einzelentscheidung wird
+nicht durch normalen History-Retry geklont; derselbe Beleg bleibt dieselbe
+Entscheidung. Ein neuer Retryworkflow ist dadurch nicht behauptet.
+
+Vor Transfer prüft der Worker Identität und alle Belege nochmals, einschließlich
+exakter URL und MP4-Assetfingerprint. Mehrfenster-Proben verlangen denselben
+starken ETag; bis vier 1-MiB-Fenster teilen weiterhin 32 Versuche/15 Sekunden.
+Bei verändertem Beleg kein Transfer. Die fertige Datei muss die Quelllaufzeit,
+Audio- und Auflösungsverträge weiterhin erfüllen. Nur die ausdrücklich
+bestätigte Metadatenlaufzeit wird als `explicitly_exempted` dokumentiert;
+„completed“ ist nicht gleich Sonarr-Import.
+
+### Rollbackgrenze
+
+Vor dem ersten v4-Write kann bei leerer Queue der bisherige, schemaidentische
+Runner wiederverwendet werden. Danach darf kein v1/v2-only Runner neue v4-Jobs
+verarbeiten oder interne Receipts unmaskiert ausgeben. Sicherer Stop: derselbe
+v4-kompatible Runner mit Schreibgate aus; Daten/Audits unverändert erhalten,
+Aufträge kontrolliert abnehmen und einen kompatiblen Fix vor Wiederfreigabe
+prüfen. Kein SQLite-Rückfall, kein Restore eines alten Datenstands, keine
+History-/Auditlöschung und keine Profil- oder Toleranzkorrektur als Rollback.

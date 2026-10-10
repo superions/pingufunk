@@ -1256,7 +1256,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1281,6 +1281,27 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       TBA-Suche direkt und via Prowlarr, 720p/UNKNOWN-/Konfliktvarianten,
       SQLite-/PG-Persistenz, echte synthetische Medien und Rollback geprüft;
       keine Image-Publikation, Grabs oder produktive Mutationen.
+      Wieder geöffnet 10.10.2026: Identitätsgesicherte vollständige S/E mit
+      zwei positiven, widersprüchlichen Laufzeiten sichtbar lassen; normale
+      NZB-/SAB-/RSS-Downloads bleiben gesperrt. Vollständiger Freigabeweg in
+      Suche: ausgewählte Rendition frisch prüfen, beide Referenzen und unveränderte
+      Toleranz anzeigen, Abbruch ohne Auftrag, ausdrückliche Einzelentscheidung.
+      Server prüft Identität, Quelle, URL/Asset, Sprache und Dimensionen erneut;
+      Originalreferenzen bleiben als v4-Audit im genau gebundenen Job erhalten.
+      Durable Receipt und Job atomar in vorhandenen Config/Download-Zeilen,
+      kein DDL/Profil-/globaler Toleranzwechsel und keine automatische Allowlist.
+      Doppelklick/Reload/verlorene Antwort/konkurrierende Bestätigung ergeben
+      denselben Auftrag; gewöhnlicher Retry darf die Freigabe nicht klonen.
+      Worker validiert die Freigabe frisch vor Transfer und anschließend Quelle,
+      Laufzeit, Auflösung und Audio der tatsächlichen Datei. Abnahme: negative
+      Identitäts-/Belegwechsel, native RSS→NZB-Sperre, echte SQLite-/PG-Transaktionen,
+      servierter Desktop-Dialog mit Abbruch/Bestätigung/Fehler/Readback, echter
+      synthetischer Workerabschluss auf beiden Backends, normale Produktgates,
+      Fork-CI, unveränderte Produktionsprofile/Toleranzen/DB-Kette und live
+      geprüfte Auffindbarkeit plus Freigabedialog. Live-Dialogprüfung ist kein
+      neuer Grabauftrag. Der Hotfix basiert separat auf dem tatsächlichen
+      Produktionsschema; spätere P15-Schema-/Ausfallbefunde werden nicht mitgerollt
+      oder durch diese begrenzte Abnahme als behoben dargestellt.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 

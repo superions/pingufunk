@@ -51,7 +51,9 @@ const DEFAULT_SETTINGS: Record<string, string> = {
 };
 
 function isHiddenSettingKey(key: string): boolean {
-  return key === "tvdb_token" || key === "tvdb_token_expiry";
+  return (
+    key === "tvdb_token" || key === "tvdb_token_expiry" || key.startsWith("internal.manual-review.")
+  );
 }
 
 function visibleSetting(key: string, value: string): string {
