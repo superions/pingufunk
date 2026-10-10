@@ -161,6 +161,9 @@ export class TvSearchDeliveryJournal {
   }
 
   private arm(entries: Entry[]): void {
+    // Restore failures before ordinary RSS warming can enqueue the same URL
+    // after a process restart. Quarantine is discovery state, not media proof.
+    for (const entry of entries) this.facts.retain(entry.blockedUrls, entry.expiresAt, true);
     // Breadth-first HD before alternatives, using the existing single/rate-bound worker.
     for (const field of fields) {
       const eligible = entries.filter((e) => !e.blockedUrls.includes(e.item[field]));

@@ -57,6 +57,7 @@ export class SourceMediaFactsStore {
 
   remember(url: string, result: CheckedFacts, generation = this.epoch): void {
     if (generation !== this.epoch || !isProbeableMp4(url)) return;
+    if (this.retained.get(key(url))?.blocked) return;
     // An unsupported/unproven asset has a short negative lifetime, never a
     // fabricated language or resolution. Transport failures are not facts.
     this.facts.set(key(url), {
@@ -78,8 +79,8 @@ export class SourceMediaFactsStore {
     for (const listener of this.listeners) listener(url, structuredClone(result));
   }
 
-  /** A delivery owner may retain successful hints, never extend their proof TTL. */
-  retain(urls: readonly string[], until: number): void {
+  /** Retain discovery or restore a durable quarantine, never extend proof TTL. */
+  retain(urls: readonly string[], until: number, blocked = false): void {
     const now = Date.now();
     for (const [id, held] of this.retained) if (held.until <= now) this.retained.delete(id);
     for (const url of urls) {
@@ -89,8 +90,12 @@ export class SourceMediaFactsStore {
       this.retained.set(id, {
         url,
         until: Math.min(until, now + 7_200_000),
-        blocked: this.retained.get(id)?.blocked ?? false,
+        blocked: blocked || (this.retained.get(id)?.blocked ?? false),
       });
+      if (this.retained.get(id)?.blocked) {
+        this.pending.delete(id);
+        if (this.active?.key === id) this.active.controller.abort();
+      }
     }
     this.maintainRetained();
   }

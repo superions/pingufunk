@@ -167,6 +167,16 @@ it("does not re-probe a failed source automatically or persist its exception", a
   await journal.register(scope, show(), [match()]);
   await vi.advanceTimersByTimeAsync(600_000);
   expect(fetch).toHaveBeenCalledTimes(1);
+  journal.dispose();
+  facts.clear();
+  await facts.idle();
+  facts = new SourceMediaFactsStore();
+  journal = new TvSearchDeliveryJournal({ read: async () => persisted, write }, facts);
+  expect((await journal.current(scope))[0].blockedUrls).toEqual([url()]);
+  facts.enqueue([url()]); // Ordinary RSS warming must honor the recovered quarantine.
+  await vi.advanceTimersByTimeAsync(600_000);
+  await facts.idle();
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it("persists each eligible release's first announcement across restarts without extending retention", async () => {
