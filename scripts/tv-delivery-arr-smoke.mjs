@@ -21,7 +21,10 @@ const fail = (message) => {
 };
 async function command(body) {
   const created = await api(root, manifest, "sonarr", "/api/v3/command", body);
-  for (let attempt = 0; attempt < 90; attempt++) {
+  // A bulk command also performs each real, freshly revalidated NZB grab;
+  // its overall test deadline is not the indexer's 15-second request deadline.
+  const deadline = Date.now() + 180_000;
+  for (let attempt = 0; attempt < 360 && Date.now() < deadline; attempt++) {
     const result = await api(root, manifest, "sonarr", `/api/v3/command/${created.id}`);
     if (result.status === "completed") return;
     if (["failed", "aborted"].includes(result.status)) fail("native command failed (not retried)");
@@ -157,6 +160,9 @@ try {
   if (journal() !== null) fail("pre-existing discovery invalidates cold gate");
   await command({ name: "MissingEpisodeSearch", seriesId: series.id });
   const cold = (await histories()).filter((row) => row.eventType === "grabbed");
+  console.log(
+    `Owned ${transport}: cold bulk command completed; initial native grabs=${cold.length}/80`
+  );
   if (cold.length >= 80) fail("fixture did not exercise deferred delivery");
   const initial = journal();
   if (initial?.entries.length !== 80) fail("cold discovery incomplete");
@@ -169,6 +175,7 @@ try {
   if (journal().entries.some((row) => row.readyAt === null)) fail("background proof deadline");
   // No second episode/season search, manual release, retry or profile override.
   await command({ name: "RssSync" });
+  console.log(`Owned ${transport}: native RSS delivery completed; awaiting physical imports`);
   for (let attempt = 0; attempt < 180; attempt++) {
     const slots = (await api(root, manifest, "pingufunk", "/api/download?mode=history&limit=100"))
       .history.slots;
