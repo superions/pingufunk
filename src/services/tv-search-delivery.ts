@@ -50,6 +50,18 @@ const entrySchema = z
     expiresAt: z.number().int().nonnegative(),
     readyAt: z.number().int().nonnegative().nullable(),
     blockedUrls: z.array(text).max(3),
+    // Publication events are not media proofs or consumer acknowledgements.
+    announcements: z
+      .array(
+        z
+          .object({
+            release: z.string().regex(/^[a-f0-9]{64}$/),
+            at: z.number().int().nonnegative(),
+          })
+          .strict()
+      )
+      .max(6)
+      .default([]),
   })
   .strict();
 type Entry = z.infer<typeof entrySchema>;
@@ -88,6 +100,7 @@ export class TvSearchDeliveryJournal {
         );
         let changed = false;
         for (const entry of this.entries ?? []) {
+          if (entry.expiresAt <= Date.now()) continue;
           if (!fields.some((f) => entry.item[f] === url)) continue;
           if (complete && entry.readyAt === null) {
             entry.readyAt = Date.now();
@@ -123,6 +136,10 @@ export class TvSearchDeliveryJournal {
           (e) =>
             e.expiresAt <= e.createdAt ||
             e.expiresAt > e.createdAt + RETENTION_MS ||
+            (e.readyAt !== null && (e.readyAt < e.createdAt || e.readyAt >= e.expiresAt)) ||
+            e.announcements.some((event) => event.at < e.createdAt || event.at >= e.expiresAt) ||
+            new Set(e.announcements.map((event) => event.release)).size !==
+              e.announcements.length ||
             fields.some((f) => e.item[f] && !isProbeableMp4(e.item[f]))
         )
       )
@@ -226,6 +243,7 @@ export class TvSearchDeliveryJournal {
             ? now
             : null,
           blockedUrls: [],
+          announcements: [],
         });
         changed = true;
       }
@@ -255,6 +273,38 @@ export class TvSearchDeliveryJournal {
       this.releaseRemoved(this.entries!, proposed);
       this.entries = proposed;
       await this.save();
+    });
+  }
+
+  /** Timestamp each actually eligible rendition once, not the first arbitrary probe. */
+  async announce(
+    scope: string,
+    releases: Array<{ entryId: string; guid: string }>
+  ): Promise<Map<string, number>> {
+    return this.lock(async () => {
+      const entries = structuredClone(await this.load()),
+        output = new Map<string, number>(),
+        now = Date.now();
+      let changed = false;
+      for (const { entryId, guid } of releases) {
+        const entry = entries.find((e) => e.id === entryId && e.scope === scope);
+        if (!entry) throw new SonarrUnavailableError();
+        const release = createHash("sha256").update(guid).digest("hex");
+        let event = entry.announcements.find((e) => e.release === release);
+        if (!event) {
+          if (entry.announcements.length >= 6) throw new SonarrUnavailableError();
+          event = { release, at: now };
+          entry.announcements.push(event);
+          changed = true;
+        }
+        output.set(guid, event.at);
+      }
+      if (changed) {
+        this.releaseRemoved(this.entries!, entries);
+        this.entries = entries;
+        await this.save(); // One bounded write for the whole publication batch.
+      }
+      return output;
     });
   }
 
@@ -340,6 +390,7 @@ export async function getTvSearchDeliveryItems(
   if (!entries.length) return [];
   const inventory = await session.inventory(budget, true);
   const output: NewznabItem[] = [];
+  const announcements: Array<{ entryId: string; guid: string }> = [];
   // Reserve the normal RSS source window. Cache-backed proof rendering consumes no HTTP.
   const allOwners = [...new Set(entries.map((e) => e.tvdbId))];
   const start = ownerCursor % allOwners.length;
@@ -398,11 +449,21 @@ export async function getTvSearchDeliveryItems(
       for (const info of await enrichTvMatches(exact, budget, policy, quality, hlsEnabled, false)) {
         for (const release of generateRssItems(info, quality, hlsEnabled)) {
           if (release.title.includes(".UNKNOWN.")) continue;
-          output.push({ ...release, pubDate: new Date(entry.readyAt!).toUTCString() });
+          output.push(release);
+          announcements.push({ entryId: entry.id, guid: release.guid.value });
         }
       }
     }
   }
+  if (
+    epoch !== cacheContextEpoch() ||
+    rules !== getRulesetContext() ||
+    Date.now() >= budget.deadlineAt
+  )
+    throw new SonarrUnavailableError();
+  const advertised = await tvSearchDelivery.announce(session.deliveryIdentity, announcements);
+  for (const item of output)
+    item.pubDate = new Date(advertised.get(item.guid.value)!).toUTCString();
   if (
     epoch !== cacheContextEpoch() ||
     rules !== getRulesetContext() ||

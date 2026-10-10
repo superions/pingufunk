@@ -1626,3 +1626,15 @@ Suchbegriffe. Normale Sprachfassungswahl vor dem Ergebnislimit bleibt erhalten.
 Regressionen prüfen die echte Begrenzung und die verbleibenden fünf Slots.
 Die native Cold/RSS/Importfixture enthält einen vollständig gefüllten primären
 Katalog, nicht nur eine fast leere Kontrollantwort.
+
+Der abschließende Renditionreview trennt fertigen Medienbeleg und tatsächliche
+RSS-Veröffentlichung: Eine zunächst belegte französische oder ungeeignete Quelle
+darf einer später belegten deutschen HD-Fassung keinen alten PubDate vererben.
+Das begrenzte Journal hält deshalb je tatsächlich zulässiger Release-GUID den
+ersten Veröffentlichungszeitpunkt (höchstens sechs Hashes pro Quelleneintrag).
+SD und späteres HD erhalten getrennte Zeitpunkte; wiederholtes RSS und Restart
+verschieben diese nicht. Dies sind weder persistierte Medienbelege noch
+Consumer-ACKs. Retention, frische Sprach-/Pixel-/Identitätsprüfung und GUIDs bleiben
+unverändert. Die Regression prüft diese Reihenfolge über den tatsächlichen
+Feedowner; echte SQLite-/PostgreSQL-Verbindungen prüfen die Persistenz. Kapazität,
+ungültige Zeitpunkte und Schreibfehler scheitern geschlossen und atomar.

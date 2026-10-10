@@ -1396,7 +1396,9 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       gespeicherten Sprach-/Pixelbelege. Erst frisch belegte und erneut gegen
       den überwachten Sonarr-Bestand/Matcher geprüfte Quellen im bestehenden
       RSS-Pfad nachliefern. Alte bereits ausgestrahlte Folgen bleiben zulässig;
-      Vorab-RSS-Politik unverändert. PubDate ist der Downloadfähigkeitszeitpunkt,
+      Vorab-RSS-Politik unverändert. PubDate ist der erste tatsächlich zulässige
+      Veröffentlichungszeitpunkt je Release-GUID, nicht der erste beliebige
+      Medienbeleg (etwa eine fremdsprachige oder ungeeignete Fassung),
       nicht ein erfundenes Airdate; GUIDs/URLs bleiben erhalten. Feedabfragen
       sind keine ACKs. Fester kurzer Snapshot schützt Pagination, begrenzter
       Besitzer-Cursor verhindert Serienverhungern; vorhandene Dateien entfernen

@@ -168,3 +168,51 @@ it("does not re-probe a failed source automatically or persist its exception", a
   await vi.advanceTimersByTimeAsync(600_000);
   expect(fetch).toHaveBeenCalledTimes(1);
 });
+
+it("persists each eligible release's first announcement across restarts without extending retention", async () => {
+  await journal.register(scope, show(), [match()]);
+  const [entry] = await journal.current(scope);
+  const sd = [{ entryId: entry.id, guid: "synthetic-sd" }];
+  const first = await journal.announce(scope, sd);
+  await vi.advanceTimersByTimeAsync(1000);
+  journal.dispose();
+  journal = new TvSearchDeliveryJournal({ read: async () => persisted, write }, facts);
+  expect(await journal.announce(scope, sd)).toEqual(first);
+  const hd = await journal.announce(scope, [{ entryId: entry.id, guid: "synthetic-hd" }]);
+  expect(hd.get("synthetic-hd")).toBe(Date.now());
+  expect(hd.get("synthetic-hd")).toBeGreaterThan(first.get("synthetic-sd")!);
+  expect((await journal.current(scope))[0].expiresAt).toBe(entry.expiresAt);
+  expect(persisted).not.toContain("synthetic-hd"); // Persist hashes, never proofs or ACKs.
+});
+
+it("rejects an overflowing announcement batch atomically and fails closed on publication write failure", async () => {
+  await journal.register(scope, show(), [match()]);
+  const [entry] = await journal.current(scope);
+  const before = persisted;
+  await expect(
+    journal.announce(
+      scope,
+      Array.from({ length: 7 }, (_, i) => ({ entryId: entry.id, guid: `synthetic-${i}` }))
+    )
+  ).rejects.toThrow();
+  expect(persisted).toBe(before);
+  expect((await journal.current(scope))[0].announcements).toEqual([]);
+  write.mockRejectedValueOnce(new Error("private DB detail"));
+  await expect(
+    journal.announce(scope, [{ entryId: entry.id, guid: "synthetic-hd" }])
+  ).rejects.toThrow();
+  await expect(journal.current(scope)).rejects.toThrow();
+  expect(persisted).toBe(before);
+});
+
+it("rejects persisted announcement dates outside discovery retention", async () => {
+  await journal.register(scope, show(), [match()]);
+  const [entry] = await journal.current(scope);
+  journal.dispose();
+  persisted = JSON.stringify({
+    version: 1,
+    entries: [{ ...entry, announcements: [{ release: "b".repeat(64), at: entry.expiresAt }] }],
+  });
+  journal = new TvSearchDeliveryJournal({ read: async () => persisted, write }, facts);
+  await expect(journal.current(scope)).rejects.toThrow();
+});

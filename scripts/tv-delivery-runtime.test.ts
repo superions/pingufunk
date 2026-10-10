@@ -124,6 +124,10 @@ for (const provider of ["sqlite", "postgresql"] as const)
         await journal.register(scope, show, [match]);
         await facts.idle();
         await journal.idle();
+        const [registered] = await journal.current(scope);
+        const announced = await journal.announce(scope, [
+          { entryId: registered.id, guid: "synthetic-hd" },
+        ]);
         const first = await journal.current(scope);
         expect(first).toHaveLength(1);
         expect(first[0].readyAt).not.toBeNull();
@@ -141,6 +145,9 @@ for (const provider of ["sqlite", "postgresql"] as const)
         await journal.idle();
         expect(facts.get(source)?.facts.audioLanguage).toBe("de");
         expect(await journal.current(scope)).toEqual(first); // Fresh proof never moves first readiness.
+        expect(
+          await journal.announce(scope, [{ entryId: first[0].id, guid: "synthetic-hd" }])
+        ).toEqual(announced);
         expect(
           (await prisma.config.findUnique({ where: { key: "synthetic.sentinel" } }))?.value
         ).toBe("preserve");

@@ -150,6 +150,63 @@ it("delivers old cold discoveries only with fresh complete proof/current monitor
     state.epoch++;
     expect(await feed()).toHaveLength(42);
     expect((await tvSearchDelivery.current(state.scope)).some((e) => e.episode < 3)).toBe(false);
+    // A complete but invisible/unsupported rendition must not pre-date the
+    // later actually eligible source, nor hide a newly ready HD GUID after SD.
+    state.episodes.push({
+      ...state.episodes[3],
+      sonarrId: 46,
+      episodeNumber: 46,
+      title: "Synthetic Episode 46",
+    });
+    const extraShow = mergeSonarrShow(null, {
+      series: { sonarrId: 1, tvdbId: 123, title: "Synthetic Series", monitored: true },
+      episodes: state.episodes,
+    })!;
+    const extra = {
+      ...candidates[0],
+      title: "Localized Source (S01E46)",
+      url_website: "https://example.invalid/46",
+      url_video_hd: "https://rodlzdf-a.akamaihd.net/synthetic/episode-46.mp4",
+      url_video: "https://rodlzdf-a.akamaihd.net/synthetic/episode-47.mp4",
+    };
+    sourceMediaFacts.remember(extra.url_video_hd, {
+      facts: { audioLanguage: "fr", videoDimensions: { width: 1920, height: 1080 } },
+      fingerprint: "a".repeat(64),
+    });
+    await tvSearchDelivery.register(
+      state.scope,
+      extraShow,
+      matchSonarrEpisodes(extraShow, [extra], 0, 15, DEFAULT_LANGUAGE_POLICY, false, true)
+    );
+    state.epoch++;
+    expect((await feed()).some((i) => i.title.includes("S01E46"))).toBe(false);
+    vi.setSystemTime(Date.now() + 1000);
+    sourceMediaFacts.remember(extra.url_video, {
+      facts: { audioLanguage: "de", videoDimensions: { width: 1280, height: 720 } },
+      fingerprint: "b".repeat(64),
+    });
+    await tvSearchDelivery.idle();
+    state.epoch++;
+    const standard = (await feed()).find((i) => i.title.includes("S01E46"))!;
+    expect(standard.title).toContain("720p");
+    expect(Date.parse(standard.pubDate)).toBe(Math.floor(Date.now() / 1000) * 1000);
+    vi.setSystemTime(Date.now() + 1000);
+    sourceMediaFacts.remember(extra.url_video_hd, {
+      facts: { audioLanguage: "de", videoDimensions: { width: 1920, height: 1080 } },
+      fingerprint: "c".repeat(64),
+    });
+    await tvSearchDelivery.idle();
+    state.epoch++;
+    const high = (await feed()).find((i) => i.title.includes("S01E46"))!;
+    expect(high.title).toContain("1080p");
+    expect(high.guid.value).not.toBe(standard.guid.value);
+    expect(Date.parse(high.pubDate)).toBeGreaterThan(Date.parse(standard.pubDate));
+    state.epoch++;
+    expect((await feed()).find((i) => i.guid.value === high.guid.value)?.pubDate).toBe(
+      high.pubDate
+    );
+    state.episodes.pop();
+    state.epoch++;
     state.scope = "b".repeat(64);
     state.epoch++;
     expect(await feed()).toEqual([]); // New credentials/instance cannot consume old discovery.
