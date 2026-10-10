@@ -68,7 +68,9 @@ Range-Fenster je Quelle, höchstens 32 HTTP-Versuche je 15-Sekunden-Batch auch �
 kurze getrennte Läufe, maximal 128 wartende Quellen und 512 Cacheeinträge.
 Standardfassungen und HD-Renditions werden vor alternativen Fassungen geprüft.
 Keine Senderseiten, zusätzlichen Hosts, Voll-Downloads, Medien-Dateischreibzugriffe,
-DB-Änderungen oder zweite Downloadqueue. Ausfälle werden nicht automatisch retried.
+persistierten Sprach-/Pixelbelege oder zweite Downloadqueue. Das nachfolgend
+beschriebene Entdeckungsjournal nutzt vorhandene Config-Zeilen, kein DDL.
+Ausfälle werden nicht automatisch retried.
 Kalte MP4-Proben laufen nicht synchron im TV-Such-/RSS-HTTP-Pfad. Eine bereits
 erfolgreiche Katalog-/Metadatensuche darf nicht durch eine einzelne langsame oder
 abgelaufene Medienfassung scheitern und dadurch den nativen Indexer sperren.
@@ -88,8 +90,9 @@ keinen Suchhinweis. Eine kalte Suche darf neutral sein; nach abgeschlossener
 Prüfung konsumiert die nächste Suche die Belege ohne erfundene Sprache/Auflösung.
 Der Hintergrundworker startet keine erneute Sonarr-Suche und keinen Grab.
 
-Historischer Verbraucherbefund, Abnahme noch offen in P06.4: Sonarr verarbeitet eine abgeschlossene
-Staffelsuche nicht nochmals, nur weil dieser Cache später HD-Belege enthält.
+Historischer Verbraucherbefund, Abnahme noch offen in P06.4: Sonarr verarbeitet
+eine abgeschlossene Staffelsuche nicht nochmals, nur weil dieser Cache später
+HD-Belege enthält.
 Das normale RSS-Verfahren garantiert bisher keine Nachlieferung zuvor gefundener
 alter Episoden. Die warme Folgeabfrage beweist deshalb Auffindbarkeit, nicht
 vollständige automatische Beschaffung. Der neue Befund und der anschließend

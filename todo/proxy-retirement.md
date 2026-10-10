@@ -1438,6 +1438,28 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       reguläres RSS und 80 reale Importe ohne Doppelgrab direkt/über Prowlarr.
       Kein Nachweis durch eine warme zweite Suche oder blind wiederholte
       Live-Aufträge; produktive Gesamtabnahme bleibt offen.
+      Korrigierter Produktcheckpoint 10.10.2026 auf `7cde3fb`: 1.101 Tests
+      sowie Lint/Typecheck/Format/Build/Diff grün; 16 opt-in Fälle separat.
+      Fork-CI 38072201361 und Container-CI 38072201388 erfolgreich, inklusive
+      realer SQLite-/PostgreSQL-Journal-/Restartgates und nativer kalter
+      Mehrstaffelketten direkt/über Prowlarr mit 81 Quellen, null initialen
+      Grabs und 80/80 physischen Importen, wiederholtem RSS ohne Doppelgrab.
+      Die direkte revisionsgebundene OCI-Probe zusätzlich unabhängig an
+      gestopptem synthetischem Sonarr-Bestand/Dateien/Commands rückgelesen;
+      deren Terminal-Exit wurde nicht wiedergewonnen. Die weitergeleitete
+      OCI-Probe endete nach vollständiger Dateiabnahme mit Exit 0.
+      Ein Mutationstest deaktiviert die neue Foreground-Probesperre und lässt
+      die kausale Unit-Regression fehlschlagen; danach Produktquelle exakt
+      wiederhergestellt. QA-Checkpoint `5d868d5` enthält nur diese verschärfte
+      Testvorbedingung, kein Produktdelta. Persistierte Quarantäne verhindert
+      erneute Proben derselben ausgefallenen Quelle nach Restart/normalem RSS.
+      Separat autorisierter Image-only-Rollout des geprüften Produktstands
+      tatsächlich gesund verifiziert; übrige Anwendungscontainer, Profile,
+      globale Settings, bestehende Receipts und Migrationskette unverändert.
+      Der korrigierte einmalige kalte Live-Suchauftrag entdeckt alle noch
+      fehlenden sicher zugeordneten Folgen und liefert ihre Medienbelege nach.
+      Vollständige Live-Datei-/Importabnahme bleibt bis zum regulären RSS-/
+      Download-/Importabschluss offen; kein Completed-Command als Importbeweis.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
