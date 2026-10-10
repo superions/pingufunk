@@ -1497,3 +1497,9 @@ unüberwachte lokalisierte Quellfolge direkt und über Prowlarr gegen unverände
 englischen Sonarr-Titel. Fork-CI, native Container-/beide Backendgates und der
 autorisierte Live-Rollout sind noch offen.
 Es wird weder vollständige Katalogabdeckung noch ein neuer Grab/Import behauptet.
+Die erste native lokalisierte QA erwartete irrtümlich eine RSS-Titeländerung:
+konkrete Metadatentitel bleiben dort bewusst erhalten, nur TBA benutzt den
+Quelltitel. Die positive Consumerprüfung verlangt deshalb erhaltenen englischen
+Titel plus belegte S/E/German/720p bei ausschließlich lokalisierter Quellfixture;
+mit dem früheren Matcher gäbe es keinen Treffer. Keine Produktänderung oder
+geschwächte Identitäts-/Sprach-/Qualitätsprüfung für diese Testkorrektur.

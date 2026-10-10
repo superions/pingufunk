@@ -702,9 +702,9 @@ async function movieSearch(root, manifest, app = "radarr") {
         const release = candidates[0];
         if (
           !release.title.includes(".S01E01.") ||
-          !release.title.includes(
-            manifest.localizedEpisode ? "Lokalisierter.Quelltitel" : "Synthetic.Episode"
-          ) ||
+          // Concrete metadata titles remain authoritative in RSS. The source
+          // fixture differs deliberately; the old matcher returned no release.
+          !release.title.includes("Synthetic.Episode") ||
           release.title.includes(".TBA.") ||
           !release.title.includes(".GERMAN.") ||
           release.quality?.quality?.name !== "WEBDL-720p" ||
@@ -713,7 +713,7 @@ async function movieSearch(root, manifest, app = "radarr") {
           )
         )
           throw new Error(
-            "Owned TBA source coordinates/title/language/quality not natively accepted"
+            "Owned verified source coordinates/title/language/quality not natively accepted"
           );
         const fresh = await fixtureTarget(root, manifest, app);
         if (
