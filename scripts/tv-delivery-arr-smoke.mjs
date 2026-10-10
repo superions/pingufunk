@@ -94,7 +94,7 @@ try {
     root,
     manifest,
     "sonarr",
-    "/api/v3/qualitydefinition",
+    "/api/v3/qualitydefinition/update",
     definitions.map((row) => ({ ...row, minSize: 0 })),
     "PUT"
   );

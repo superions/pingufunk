@@ -1203,7 +1203,7 @@ export {
   fixtureIndexersReady,
 };
 
-if (import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
   try {
     const command = process.argv[2];
     if (command === "up") await up();
