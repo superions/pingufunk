@@ -231,7 +231,7 @@ try {
   const stats = JSON.parse(
     readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
   );
-  if (stats.transfers !== 80 || stats.ranges < 80)
+  if (stats.transfers !== 80 || stats.ranges < 80 || stats.cataloguePages !== 5)
     fail("bounded proof/full-transfer cardinality mismatch");
   console.log(
     `Owned ${transport}: one cold bulk search (${cold.length}/80 initial grabs), background -> RSS -> 80/80 real native imports; repeat RSS produced no duplicate`

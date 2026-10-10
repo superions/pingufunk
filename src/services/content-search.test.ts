@@ -65,6 +65,36 @@ beforeEach(() => {
   vi.mocked(queryMediathekView).mockResolvedValue([]);
 });
 
+it("caps supplemental raw pages without narrowing ordinary edition selection", async () => {
+  settings.set("provider.srf.enabled", "false");
+  vi.mocked(queryMediathekView).mockImplementation(async (_queries, size) =>
+    Array.from({ length: size }, (_, index) => ({
+      channel: "ZDF",
+      topic: "Synthetic",
+      title: `Source ${index}`,
+      description: "",
+      filmlisteTimestamp: 1_700_000_000,
+      duration: 600,
+      size: 0,
+      url_website: "https://example.invalid/source",
+      url_video: "https://example.invalid/source.mp4",
+      url_video_hd: "",
+      url_video_low: "",
+    }))
+  );
+  const result = await queryContent([], 5000, {
+    maxCandidatePages: 2,
+    deferLanguageSelection: true,
+  });
+  expect(result).toHaveLength(2000);
+  expect(vi.mocked(queryMediathekView).mock.calls.map(([, , options]) => options?.offset)).toEqual([
+    0, 1000,
+  ]);
+  vi.mocked(queryMediathekView).mockClear();
+  expect(await queryContent([], 5000, { maxCandidatePages: 0 })).toBeNull();
+  expect(queryMediathekView).not.toHaveBeenCalled();
+});
+
 describe("configured providers in normal search flows", () => {
   it("returns SRF in the ordinary UI request without an extra query parameter", async () => {
     const response = await GET(new NextRequest("http://localhost/api/search?q=Rundschau"));

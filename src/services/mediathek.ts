@@ -1,7 +1,12 @@
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { cacheContextEpoch, mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
-import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
+import {
+  getConfiguredLanguagePolicy,
+  queryContent,
+  searchCacheContext,
+  RSS_SYNC_CANDIDATE_LIMIT,
+} from "./content-search";
 import { selectLanguageVariants } from "./language-editions";
 import { enrichSourceAudio, enrichTvMatches, enrichTvCandidates } from "./source-audio";
 import { registerTvSearchDelivery, getTvSearchDeliveryItems } from "./tv-search-delivery";
@@ -57,7 +62,6 @@ import { findEpisodeByAirDate, findEpisodeBySeasonAndNumber } from "@/types";
 const QUERY_FIELDS = ["topic", "title"];
 const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "480p"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
-const RSS_SYNC_CANDIDATE_LIMIT = 6000;
 const CONTENT_SEARCH_CACHE_VERSION = "v17-tv-search-delivery";
 const GERMAN_MONTHS: Record<string, number> = {
   januar: 0,

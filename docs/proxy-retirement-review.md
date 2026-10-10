@@ -1614,3 +1614,15 @@ Quelle erhält ein eigenes, weiterhin höchstens 15 Sekunden langes Viererbudget
 Eine langsame erfolgreiche Probe über die Ratefenstergrenze ist kausal getestet.
 Echte Ausfälle bleiben ohne automatischen Retry gesperrt. Die kalte native
 Importabnahme wird nach dieser Produktkorrektur mit frischen Instanzen wiederholt.
+
+Ein weiterer Reviewbefund betrifft das gemeinsame RSS-Budget: Eine logische
+Sonarr-Ergänzungsabfrage konnte mehrere Katalogseiten verbrauchen und damit die
+primäre Quelle verdrängen. Das nominelle 6.000er-RSS-Limit wurde bereits durch
+den gemeinsamen Quellenowner auf 5.000 Rohkandidaten/fünf Seiten begrenzt;
+dieser tatsächliche Umfang bleibt unvergrößert. Beide Ergänzungsowner beziehen
+ihre Reserve nun aus diesem Vertrag; jede Ergänzungsabfrage erhält vorab ein
+begrenztes Rohseitenfenster statt nur eine Begrenzung der Anzahl logischer
+Suchbegriffe. Normale Sprachfassungswahl vor dem Ergebnislimit bleibt erhalten.
+Regressionen prüfen die echte Begrenzung und die verbleibenden fünf Slots.
+Die native Cold/RSS/Importfixture enthält einen vollständig gefüllten primären
+Katalog, nicht nur eine fast leere Kontrollantwort.

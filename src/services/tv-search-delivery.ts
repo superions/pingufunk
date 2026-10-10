@@ -9,7 +9,7 @@ import { isProbeableMp4 } from "@/lib/mp4-audio-language";
 import { sourceMediaFacts, SourceMediaFactsStore } from "./source-media-facts";
 import { openSonarrSession, mergeSonarrShow, SonarrUnavailableError } from "./sonarr-provider";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
-import { getConfiguredLanguagePolicy } from "./content-search";
+import { getConfiguredLanguagePolicy, RSS_SOURCE_WINDOW_ATTEMPTS } from "./content-search";
 import { verifiedRuleTopics } from "./tv-search-terms";
 import { getRulesetContext } from "./rulesets";
 import { enrichTvMatches } from "./source-audio";
@@ -345,7 +345,7 @@ export async function getTvSearchDeliveryItems(
   const start = ownerCursor % allOwners.length;
   const owners = [...allOwners.slice(start), ...allOwners.slice(0, start)].slice(
     0,
-    Math.max(1, budget.remainingAttempts - 5)
+    Math.max(0, budget.remainingAttempts - RSS_SOURCE_WINDOW_ATTEMPTS)
   );
   for (const id of owners) {
     const series = inventory.find((s) => s.tvdbId === id && s.monitored);

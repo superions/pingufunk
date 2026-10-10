@@ -16,6 +16,12 @@ import { resolveArteSeriesEditions } from "./arte-editions";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 
 const MAX_MEDIATHEK_CANDIDATES = 5000;
+// The shared source owner clamps the legacy 6,000 request to its 5,000 cap.
+// Supplemental owners must reserve the real window, not count logical queries.
+export const RSS_SYNC_CANDIDATE_LIMIT = 6000;
+export const RSS_SOURCE_WINDOW_ATTEMPTS = Math.ceil(
+  Math.min(RSS_SYNC_CANDIDATE_LIMIT, MAX_MEDIATHEK_CANDIDATES) / MEDIATHEK_VIEW_MAX_PAGE_SIZE
+);
 const MAX_PENDING_SEARCHES = 128;
 const pendingSearches = new Map<string, Promise<ApiResultItem[] | null>>();
 
@@ -80,8 +86,15 @@ async function queryMediathekCandidateWindow(
 
   // Scan a bounded source window before edition selection. MediathekViewWeb's
   // `id` hashes its full source row, so it is not a stable cursor or release key.
-  for (let offset = 0; offset < MAX_MEDIATHEK_CANDIDATES; offset += MEDIATHEK_VIEW_MAX_PAGE_SIZE) {
-    const pageSize = Math.min(MEDIATHEK_VIEW_MAX_PAGE_SIZE, MAX_MEDIATHEK_CANDIDATES - offset);
+  const pages = options.maxCandidatePages;
+  if (pages !== undefined && (!Number.isSafeInteger(pages) || pages < 1 || pages > 5))
+    throw new Error("Invalid candidate window");
+  const candidateLimit = Math.min(
+    MAX_MEDIATHEK_CANDIDATES,
+    (pages ?? 5) * MEDIATHEK_VIEW_MAX_PAGE_SIZE
+  );
+  for (let offset = 0; offset < candidateLimit; offset += MEDIATHEK_VIEW_MAX_PAGE_SIZE) {
+    const pageSize = Math.min(MEDIATHEK_VIEW_MAX_PAGE_SIZE, candidateLimit - offset);
     const page = await queryMediathekView(queries, pageSize, { ...options, offset });
     if (page === null) return null;
 

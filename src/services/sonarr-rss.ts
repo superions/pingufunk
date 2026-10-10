@@ -6,7 +6,12 @@ import { openSonarrSession, mergeSonarrShow, SonarrUnavailableError } from "./so
 import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { tvSearchQueries, verifiedRuleTopics } from "./tv-search-terms";
 import { getRulesetContext } from "./rulesets";
-import { queryContent, searchCacheContext, getConfiguredLanguagePolicy } from "./content-search";
+import {
+  queryContent,
+  searchCacheContext,
+  getConfiguredLanguagePolicy,
+  RSS_SOURCE_WINDOW_ATTEMPTS,
+} from "./content-search";
 import type { MatchedEpisodeInfo, TvdbData } from "@/types";
 
 interface Snapshot {
@@ -59,8 +64,9 @@ export async function getSonarrRssMatches(
     let episodeCount = 0;
     // Reserve one episode lookup and one source attempt per selected series.
     // A full source page may consume more; its failure aborts the entire snapshot.
-    // A foreground RSS owner still needs its bounded five-page source window.
-    const available = Math.max(0, budget.remainingAttempts - (callerBudget ? 5 : 0));
+    const reserved = callerBudget ? RSS_SOURCE_WINDOW_ATTEMPTS : 0;
+    // Account for the actual paginated primary window, not a historical page count.
+    const available = Math.max(0, budget.remainingAttempts - reserved);
     const count = Math.min(5, inventory.length, Math.floor(available / 2));
     for (let index = 0; index < count && episodeCount < 50; index++) {
       const series = inventory[(start + index) % inventory.length];
@@ -84,16 +90,18 @@ export async function getSonarrRssMatches(
       const candidates = [];
       // Reserve the remaining series lookups and primary RSS window. Broader
       // retrieval never resets the ten-attempt budget or starves its cursor.
-      const maxQueries = Math.max(
-        1,
-        budget.remainingAttempts - (callerBudget ? 5 : 0) - (count - index - 1) * 2
-      );
+      const maxQueries = Math.max(1, budget.remainingAttempts - reserved - (count - index - 1) * 2);
       for (const query of tvSearchQueries(show).slice(0, maxQueries)) {
+        // One logical query can consume several pages. Bound its candidate
+        // window before fetching, rather than lending it the primary owner's slots.
+        const pages = budget.remainingAttempts - reserved - (count - index - 1) * 2;
+        if (pages < 1) break;
         const page = await queryContent([query], 5000, {
           requestBudget: budget,
           progressiveOnly: !hlsEnabled,
           arteSeries: show,
           deferLanguageSelection: true,
+          maxCandidatePages: Math.min(5, pages),
         });
         if (page === null) throw new SonarrUnavailableError();
         candidates.push(...page);

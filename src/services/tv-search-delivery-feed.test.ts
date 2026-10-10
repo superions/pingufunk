@@ -44,6 +44,7 @@ vi.mock("@/lib/settings", () => ({
 vi.mock("./rulesets", () => ({ getRulesetContext: () => "synthetic-rules" }));
 vi.mock("./tv-search-terms", () => ({ verifiedRuleTopics: () => [] }));
 vi.mock("./content-search", () => ({
+  RSS_SOURCE_WINDOW_ATTEMPTS: 5,
   getConfiguredLanguagePolicy: async () => DEFAULT_LANGUAGE_POLICY,
 }));
 vi.mock("./sonarr-provider", async (importOriginal) => {

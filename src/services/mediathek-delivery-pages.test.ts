@@ -17,6 +17,7 @@ vi.mock("@/lib/cache", () => ({
   mediathekCache: { get: () => undefined, set: () => {} },
 }));
 vi.mock("./content-search", () => ({
+  RSS_SYNC_CANDIDATE_LIMIT: 6000,
   queryContent: state.query,
   searchCacheContext: async () => "synthetic-context",
   getConfiguredLanguagePolicy: async () => ({}),

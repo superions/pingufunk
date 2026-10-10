@@ -190,6 +190,39 @@ globalThis.fetch = async (input, init) => {
         filmlisteTimestamp: 1546387200,
         searchEngineTime: 0,
       };
+    } else if (tvDelivery && terms.length === 0) {
+      // The primary feed really fills the complete bounded source window. An almost-empty fixture
+      // would hide budget starvation between delivery, supplements and the catalogue.
+      const offset = Number(body.offset ?? 0),
+        size = Number(body.size ?? 1000);
+      const statsPath = "/qa/delivery-source-stats.json";
+      const stats = existsSync(statsPath)
+        ? JSON.parse(readFileSync(statsPath, "utf8"))
+        : { ranges: 0, transfers: 0 };
+      stats.cataloguePages = (stats.cataloguePages ?? 0) + 1;
+      writeFileSync(statsPath, JSON.stringify(stats));
+      data.result.results = Array.from(
+        { length: Math.max(0, Math.min(size, 5000 - offset)) },
+        (_, i) => ({
+          channel: "ZDF",
+          topic: "Unrelated Programme",
+          title: `Unrelated ${offset + i}`,
+          description: "Owned primary RSS page",
+          filmlisteTimestamp: 1546387200,
+          duration: 60,
+          size: 0,
+          url_website: "https://example.invalid/unrelated",
+          url_video: "https://example.invalid/unrelated.mp4",
+          url_video_hd: "",
+          url_video_low: "",
+        })
+      );
+      data.result.queryInfo = {
+        totalResults: 5000,
+        resultCount: data.result.results.length,
+        filmlisteTimestamp: 1546387200,
+        searchEngineTime: 0,
+      };
     } else data.result.results = rows;
     return Response.json(data);
   }
