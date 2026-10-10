@@ -1256,7 +1256,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1352,6 +1352,27 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       neuen Grabs/Importe. Katalogzeilen, eindeutige Episoden, belegte Renditions
       und fehlende Metadaten getrennt zählen; verbleibende Nummerierungs- oder
       Quellenlücken nicht als vollständige Produktabnahme darstellen.
+      Erneute Abnahme 10.10.2026: Produktstand `7aa5e9c`, native QA-Korrektur
+      `8f92dc9` ohne Produktdelta. 1082 reguläre Tests, Lint/Typecheck/Format/
+      Build/Diff grün; 15 opt-in PG-Fälle im separaten realen CI-Gate.
+      Fork-CI 38053377194 und Docker-Validierung 38053377152 vollständig grün:
+      direkte/über Prowlarr erkannte lokalisierte Folge bei unveränderten
+      englischen Sonarr-Metadaten, TBA-/Qualitätsnegative, beide Backend-/
+      Medien-/v4-Freigabegates und kompatibler Rollback. Abschließende Unit-
+      Isolierung der Hintergrundqueue anschließend lokal erneut voll geprüft;
+      Produkt- und native Container-Evidenz unverändert wiederverwendet.
+      Autorisierter Image-only-Rollout tatsächlich gesund und mit vollem
+      Produkt-Revisionslabel verifiziert; andere Anwendungscontainer, Profile,
+      Settings, PG-/Migrationsstand und Anzahl bestehender v4-Receipts erhalten.
+      Lesende Live-Staffelsuchen über die bestehende Sonarr/Prowlarr-Route
+      bestätigen nach begrenztem Aufwärmen sämtliche eindeutig zum vorhandenen
+      Metadatenbestand zuordenbaren Folgen mit deutscher HD-Rendition.
+      Katalogfassungen, eindeutige Episoden und ungebundene Quellen separat
+      geprüft; bestehende Cutoff-Ablehnungen nicht durch Profiländerung beseitigt.
+      Kein Grab, Import, öffentliches Image oder Main-/Upstream-Push. Kalte/
+      abgelaufene Suchbelege können bis zur nächsten Suche neutral sein;
+      automatischer Suchwiederholer, erfundene Nummerierung und vollständige
+      P03.4-Sprachabnahme sind durch diesen begrenzten Fix nicht behauptet.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 

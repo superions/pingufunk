@@ -1490,12 +1490,13 @@ Aufwärmen ohne erneute Katalogabfrage, stabile GUIDs, Sprach-/Pixelbelege,
 Pagination, RSS→NZB→Queue und unveränderte Metadaten. Weitere negative Tests
 prüfen URL-/Selectorbindung, TTL/Kapazität, Ratelimit, Abbruch, Ausfall,
 gemischte/unbekannte Audiotracks und frische Einzelprüfung trotz widersprechendem
-Suchcache. Lokal 1082 reguläre Tests grün; 15 opt-in PG-Tests separat zu prüfen.
+Suchcache. Lokal 1082 reguläre Tests grün; 15 opt-in PG-Tests nicht regulär lokal
+ausgeführt, sondern im separaten realen CI-Gate geprüft.
 Lint, Typecheck, Format, Produktionsbuild und Diffcheck grün; bestehende 14
 Turbopack-Tracingwarnungen unverändert. Der native Containerharness ergänzt eine
 unüberwachte lokalisierte Quellfolge direkt und über Prowlarr gegen unveränderten
-englischen Sonarr-Titel. Fork-CI, native Container-/beide Backendgates und der
-autorisierte Live-Rollout sind noch offen.
+englischen Sonarr-Titel. Die erste Prüfung und die abschließende Abnahme sind
+unten getrennt dokumentiert.
 Es wird weder vollständige Katalogabdeckung noch ein neuer Grab/Import behauptet.
 Die erste native lokalisierte QA erwartete irrtümlich eine RSS-Titeländerung:
 konkrete Metadatentitel bleiben dort bewusst erhalten, nur TBA benutzt den
@@ -1503,3 +1504,50 @@ Quelltitel. Die positive Consumerprüfung verlangt deshalb erhaltenen englischen
 Titel plus belegte S/E/German/720p bei ausschließlich lokalisierter Quellfixture;
 mit dem früheren Matcher gäbe es keinen Treffer. Keine Produktänderung oder
 geschwächte Identitäts-/Sprach-/Qualitätsprüfung für diese Testkorrektur.
+
+### Abschließende Entwicklungs- und Betriebsabnahme
+
+[Fork-CI auf `8f92dc9`](https://github.com/superions/pingufunk/actions/runs/38053377194)
+und [Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/38053377152)
+vollständig bestanden. Native direkte und über Prowlarr geführte Suche erkennt
+die ausschließlich lokalisierte Quellfixture bei unverändertem konkretem
+englischen Metadatentitel als S01E01/German/720p; alte TBA-/Qualitätsnegative
+bleiben geschützt. Beide Backend-/Medien-/v4-Freigabegates sowie Migration und
+Post-write-Rollback grün, keine Image-Publikation. Zwischen Produktcommit
+`7aa5e9c` und QA-Korrektur `8f92dc9` sind Produkt-, Schema-, Dependency-,
+Dockerfile- und Entrypointinputs identisch.
+
+Beim abschließenden Testreview wurde die Hintergrundqueue in den isolierten
+Review-Unit-Tests ausdrücklich gemockt. Der Test prüft die übergebenen
+Rendition-URLs; tatsächliche HTTP-, Range-, Cache- und Abbruchverträge prüft die
+eigene Worker-Suite. Dadurch entstehen dort keine ungemockten externen Proben
+oder fremden Timer. Danach erneut 1082 reguläre Tests und Lint/Types/Format/Diff
+grün. Produktbuild und native Container-/CI-Evidenz mit unveränderten relevanten
+Inputs werden als wiederverwendet ausgewiesen, nicht als neue Ausführung.
+
+Der separat beauftragte lokale Image-only-Rollout ist tatsächlich angekommen:
+gesunde laufende Instanz mit vollem `7aa5e9c`-Revisionslabel und geprüftem OCI-
+Imageconfig-Digest, ein Worker, bestehender PostgreSQL-Schreibbetrieb. Andere
+Anwendungscontainer, Profile, globale Settings/Toleranzen, Migrationskette und
+Anzahl bestehender v4-Receipts unverändert gegengeprüft. Frischer Runner- und
+kompatibler Rollbackimage-Scan ohne fixbare HIGH/CRITICAL-Befunde; bestehende
+Befunde anderer unveränderter Images sind damit ausdrücklich nicht behoben.
+Private Infrastruktur-, Scanner-, Archiv- und GitOpsnachweise bleiben im
+privaten Betriebsrunbook, nicht als API-Snapshots oder Fixtures in diesem Repo.
+
+Live wurden Quellfassungen, eindeutige S/E, gebundene Metadaten und belegte
+Renditions getrennt gezählt. Staffelsuchen über den tatsächlichen Sonarr-/
+Prowlarr-Consumer bestätigen nach begrenzter Hintergrundprüfung sämtliche
+eindeutig zum vorhandenen Bestand zuordenbaren Folgen als German/WEBDL-HD.
+Eine erste breitere Abnahme zeigte noch unbelegte Qualitäten; erst die frische
+Folgesuche ohne diese Ablehnungen ist der vollständige HD-Nachweis. Bestehende
+Cutoff-Ablehnungen bleiben unverändert, unnummerierte Quellen ungebunden und
+abweichende Spezial-/Jahresnummerierungen werden nicht umgedeutet. Nur lesende
+Suchen, keine Grabs oder Importe. P06.4 für diesen Vertrag erneut geschlossen.
+
+Grenzen: Eine kalte oder abgelaufene breite Suche kann zunächst neutral sein;
+fertige Hintergrundbelege werden von der nächsten Suche konsumiert. Dieser
+Fix löst keine automatische erneute Sonarr-Suche aus. Fehlende/abweichende
+Nummerierungen und nicht in vier Fenstern beweisbare Medienmetadaten bleiben
+ungeklärt; P03.4 ist weiterhin getrennt offen. Keine vollständige Produkt- oder
+Bibliotheksabnahme aus dieser begrenzten Prüfung ableiten.

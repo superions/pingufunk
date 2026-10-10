@@ -79,7 +79,8 @@ bleibt unabhängig davon erhalten. Unvollständige Sprache/Pixel bleiben neutral
 Cacheinvalidierung bricht nur den eigenen Worker ab und verwirft späte Antworten.
 Freigabe, Bestätigung und Workerrevalidierung prüfen stets frisch und konsumieren
 keinen Suchhinweis. Eine kalte Suche darf neutral sein; nach abgeschlossener
-Prüfung wird dieselbe Staffel ohne erfundene Sprache/Auflösung nutzbar.
+Prüfung konsumiert die nächste Suche die Belege ohne erfundene Sprache/Auflösung.
+Der Hintergrundworker startet keine erneute Sonarr-Suche und keinen Grab.
 
 ## Abgrenzung zu MediathekArr
 

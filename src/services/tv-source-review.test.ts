@@ -119,6 +119,9 @@ vi.mock("./tv-search-terms", () => ({ verifiedRuleTopics: () => [] }));
 vi.mock("./content-search", () => ({
   getConfiguredLanguagePolicy: async () => DEFAULT_LANGUAGE_POLICY,
 }));
+// Review unit tests do not own a metadata worker or external HTTP. Exercise
+// its queue boundary here; the worker's range/cache lifecycle has its own suite.
+vi.mock("./source-media-facts", () => ({ sourceMediaFacts: { enqueue: vi.fn() } }));
 vi.mock("./source-audio", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   enrichSourceAudio: async (items: Array<typeof state.source>) =>
@@ -144,6 +147,7 @@ import {
   revalidateApprovedTvJob,
 } from "./tv-source-review";
 import { prisma } from "@/lib/db";
+import { sourceMediaFacts } from "./source-media-facts";
 import { NextRequest } from "next/server";
 import { generateRssItems } from "./newznab";
 import { GET as downloadNzb } from "@/app/api/newznab/fake_nzb_download/route";
@@ -177,6 +181,7 @@ async function preview() {
 
 it("publishes verified conflict coordinates without allowing an ordinary NZB or forged grant", async () => {
   const found = (await searchTvSourceReviews("Synthetic series"))!;
+  expect(sourceMediaFacts.enqueue).toHaveBeenCalledWith([state.source.url_video_hd, "", ""]);
   const info = {
     ...found[0].info,
     item: {
