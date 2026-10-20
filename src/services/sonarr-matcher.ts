@@ -46,7 +46,8 @@ export function matchSonarrEpisodes(
   languagePolicy: LanguagePolicy = DEFAULT_LANGUAGE_POLICY,
   hlsEnabled = false,
   deferLanguageSelection = false,
-  ruleTopics: readonly string[] = []
+  ruleTopics: readonly string[] = [],
+  includeRuntimeConflicts = false
 ): MatchedEpisodeInfo[] {
   const names = [
     show.name,
@@ -61,8 +62,7 @@ export function matchSonarrEpisodes(
   const episodes = show.episodes.filter(
     (episode) =>
       (episode.metadataSource === "sonarr" ||
-        (verified.has(`${episode.seasonNumber}:${episode.episodeNumber}`) &&
-          isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber))) &&
+        verified.has(`${episode.seasonNumber}:${episode.episodeNumber}`)) &&
       !blocked.has(`${episode.seasonNumber}:${episode.episodeNumber}`)
   );
   const matches: MatchedEpisodeInfo[] = [];
@@ -128,6 +128,22 @@ export function matchSonarrEpisodes(
         .replace(/\s*\((?:klare Sprache|Gebärdensprache)\)\s*$/i, "")
         .replace(/\s*\((?:19|20)\d{2}\)\s*$/, "")
     );
+    const hasMatchingTitle = (episode: TvdbData["episodes"][number]): boolean => {
+      const full = normalized(episode.name);
+      const tail = full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)!;
+      return (
+        [...full].length >= 3 &&
+        (title === full ||
+          ([...tail].length >= 3 && title === tail) ||
+          names.some(
+            (name) =>
+              title === `${name}: ${full}` ||
+              title === `${name} - ${full}` ||
+              ([...tail].length >= 3 &&
+                (title === `${name}: ${tail}` || title === `${name} - ${tail}`))
+          ))
+      );
+    };
     const possible = episodes.filter((episode) => {
       if (sourceSeason !== null && sourceSeason !== episode.seasonNumber) {
         recordDecision("identity", "coordinate_conflict", "conflicting");
@@ -148,53 +164,26 @@ export function matchSonarrEpisodes(
         recordDecision("identity", "year_conflict", "conflicting");
         return false;
       }
-      const full = normalized(episode.name);
-      const tail = full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)!;
-      if ([...full].length < 3) return false;
-      const titleMatches =
-        title === full ||
-        ([...tail].length >= 3 && title === tail) ||
-        names.some(
-          (name) =>
-            title === `${name}: ${full}` ||
-            title === `${name} - ${full}` ||
-            ([...tail].length >= 3 &&
-              (title === `${name}: ${tail}` || title === `${name} - ${tail}`))
-        );
-      // An explicit source coordinate with verified series identity and runtime
-      // is stronger than translated/generic metadata titles (e.g. "Episode 3").
+      // Complete source coordinates in an independently verified series do not
+      // require a localized source title to equal the metadata language. Keep
+      // the original metadata and cross-provider conflicts; never adopt request
+      // coordinates or use runtime to guess among episodes.
       const genericMetadataTitle = isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber);
       const coordinateMatches =
-        genericMetadataTitle &&
         sourceSeason !== null &&
         parsed.episodes.length === 1 &&
         episode.runtime !== null &&
         Number.isFinite(episode.runtime) &&
         episode.runtime > 0;
-      if (!((!genericMetadataTitle && titleMatches) || coordinateMatches)) {
+      const identityMatches =
+        (!genericMetadataTitle && hasMatchingTitle(episode)) || coordinateMatches;
+      if (!identityMatches)
         recordDecision(
           "identity",
           genericMetadataTitle ? "identity_missing" : "alias_conflict",
           genericMetadataTitle ? "missing" : "conflicting"
         );
-        return false;
-      }
-      const duration = sonarrDurationCheck(
-        item.duration,
-        episode.runtime === null ? null : episode.runtime * 60,
-        minimumSeconds,
-        tolerancePercent
-      );
-      recordDecision(
-        "runtime",
-        duration.accepted
-          ? duration.expectedVerified
-            ? "runtime_verified"
-            : "runtime_missing"
-          : "runtime_outside_tolerance",
-        duration.accepted ? (duration.expectedVerified ? "proven" : "missing") : "conflicting"
-      );
-      return duration.accepted;
+      return identityMatches;
     });
     // Repeated episode titles without discriminating coordinates/year never pick the newest.
     if (possible.length !== 1) {
@@ -206,12 +195,51 @@ export function matchSonarrEpisodes(
       continue;
     }
     recordDecision("identity", "identity_verified", "proven");
+    // Duration cannot disambiguate identity. Review is restricted to complete
+    // source coordinates and two positive references, never guessed episodes.
+    const episode = possible[0];
+    const runtimeConflict = !sonarrDurationCheck(
+      item.duration,
+      episode.runtime === null ? null : episode.runtime * 60,
+      minimumSeconds,
+      tolerancePercent
+    ).accepted;
+    recordDecision(
+      "runtime",
+      runtimeConflict
+        ? "runtime_outside_tolerance"
+        : episode.runtime
+          ? "runtime_verified"
+          : "runtime_missing",
+      runtimeConflict ? "conflicting" : episode.runtime ? "proven" : "missing"
+    );
+    if (
+      runtimeConflict &&
+      !(
+        includeRuntimeConflicts &&
+        // A manual runtime exception cannot also waive a concrete title
+        // difference. Localized coordinate mapping requires matching runtime.
+        (isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber) ||
+          hasMatchingTitle(episode)) &&
+        sourceSeason !== null &&
+        parsed.episodes.length === 1 &&
+        Number.isFinite(item.duration) &&
+        item.duration > 0 &&
+        episode.runtime !== null &&
+        Number.isFinite(episode.runtime) &&
+        episode.runtime > 0
+      )
+    )
+      continue;
     matches.push({
-      episode: possible[0],
+      episode,
       item,
       showName: show.germanName || show.name,
       matchedTitle: item.title,
       tvdbId: show.id,
+      ...(runtimeConflict
+        ? { runtimeConflict: true, runtimeTolerancePercent: tolerancePercent }
+        : {}),
     });
   }
   return matches;

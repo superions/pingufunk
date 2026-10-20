@@ -10,6 +10,8 @@ import { buildReleaseGuid, generateMovieRssItems } from "./newznab";
 import { releaseMediaExpectations } from "./release-media-expectations";
 import { decodeMediaExpectations, generateFakeNzb } from "./nzb-release";
 import { parseNzbContent } from "./download";
+import { sourceMediaFacts } from "./source-media-facts";
+import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
 
 const item: ApiResultItem = {
   channel: "ARTE.DE",
@@ -39,7 +41,80 @@ function mock(value: unknown = streams(), status = 200) {
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+  sourceMediaFacts.clear();
+  await sourceMediaFacts.idle();
+  vi.unstubAllGlobals();
+});
+
+it("defers cold MP4 evidence without making a gone asset or slow probe fail the completed TV search", async () => {
+  const url = "https://rodlzdf-a.akamaihd.net/synthetic/gone.mp4";
+  const source = {
+    ...item,
+    url_website: "https://example.invalid/episode",
+    url_video: "",
+    url_video_low: "",
+    url_video_hd: url,
+  };
+  const fetch = vi.fn(async () => new Response(null, { status: 404 }));
+  vi.stubGlobal("fetch", fetch);
+  const checked = vi.fn();
+  const unsubscribe = sourceMediaFacts.onChecked(checked);
+  sourceMediaFacts.retain([url], Date.now() + 7_200_000);
+  try {
+    // At least four attempts keep the former foreground branch reachable in a mutation test.
+    const budget = new HttpRequestBudget(8);
+    const [neutral] = (await enrichSourceAudio([source], budget, 16, true)).get(source)!;
+    expect(neutral.audioLanguage).toBeUndefined();
+    expect(neutral.sourceVideoDimensions).toBeUndefined();
+    expect(budget.remainingAttempts).toBe(8);
+    expect(fetch).not.toHaveBeenCalled();
+    await sourceMediaFacts.idle();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(checked).toHaveBeenCalledWith(url, {
+      facts: { audioLanguage: null, videoDimensions: null },
+      fingerprint: undefined,
+    });
+    sourceMediaFacts.enqueue([url]);
+    await sourceMediaFacts.idle();
+    expect(fetch).toHaveBeenCalledTimes(1); // A retained failure is not retried by RSS warming.
+    const [fresh] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
+    expect(fetch).toHaveBeenCalledTimes(2); // Approval bypasses search hints and rechecks freshly.
+    expect(fresh.audioLanguage).toBeUndefined();
+    expect(fresh.sourceVideoDimensions).toBeUndefined(); // No approval/quality promise for a gone asset.
+  } finally {
+    unsubscribe();
+  }
+});
+
+it("keeps approval enrichment fresh even when a TV search has a conflicting cached asset hint", async () => {
+  const url = "https://rodlzdf-a.akamaihd.net/synthetic/fresh-approval.mp4";
+  sourceMediaFacts.remember(url, {
+    facts: { audioLanguage: "de", videoDimensions: { width: 1920, height: 1080 } },
+    fingerprint: "a".repeat(64),
+  });
+  const fetch = vi.fn(async (_url: string, init: RequestInit) =>
+    mp4RangeResponse(syntheticMp4(1280, 720, ["fra"]), init)
+  );
+  vi.stubGlobal("fetch", fetch);
+  const source = {
+    ...item,
+    url_website: "https://example.invalid/source",
+    url_video: url,
+    url_video_hd: "",
+    url_video_low: "",
+  };
+  try {
+    const [fresh] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fresh.audioLanguage).toBe("fr");
+    expect(fresh.sourceVideoDimensions).toEqual([{ url, width: 1280, height: 720 }]);
+    expect(fresh.sourceAssetFingerprint).not.toBe("a".repeat(64));
+  } finally {
+    sourceMediaFacts.clear();
+    await sourceMediaFacts.idle();
+  }
+});
 
 it("accepts only the confirmed ARTE legacy CDN and binds its exact HbbTV URL in producer and worker", async () => {
   const url = "https://arteptweb-a.akamaihd.net/synthetic/episode.mp4";

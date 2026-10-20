@@ -15,6 +15,7 @@ vi.mock("@/lib/settings", () => ({
 vi.mock("@/services/category", () => ({
   getCategoriesForTopics,
 }));
+vi.mock("@/services/tv-source-review", () => ({ searchTvSourceReviews: vi.fn(async () => null) }));
 
 import { GET } from "./route";
 import { srfProvider } from "@/providers/srf";

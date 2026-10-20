@@ -9,6 +9,7 @@ import {
   lstatSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
 // Explicitly approved isolated integration only. No production endpoint input.
@@ -117,10 +118,14 @@ async function up() {
   const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
   const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
   const placeholderEpisode = process.env.PINGUFUNK_ARR_QA_TBA === "1";
+  const localizedEpisode = process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1";
+  const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
   const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
+  if (localizedEpisode && (placeholderEpisode || !sourceAudio || renditionQuality !== "720p"))
+    throw new Error("Owned localized episode QA requires its positive source-audio fixture");
   if (
     renditionQuality &&
-    (!sourceAudio || !["720p", "unknown", "conflicting"].includes(renditionQuality))
+    (!sourceAudio || !["720p", "unknown", "conflicting", "ard-1080p"].includes(renditionQuality))
   )
     throw new Error("Owned quality QA requires the bounded source-audio fixture");
   const appImages = Object.fromEntries(
@@ -145,10 +150,13 @@ async function up() {
     movieCorrelation,
     sourceAudio,
     placeholderEpisode,
+    localizedEpisode,
     renditionQuality,
+    tvDelivery,
     apps: {},
   };
   save(root, manifest);
+  if (tvDelivery) mkdirSync(join(root, "shared-downloads"), { mode: 0o700 });
   docker(["network", "create", "--internal", "--label", `${label}=${owner}`, manifest.network]);
   for (const app of ["sonarr", "radarr", "prowlarr"]) {
     const dir = join(root, app);
@@ -179,6 +187,9 @@ async function up() {
       `PGID=${process.getgid()}`,
       "--mount",
       `type=bind,src=${dir},dst=/config`,
+      ...(tvDelivery && app === "sonarr"
+        ? ["--mount", `type=bind,src=${join(root, "shared-downloads")},dst=/qa-downloads`]
+        : []),
       image,
     ]);
   }
@@ -186,7 +197,7 @@ async function up() {
   mkdirSync(dir, { mode: 0o700 });
   if (movieCorrelation)
     writeFileSync(join(dir, "radarr-api-key"), apiKey(root, "radarr"), { mode: 0o600 });
-  if (placeholderEpisode)
+  if (placeholderEpisode || localizedEpisode || tvDelivery)
     writeFileSync(join(dir, "sonarr-api-key"), apiKey(root, "sonarr"), { mode: 0o600 });
   // Initialize only this newly allocated SQLite test file, using the schema runner.
   docker([
@@ -234,7 +245,20 @@ async function up() {
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
     ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
-    ...(placeholderEpisode ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"] : []),
+    ...(placeholderEpisode || localizedEpisode || tvDelivery
+      ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"]
+      : []),
+    ...(tvDelivery
+      ? [
+          "-e",
+          "PINGUFUNK_ARR_QA_TV_DELIVERY=1",
+          "-e",
+          "DOWNLOAD_FOLDER_PATH=/downloads",
+          "--mount",
+          `type=bind,src=${join(root, "shared-downloads")},dst=/downloads`,
+        ]
+      : []),
+    ...(localizedEpisode ? ["-e", "PINGUFUNK_ARR_QA_LOCALIZED_EPISODE=1"] : []),
     ...(renditionQuality ? ["-e", `PINGUFUNK_ARR_QA_RENDITION_QUALITY=${renditionQuality}`] : []),
     ...(movieCorrelation
       ? [
@@ -284,6 +308,7 @@ async function up() {
   save(root, manifest);
   console.log(`QA_DIRECTORY=${root}`);
   await status(root, manifest);
+  return root;
 }
 async function status(root, manifest) {
   for (const app of Object.keys(manifest.apps)) {
@@ -601,6 +626,23 @@ async function seriesFixture(root, manifest) {
           series.Id,
           2147483003
         );
+      if (manifest.tvDelivery) {
+        db.prepare("UPDATE Series SET Monitored=1, Runtime=1, Seasons=? WHERE Id=?").run(
+          JSON.stringify([1, 2].map((seasonNumber) => ({ seasonNumber, monitored: true }))),
+          series.Id
+        );
+        db.prepare(
+          "UPDATE Episodes SET Monitored=1, Runtime=1, AirDateUtc='2019-01-01 20:00:00', AirDate='2019-01-01' WHERE SeriesId=?"
+        ).run(series.Id);
+        for (let season = 1; season <= 2; season++)
+          for (let episode = 1; episode <= 40; episode++) {
+            if (season === 1 && episode === 1) continue;
+            db.prepare(
+              `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
+            VALUES (?,?,?,'Synthetic Episode',0,1,'2019-01-01 20:00:00','2019-01-01',0,?,1,'[]')`
+            ).run(series.Id, season, episode, 2147483003 + (season - 1) * 40 + episode - 1);
+          }
+      }
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -639,7 +681,7 @@ async function movieSearch(root, manifest, app = "radarr") {
   await api(root, manifest, "pingufunk", "/api/settings", {
     "matching.minDuration": "0",
     "download.quality": "all",
-    ...(app === "sonarr" && manifest.placeholderEpisode
+    ...(app === "sonarr" && (manifest.placeholderEpisode || manifest.localizedEpisode)
       ? { "integration.sonarr.enabled": "true", "integration.sonarr.url": "http://sonarr:8989" }
       : {}),
   });
@@ -691,10 +733,12 @@ async function movieSearch(root, manifest, app = "radarr") {
         );
       if (!candidates[0].guid || !candidates[0].downloadUrl)
         throw new Error("Owned Radarr candidate transport identity missing");
-      if (app === "sonarr" && manifest.placeholderEpisode) {
+      if (app === "sonarr" && (manifest.placeholderEpisode || manifest.localizedEpisode)) {
         const release = candidates[0];
         if (
           !release.title.includes(".S01E01.") ||
+          // Concrete metadata titles remain authoritative in RSS. The source
+          // fixture differs deliberately; the old matcher returned no release.
           !release.title.includes("Synthetic.Episode") ||
           release.title.includes(".TBA.") ||
           !release.title.includes(".GERMAN.") ||
@@ -704,17 +748,25 @@ async function movieSearch(root, manifest, app = "radarr") {
           )
         )
           throw new Error(
-            "Owned TBA source coordinates/title/language/quality not natively accepted"
+            "Owned verified source coordinates/title/language/quality not natively accepted"
           );
         const fresh = await fixtureTarget(root, manifest, app);
-        if (fresh?.title !== "TBA" || fresh.episodeFileId)
+        if (
+          fresh?.title !== (manifest.placeholderEpisode ? "TBA" : "Synthetic Episode") ||
+          fresh.episodeFileId
+        )
           throw new Error("Owned TBA search changed fixture metadata or imported a file");
         console.log(
-          `sonarr: ${transport} TBA source accepted as S01E01/German/720p; metadata preserved; no grab`
+          `sonarr: ${transport} ${manifest.localizedEpisode ? "localized" : "TBA"} source accepted as S01E01/German/720p; metadata preserved; no grab`
         );
       }
       if (app === "radarr" && manifest.renditionQuality) {
-        const expected = manifest.renditionQuality === "720p" ? "WEBDL-720p" : "Unknown";
+        const expected =
+          manifest.renditionQuality === "720p"
+            ? "WEBDL-720p"
+            : manifest.renditionQuality === "ard-1080p"
+              ? "WEBDL-1080p"
+              : "Unknown";
         if (
           candidates[0].quality?.quality?.name !== expected ||
           (expected === "Unknown" && candidates[0].quality.quality.id !== 0)
@@ -1140,42 +1192,54 @@ async function consumerRemove(root, manifest, app, job, file) {
   }
 }
 
-try {
-  const command = process.argv[2];
-  if (command === "up") await up();
-  else {
-    const root = resolve(process.argv[3] ?? "invalid");
-    const manifest = load(root);
-    if (command === "status") await status(root, manifest);
-    else if (command === "schemas") await schemas(root, manifest);
-    else if (command === "connections") await connections(root, manifest, process.argv[4]);
-    else if (command === "client") await downloadClient(root, manifest, process.argv[4]);
-    else if (command === "bootstrap") await bootstrap(root, manifest);
-    else if (command === "movie-fixture") await movieFixture(root, manifest);
-    else if (command === "series-fixture") await seriesFixture(root, manifest);
-    else if (command === "movie-search") await movieSearch(root, manifest);
-    else if (command === "episode-search") await movieSearch(root, manifest, "sonarr");
-    else if (command === "forwarded-search") await forwardedSearch(root, manifest);
-    else if (command === "boundaries") await boundaries(root, manifest);
-    else if (command === "movie-download")
-      await movieDownload(root, manifest, "radarr", process.argv[4] ?? "direct");
-    else if (command === "episode-download")
-      await movieDownload(root, manifest, "sonarr", process.argv[4] ?? "direct");
-    else if (command === "movie-import") await movieImport(root, manifest);
-    else if (command === "episode-import") await movieImport(root, manifest, "sonarr");
-    else if (command === "stop") {
-      for (const item of Object.values(manifest.apps)) docker(["stop", item.name]);
-      console.log("Owned QA instances stopped; configuration retained, no deletion");
-    } else throw new Error("Use up or a documented QA command with the exact QA directory");
+export {
+  up,
+  load,
+  api,
+  docker,
+  bootstrap,
+  seriesFixture,
+  fixtureRuntimeReady,
+  fixtureIndexersReady,
+};
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+  try {
+    const command = process.argv[2];
+    if (command === "up") await up();
+    else {
+      const root = resolve(process.argv[3] ?? "invalid");
+      const manifest = load(root);
+      if (command === "status") await status(root, manifest);
+      else if (command === "schemas") await schemas(root, manifest);
+      else if (command === "connections") await connections(root, manifest, process.argv[4]);
+      else if (command === "client") await downloadClient(root, manifest, process.argv[4]);
+      else if (command === "bootstrap") await bootstrap(root, manifest);
+      else if (command === "movie-fixture") await movieFixture(root, manifest);
+      else if (command === "series-fixture") await seriesFixture(root, manifest);
+      else if (command === "movie-search") await movieSearch(root, manifest);
+      else if (command === "episode-search") await movieSearch(root, manifest, "sonarr");
+      else if (command === "forwarded-search") await forwardedSearch(root, manifest);
+      else if (command === "boundaries") await boundaries(root, manifest);
+      else if (command === "movie-download")
+        await movieDownload(root, manifest, "radarr", process.argv[4] ?? "direct");
+      else if (command === "episode-download")
+        await movieDownload(root, manifest, "sonarr", process.argv[4] ?? "direct");
+      else if (command === "movie-import") await movieImport(root, manifest);
+      else if (command === "episode-import") await movieImport(root, manifest, "sonarr");
+      else if (command === "stop") {
+        for (const item of Object.values(manifest.apps)) docker(["stop", item.name]);
+        console.log("Owned QA instances stopped; configuration retained, no deletion");
+      } else throw new Error("Use up or a documented QA command with the exact QA directory");
+    }
+  } catch (error) {
+    // No fetch/Prisma/Docker payload or config values in errors.
+    console.error(
+      error.message.startsWith("Owned") ||
+        error.message.startsWith("Exact") ||
+        error.message.startsWith("Use")
+        ? error.message
+        : "Isolated QA operation failed; diagnostics suppressed"
+    );
+    process.exitCode = 1;
   }
-} catch (error) {
-  // No fetch/Prisma/Docker payload or config values in errors.
-  console.error(
-    error.message.startsWith("Owned") ||
-      error.message.startsWith("Exact") ||
-      error.message.startsWith("Use")
-      ? error.message
-      : "Isolated QA operation failed; diagnostics suppressed"
-  );
-  process.exitCode = 1;
-}

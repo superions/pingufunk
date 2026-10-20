@@ -1,6 +1,6 @@
 # Review des Proxy-Ablöseplans
 
-Stand: 06.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
+Stand: 21.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
 Aktueller Implementierungsstatus ausschließlich im Phasen-TODO; die datierten
 folgenden Bewertungen sind keine konkurrierende Abnahme-/Deploymentfreigabe.
 Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
@@ -11,6 +11,49 @@ historisch. Sie wurde am 30.09.2026 ausdrücklich aufgehoben: SQLite bleibt
 unterstützt, PostgreSQL ist optional und kein Proxy-Ablösegate. Aktuell gilt
 ausschließlich der [Phasenvertrag](../todo/proxy-retirement.md); frühere
 Pflicht-, HAProxy- und RPO-Aussagen in diesem Review sind nicht operativ.
+
+## Main-/TV-Integrationsreview 21.10.2026
+
+Der gesonderte Integrationsauftrag vom 20.10.2026 führt Main `e435804` und
+die spätere TV-Linie `c5d6608` zusammen. Die bereits ausgegliederten Main-Owner
+für Matching, Releasebau, Transfer, Medienabschluss, Workerlease und dauerhafte
+Enqueue-Intents bleiben erhalten. Alte monolithische Kopien werden nicht erneut
+eingeführt; gegenüber Main wird keine Quelldatei gelöscht. Beide Git-Historien
+bleiben erhalten. Dies ist keine erneute Upstream-Integration oder Freigabe für
+Imagepublikation, Produktion, Bibliotheksaufträge oder unklare Quellen.
+
+Die semantische Zusammenführung erhält v3 mit eingefrorenen Referenzen und
+ergänzt den internen v4-Einzelentscheid, ohne ihn über NZB/SAB zuzulassen.
+Nachlieferjournal und Medienbelegworker werden in Main-Frische-, Snapshot-,
+Diagnose- und Fencingverträge eingebunden. Normales RSS liest weiterhin frische
+Quellzeilen; nur ein aktiver Nachlieferfeed friert eine begrenzte Verbraucher-
+Pagination ein. Historische SQLite- und PostgreSQL-Migrationen bleiben unverändert.
+
+Der Selbstreview hat zwei Integrationsverluste korrigiert: konkrete Ablehnungs-
+Diagnosegründe bleiben erhalten; der TV-Prüfpfad liefert nun den bestehenden
+GUI-Suchfenstervertrag aus den tatsächlich abgerufenen Quellenfenstern. Die
+GUI-Antwortprüfung wird nicht gelockert. Überlappende Queryalternativen werden
+nicht zu einem vermeintlichen Kataloggesamtbestand addiert.
+
+Vorabgates des integrierten Baums: `npm ci`, 1.392 bestandene Tests bei 23 separat
+aktivierbaren, hier nicht ausgeführten Backendfällen, ESLint, Typecheck,
+Formatprüfung und Build erfolgreich. Die native Container-/PostgreSQL-Abnahme
+ist ein eigenes Fork-CI-Gate dieses Integrations-PRs; die lokalen Ergebnisse
+ersetzen es nicht. Keine lokal verfügbare Docker-Daemoninstanz wurde gestartet.
+
+Desktop-QA auf einem isolierten Produktionsbuild mit synthetischen, extern
+abgeschotteten Quellen: gematchter Main-/Nachher-Suchzustand bei 1440 × 1100,
+vorhandener HD-MP4 trotz deaktiviertem Standard-HLS, echter TV-Prüfdialog,
+Abbrechen/Focus-Rückgabe sowie Leer- und Fehlerzustände. Kein Download bestätigt.
+Screenshots bleiben lokal; Browserdiagnostik enthält ausschließlich den gezielt
+erzeugten 502-Quellenfehler, keinen unbeabsichtigten Konsolenfehler. Beide eigenen
+Testserver sind anschließend mit null angelegten Jobs beendet worden.
+
+Separater aktueller Auditbefund: eine hohe transitive Vite-Entwicklungsabhängigkeits-
+Meldung; `npm audit --omit=dev` meldet keine Produktionsabhängigkeitslücke.
+Kein beiläufiges Dependency-Upgrade oder Sicherheitsabschluss aus dieser Integration.
+P03.4, P06.4 und die gesonderten Betriebs-/Entfernungsgates bleiben offen; reale
+Dateien ersetzen keinen geklärten Herkunfts- und Freigabenachweis.
 
 ## Historisches Urteil vom 28.09.2026
 
@@ -2340,3 +2383,188 @@ und das bestehende TODO. Format-/Link-/Struktur-/Diffprüfung separat ausgeführ
 die erfolgreichen Produkt-/Backend-/Containergates des Mergecommits bleiben
 ohne neue Produktinputs gültig. Keine erneute Ausführung allein für den
 Dokumentationscommit behauptet.
+
+## Episodenabdeckung und Suchbelege (10.10.2026)
+
+Zwei systematische Ursachen sind getrennt korrigiert: vollständig nummerierte
+lokalisierte Quelltitel wurden trotz verifizierter Serie und passender Dauer
+verworfen, während große Staffeln das gemeinsame Medienbelegbudget erschöpften.
+Die bisherigen Ergebnis-Caches konnten anschließend neutrale Treffer festhalten.
+Mehr Suchbegriffe oder ein pauschales höheres Budget beheben diese Ursachen nicht.
+
+Ausdrücklich bestätigt wurde eine Koordinatenzuordnung mit gesicherter Serie,
+vollständigem einzelnen Quell-S/E, validiertem Sonarr-Bestand und positiver
+passender Laufzeit. Originalmetadaten bleiben unverändert; Konflikte zwischen
+Metadatenprovidern, fremde Serien, fehlende/mehrdeutige Koordinaten und Jahres-
+konflikte bleiben gesperrt. Im Review zusätzlich gefunden: Episodenbereiche wurden
+auf die erste Folge verkürzt; vollständige Bereichs-/Konfliktprüfung verhindert
+jetzt falsche Einzelzuordnung. Ein Laufzeitkonflikt zusammen mit abweichendem
+konkretem Titel erhält keinen kombinierten Ausnahmeweg. Die existierende enge
+TBA-Einzelfreigabe bleibt unverändert. Auch kurze Metadatentitel dürfen eine
+anderweitig vollständig belegte Koordinatenzuordnung nicht verhindern.
+
+Der genehmigte Hintergrundowner prüft ausschließlich bekannte öffentliche MP4-
+URLs mit dem vorhandenen ISO-BMFF-Probeowner: ein Worker pro Serverprozess,
+vier 1-MiB-Range-Fenster je Quelle, maximal 32 HTTP-Versuche je 15s-Batch auch
+über getrennte Läufe, 128 wartende Quellen und 512 Cacheeinträge. Belege binden
+die komplette URL; positive Hinweise verfallen nach fünf Minuten, unbekannte
+nach 30 Sekunden. Transportfehler sind keine Fakten und kein automatischer
+Retryauftrag. Cacheinvalidierung abortiert eigene Proben und verhindert späte
+Einträge. Neue/abgelaufene Hinweise invalidieren Ergebnis-Caches, nicht den
+Rohkatalog. Freigabe und Transferowner prüfen frisch statt Suchhinweise zu nutzen.
+Keine Senderseiten, neuen Hosts, Voll-Downloads, DB-/Profil-/Toleranzänderungen.
+
+Kausale Regressionen scheiterten vor der Matchingkorrektur. Die vollständige
+synthetische 20-Folgen-/Zwei-Staffel-Kette prüft den echten Newznab-Handler,
+Aufwärmen ohne erneute Katalogabfrage, stabile GUIDs, Sprach-/Pixelbelege,
+Pagination, RSS→NZB→Queue und unveränderte Metadaten. Weitere negative Tests
+prüfen URL-/Selectorbindung, TTL/Kapazität, Ratelimit, Abbruch, Ausfall,
+gemischte/unbekannte Audiotracks und frische Einzelprüfung trotz widersprechendem
+Suchcache. Lokal 1082 reguläre Tests grün; 15 opt-in PG-Tests nicht regulär lokal
+ausgeführt, sondern im separaten realen CI-Gate geprüft.
+Lint, Typecheck, Format, Produktionsbuild und Diffcheck grün; bestehende 14
+Turbopack-Tracingwarnungen unverändert. Der native Containerharness ergänzt eine
+unüberwachte lokalisierte Quellfolge direkt und über Prowlarr gegen unveränderten
+englischen Sonarr-Titel. Die erste Prüfung und die abschließende Abnahme sind
+unten getrennt dokumentiert.
+Es wird weder vollständige Katalogabdeckung noch ein neuer Grab/Import behauptet.
+Die erste native lokalisierte QA erwartete irrtümlich eine RSS-Titeländerung:
+konkrete Metadatentitel bleiben dort bewusst erhalten, nur TBA benutzt den
+Quelltitel. Die positive Consumerprüfung verlangt deshalb erhaltenen englischen
+Titel plus belegte S/E/German/720p bei ausschließlich lokalisierter Quellfixture;
+mit dem früheren Matcher gäbe es keinen Treffer. Keine Produktänderung oder
+geschwächte Identitäts-/Sprach-/Qualitätsprüfung für diese Testkorrektur.
+
+### Abschließende Entwicklungs- und Betriebsabnahme
+
+[Fork-CI auf `8f92dc9`](https://github.com/superions/pingufunk/actions/runs/38053377194)
+und [Docker-Validierung](https://github.com/superions/pingufunk/actions/runs/38053377152)
+vollständig bestanden. Native direkte und über Prowlarr geführte Suche erkennt
+die ausschließlich lokalisierte Quellfixture bei unverändertem konkretem
+englischen Metadatentitel als S01E01/German/720p; alte TBA-/Qualitätsnegative
+bleiben geschützt. Beide Backend-/Medien-/v4-Freigabegates sowie Migration und
+Post-write-Rollback grün, keine Image-Publikation. Zwischen Produktcommit
+`7aa5e9c` und QA-Korrektur `8f92dc9` sind Produkt-, Schema-, Dependency-,
+Dockerfile- und Entrypointinputs identisch.
+
+Beim abschließenden Testreview wurde die Hintergrundqueue in den isolierten
+Review-Unit-Tests ausdrücklich gemockt. Der Test prüft die übergebenen
+Rendition-URLs; tatsächliche HTTP-, Range-, Cache- und Abbruchverträge prüft die
+eigene Worker-Suite. Dadurch entstehen dort keine ungemockten externen Proben
+oder fremden Timer. Danach erneut 1082 reguläre Tests und Lint/Types/Format/Diff
+grün. Produktbuild und native Container-/CI-Evidenz mit unveränderten relevanten
+Inputs werden als wiederverwendet ausgewiesen, nicht als neue Ausführung.
+
+Der separat beauftragte lokale Image-only-Rollout ist tatsächlich angekommen:
+gesunde laufende Instanz mit vollem `7aa5e9c`-Revisionslabel und geprüftem OCI-
+Imageconfig-Digest, ein Worker, bestehender PostgreSQL-Schreibbetrieb. Andere
+Anwendungscontainer, Profile, globale Settings/Toleranzen, Migrationskette und
+Anzahl bestehender v4-Receipts unverändert gegengeprüft. Frischer Runner- und
+kompatibler Rollbackimage-Scan ohne fixbare HIGH/CRITICAL-Befunde; bestehende
+Befunde anderer unveränderter Images sind damit ausdrücklich nicht behoben.
+Private Infrastruktur-, Scanner-, Archiv- und GitOpsnachweise bleiben im
+privaten Betriebsrunbook, nicht als API-Snapshots oder Fixtures in diesem Repo.
+
+Live wurden Quellfassungen, eindeutige S/E, gebundene Metadaten und belegte
+Renditions getrennt gezählt. Staffelsuchen über den tatsächlichen Sonarr-/
+Prowlarr-Consumer bestätigen nach begrenzter Hintergrundprüfung sämtliche
+eindeutig zum vorhandenen Bestand zuordenbaren Folgen als German/WEBDL-HD.
+Eine erste breitere Abnahme zeigte noch unbelegte Qualitäten; erst die frische
+Folgesuche ohne diese Ablehnungen ist der vollständige HD-Nachweis. Bestehende
+Cutoff-Ablehnungen bleiben unverändert, unnummerierte Quellen ungebunden und
+abweichende Spezial-/Jahresnummerierungen werden nicht umgedeutet. Nur lesende
+Suchen, keine Grabs oder Importe. P06.4 für diesen Vertrag erneut geschlossen.
+
+Grenzen: Eine kalte oder abgelaufene breite Suche kann zunächst neutral sein;
+fertige Hintergrundbelege werden von der nächsten Suche konsumiert. Dieser
+Fix löst keine automatische erneute Sonarr-Suche aus. Fehlende/abweichende
+Nummerierungen und nicht in vier Fenstern beweisbare Medienmetadaten bleiben
+ungeklärt; P03.4 ist weiterhin getrennt offen. Keine vollständige Produkt- oder
+Bibliotheksabnahme aus dieser begrenzten Prüfung ableiten.
+
+### Erneut offener Verbraucherbefund: kalte Suche ohne Nachlieferung
+
+Die anschließende lesende Verbraucherprüfung zeigt eine systematische Lücke:
+Der initiale Suchlauf veröffentlicht korrekt zugeordnete Quellen noch mit
+UNKNOWN-Qualität. Das unveränderte Sonarr-Profil lehnt sie ab. Nach der begrenzten
+Hintergrundprüfung liefert eine weitere native Suche belegte HD-Treffer und
+Freigaben für zuvor fehlende Episoden. Die Dateien bereits angenommener Aufträge
+werden dagegen tatsächlich importiert; fehlende Aufträge haben weder Queue-
+Eintrag noch Grab-/Importhistorie. Der Cutoff vorhandener Dateien erklärt diesen
+Fall nicht. Private Antworten, Bestandszahlen und Betriebsdetails bleiben
+außerhalb des öffentlichen Repositorys.
+
+Sonarr verarbeitet die Antworten eines Bulk-Suchauftrags pro Staffel einmal;
+ein Hintergrundcache im Indexer ist kein neuer Suchauftrag. Gegen die tatsächlich
+eingesetzte Version geprüft: [EpisodeSearchService v4.0.20.3014](https://github.com/Sonarr/Sonarr/blob/v4.0.20.3014/src/NzbDrone.Core/IndexerSearch/EpisodeSearchService.cs).
+`SourceMediaFactsStore` hält Medienbelege, aber keine Veröffentlichungszustände
+oder Nachlieferereignisse. `getSonarrRssMatches` benutzt ein Ausstrahlungsfenster;
+die primäre RSS-Suche benutzt ein begrenztes aktuelles Katalogfenster. Keiner
+dieser Owner garantiert, dass in einer früheren Suche entdeckte alte Episoden
+nach fertiger Belegprüfung erneut im normalen Feed erscheinen. Eine lesende
+native RSS-Probe lieferte die betroffenen Serienkandidaten nicht nach. Das ist
+keine Behauptung, dass sie niemals in irgendeiner späteren RSS-Seite vorkommen.
+
+P06.4 wird deshalb erneut geöffnet. Warme Folgeabfragen und grüne Unit-/native
+Einzelfalltests bleiben Teilnachweise; sie ersetzen nicht den Erstlauf mit kaltem
+Cache bis zur automatischen Verbraucherentscheidung. P03.4, ungebundene
+Nummerierungen und Kataloglücken bleiben davon getrennt.
+
+Ursprüngliche Lösungsoption, anschließend ausdrücklich zur Implementierung und
+zum kontrollierten Image-only-Rollout beauftragt: gefundene
+identitätsgesicherte Kandidaten, laufende Prüfung, belegte Freigabe und echte
+Ablehnung als getrennte Zustände führen. Der bestehende bounded Worker braucht
+eine faire, begrenzte Readiness-Verarbeitung. Neu belegte Kandidaten aus bereits
+angeforderten Suchen müssen über den vorhandenen Newznab-/RSS-Verbraucherpfad
+verlässlich nachgeliefert werden können, unabhängig vom alten Ausstrahlungsdatum;
+keine direkten oder blinden Sonarr-Grabs und kein zweiter Indexer-Endpunkt.
+Retention, Pagination, Cache-/Instanzinvalidierung und stabile Releaseidentität
+müssen gemeinsam definiert werden. Frische Quellen-/Transferbelege und Sonarrs
+eigene Queue-/Bestandsentscheidung bleiben die Sicherheitsgrenze.
+
+Die dafür nötige kausale Regression beginnt mit kaltem Cache und einer einzigen
+nativen Mehrstaffelsuche: zunächst unbelegte Quellen, danach begrenzte
+Hintergrundprüfung und normale Nachlieferung ohne zweiten manuellen Suchklick.
+Der Consumer muss alle sicheren fehlenden Episoden genau einmal annehmen,
+bestehende/queued Dateien nicht doppelt grabben und echte Konflikte weiter
+ablehnen. Synthetische Datei-/Importnachweise direkt und über Prowlarr sowie
+Ausfall-/Expiry-/Kapazitätsnegative wären Pflicht; Produktion bleibt ein eigener
+Freigabeschritt. Keine Produkt-, Profil-, DB-, Dienst- oder Grabänderung in dieser
+Diagnose. Der neue Owner und seine Grenzen sind im aktuellen P06.4-Vertrag
+konkretisiert. Lokale Produktgates und SQLite-Journalpersistenz sind vorbereitet;
+native kalte Importketten, PostgreSQL-Persistenz, Fork-CI und Produktionsabnahme
+werden nicht aus diesen Teilnachweisen als erledigt abgeleitet.
+
+Der native kalte Mehrstaffeltest deckte zusätzlich eine Rate-/Deadline-Verwechslung
+im Medienbelegworker auf: Die letzte Probe eines fast abgelaufenen 15-Sekunden-
+Batches konnte eine gesunde Quelle dauerhaft als fehlgeschlagen kennzeichnen.
+Der Worker reserviert deshalb vor jeder atomaren Quellenprüfung konservativ
+alle vier möglichen Range-Versuche im unvergrößerten 32er-Ratebudget; die konkrete
+Quelle erhält ein eigenes, weiterhin höchstens 15 Sekunden langes Viererbudget.
+Eine langsame erfolgreiche Probe über die Ratefenstergrenze ist kausal getestet.
+Echte Ausfälle bleiben ohne automatischen Retry gesperrt. Die kalte native
+Importabnahme wird nach dieser Produktkorrektur mit frischen Instanzen wiederholt.
+
+Ein weiterer Reviewbefund betrifft das gemeinsame RSS-Budget: Eine logische
+Sonarr-Ergänzungsabfrage konnte mehrere Katalogseiten verbrauchen und damit die
+primäre Quelle verdrängen. Das nominelle 6.000er-RSS-Limit wurde bereits durch
+den gemeinsamen Quellenowner auf 5.000 Rohkandidaten/fünf Seiten begrenzt;
+dieser tatsächliche Umfang bleibt unvergrößert. Beide Ergänzungsowner beziehen
+ihre Reserve nun aus diesem Vertrag; jede Ergänzungsabfrage erhält vorab ein
+begrenztes Rohseitenfenster statt nur eine Begrenzung der Anzahl logischer
+Suchbegriffe. Normale Sprachfassungswahl vor dem Ergebnislimit bleibt erhalten.
+Regressionen prüfen die echte Begrenzung und die verbleibenden fünf Slots.
+Die native Cold/RSS/Importfixture enthält einen vollständig gefüllten primären
+Katalog, nicht nur eine fast leere Kontrollantwort.
+
+Der abschließende Renditionreview trennt fertigen Medienbeleg und tatsächliche
+RSS-Veröffentlichung: Eine zunächst belegte französische oder ungeeignete Quelle
+darf einer später belegten deutschen HD-Fassung keinen alten PubDate vererben.
+Das begrenzte Journal hält deshalb je tatsächlich zulässiger Release-GUID den
+ersten Veröffentlichungszeitpunkt (höchstens sechs Hashes pro Quelleneintrag).
+SD und späteres HD erhalten getrennte Zeitpunkte; wiederholtes RSS und Restart
+verschieben diese nicht. Dies sind weder persistierte Medienbelege noch
+Consumer-ACKs. Retention, frische Sprach-/Pixel-/Identitätsprüfung und GUIDs bleiben
+unverändert. Die Regression prüft diese Reihenfolge über den tatsächlichen
+Feedowner; echte SQLite-/PostgreSQL-Verbindungen prüfen die Persistenz. Kapazität,
+ungültige Zeitpunkte und Schreibfehler scheitern geschlossen und atomar.

@@ -3,7 +3,13 @@ import { z } from "zod";
 import type { ApiResultItem, MatchedEpisodeInfo } from "@/types";
 import type { LanguagePolicy } from "@/lib/language-policy";
 import { selectRenditions, type QualityPreference } from "./rendition-quality";
-import { ardVideoId, getArdMedia, getArdSource, ardEdition } from "./ard-source-audio";
+import {
+  ardVideoId,
+  getArdMedia,
+  getArdSource,
+  ardEdition,
+  isArdProgressiveMp4,
+} from "./ard-source-audio";
 import type { SourceAudioEvidence } from "@/lib/media-expectations";
 import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
@@ -18,6 +24,7 @@ import {
   selectLanguageVariants,
   stableUrlIdentity,
 } from "./language-editions";
+import { sourceMediaFacts } from "./source-media-facts";
 
 const streamsSchema = z.object({
   videoStreams: z
@@ -117,11 +124,7 @@ export async function verifySourceAudio(
   signal?.throwIfAborted();
   if (expected.provider === "arte_hbbtv")
     return verifyArteSourceAudio(expected, url, budget, signal);
-  if (
-    !isProbeableMp4(url) ||
-    new URL(url).hostname !== "ctv-videos.daserste.de" ||
-    mediaSourceIdentity(url) !== expected.mediaIdentity
-  )
+  if (!isArdProgressiveMp4(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   const edition = ardEdition(await getArdMedia(expected.videoId, budget, signal), url);
   if (!edition || edition.audioLanguage !== expected.language)
@@ -134,12 +137,17 @@ export async function verifySourceAudio(
  * infer the requested language. Each split row owns exactly one concrete URL.
  * RSS/film enrichment permits four identities; explicit TV searches permit
  * sixteen. Both obey the caller's shared attempts and 15-second deadline.
- * Unprobed renditions remain honestly unknown.
+ * Unprobed renditions remain honestly unknown. TV search callers may reuse
+ * short-lived exact-asset hints and queue missing MP4 facts, never perform a
+ * cold MP4 probe in the search request. One expired/slow catalogue rendition
+ * must not fail the whole search and put the native indexer in cooldown.
+ * Fresh approval callers use the default and never consume these cached hints.
  */
 export async function enrichSourceAudio(
   items: ApiResultItem[],
   budget: HttpRequestBudget,
-  maxIdentities: 4 | 16 = 4
+  maxIdentities: 4 | 16 = 4,
+  reuseSearchFacts = false
 ): Promise<Map<ApiResultItem, ApiResultItem[]>> {
   const arte = new Map<string, ArteStreams>();
   const ard = new Map<string, Awaited<ReturnType<typeof getArdSource>>>();
@@ -154,10 +162,17 @@ export async function enrichSourceAudio(
         isCurrent: () => snapshot.isCurrent() && epoch === cacheContextEpoch(),
       }
     : undefined;
+  const assets = new Map<string, string>();
   const output = new Map<ApiResultItem, ApiResultItem[]>();
   let probes = 0;
+  const generation = sourceMediaFacts.generation;
+  const warming: string[] = [];
   const ordered = [...items].sort(
-    (a, b) => a.url_website.localeCompare(b.url_website) || a.url_video.localeCompare(b.url_video)
+    (a, b) =>
+      Number(classifyLanguageEdition(a).audioDescription) -
+        Number(classifyLanguageEdition(b).audioDescription) ||
+      a.url_website.localeCompare(b.url_website) ||
+      a.url_video.localeCompare(b.url_video)
   );
   const pending: ApiResultItem[] = [];
   for (const item of ordered) {
@@ -172,11 +187,15 @@ export async function enrichSourceAudio(
       continue;
     }
     const videoId = arteVideoId(item.url_website);
+    const ardId = ardVideoId(item.url_website);
     const fields = ["url_video_hd", "url_video", "url_video_low"] as const;
     if (
       !fields.some(
         (field) =>
-          item[field] && ((videoId && progressiveUrl(item[field])) || isProbeableMp4(item[field]))
+          item[field] &&
+          ((videoId && progressiveUrl(item[field])) ||
+            (ardId && isArdProgressiveMp4(item[field])) ||
+            isProbeableMp4(item[field]))
       )
     ) {
       recordDecision("language", "language_unknown", "missing");
@@ -227,11 +246,7 @@ export async function enrichSourceAudio(
             mediaIdentity: mediaSourceIdentity(url),
             language,
           };
-      } else if (
-        ardId &&
-        isProbeableMp4(url) &&
-        new URL(url).hostname === "ctv-videos.daserste.de"
-      ) {
+      } else if (ardId && isArdProgressiveMp4(url)) {
         if (!ard.has(ardId) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
           ard.set(ardId, await getArdSource(ardId, budget));
@@ -256,11 +271,33 @@ export async function enrichSourceAudio(
             language,
           };
       } else if (isProbeableMp4(url)) {
-        if (!mp4.has(url) && probes < maxIdentities && budget.remainingAttempts > 0) {
-          probes++;
-          mp4.set(url, await probeMp4MediaFacts(url, budget, true, proofContext));
+        const cached = reuseSearchFacts ? sourceMediaFacts.get(url) : undefined;
+        if (cached) {
+          mp4.set(url, cached.facts);
+          if (cached.fingerprint) assets.set(url, cached.fingerprint);
         }
+        if (
+          !mp4.has(url) &&
+          !reuseSearchFacts &&
+          probes < maxIdentities &&
+          budget.remainingAttempts >= 1
+        ) {
+          probes++;
+          mp4.set(
+            url,
+            await probeMp4MediaFacts(
+              url,
+              budget,
+              true,
+              (fingerprint) => assets.set(url, fingerprint),
+              undefined,
+              proofContext
+            )
+          );
+        }
+        if (reuseSearchFacts && !mp4.has(url)) warming.push(url);
         const facts = mp4.get(url);
+        if (assets.has(url)) split.sourceAssetFingerprint = assets.get(url);
         language = facts?.audioLanguage ?? null;
         if (facts?.videoDimensions)
           split.sourceVideoDimensions = [{ url, ...facts.videoDimensions }];
@@ -280,6 +317,8 @@ export async function enrichSourceAudio(
     }
   }
   if (Date.now() >= budget.deadlineAt) throw new Error("Source evidence unavailable");
+  if (reuseSearchFacts && generation === sourceMediaFacts.generation)
+    sourceMediaFacts.enqueue(warming);
   return output;
 }
 
@@ -292,7 +331,7 @@ export async function enrichTvCandidates(
   hlsEnabled: boolean
 ): Promise<ApiResultItem[]> {
   const owners = new Map<ApiResultItem, ApiResultItem>();
-  const enriched = await enrichSourceAudio(items, budget, 16);
+  const enriched = await enrichSourceAudio(items, budget, 16, true);
   for (const [item, renditions] of enriched)
     for (const rendition of renditions) owners.set(rendition, item);
   const selected = selectLanguageVariants([...owners.keys()], policy);
@@ -326,7 +365,7 @@ export async function enrichTvMatches(
 ): Promise<MatchedEpisodeInfo[]> {
   const owners = new Map<ApiResultItem, MatchedEpisodeInfo[]>();
   for (const match of matches) owners.set(match.item, [...(owners.get(match.item) ?? []), match]);
-  const editions = await enrichSourceAudio([...owners.keys()], budget, foreground ? 16 : 4);
+  const editions = await enrichSourceAudio([...owners.keys()], budget, foreground ? 16 : 4, true);
   const enriched = new Map<ApiResultItem, MatchedEpisodeInfo[]>();
   for (const [item, renditions] of editions)
     for (const rendition of renditions)

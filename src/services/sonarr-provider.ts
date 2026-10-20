@@ -1,4 +1,5 @@
 import { LRUCache } from "lru-cache";
+import { createHash } from "node:crypto";
 import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { getSetting } from "@/lib/settings";
 import { externalCredential } from "@/lib/credential-settings";
@@ -48,10 +49,16 @@ export class SonarrSession {
   private readonly epoch = cacheContextEpoch();
   private readonly client: ReturnType<typeof createReadOnlyArrJsonClient>;
   private readonly context: string;
+  readonly deliveryIdentity: string;
 
   constructor(baseUrl: string, credential: string) {
     this.client = createReadOnlyArrJsonClient(baseUrl, credential);
     this.context = metadataCacheKey("sonarr-context", null, [baseUrl, credential]);
+    // Discovery survives process/cache epochs, but never an instance, credential
+    // or database change. No connection detail is exposed or stored verbatim.
+    this.deliveryIdentity = createHash("sha256")
+      .update(JSON.stringify([process.env.DATABASE_URL ?? null, baseUrl, credential]))
+      .digest("hex");
   }
 
   get cacheIdentity(): string {
@@ -123,10 +130,18 @@ export class SonarrSession {
     );
   }
 
-  async show(tvdbId: number, budget = new HttpRequestBudget()): Promise<SonarrShow | null> {
+  async show(
+    tvdbId: number,
+    budget = new HttpRequestBudget(),
+    refresh = false
+  ): Promise<SonarrShow | null> {
     if (!Number.isSafeInteger(tvdbId) || tvdbId < 1 || tvdbId > 2_147_483_647)
       throw new SonarrUnavailableError();
     await this.version(budget);
+    if (refresh) {
+      metadata.delete(metadataCacheKey("sonarr", ["show", tvdbId], this.context));
+      await this.inventory(budget, true);
+    }
     return this.cached(["show", tvdbId], budget, async () => {
       const series = parseSonarrSeries(
         await this.client("api/v3/series", new URLSearchParams({ tvdbId: String(tvdbId) }), {
@@ -135,11 +150,15 @@ export class SonarrSession {
       );
       if (series.length === 0) return null;
       if (series.length !== 1 || series[0].tvdbId !== tvdbId) throw new SonarrUnavailableError();
-      return this.episodes(series[0], budget);
+      return this.episodes(series[0], budget, refresh);
     });
   }
 
-  async episodes(series: SonarrSeriesMetadata, budget: HttpRequestBudget): Promise<SonarrShow> {
+  async episodes(
+    series: SonarrSeriesMetadata,
+    budget: HttpRequestBudget,
+    refresh = false
+  ): Promise<SonarrShow> {
     // Only accept a series verified by this instance, not a caller-supplied local ID.
     let inventory = await this.inventory(budget);
     let verified = inventory.find((item) => item.tvdbId === series.tvdbId);
@@ -150,6 +169,10 @@ export class SonarrSession {
       verified = inventory.find((item) => item.tvdbId === series.tvdbId);
     }
     if (!verified || verified.sonarrId !== series.sonarrId) throw new SonarrUnavailableError();
+    if (refresh)
+      metadata.delete(
+        metadataCacheKey("sonarr", ["episodes", verified.sonarrId, verified.tvdbId], this.context)
+      );
     return this.cached(["episodes", verified.sonarrId, verified.tvdbId], budget, async () => ({
       // Only instance inventory may supply title/aliases, not caller fields.
       series: verified,
@@ -219,6 +242,11 @@ export function mergeSonarrShow(
     ],
     episodes,
     sonarrVerifiedCoordinates: supplemental.episodes.map(coordinate),
+    sonarrMonitoredCoordinates: supplemental.series.monitored
+      ? supplemental.episodes
+          .filter((episode) => episode.monitored && !episode.hasFile)
+          .map(coordinate)
+      : [],
     sonarrBlockedCoordinates: [...blocked],
   };
 }

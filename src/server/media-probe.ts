@@ -74,6 +74,8 @@ export interface MediaProbeFacts {
     tolerancePercent: number;
     result: "passed";
   }[];
+  runtimeApproval?: Extract<MediaExpectations, { version: 4 }>["approval"];
+  metadataDurationCheck?: "explicitly_exempted";
   expectedChecks: {
     duration: "unknown" | "passed";
     audio: "unknown" | "passed" | "passed_provider";
@@ -135,6 +137,7 @@ export function validateMediaProbe(
     const references = durationExpectations(contract, tolerancePercent);
     if (
       (contract?.version !== 3 &&
+        contract?.version !== 4 &&
         !verifiedDurationCheck(durationSeconds, null, 0, tolerancePercent).accepted) ||
       references.some(
         (reference) =>
@@ -148,6 +151,14 @@ export function validateMediaProbe(
         audioLanguages.length ? "language_conflict" : "language_unknown",
         audioLanguages.length ? "conflicting" : "missing"
       );
+    if (
+      contract?.version === 4 &&
+      contract.audio &&
+      audio.some(
+        (stream) => languageTag(stream.tags?.language) !== languageTag(contract.audio!.language)
+      )
+    )
+      throw new MediaProbeError("language_conflict", "conflicting");
     const providerExpectation = sourceAudioExpectation(contract);
     if (providerExpectation) {
       if (
@@ -184,6 +195,12 @@ export function validateMediaProbe(
               ...reference,
               result: "passed" as const,
             })),
+          }
+        : {}),
+      ...(contract?.version === 4
+        ? {
+            runtimeApproval: contract.approval,
+            metadataDurationCheck: "explicitly_exempted" as const,
           }
         : {}),
       expectedChecks: {

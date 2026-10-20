@@ -1,4 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { sourceMediaFacts } from "./source-media-facts";
+import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
+import { NextRequest } from "next/server";
+import { GET as newznab } from "@/app/api/newznab/route";
+import { generateFakeNzb } from "./newznab";
+import { decodeMediaExpectations } from "./nzb-release";
+import { parseNzbContent } from "./download";
 import { MatchingStrategy } from "@/types";
 import type { ApiResultItem, Ruleset, TmdbMovieData, TvdbData, TvSearchContext } from "@/types";
 
@@ -21,6 +28,7 @@ vi.mock("@/lib/settings", () => ({
   // null -> defaults kick in: quality "all", minDuration 300s, fuzzy/0.7
   getSetting: vi.fn().mockResolvedValue(null),
   getMinDurationSeconds: vi.fn().mockResolvedValue(300),
+  withSettingsSnapshot: async (operation: () => Promise<unknown>) => operation(),
 }));
 vi.mock("@/lib/cache", () => ({
   cacheContextEpoch: () => 0,
@@ -56,6 +64,7 @@ import {
   fetchSearchResultsById,
   fetchSearchResultsByString,
   fetchSearchResultsForRssSync,
+  queryTvSourceCandidates,
 } from "./mediathek";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
@@ -111,6 +120,7 @@ function mockApi(results: ApiResultItem[]): void {
 }
 
 beforeEach(() => {
+  sourceMediaFacts.clear();
   vi.clearAllMocks();
   mockedFetch.mockReset();
   mediathekMocks.getRadarrMonitoredMovies.mockResolvedValue([]);
@@ -124,8 +134,144 @@ beforeEach(() => {
   mockedAllTopics.mockReturnValue([]);
   mockedGenerateRuleset.mockResolvedValue(null);
 });
+afterEach(async () => {
+  sourceMediaFacts.clear();
+  await sourceMediaFacts.idle();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("Sonarr supplemental search consumer", () => {
+  it("reports the actual bounded candidate window to review without masking source failure", async () => {
+    const show: TvdbData = {
+      id: 123,
+      name: "Synthetic series",
+      germanName: null,
+      aliases: [],
+      episodes: [],
+    };
+    const report = vi.fn();
+    const source = makeItem();
+    mockApi([source]);
+    expect(
+      await queryTvSourceCandidates(show, makeTvSearchContext(), new HttpRequestBudget(32), report)
+    ).toEqual([source]);
+    expect(report).toHaveBeenCalledWith({
+      complete: true,
+      candidateWindowLimited: false,
+      sources: [
+        { providerId: "mediathekview", state: "complete", candidateCount: 1 },
+        { providerId: "orf", state: "disabled", candidateCount: 0 },
+        { providerId: "srf", state: "disabled", candidateCount: 0 },
+      ],
+    });
+    report.mockClear();
+    mockedFetch.mockResolvedValue(new Response(null, { status: 503 }));
+    expect(
+      await queryTvSourceCandidates(show, makeTvSearchContext(), new HttpRequestBudget(32), report)
+    ).toBeNull();
+    expect(report).toHaveBeenCalledWith(expect.objectContaining({ complete: false }));
+  });
+  it("keeps localized multi-season coordinates and warmed proofs while refreshing catalogue URLs without re-grabbing", async () => {
+    vi.useFakeTimers();
+    const episodes = Array.from({ length: 20 }, (_, index) => ({
+      name: `English metadata ${index + 1}`,
+      seasonNumber: 2 + Math.floor(index / 10),
+      episodeNumber: (index % 10) + 1,
+      aired: new Date("2026-09-29T12:00:00Z"),
+      runtime: 2,
+      metadataSource: "sonarr" as const,
+    }));
+    const show: TvdbData = {
+      id: 123,
+      name: "Synthetic series",
+      germanName: null,
+      aliases: [],
+      episodes,
+    };
+    const unchanged = structuredClone(show);
+    const sources = episodes.map((episode, index) =>
+      makeItem({
+        topic: show.name,
+        title: `Lokalisierter Titel ${index + 1} (S0${episode.seasonNumber}/E${String(episode.episodeNumber).padStart(2, "0")})`,
+        duration: 120,
+        url_website: `https://example.invalid/source/${index}`,
+        url_video_hd: `https://rodlzdf-a.akamaihd.net/synthetic/coverage-${index}.mp4`,
+        url_video: "",
+        url_video_low: "",
+      })
+    );
+    mockedGetShowInfo.mockResolvedValue(show);
+    mockedGetSetting.mockImplementation(async (key) =>
+      key === "download.quality" ? "best" : null
+    );
+    const mediaFetch = vi.fn(async (_input: string, init: RequestInit) => {
+      const response = mp4RangeResponse(syntheticMp4(), init);
+      response.headers.set("etag", '"synthetic-coverage"');
+      return response;
+    });
+    mockedFetch.mockImplementation(async (input, init, options) => {
+      options?.requestBudget?.takeAttempt();
+      if (new Headers(init?.headers).has("range")) return mediaFetch(String(input), init!);
+      return Response.json({ result: { results: sources } });
+    });
+    const catalogueCalls = () =>
+      mockedFetch.mock.calls.filter(([, init]) => !new Headers(init?.headers).has("range")).length;
+    const request = () =>
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&limit=100");
+    const first = await newznab(request());
+    const cold = await first.text();
+    expect(first.status).toBe(200);
+    expect(cold).toContain('total="20"');
+    expect(cold).toContain(".UNKNOWN.");
+    const sourceCalls = catalogueCalls();
+    expect(mediaFetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_100); // Three bounded eight-source rate windows.
+    await sourceMediaFacts.idle();
+    const second = await newznab(request());
+    const warm = await second.text();
+    expect(second.status).toBe(200);
+    expect(warm).toContain('total="20"');
+    expect(warm).not.toContain(".UNKNOWN.");
+    expect(
+      warm.match(
+        /<title>Synthetic.series.S0[23]E\d+.English.metadata.\d+.GERMAN.1080p.WEB.h264-MEDiATHEK<\/title>/g
+      )
+    ).toHaveLength(20);
+    // Main's freshness contract re-reads nonempty catalogue rows; only exact
+    // URL-bound media hints survive between requests, never a signed RSS body.
+    expect(catalogueCalls()).toBe(sourceCalls * 2);
+    expect(mediaFetch).toHaveBeenCalledTimes(20);
+    expect(show).toEqual(unchanged);
+    const guids = (xml: string) =>
+      [...xml.matchAll(/<guid[^>]*>(.*?)<\/guid>/g)].map((match) => match[1]).sort();
+    expect(guids(warm)).toEqual(guids(cold));
+    const paged = await newznab(
+      new NextRequest(
+        "http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=3&limit=2&offset=8"
+      )
+    );
+    const page = await paged.text();
+    expect(page).toContain('offset="8" total="10"');
+    expect(page.match(/<item>/g)).toHaveLength(2);
+    expect(page).not.toContain(".S02E");
+    const enclosure = new URL(
+      [...warm.matchAll(/<enclosure url="([^"]*)"/g)][0][1].replaceAll("&amp;", "&"),
+      "http://localhost"
+    );
+    const expectations = decodeMediaExpectations(
+      enclosure.searchParams.get("encodedExpectations")!
+    );
+    const mediaUrl = Buffer.from(enclosure.searchParams.get("encodedUrl")!, "base64").toString();
+    const title = Buffer.from(enclosure.searchParams.get("encodedTitle")!, "base64").toString();
+    const parsed = parseNzbContent(
+      generateFakeNzb({ title, url: mediaUrl, mediaExpectations: expectations })
+    );
+    expect(parsed).toMatchObject({
+      url: mediaUrl,
+      mediaExpectations: { audio: { language: "de" }, resolution: { width: 1920, height: 1080 } },
+    });
+  });
   const supplemental: TvdbData = {
     id: 123,
     name: "Synthetic series",

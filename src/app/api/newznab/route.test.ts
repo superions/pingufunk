@@ -401,7 +401,7 @@ describe("Newznab indexer validation", () => {
         episode: {
           name: `März & "Heute" + Finale`,
           aired: new Date("2026-03-31T00:00:00Z"),
-          runtime: 30,
+          runtime: 45,
           seasonNumber: 2026,
           episodeNumber: 12,
         },
@@ -455,7 +455,7 @@ describe("Newznab indexer validation", () => {
         mediaKind: "series",
         durations: {
           source: { seconds: 2700, provenance: "source_catalogue", tolerancePercent: 10 },
-          metadata: { seconds: 1800, provenance: "episode_metadata", tolerancePercent: 10 },
+          metadata: { seconds: 2700, provenance: "episode_metadata", tolerancePercent: 10 },
         },
         sourceAudio: null,
         audio: null,

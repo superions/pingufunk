@@ -31,6 +31,7 @@ vi.mock("@/lib/cache", () => ({
   },
 }));
 vi.mock("./content-search", () => ({
+  RSS_SOURCE_WINDOW_ATTEMPTS: 5,
   getConfiguredLanguagePolicy: async () =>
     (await import("@/lib/language-policy")).DEFAULT_LANGUAGE_POLICY,
   searchCacheContext: async () => "synthetic-context",
@@ -228,6 +229,21 @@ it("reuses pagination goals but refreshes rotated media URLs and availability on
   const expired = await getSonarrRssMatches(base);
   expect(expired).toHaveLength(first.length);
   expect(expired.flatMap((match) => generateRssItems(match, "all", false))).toEqual([]);
+});
+
+it("bounds supplemental pages, not logical queries, so a full primary window remains fetchable", async () => {
+  state.query.mockImplementation(async (_queries, size, options: MediathekQueryOptions) => {
+    const pages = options.maxCandidatePages ?? Math.ceil(size / 1000);
+    for (let page = 0; page < pages; page++) options.requestBudget!.takeAttempt();
+    return [];
+  });
+  const budget = new HttpRequestBudget();
+  await getSonarrRssMatches(base, budget);
+  expect(state.query).toHaveBeenCalledTimes(1);
+  expect(state.query.mock.calls[0][2].maxCandidatePages).toBe(2);
+  expect(budget.remainingAttempts).toBe(5);
+  for (let page = 0; page < 5; page++) budget.takeAttempt();
+  expect(budget.remainingAttempts).toBe(0);
 });
 
 it("uses inclusive UTC boundaries and excludes future/missing/invalid dates", async () => {

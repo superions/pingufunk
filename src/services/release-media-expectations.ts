@@ -74,3 +74,24 @@ export function releaseMediaExpectations(
   // Only exact-URL evidence above supplies dimensions, never a quality label.
   return parseMediaExpectations(expected) as NewMediaExpectations;
 }
+
+/** Review carries both original references; legacy producers remain unchanged. */
+export function tvReviewMediaExpectations(
+  item: ApiResultItem,
+  runtimeMinutes: number,
+  url: string,
+  tolerancePercent: number
+): NewMediaExpectations {
+  const facts = releaseMediaExpectations(item, null, url);
+  return parseMediaExpectations({
+    version: 3,
+    mediaKind: "series",
+    durations: {
+      source: { seconds: item.duration, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata: { seconds: runtimeMinutes * 60, provenance: "episode_metadata", tolerancePercent },
+    },
+    audio: facts.audio,
+    sourceAudio: facts.sourceAudio,
+    resolution: facts.resolution,
+  }) as NewMediaExpectations;
+}

@@ -12,6 +12,14 @@ Abnahme im
 Produktion, reale Bibliotheksaufträge, Datenbanken, Upstream, Release-Tags und
 öffentliche Imagepublikation bleiben durch diese Integration unberührt.
 
+Gesonderter Integrationsauftrag vom 20.10.2026: spätere TV-Arbeiten werden mit
+den Main-Architekturownern zusammengeführt, ohne neue Quellenfreigabe oder Replan.
+Lokaler integrierter Vorabstand vom 21.10.2026 mit 1.392 bestandenen Tests,
+Produktgates und isolierter Desktopprüfung; native Backend-/Containerabnahme
+bleibt eigenes Fork-CI-Gate. Befunde und Grenzen im
+[Integrationsreview](../docs/proxy-retirement-review.md#maintv-integrationsreview-21102026).
+P03.4/P06.4 sowie die eigenständigen Betriebs-/Entfernungsgates bleiben offen.
+
 Dieser Vertrag überführt den [Analyseplan](../docs/proxy-retirement-plan.md),
 dessen [Review](../docs/proxy-retirement-review.md) und die
 [PostgreSQL-Fachreferenz](../docs/postgresql-migration-plan.md). Es gibt im
@@ -43,6 +51,8 @@ erledigte Implementierung.
   ihre privaten Betriebswerte sind kein Produktdefault und keine Freigabe
   für eine andere Installation. P10.6/P10.7 bleiben mit ihren eigenen
   Beobachtungs-/Entfernungsgates offen. P11.9 ist optional zurückgestellt.
+  P06.4 ist für die kalte Nachliefer-/Live-Abnahme erneut offen; allgemeine
+  Sprachabdeckung und ungebundene Quellen bleiben davon getrennt.
   P11.2–P11.8 sichern die PostgreSQL-Option und müssen vor deren Betriebsfreigabe
   abgenommen sein; sie blockieren unabhängige Proxy-Arbeit auf SQLite nicht.
   PostgreSQL-Unterstützung gehört zum Entwicklungsumfang, ihre Nutzung und
@@ -1293,7 +1303,7 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Progressive URL-Endungen sind kein Containerbeweis; die tatsächliche
       Dateivalidierung bleibt ausdrücklich P09 zugeordnet.
 
-- [x] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
+- [ ] **P06.4 — Breite TV-Suche und TBA mit Quellenkoordinaten.**
       Nutzerauftrag 06.10.2026, Owner `tv-search-terms.ts`, `sonarr-provider.ts`,
       `sonarr-matcher.ts`, `mediathek.ts`, `sonarr-rss.ts` und `newznab.ts`;
       abhängig von P06.2/P06.3, keine Lockerung konkreter Konflikte.
@@ -1321,6 +1331,184 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       TBA-Suche direkt und via Prowlarr, 720p/UNKNOWN-/Konfliktvarianten,
       SQLite-/PG-Persistenz, echte synthetische Medien und Rollback geprüft;
       keine Image-Publikation, Grabs oder produktive Mutationen.
+      Wieder geöffnet 10.10.2026: Identitätsgesicherte vollständige S/E mit
+      zwei positiven, widersprüchlichen Laufzeiten sichtbar lassen; normale
+      NZB-/SAB-/RSS-Downloads bleiben gesperrt. Vollständiger Freigabeweg in
+      Suche: ausgewählte Rendition frisch prüfen, beide Referenzen und unveränderte
+      Toleranz anzeigen, Abbruch ohne Auftrag, ausdrückliche Einzelentscheidung.
+      Server prüft Identität, Quelle, URL/Asset, Sprache und Dimensionen erneut;
+      Originalreferenzen bleiben als v4-Audit im genau gebundenen Job erhalten.
+      Durable Receipt und Job atomar in vorhandenen Config/Download-Zeilen,
+      kein DDL/Profil-/globaler Toleranzwechsel und keine automatische Allowlist.
+      Doppelklick/Reload/verlorene Antwort/konkurrierende Bestätigung ergeben
+      denselben Auftrag; gewöhnlicher Retry darf die Freigabe nicht klonen.
+      Worker validiert die Freigabe frisch vor Transfer und anschließend Quelle,
+      Laufzeit, Auflösung und Audio der tatsächlichen Datei. Abnahme: negative
+      Identitäts-/Belegwechsel, native RSS→NZB-Sperre, echte SQLite-/PG-Transaktionen,
+      servierter Desktop-Dialog mit Abbruch/Bestätigung/Fehler/Readback, echter
+      synthetischer Workerabschluss auf beiden Backends, normale Produktgates,
+      Fork-CI, unveränderte Produktionsprofile/Toleranzen/DB-Kette und live
+      geprüfte Auffindbarkeit plus Freigabedialog. Live-Dialogprüfung ist kein
+      neuer Grabauftrag. Der Hotfix basiert separat auf dem tatsächlichen
+      Produktionsschema; spätere P15-Schema-/Ausfallbefunde werden nicht mitgerollt
+      oder durch diese begrenzte Abnahme als behoben dargestellt.
+      Erneute Abnahme 10.10.2026 auf `0a37363`: 1065 reguläre Tests grün;
+      15 opt-in PG-Tests in der regulären Suite nicht ausgeführt, sondern im
+      separaten realen PG-Gate geprüft. Lint/Typecheck/Format/Produktionsbuild,
+      Fork-CI 38041269044 und Docker-Validierung 38041269045 bestanden.
+      Native RSS→409-NZB→expliziter POST→genau ein realer Worker-/Dateiabschluss
+      mit unveränderten Referenzen und Settings auf SQLite sowie PostgreSQL
+      bestanden. Desktop-Abnahme auf tatsächlich serviertem Node-24-Bundle:
+      passende Vorher-/Nachher-Suche, Dialog, Abbruch/Fokus, veränderte Quelle
+      ohne Auftrag, Bestätigung, Reload/Wiederholung mit gleicher Job-ID,
+      persistiertes Audit und reguläre geprüfte Datei; Console ohne Findings.
+      Separat autorisierter Hotfix live abgenommen: alle fünf dort verfügbaren
+      Standardquellen der gemeldeten Vorabstaffel einzeln frisch mit Sprache,
+      Pixeln und unveränderten Konfliktreferenzen geprüft; nativer Sonarr-/
+      Prowlarr-Pfad und normale NZB-Sperre bestätigt. GUI-Freigabe aktiv und
+      ohne echten Grab abgebrochen; weder Download noch Import behauptet.
+      Unveränderte Profile, globale Settings und DB-Kette per Readback geprüft;
+      private Betriebsdetails/Bilder bleiben ausschließlich ignoriert bzw. im
+      privaten Runbook. Breite Staffelsuchen dürfen bei ausgeschöpftem Belegbudget
+      weiterhin neutrale Qualität liefern; sie ersetzen nicht die frische
+      Einzelquellenprüfung und rechtfertigen kein Hochstufen ohne Beleg.
+      Wieder geöffnet 10.10.2026 mit ausdrücklicher Nutzerentscheidung:
+      vollständige einzelne Quell-S/E innerhalb einer unabhängig verifizierten
+      Serie und eines validierten Sonarr-Bestands dürfen trotz lokalisiertem
+      Episodentitel zugeordnet werden, wenn die positive Laufzeit passt.
+      Originalmetadaten und providerübergreifende Titel-/Datumskonflikte erhalten;
+      unbekannte, mehrdeutige oder widersprüchliche Koordinaten nicht erfinden.
+      Ein Laufzeitkonflikt plus abweichender konkreter Titel erhält keinen
+      kombinierten Ausnahmeweg; der bisherige enge TBA-Freigabeweg bleibt erhalten.
+      Bereits gefundene öffentliche MP4-URLs der bestehenden Allowlist begrenzt
+      im Hintergrund prüfen: ein Prozessworker, höchstens 32 HTTP-Versuche je
+      15s-Batch auch über getrennte Läufe, höchstens vier 1-MiB-Range-Fenster pro
+      Quelle, 128 wartende Quellen und 512 Cacheeinträge. Positive Belege maximal
+      fünf Minuten, unbelegte Quellen 30 Sekunden; Transportfehler sind keine
+      Belege und werden nicht automatisch wiederholt. Ganze URL inklusive
+      Auswahlparameter bindet den Cache. Keine Senderseiten, Voll-Downloads,
+      zusätzlichen Hosts, DB- oder Downloadworkeränderungen. Abbruch/Invalidierung
+      verhindert verspätete Cacheeinträge; frische Freigabe/Workerprüfung umgeht
+      Suchhinweise. Ergebnis-Caches müssen neue/abgelaufene Belege berücksichtigen.
+      Abnahme: kausale positive/negative Koordinaten- und Range-Regressionen;
+      20 lokalisierte Folgen aus zwei Staffeln durch echten Newznab-Handler,
+      RSS→NZB→Queue, Pagination und stabile GUIDs vor/nach Hintergrundbelegen;
+      URL-Bindung, TTL, Rate, Kapazität, Abbruch, Fehler und frische Prüfung
+      trotz widersprechendem Cache testen. Normale Produktgates, Fork-CI,
+      bestehende native Sonarr/Prowlarr-/Medien-/SQLite-/PG-Containergates grün.
+      Rollout ausdrücklich beauftragt: nur kompatibles lokal übertragenes Image,
+      v4-Audits/PG/Profile/Toleranzen/DB-Kette erhalten, kompatibles Rollback.
+      Live Auffindbarkeit und Sonarr/Prowlarr-Consumer lesend gegenprüfen; keine
+      neuen Grabs/Importe. Katalogzeilen, eindeutige Episoden, belegte Renditions
+      und fehlende Metadaten getrennt zählen; verbleibende Nummerierungs- oder
+      Quellenlücken nicht als vollständige Produktabnahme darstellen.
+      Erneute Abnahme 10.10.2026: Produktstand `7aa5e9c`, native QA-Korrektur
+      `8f92dc9` ohne Produktdelta. 1082 reguläre Tests, Lint/Typecheck/Format/
+      Build/Diff grün; 15 opt-in PG-Fälle im separaten realen CI-Gate.
+      Fork-CI 38053377194 und Docker-Validierung 38053377152 vollständig grün:
+      direkte/über Prowlarr erkannte lokalisierte Folge bei unveränderten
+      englischen Sonarr-Metadaten, TBA-/Qualitätsnegative, beide Backend-/
+      Medien-/v4-Freigabegates und kompatibler Rollback. Abschließende Unit-
+      Isolierung der Hintergrundqueue anschließend lokal erneut voll geprüft;
+      Produkt- und native Container-Evidenz unverändert wiederverwendet.
+      Autorisierter Image-only-Rollout tatsächlich gesund und mit vollem
+      Produkt-Revisionslabel verifiziert; andere Anwendungscontainer, Profile,
+      Settings, PG-/Migrationsstand und Anzahl bestehender v4-Receipts erhalten.
+      Lesende Live-Staffelsuchen über die bestehende Sonarr/Prowlarr-Route
+      bestätigen nach begrenztem Aufwärmen sämtliche eindeutig zum vorhandenen
+      Metadatenbestand zuordenbaren Folgen mit deutscher HD-Rendition.
+      Katalogfassungen, eindeutige Episoden und ungebundene Quellen separat
+      geprüft; bestehende Cutoff-Ablehnungen nicht durch Profiländerung beseitigt.
+      Kein Grab, Import, öffentliches Image oder Main-/Upstream-Push. Kalte/
+      abgelaufene Suchbelege können bis zur nächsten Suche neutral sein;
+      automatischer Suchwiederholer, erfundene Nummerierung und vollständige
+      P03.4-Sprachabnahme sind durch diesen begrenzten Fix nicht behauptet.
+      Erneut offen am 10.10.2026 nach lesender Prüfung des tatsächlichen
+      Verbrauchers: Eine kalte Staffelsuche liefert zuordenbare Quellen mit
+      UNKNOWN; Sonarr lehnt diese im bestehenden Profil ab. Nach begrenzter
+      Hintergrundprüfung liefert eine zusätzliche Suche belegte HD-Treffer,
+      aber der bereits abgeschlossene Suchauftrag verarbeitet sie nicht erneut.
+      Eine nachträgliche Belegänderung erzeugt bisher keine verlässliche
+      Nachlieferung im bestehenden RSS-Pfad; das Sonarr-Ergänzungsfenster
+      schließt alte Ausstrahlungen aus. Dies ist weder ein Cutoff- noch ein
+      Importfehler. Bisherige warme Such-/Consumerabnahmen bleiben gültige
+      Teilnachweise, nicht eine vollständige automatische Beschaffungskette.
+      Befund in `docs/proxy-retirement-review.md`. Nachliefer-/Readiness-Vertrag
+      anschließend ausdrücklich beauftragt: `tv-search-delivery.ts` hält höchstens
+      128 identitätsgesicherte, überwachte fehlende Quellen für zwei Stunden
+      in einem serverinternen, maximal 2-MiB-Config-Journal ohne DDL. Wiederholte
+      Suchen verlängern dieselbe Entdeckung nicht unbegrenzt; Instanzbindung,
+      Maintenance, Kapazität, Restart und ungültige Persistenz fail-closed.
+      Der einzelne Medienbelegworker darf erfolgreiche Hinweise vor ihrem
+      Fünf-Minuten-Ablauf begrenzt neu prüfen, nicht ihren TTL verlängern oder
+      fehlgeschlagene/unbelegte Proben automatisch wiederholen. Keine dauerhaft
+      gespeicherten Sprach-/Pixelbelege. Erst frisch belegte und erneut gegen
+      den überwachten Sonarr-Bestand/Matcher geprüfte Quellen im bestehenden
+      RSS-Pfad nachliefern. Alte bereits ausgestrahlte Folgen bleiben zulässig;
+      Vorab-RSS-Politik unverändert. PubDate ist der erste tatsächlich zulässige
+      Veröffentlichungszeitpunkt je Release-GUID, nicht der erste beliebige
+      Medienbeleg (etwa eine fremdsprachige oder ungeeignete Fassung),
+      nicht ein erfundenes Airdate; GUIDs/URLs bleiben erhalten. Feedabfragen
+      sind keine ACKs. Fester kurzer Snapshot schützt Pagination, begrenzter
+      Besitzer-Cursor verhindert Serienverhungern; vorhandene Dateien entfernen
+      nur eigene Nachliefermetadaten. Settings-API darf interne Einträge weder
+      lesen, ändern noch löschen. Abnahme: eine kalte native Mehrstaffelsuche,
+      danach reguläre RSS-Nachlieferung ohne zweite Suche bis zu echten
+      synthetischen Importen direkt und über Prowlarr; genau ein Grab/Import
+      je sicherer Folge, keine Doppelgrabs bei wiederholtem RSS, negative
+      Identitäts-/Monitoring-/Laufzeit-/Sprach-/Pixel-/Ausfallfälle sowie
+      Restart/Expiry/Kapazität und echte Journalpersistenz auf beiden Backends.
+      Normale Produkt-/Fork-CI-/Containergates, anschließender kompatibler
+      Image-only-Rollout und vollständiger scoped Live-Bestands-/Importaudit
+      ausdrücklich autorisiert. Keine anderen Bibliotheksaufträge.
+      Bestehende Budgets, frische Transferprüfung, GUIDs, Profile,
+      Toleranzen und Datenbankverträge bleiben unverändert; keine neuen Grabs
+      oder Betriebsänderungen durch diese Diagnose.
+      Implementierungscheckpoint 10.10.2026, Produktrevision `79d946d`:
+      1.100 lokale Tests, Lint/Typecheck/Format/Build und Fork-CI einschließlich
+      echter SQLite-/PostgreSQL-Journalpersistenz grün. Zwei frische isolierte
+      native Verbraucherketten mit dem revisionsgebundenen Container bestanden:
+      je eine kalte Mehrstaffelsuche mit zunächst 39/80 Grabs, anschließend
+      begrenzte Hintergrundprüfung und reguläres RSS bis zu 80/80 physischen
+      Sonarr-Importen mit gepaarten Grab-/Import-IDs; wiederholtes RSS ohne
+      Doppelgrab. Das primäre RSS-Fenster enthielt tatsächlich 5.000 Rohzeilen
+      auf fünf Seiten. Separate vollständige Container-CI und produktiver
+      Bestands-/Importaudit bleiben bis zu ihrem Abschluss offen; keine
+      Vorwegnahme dieser Abnahme aus den grünen synthetischen Ketten.
+      Der anschließende kalte Live-Verbraucherlauf legte eine weitere Grenze
+      offen: Nach fehlgeschlagenen Suchantworten sperrte Sonarr den Indexer
+      vorübergehend und übersprang nachfolgende Staffeln. Die ursprüngliche
+      Exception ist nicht belegt; erfolgreiche Katalogsuche und anschließende
+      synchrone kalte Medienprüfung dürfen dennoch nicht gekoppelt bleiben.
+      Kalte MP4-Hinweise ausschließlich im vorhandenen begrenzten Worker
+      prüfen; Ausfälle einer Fassung dürfen weitere Staffeln nicht verhindern.
+      Native Abnahme um eine abgelaufene alternative Quelle ergänzen: 81
+      Quellzeilen, 80 Folgen, eine quarantänisierte Fassung, ein kalter Auftrag,
+      reguläres RSS und 80 reale Importe ohne Doppelgrab direkt/über Prowlarr.
+      Kein Nachweis durch eine warme zweite Suche oder blind wiederholte
+      Live-Aufträge; produktive Gesamtabnahme bleibt offen.
+      Korrigierter Produktcheckpoint 10.10.2026 auf `7cde3fb`: 1.101 Tests
+      sowie Lint/Typecheck/Format/Build/Diff grün; 16 opt-in Fälle separat.
+      Fork-CI 38072201361 und Container-CI 38072201388 erfolgreich, inklusive
+      realer SQLite-/PostgreSQL-Journal-/Restartgates und nativer kalter
+      Mehrstaffelketten direkt/über Prowlarr mit 81 Quellen, null initialen
+      Grabs und 80/80 physischen Importen, wiederholtem RSS ohne Doppelgrab.
+      Die direkte revisionsgebundene OCI-Probe zusätzlich unabhängig an
+      gestopptem synthetischem Sonarr-Bestand/Dateien/Commands rückgelesen;
+      deren Terminal-Exit wurde nicht wiedergewonnen. Die weitergeleitete
+      OCI-Probe endete nach vollständiger Dateiabnahme mit Exit 0.
+      Ein Mutationstest deaktiviert die neue Foreground-Probesperre und lässt
+      die kausale Unit-Regression fehlschlagen; danach Produktquelle exakt
+      wiederhergestellt. QA-Checkpoint `5d868d5` enthält nur diese verschärfte
+      Testvorbedingung, kein Produktdelta. Persistierte Quarantäne verhindert
+      erneute Proben derselben ausgefallenen Quelle nach Restart/normalem RSS.
+      Separat autorisierter Image-only-Rollout des geprüften Produktstands
+      tatsächlich gesund verifiziert; übrige Anwendungscontainer, Profile,
+      globale Settings, bestehende Receipts und Migrationskette unverändert.
+      Der korrigierte einmalige kalte Live-Suchauftrag entdeckt alle noch
+      fehlenden sicher zugeordneten Folgen und liefert ihre Medienbelege nach.
+      Vollständige Live-Datei-/Importabnahme bleibt bis zum regulären RSS-/
+      Download-/Importabschluss offen; kein Completed-Command als Importbeweis.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 

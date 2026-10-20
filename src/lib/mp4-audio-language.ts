@@ -1,7 +1,7 @@
 import { readBoundedProviderBytes } from "./bounded-provider-json";
+import { createHash } from "node:crypto";
 import { FetchBudgetError, fetchWithRetry, type HttpRequestBudget } from "./fetch-retry";
 import { recordDecision } from "@/server/decision-diagnostics";
-import { createHash } from "node:crypto";
 import { LRUCache } from "lru-cache";
 import { getSearchTTL } from "./cache";
 
@@ -112,12 +112,14 @@ export interface Mp4ProofContext {
 }
 interface AssetProof {
   facts: Mp4MediaFacts;
+  fingerprint: string;
   validator: string;
   total: number;
   expiresAt: number;
 }
 interface ProbeFlight {
   promise: Promise<Mp4MediaFacts>;
+  fingerprint?: string;
   attempts: number;
   budget: HttpRequestBudget;
   charged: WeakSet<HttpRequestBudget>;
@@ -164,16 +166,32 @@ export async function probeMp4MediaFacts(
   url: string,
   budget: HttpRequestBudget,
   includeDimensions = true,
-  context?: Mp4ProofContext
+  contextOrAsset?: Mp4ProofContext | ((fingerprint: string) => void),
+  signal?: AbortSignal,
+  searchContext?: Mp4ProofContext
 ): Promise<Mp4MediaFacts> {
+  const context = typeof contextOrAsset === "function" ? searchContext : contextOrAsset;
+  const onVerifiedAsset = typeof contextOrAsset === "function" ? contextOrAsset : undefined;
+  signal?.throwIfAborted();
   if (!isProbeableMp4(url) || context?.isCurrent() === false) return unknownFacts();
-  if (!context) return readMp4MediaFacts(url, budget, includeDimensions);
+  if (!context)
+    return readMp4MediaFacts(
+      url,
+      budget,
+      includeDimensions,
+      undefined,
+      undefined,
+      undefined,
+      onVerifiedAsset,
+      signal
+    );
   const key = createHash("sha256")
     .update(JSON.stringify([PARSER_VERSION, context.fingerprint, url, includeDimensions]))
     .digest("hex");
   const pending = flights.get(key);
   if (pending) {
     const facts = await consumeFlight(pending, budget);
+    if (context.isCurrent() && pending.fingerprint) onVerifiedAsset?.(pending.fingerprint);
     return context.isCurrent() ? facts : unknownFacts();
   }
   if (flights.size >= 128) return unknownFacts();
@@ -183,13 +201,26 @@ export async function probeMp4MediaFacts(
     budget,
     charged: new WeakSet([budget]),
   };
-  flight.promise = readMp4MediaFacts(url, budget, includeDimensions, key, context, () => {
-    flight.attempts++;
-  }).finally(() => {
+  flight.promise = readMp4MediaFacts(
+    url,
+    budget,
+    includeDimensions,
+    key,
+    context,
+    () => {
+      flight.attempts++;
+    },
+    (fingerprint) => {
+      flight.fingerprint = fingerprint;
+    },
+    signal
+  ).finally(() => {
     if (flights.get(key) === flight) flights.delete(key);
   });
   flights.set(key, flight);
-  return flight.promise;
+  const facts = await flight.promise;
+  if (context.isCurrent() && flight.fingerprint) onVerifiedAsset?.(flight.fingerprint);
+  return facts;
 }
 
 /**
@@ -204,7 +235,9 @@ async function readMp4MediaFacts(
   includeDimensions = true,
   key?: string,
   context?: Mp4ProofContext,
-  onAttempt?: () => void
+  onAttempt?: () => void,
+  onVerifiedAsset?: (fingerprint: string) => void,
+  signal?: AbortSignal
 ): Promise<Mp4MediaFacts> {
   if (!isProbeableMp4(url)) return unknownFacts();
   let total: number | undefined;
@@ -229,17 +262,25 @@ async function readMp4MediaFacts(
     if (requests > 0 && !validator) throw new AssetVersionChanged();
     requests++;
     onAttempt?.();
+    // Parent metadata may precede a trailer seek by a few bytes. Include that
+    // small look-behind instead of spending a second overlapping 1-MiB window.
+    const rangeStart = Math.max(0, start - Math.min(256, MAX_BYTES - size));
     const response = await fetchWithRetry(
       url,
       {
+        signal,
         headers: {
-          Range: `bytes=${start}-${start + MAX_BYTES - 1}`,
+          Range: `bytes=${rangeStart}-${rangeStart + MAX_BYTES - 1}`,
           "Accept-Encoding": "identity",
           ...(requests > 1 && validator ? { "If-Range": validator } : {}),
         },
       },
       { requestBudget: budget, maxRetries: 0 }
     );
+    if (response.status === 429 || response.status >= 500) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error("Source evidence unavailable");
+    }
     const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get("content-range") ?? "");
     const encoding = response.headers.get("content-encoding");
     const currentValidator = strongEtag(response.headers.get("etag"));
@@ -255,7 +296,7 @@ async function readMp4MediaFacts(
     const [from, end, length] = range.slice(1).map(Number);
     if (
       ![from, end, length].every(Number.isSafeInteger) ||
-      from !== start ||
+      from !== rangeStart ||
       end < from ||
       end >= length ||
       end - from + 1 > MAX_BYTES ||
@@ -267,9 +308,10 @@ async function readMp4MediaFacts(
     total = length;
     if (requests === 1) validator = currentValidator;
     const data = await readBoundedProviderBytes(response, budget.deadlineAt, MAX_BYTES);
-    if (data.length !== end - from + 1 || data.length < size) throw new UnsupportedMetadata();
-    windows.push({ start, data });
-    return data.subarray(0, size);
+    if (data.length !== end - from + 1 || data.length < start - from + size)
+      throw new UnsupportedMetadata();
+    windows.push({ start: from, data });
+    return data.subarray(start - from, start - from + size);
   }
 
   async function headerAt(start: number, parentEnd: number) {
@@ -340,8 +382,10 @@ async function readMp4MediaFacts(
         Date.now() < cached.expiresAt &&
         context?.isCurrent() &&
         Date.now() < budget.deadlineAt
-      )
+      ) {
+        onVerifiedAsset?.(cached.fingerprint);
         return structuredClone(cached.facts);
+      }
       proofs.delete(key);
     }
     for (let offset = 0; offset < total!; ) {
@@ -395,10 +439,24 @@ async function readMp4MediaFacts(
         videoDimensions: videos.length === 1 ? videos[0] : null,
       };
       if (context?.isCurrent() === false) return unknownFacts();
-      const ttl = Math.min(getSearchTTL(), 300) * 1000;
+      const fingerprint = createHash("sha256")
+        .update(
+          JSON.stringify([
+            validator,
+            total,
+            windows.map((window) => [
+              window.start,
+              createHash("sha256").update(window.data).digest("hex"),
+            ]),
+          ])
+        )
+        .digest("hex");
+      onVerifiedAsset?.(fingerprint);
+      const ttl = key ? Math.min(getSearchTTL(), 300) * 1000 : 0;
       if (key && validator && total && ttl > 0 && (facts.audioLanguage || facts.videoDimensions))
         proofs.set(key, {
           facts: structuredClone(facts),
+          fingerprint,
           validator,
           total,
           expiresAt: Date.now() + ttl,
