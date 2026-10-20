@@ -11,7 +11,15 @@ function run(args, input) {
     encoding: "utf8",
     timeout: args[0] === "stop" ? 20_000 : 10_000,
   });
-  if (result.error || result.status !== 0) throw new Error("Disposable media command failed");
+  if (result.error || result.status !== 0) {
+    const closedCode = result.stderr?.match(
+      /Owned database read failed: (P1001|P1002|P2024|P2025)\b/
+    )?.[1];
+    const cause =
+      result.error?.code === "ETIMEDOUT" ? "timeout" : closedCode || `exit ${result.status}`;
+    // Command arguments, URLs and raw database exceptions can contain secrets.
+    throw new Error(`Disposable media command failed (${args[0]}: ${cause})`);
+  }
   return args[0] === "logs" ? result.stdout + result.stderr : result.stdout;
 }
 if (
@@ -26,19 +34,25 @@ if (
   ]).trim() !== owner
 )
   throw new Error("Exact harness-owned media application required");
-function request(endpoint, body, enqueueKey) {
+function request(endpoint, body, enqueueKey, expectedStatus) {
   const args = [
     "exec",
     ...(body === undefined ? [] : ["-i"]),
     container,
     "curl",
-    "-fsS",
+    expectedStatus === undefined ? "-fsS" : "-sS",
     "--max-time",
     "5",
   ];
   if (body !== undefined) args.push("-X", "POST", "--data-binary", "@-");
   if (enqueueKey !== undefined) args.push("-H", `X-Pingufunk-Enqueue-Key: ${enqueueKey}`);
-  return JSON.parse(run([...args, `http://localhost:6767/${endpoint}`], body));
+  if (expectedStatus !== undefined) args.push("-w", "\n%{http_code}");
+  const result = run([...args, `http://localhost:6767/${endpoint}`], body);
+  if (expectedStatus === undefined) return JSON.parse(result);
+  const split = result.lastIndexOf("\n");
+  if (Number(result.slice(split + 1)) !== expectedStatus)
+    throw new Error("Owned media response status mismatch");
+  return JSON.parse(result.slice(0, split));
 }
 function rawRequest(url) {
   return run(["exec", container, "curl", "-fsS", "--max-time", "5", url]);
@@ -67,7 +81,7 @@ function expectedNzb(filename, expected) {
 }
 function readJob(id) {
   // Inspect persisted facts inside this owned image; never emit a URL or raw diagnostics.
-  const code = `const pg=process.env.DATABASE_PROVIDER==='postgresql'; const {PrismaClient}=require(pg?'@prisma/client':'./generated/sqlite'); const db=new PrismaClient({log:[]}); (async()=>{try{const row=await db.download.findUniqueOrThrow({where:{id:process.argv[1]}});console.log(JSON.stringify({status:row.status,expectations:row.mediaExpectations,validation:row.mediaValidation,category:row.category,filePath:row.filePath}));}finally{await db.$disconnect();}})().catch(()=>{process.exitCode=1});`;
+  const code = `const pg=process.env.DATABASE_PROVIDER==='postgresql'; const {PrismaClient}=require(pg?'@prisma/client':'./generated/sqlite'); const db=new PrismaClient({log:[]}); (async()=>{try{const row=await db.download.findUniqueOrThrow({where:{id:process.argv[1]}});console.log(JSON.stringify({status:row.status,expectations:row.mediaExpectations,validation:row.mediaValidation,category:row.category,filePath:row.filePath}));}finally{await db.$disconnect();}})().catch(error=>{if(['P1001','P1002','P2024','P2025'].includes(error?.code))console.error('Owned database read failed: '+error.code);process.exitCode=1});`;
   return JSON.parse(run(["exec", container, "node", "-e", code, id]));
 }
 const terminalSnapshots = new Map();
@@ -161,13 +175,18 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
   ["unknown", 2, null, "completed", "stream.m3u8"],
   ["series", 2, 120, "failed", "valid.mp4"],
   ["series", 120, 2, "failed", "valid.mp4"],
+  ["series", null, 120, "failed", "valid.mp4"],
+  ["series", 120, null, "failed", "valid.mp4"],
   ["movie", 120, null, "failed", "valid.mp4"],
 ]) {
   const expected = {
     version: 3,
     mediaKind,
     durations: {
-      source: { seconds: sourceSeconds, provenance: "source_catalogue", tolerancePercent: 10 },
+      source:
+        sourceSeconds === null
+          ? null
+          : { seconds: sourceSeconds, provenance: "source_catalogue", tolerancePercent: 10 },
       metadata:
         metadataSeconds === null
           ? null
@@ -177,6 +196,30 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
     sourceAudio: null,
     resolution: null,
   };
+  if (
+    sourceSeconds !== null &&
+    metadataSeconds !== null &&
+    Math.abs(sourceSeconds - metadataSeconds) > Math.max(5, metadataSeconds * 0.15)
+  ) {
+    const beforeQueue = request("api?mode=queue").queue;
+    const beforeHistory = request("api?mode=history").history;
+    for (const endpoint of ["api", "api/download"]) {
+      const rejected = request(
+        `${endpoint}?mode=addfile&cat=sonarr`,
+        expectedNzb(filename, expected).body,
+        undefined,
+        409
+      );
+      if (!rejected.error?.includes("Source duration conflicts"))
+        throw new Error("Runtime conflict lost its structured rejection");
+    }
+    if (
+      JSON.stringify(request("api?mode=queue").queue) !== JSON.stringify(beforeQueue) ||
+      JSON.stringify(request("api?mode=history").history) !== JSON.stringify(beforeHistory)
+    )
+      throw new Error("Blocked known runtime conflict wrote queue/history");
+    continue;
+  }
   const added = request("api?mode=addfile&cat=sonarr", expectedNzb(filename, expected).body);
   if (added.status !== true || added.nzo_ids.length !== 1)
     throw new Error("Frozen fixture enqueue failed");
@@ -525,7 +568,70 @@ if (pgContainer) {
     throw new Error(
       `DB outage left unexpected ${interrupted.status} with validation=${interrupted.validation !== null}`
     );
-  const nextId = request("api?mode=addfile&cat=sonarr", fixture.body).nzo_ids[0];
+  const reconnectReceipt = request("api?mode=addfile&cat=sonarr", fixture.body);
+  if (
+    reconnectReceipt.status !== true ||
+    reconnectReceipt.nzo_ids?.length !== 1 ||
+    !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(reconnectReceipt.nzo_ids[0])
+  )
+    throw new Error("Owned reconnect enqueue did not acknowledge one UUID job");
+  const nextId = reconnectReceipt.nzo_ids[0];
+  if (nextId === interruptedId)
+    throw new Error("Owned unkeyed reconnect enqueue reused the interrupted job");
+  if (terminalSnapshots.has(nextId))
+    throw new Error("Owned reconnect enqueue returned a historical terminal receipt");
+  // Independent SQL read distinguishes an acknowledged-but-missing row from
+  // client/query failures after the intentional outage. The UUID is validated.
+  const acknowledgedRows = run([
+    "exec",
+    pgContainer,
+    "psql",
+    "-At",
+    "-U",
+    "postgres",
+    "-d",
+    "pingufunk_media_qa",
+    "-c",
+    `SELECT count(*) FROM "Download" WHERE id='${nextId}'`,
+  ]).trim();
+  if (acknowledgedRows !== "1") {
+    if (process.env.PINGUFUNK_MEDIA_QA_TRACE === "1") {
+      // Never emit statements/parameters: even QA logs may contain URL values.
+      // Correlate only this owned server's Download insert and UUID parameter.
+      const inserts = [];
+      const pending = new Set();
+      for (const line of run(["logs", pgContainer]).split("\n")) {
+        const pid = line.match(/\[(\d+)\]/)?.[1];
+        if (pid && /INSERT INTO "public"\."Download"/.test(line)) pending.add(pid);
+        const id = line.match(/DETAIL:\s+parameters:\s+\$1 = '([a-f0-9-]{36})'/i)?.[1];
+        if (pid && id && pending.delete(pid)) inserts.push(id);
+      }
+      console.log(
+        JSON.stringify({
+          ownedSqlTrace: true,
+          downloadInserts: inserts.length,
+          acknowledgementInsertObserved: inserts.includes(nextId),
+        })
+      );
+    }
+    const shape = run([
+      "exec",
+      pgContainer,
+      "psql",
+      "-At",
+      "-U",
+      "postgres",
+      "-d",
+      "pingufunk_media_qa",
+      "-c",
+      "SELECT count(*), count(*) FILTER (WHERE status='queued'), count(*) FILTER (WHERE status='completed'), count(*) FILTER (WHERE status='failed') FROM \"Download\"",
+    ]).trim();
+    if (!/^\d+\|\d+\|\d+\|\d+$/.test(shape)) throw new Error("Owned SQL diagnostic shape invalid");
+    throw new Error(
+      `Owned reconnect acknowledged a job absent from PostgreSQL (total|queued|completed|failed=${shape})`
+    );
+  }
+  console.log("Owned reconnect acknowledgement has one independently persisted PostgreSQL row");
   const reconnectDeadline = Date.now() + 30_000;
   while (Date.now() < reconnectDeadline && readJob(nextId).status !== "completed") await delay(200);
   if (readJob(interruptedId).status !== "failed" || readJob(nextId).status !== "completed")

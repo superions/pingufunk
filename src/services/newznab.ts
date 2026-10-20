@@ -20,7 +20,7 @@ import {
   stableUrlIdentity,
 } from "./language-editions";
 import { createFakeNzbDownloadUrl } from "./nzb-release";
-import { releaseMediaExpectations } from "./release-media-expectations";
+import { releaseMediaExpectations, tvReviewMediaExpectations } from "./release-media-expectations";
 
 export { generateFakeNzb } from "./nzb-release";
 
@@ -214,7 +214,7 @@ export function getValidationRss(requestedCategoryIds: string[], now: Date = new
 }
 
 // Title formatting utilities
-function formatTitle(title: string): string {
+export function formatTitle(title: string): string {
   // Replace German Umlaute and special characters
   let formatted = title
     .replace(/ä/g, "ae")
@@ -306,7 +306,7 @@ export function buildReleaseGuid(
   return `${permalink}#${quality}-${fingerprint}`;
 }
 
-function generateTitle(
+export function generateTitle(
   info: MatchedEpisodeInfo,
   quality: string,
   episodeType: EpisodeType
@@ -346,10 +346,18 @@ function createRssItem(
   const parsedTitle = generateTitle(info, quality, episodeType);
   const formattedTitle = formatTitle(parsedTitle);
 
+  const expectations = info.runtimeConflict
+    ? tvReviewMediaExpectations(
+        info.item,
+        info.episode.runtime!,
+        url,
+        info.runtimeTolerancePercent ?? 10
+      )
+    : releaseMediaExpectations(info.item, info.episode.runtime, url, "series");
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
-    mediaExpectations: releaseMediaExpectations(info.item, info.episode.runtime, url, "series"),
+    mediaExpectations: expectations,
   });
   const item = info.item;
 
@@ -369,7 +377,9 @@ function createRssItem(
     // Preserve catalogue publication ordering, never reinterpret it as episode airdate.
     pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
     category: category,
-    description: item.description,
+    description: info.runtimeConflict
+      ? `Laufzeitkonflikt: Quelle ${item.duration} s, Episodenmetadaten ${info.episode.runtime! * 60} s, Toleranz ±${info.runtimeTolerancePercent ?? 10} %. Automatischer Download gesperrt; Einzelquelle in Pingufunk prüfen.\n${item.description}`
+      : item.description,
     enclosure: {
       url: fakeDownloadUrl,
       length: adjustedSize,
@@ -622,12 +632,32 @@ export function parseEpisodeFromTitle(title: string): {
   let season: number | null = null;
   let episodes: number[] = [];
   let episodeName = title;
+  let expression: RegExpMatchArray | undefined;
 
-  // Keep the whole E12E13 sequence; truncating it changes the release identity.
-  const sPattern = title.match(/\(?\bS(\d+)\/?E(\d+(?:E\d+)*)\)?/i);
+  // Keep complete lists/ranges. Partial parsing of E03-E04 would falsely turn
+  // a double episode into one independently verified source coordinate.
+  const coordinates = [...title.matchAll(/\(?\bS(\d+)\/?E(\d+(?:(?:\/?E|[-–]\/?E?)\d+)*)\)?/gi)];
+  if (coordinates.length > 1) return { season: null, episodes: [], episodeName: title };
+  const sPattern = coordinates[0];
   if (sPattern) {
+    expression = sPattern;
     season = parseInt(sPattern[1], 10);
-    episodes = sPattern[2].split(/E/i).map((value) => parseInt(value, 10));
+    const parts = [...sPattern[2].matchAll(/(^|\/?E|[-–]\/?E?)(\d+)/gi)];
+    for (const part of parts) {
+      const number = Number(part[2]);
+      if (!Number.isSafeInteger(number)) return { season: null, episodes: [], episodeName: title };
+      if (/[-–]/.test(part[1])) {
+        const previous = episodes.at(-1)!;
+        if (number <= previous || number - previous > 1000)
+          return { season: null, episodes: [], episodeName: title };
+        for (let episode = previous + 1; episode <= number; episode++) episodes.push(episode);
+      } else episodes.push(number);
+    }
+    const namedSeasons = [
+      ...title.matchAll(/\b(?:Staffel|Season|Saison|Temporada|Stagione)\s+(\d+)/gi),
+    ];
+    if (namedSeasons.some((match) => Number(match[1]) !== season))
+      return { season: null, episodes: [], episodeName: title };
     episodeName = title.replace(sPattern[0], "").trim();
   }
 
@@ -637,6 +667,7 @@ export function parseEpisodeFromTitle(title: string): {
       /\b(?:Staffel|Season|Saison|Temporada|Stagione)\s+(\d+)(?:\s*\((\d+)\s*\/\s*\d+\)|[\s,:-]+(?:Folge|Episode|E)\s*(\d+(?:E\d+)*))/i
     );
     if (seasonEpisodePattern) {
+      expression = seasonEpisodePattern;
       season = parseInt(seasonEpisodePattern[1], 10);
       const episodeSequence = seasonEpisodePattern[2] ?? seasonEpisodePattern[3];
       episodes = episodeSequence.split(/E/i).map((value) => parseInt(value, 10));
@@ -650,6 +681,7 @@ export function parseEpisodeFromTitle(title: string): {
       /\b(?:Folge|Episode)\s+(\d+(?:E\d+)*)(?:\s*:\s*(.+?))?(?:\s*\(|$)/i
     );
     if (folgePattern) {
+      expression = folgePattern;
       episodes = folgePattern[1].split(/E/i).map((value) => parseInt(value, 10));
       if (folgePattern[2]) {
         episodeName = folgePattern[2].trim();
@@ -663,9 +695,39 @@ export function parseEpisodeFromTitle(title: string): {
   if (episodes.length === 0) {
     const fracPattern = title.match(/\((\d+)\/(\d+)\)/);
     if (fracPattern) {
+      expression = fracPattern;
       episodes = [parseInt(fracPattern[1], 10)];
       episodeName = title.replace(fracPattern[0], "").trim();
     }
+  }
+
+  if (expression) {
+    const start = expression.index ?? 0;
+    const after = title.slice(start + expression[0].length);
+    const rest = title.slice(0, start) + after;
+    // A partial coordinate is not a single-episode proof. Do not discard named
+    // episode markers, slash/range tails or a second fraction after a compact
+    // expression. Repeated labels must agree; unsupported forms stay unbound.
+    const incomplete = /^[\s)]*(?:\/|[-–]|,|&|\+)\s*(?:E|Folge|Episode)?\s*\d/i.test(after);
+    const extraMarkers = [...rest.matchAll(/\b(?:E|Folge|Episode)\s*(\d+)\b/gi)];
+    const extraEpisode =
+      /\bS\d+(?:\/?E\d+)?\b/i.test(rest) ||
+      extraMarkers.some(
+        (marker) =>
+          episodes.length !== 1 ||
+          Number(marker[1]) !== episodes[0] ||
+          /^[\s)]*(?:\/|[-–]|,|&|\+)\s*(?:E|Folge|Episode)?\s*\d/i.test(
+            rest.slice(marker.index! + marker[0].length)
+          )
+      );
+    const extraFraction = /\(\s*\d+\s*\/\s*\d+\s*\)/.test(rest);
+    const conflictingSeason =
+      season !== null &&
+      [...rest.matchAll(/\b(?:Staffel|Season|Saison|Temporada|Stagione)\s+(\d+)/gi)].some(
+        (match) => Number(match[1]) !== season
+      );
+    if (incomplete || extraEpisode || extraFraction || conflictingSeason)
+      return { season: null, episodes: [], episodeName: title };
   }
 
   // Clean up episode name: remove trailing "(Audiodeskription)", "(mit Untertitel)", etc.

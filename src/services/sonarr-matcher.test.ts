@@ -58,6 +58,20 @@ it("records real alias/coordinate/runtime causes without turning a score into ev
   expect(JSON.stringify(report)).not.toMatch(/Unrelated|Synthetic|example\.invalid/);
 });
 
+it.each([
+  ["Concrete different title", "alias_conflict", "conflicting", 1],
+  ["Episode 3", "identity_missing", "missing", 2],
+])(
+  "preserves the exact diagnostic when %s has no source identity",
+  async (name, reason, evidence, count) => {
+    const { result, report } = await withDecisionDiagnostics(async () =>
+      matchSonarrEpisodes({ ...show, episodes: [{ ...show.episodes[0], name }] }, [item], 300, 10)
+    );
+    expect(result).toEqual([]);
+    expect(report.events).toContainEqual({ stage: "identity", reason, evidence, count });
+  }
+);
+
 describe("supplemental duration policy", () => {
   it.each([108, 120, 132])("accepts the inclusive short-episode boundary %s", (duration) => {
     expect(sonarrDurationCheck(duration, 120, 300, 10)).toEqual({
@@ -83,6 +97,116 @@ describe("supplemental duration policy", () => {
 });
 
 describe("identity before duration/identity stamping", () => {
+  it("uses verified complete source coordinates across localized titles without mutating metadata", () => {
+    const base = {
+      ...show,
+      episodes: [{ ...show.episodes[0], name: "English episode title", metadataSource: undefined }],
+      sonarrVerifiedCoordinates: ["2:3"],
+    };
+    const original = structuredClone(base);
+    const source = { ...item, title: "Deutscher Quelltitel (S02/E03)" };
+    expect(matchSonarrEpisodes(base, [source], 300, 10)).toMatchObject([
+      { episode: { name: "English episode title", seasonNumber: 2, episodeNumber: 3 } },
+    ]);
+    expect(base).toEqual(original);
+    expect(
+      matchSonarrEpisodes(
+        { ...base, episodes: [{ ...base.episodes[0], name: "IQ" }] },
+        [source],
+        300,
+        10
+      )
+    ).toHaveLength(1);
+    for (const override of [
+      { topic: "Foreign series" },
+      { title: "Deutscher Quelltitel" },
+      { title: "Deutscher Quelltitel (S01/E03)" },
+      { title: "Deutscher Quelltitel (S02/E04)" },
+      { title: "Deutscher Quelltitel (S02/E03-E04)" },
+      { title: "Deutscher Quelltitel S02E03 Staffel 2 Folge 4" },
+      { title: "Deutscher Quelltitel S02E03/04" },
+      { title: "Deutscher Quelltitel Staffel 2 Folge 3-5" },
+      { title: "Deutscher Quelltitel S02E03 S03E03" },
+      { title: "Deutscher Quelltitel Staffel 3 (S02/E03)" },
+      { title: "Deutscher Quelltitel (2025) (S02/E03)" },
+      { duration: 200 },
+    ])
+      expect(matchSonarrEpisodes(base, [{ ...source, ...override }], 300, 10)).toEqual([]);
+    expect(
+      matchSonarrEpisodes(
+        base,
+        [{ ...source, duration: 200 }],
+        300,
+        10,
+        undefined,
+        false,
+        false,
+        [],
+        true
+      )
+    ).toEqual([]);
+    expect(
+      matchSonarrEpisodes({ ...base, sonarrVerifiedCoordinates: [] }, [source], 300, 10)
+    ).toEqual([]);
+    expect(
+      matchSonarrEpisodes({ ...base, sonarrBlockedCoordinates: ["2:3"] }, [source], 300, 10)
+    ).toEqual([]);
+    expect(
+      matchSonarrEpisodes(
+        { ...base, episodes: [{ ...base.episodes[0], runtime: null }] },
+        [source],
+        300,
+        10
+      )
+    ).toEqual([]);
+  });
+  it("exposes only uniquely coordinate-bound duration conflicts for explicit review, not RSS acceptance", () => {
+    const pending = {
+      ...show,
+      episodes: [{ ...show.episodes[0], name: "TBA", runtime: 50, aired: new Date("2099-01-01") }],
+    };
+    const candidate = { ...item, title: "Source title (S02/E03)", duration: 3540 };
+    expect(matchSonarrEpisodes(pending, [candidate], 300, 15)).toEqual([]);
+    const review = (overrides: Partial<ApiResultItem> = {}) =>
+      matchSonarrEpisodes(
+        pending,
+        [{ ...candidate, ...overrides }],
+        300,
+        15,
+        undefined,
+        false,
+        false,
+        [],
+        true
+      );
+    expect(review()).toEqual([
+      expect.objectContaining({ runtimeConflict: true, episode: pending.episodes[0] }),
+    ]);
+    for (const invalid of [
+      { topic: "Unrelated series" },
+      { title: "Source title" },
+      { title: "Source title (S02/E04)" },
+      { title: "Trailer (S02/E03)" },
+      { duration: 0 },
+      { duration: NaN },
+    ])
+      expect(review(invalid)).toEqual([]);
+    expect(review({ duration: 3450 })[0].runtimeConflict).toBeUndefined();
+  });
+  it("never uses duration to select one of two same-title episodes", () => {
+    const ambiguous = {
+      ...show,
+      episodes: [
+        show.episodes[0],
+        {
+          ...show.episodes[0],
+          episodeNumber: 4,
+          runtime: 90,
+        },
+      ],
+    };
+    expect(matchSonarrEpisodes(ambiguous, [item], 300, 15)).toEqual([]);
+  });
   it("requires supplemental coordinate verification for a preserved base TBA episode", () => {
     const base = {
       ...show,
@@ -132,16 +256,13 @@ describe("identity before duration/identity stamping", () => {
           10
         )
       ).toEqual([]);
+      const concrete = {
+        ...placeholder,
+        episodes: [{ ...placeholder.episodes[0], name: "Concrete translated title" }],
+      };
+      expect(matchSonarrEpisodes(concrete, [source], 300, 10)).toHaveLength(1);
       expect(
-        matchSonarrEpisodes(
-          {
-            ...placeholder,
-            episodes: [{ ...placeholder.episodes[0], name: "Concrete different title" }],
-          },
-          [source],
-          300,
-          10
-        )
+        matchSonarrEpisodes(concrete, [{ ...source, title: "Actual source title" }], 300, 10)
       ).toEqual([]);
     }
   );

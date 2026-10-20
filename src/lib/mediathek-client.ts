@@ -39,6 +39,8 @@ export interface MediathekQueryOptions {
   arteSeries?: TvdbData;
   /** Internal catalogue owner must resolve verified editions before final selection. */
   deferLanguageSelection?: boolean;
+  /** Supplemental RSS owners may bound raw pages to protect the shared primary budget. */
+  maxCandidatePages?: number;
 }
 
 /**

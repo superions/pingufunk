@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { productSettingsContext } from "./product-settings-context";
 import { SETTING_DEFINITIONS } from "./settings-schema";
 import type { TvdbData, TmdbMovieData, Ruleset } from "@/types";
+import { sourceMediaFacts } from "@/services/source-media-facts";
 
 // Default TTL values (in seconds)
 const DEFAULT_SEARCH_TTL = Number(SETTING_DEFINITIONS["cache.ttl.search"].defaultValue);
@@ -225,6 +226,7 @@ export function coalesceMetadata<T>(key: string, load: () => Promise<T>): Promis
 
 export function clearMetadataCaches(): void {
   cacheEpoch++;
+  sourceMediaFacts.clear();
   tvdbCache.clear();
   metadataMissCache.clear();
   // Keep old in-flight entries counted until they settle; their epoch-bound

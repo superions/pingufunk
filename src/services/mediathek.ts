@@ -1,12 +1,20 @@
 import { cacheContextEpoch, mediathekCache } from "@/lib/cache";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
 import { configuredSetting } from "@/lib/settings-schema";
-import { getConfiguredLanguagePolicy, queryContent, searchCacheContext } from "./content-search";
+import {
+  getConfiguredLanguagePolicy,
+  queryContent,
+  queryContentWindow,
+  type ContentSearchWindow,
+  searchCacheContext,
+  RSS_SYNC_CANDIDATE_LIMIT,
+} from "./content-search";
 import { enrichTvCandidates } from "./source-audio";
-import { getBaseShowForSonarrRss } from "./shows";
+import { getBaseShowForSonarrRss, getShowInfoByTvdbId } from "./shows";
 import { getSonarrRssMatches } from "./sonarr-rss";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
-import { SonarrUnavailableError } from "./sonarr-provider";
+import { SonarrUnavailableError, openSonarrSession } from "./sonarr-provider";
+import { registerTvSearchDelivery, getTvSearchDeliveryItems } from "./tv-search-delivery";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { createHash } from "node:crypto";
 import { ensureRulesetsLoaded, getRulesetContext } from "./rulesets";
@@ -53,8 +61,60 @@ import {
 
 const QUERY_FIELDS = ["topic", "title"];
 const TV_SEARCH_CANDIDATE_LIMIT = 1500;
-const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-const CONTENT_SEARCH_CACHE_VERSION = "v14-fresh-source-facts";
+const CONTENT_SEARCH_CACHE_VERSION = "v18-integrated-tv-delivery";
+
+/** One bounded retrieval owner for native indexer searches and manual review. */
+export async function queryTvSourceCandidates(
+  tvdbData: TvdbData,
+  context: TvSearchContext,
+  requestBudget: HttpRequestBudget,
+  reportCoverage?: (coverage: ContentSearchWindow["coverage"]) => void
+): Promise<ApiResultItem[] | null> {
+  await ensureRulesetsLoaded(requestBudget);
+  const desiredEpisodes = getDesiredEpisodes(tvdbData, context);
+  const searchQuery = context.query || tvdbData.germanName || tvdbData.name;
+  const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
+    (episode) => episode.metadataSource === "sonarr"
+  );
+  const searchQueries = tvSearchQueries(
+    tvdbData,
+    searchQuery,
+    desiredEpisodes?.length === 1 ? desiredEpisodes[0].name : undefined
+  );
+  const windows = await Promise.all(
+    searchQueries.map((query) =>
+      (async () => {
+        const options = {
+          arteSeries: tvdbData,
+          deferLanguageSelection: true,
+          ...(supplemented
+            ? {
+                requestBudget,
+                progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
+                  (episode) => episode.metadataSource === "sonarr"
+                ),
+              }
+            : { requestBudget }),
+        };
+        if (!reportCoverage) return queryContent([query], TV_SEARCH_CANDIDATE_LIMIT, options);
+        const window = await queryContentWindow([query], TV_SEARCH_CANDIDATE_LIMIT, options);
+        reportCoverage(window.coverage);
+        // Review is fail-closed just like the native indexer; reporting does not
+        // turn an incomplete source window into a complete candidate set.
+        return window.coverage.complete ? window.items : null;
+      })()
+    )
+  );
+  const results = windows.some((window) => window === null)
+    ? null
+    : [
+        ...new Map(
+          windows.flatMap((window) => window ?? []).map((item) => [JSON.stringify(item), item])
+        ).values(),
+      ];
+
+  return results;
+}
 
 export async function fetchSearchResultsById(
   tvdbData: TvdbData,
@@ -106,38 +166,7 @@ export async function fetchSearchResultsById(
     results = cachedApi.results;
   } else {
     console.log(`[Mediathek] Searching MediathekView API with query: "${searchQuery}"`);
-    const supplemented = (desiredEpisodes ?? tvdbData.episodes).some(
-      (episode) => episode.metadataSource === "sonarr"
-    );
-    const searchQueries = tvSearchQueries(
-      tvdbData,
-      searchQuery,
-      desiredEpisodes?.length === 1 ? desiredEpisodes[0].name : undefined
-    );
-    const windows = await Promise.all(
-      searchQueries.map((query) =>
-        queryContent([query], TV_SEARCH_CANDIDATE_LIMIT, {
-          arteSeries: tvdbData,
-          deferLanguageSelection: true,
-          ...(supplemented
-            ? {
-                requestBudget,
-                progressiveOnly: (desiredEpisodes ?? tvdbData.episodes).every(
-                  (episode) => episode.metadataSource === "sonarr"
-                ),
-              }
-            : { requestBudget }),
-        })
-      )
-    );
-    results = windows.some((window) => window === null)
-      ? null
-      : [
-          ...new Map(
-            windows.flatMap((window) => window ?? []).map((item) => [JSON.stringify(item), item])
-          ).values(),
-        ];
-
+    results = await queryTvSourceCandidates(tvdbData, context, requestBudget);
     if (results === null) throw new Error("Search provider unavailable");
     if (results.length === 0) {
       return serializeRss(getEmptyRssResult(offset));
@@ -177,7 +206,8 @@ export async function fetchSearchResultsById(
     await getConfiguredLanguagePolicy(),
     hlsEnabled,
     true,
-    verifiedRuleTopics(tvdbData)
+    verifiedRuleTopics(tvdbData),
+    true
   );
   const matchedDesiredEpisodes = applyDesiredEpisodeFilter(
     [...matchedEpisodes, ...supplementalMatches],
@@ -185,6 +215,10 @@ export async function fetchSearchResultsById(
     context
   );
   console.log(`[Mediathek] Matched desired episodes: ${matchedDesiredEpisodes.length}`);
+
+  // Discovery must survive the HTTP response and precede asynchronous proof work.
+  // Only monitored, verified instance coordinates may enter the delivery journal.
+  await registerTvSearchDelivery(tvdbData, matchedDesiredEpisodes, requestBudget);
 
   const newznabItems = await assembleTvReleases(
     matchedDesiredEpisodes,
@@ -234,6 +268,29 @@ export async function fetchSearchResultsByString(
     query: searchContext.query?.trim() || null,
   };
   const trimmedQ = context.query;
+  // Title forwarding without an ID must reach the same verified episode owner.
+  if (trimmedQ && context.tvdbId === null) {
+    const session = await openSonarrSession();
+    if (session) {
+      const normalize = (value: string) =>
+        value
+          .normalize("NFC")
+          .toLocaleLowerCase("de-DE")
+          .replace(/[.\s]+/g, " ")
+          .trim();
+      const owners = (await session.inventory(budget)).filter((series) =>
+        [series.title, ...(series.aliases ?? [])].some(
+          (name) => normalize(name) === normalize(trimmedQ)
+        )
+      );
+      if (owners.length === 1) {
+        const show = await getShowInfoByTvdbId(owners[0].tvdbId, budget);
+        if (!show || show.sonarrUnavailable) throw new SonarrUnavailableError();
+        return fetchSearchResultsById(show, { ...context, tvdbId: show.id }, limit, offset, budget);
+      }
+      if (owners.length > 1) return serializeRss(getEmptyRssResult(offset));
+    }
+  }
   await ensureRulesetsLoaded(budget);
   const quality = await getQualityPreference();
   const hlsEnabled = await isHlsEnabled();
@@ -306,18 +363,43 @@ export async function fetchSearchResultsByString(
   return response;
 }
 
+let tvRssPageSnapshot: { key: string; expiresAt: number; items: NewznabItem[] } | undefined;
+
 export async function fetchSearchResultsForRssSync(limit: number, offset: number): Promise<string> {
   const budget = new HttpRequestBudget();
   await ensureRulesetsLoaded(budget);
+  const minDuration = await getMinDurationSeconds();
   const quality = await getQualityPreference();
   const hlsEnabled = await isHlsEnabled();
   const sourceContext = await searchCacheContext();
-  // Reuse metadata goals, never an RSS body or cached signed media URL.
+  const pageKey = JSON.stringify([
+    cacheContextEpoch(),
+    sourceContext,
+    getRulesetContext(),
+    quality,
+    minDuration,
+    hlsEnabled,
+  ]);
+  if (tvRssPageSnapshot?.key === pageKey && tvRssPageSnapshot.expiresAt > Date.now())
+    return convertItemsToRss(tvRssPageSnapshot.items, limit, offset);
+  // Ordinary RSS always reads fresh catalogue rows. Only deferred delivery
+  // freezes one bounded consumer poll so background proofs cannot shift pages.
   let supplementalMatches: MatchedEpisodeInfo[] = [];
+  let deliveryItems: NewznabItem[] = [];
   let sonarrUnavailable = false;
   try {
+    deliveryItems = await getTvSearchDeliveryItems(
+      getBaseShowForSonarrRss,
+      budget,
+      quality,
+      hlsEnabled
+    );
     supplementalMatches = await getSonarrRssMatches(getBaseShowForSonarrRss, budget);
   } catch {
+    // Withhold every optional instance-dependent item on an incomplete lookup,
+    // while independently proven base releases retain their existing fallback.
+    deliveryItems = [];
+    supplementalMatches = [];
     sonarrUnavailable = true;
     recordDecision("catalogue", "source_failed", "unavailable");
   }
@@ -357,7 +439,18 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
     hlsEnabled,
     false
   );
-  const response = convertItemsToRss(dedupeNewznabItems(newznabItems), limit, offset);
+  // Newly download-ready events precede the raw catalogue, with their original
+  // GUID/URL and an availability pubDate, not a fabricated episode air date.
+  const items = dedupeNewznabItems([...deliveryItems, ...newznabItems]).sort(
+    (a, b) =>
+      Date.parse(b.pubDate) - Date.parse(a.pubDate) || a.guid.value.localeCompare(b.guid.value)
+  );
+  const response = convertItemsToRss(items, limit, offset);
+
+  // Freeze the combined feed, not individual offset responses: new background
+  // proofs must not move a release between pages during one consumer poll.
+  if (deliveryItems.length && !sonarrUnavailable)
+    tvRssPageSnapshot = { key: pageKey, expiresAt: Date.now() + 60_000, items };
 
   return response;
 }

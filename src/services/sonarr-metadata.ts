@@ -29,6 +29,8 @@ const episodeSchema = z.object({
   episodeNumber: positiveId,
   title: z.string().trim().min(1),
   airDateUtc: z.string().nullish(),
+  monitored: z.boolean().optional(),
+  hasFile: z.boolean().optional(),
   runtime: z.number().int().nonnegative().max(2_147_483_647).nullish(),
 });
 
@@ -50,6 +52,8 @@ export interface SonarrEpisodeMetadata {
   aired: Date | null;
   /** EpisodeResource.runtime in minutes, converted once; never Series.runtime. */
   expectedRuntimeSeconds: number | null;
+  monitored: boolean;
+  hasFile: boolean;
 }
 
 /** Fail closed on unsupported majors; API v3 is not the Sonarr major version. */
@@ -137,6 +141,8 @@ export function parseSonarrEpisodes(payload: unknown, seriesId: number): SonarrE
       title: episode.title,
       aired: parseAired(episode.airDateUtc),
       expectedRuntimeSeconds: episode.runtime ? episode.runtime * 60 : null,
+      monitored: episode.monitored === true,
+      hasFile: episode.hasFile === true,
     };
   });
 }

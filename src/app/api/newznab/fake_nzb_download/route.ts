@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decodeBase64Utf8, decodeMediaExpectations, generateFakeNzb } from "@/services/nzb-release";
+import { assertMediaRuntimeCompatible } from "@/lib/media-expectations";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -23,6 +24,14 @@ export async function GET(request: NextRequest) {
     mediaExpectations = values.length === 0 ? undefined : decodeMediaExpectations(values[0]);
   } catch {
     return NextResponse.json({ error: "Invalid media expectations" }, { status: 400 });
+  }
+  try {
+    assertMediaRuntimeCompatible(mediaExpectations);
+  } catch {
+    return NextResponse.json(
+      { error: "Episode runtime conflict; review the source in Pingufunk" },
+      { status: 409 }
+    );
   }
   const nzbContent = generateFakeNzb({ title, url, mediaExpectations });
 

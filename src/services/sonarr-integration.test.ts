@@ -41,6 +41,8 @@ import { parseNzbContent } from "./download";
 import { clearMetadataCaches, mediathekCache } from "@/lib/cache";
 import { clearSettingsCache } from "@/lib/settings";
 import { mediaSourceIdentity } from "./source-audio";
+import { sourceMediaFacts } from "./source-media-facts";
+import * as delivery from "./tv-search-delivery";
 import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
 
 let fetchMock: ReturnType<typeof vi.fn<(value: string) => Promise<Response>>>;
@@ -129,12 +131,130 @@ beforeEach(() => {
   });
   vi.stubGlobal("fetch", fetchMock);
 });
-afterEach(() => {
+afterEach(async () => {
+  sourceMediaFacts.clear();
+  await sourceMediaFacts.idle();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   clearSettingsCache();
   clearMetadataCaches();
   mediathekCache.clear();
+});
+
+it("exposes a source-coordinate-bound future TBA duration conflict consistently without releasing its NZB", async () => {
+  const base = fetchMock.getMockImplementation()!;
+  state.settings.set("matching.sonarr.tolerancePercent", "15");
+  state.settings.set("download.quality", "best");
+  fetchMock.mockImplementation(async (value: string, init?: RequestInit) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/episode"))
+      return Response.json([
+        {
+          id: 45,
+          seriesId: 12,
+          seasonNumber: 2,
+          episodeNumber: 3,
+          title: "TBA",
+          airDateUtc: "2099-01-01T12:00:00Z",
+          runtime: 50,
+        },
+      ]);
+    if (url.hostname === "mediathekviewweb.de")
+      return Response.json({
+        result: {
+          results: [
+            {
+              ...source,
+              channel: "ZDF",
+              title: "Actual title (S02/E03)",
+              duration: 3540,
+              url_video: "https://rodlzdf-a.akamaihd.net/synthetic/episode.mp4",
+            },
+          ],
+        },
+        err: null,
+      });
+    if (url.hostname === "rodlzdf-a.akamaihd.net") return mp4RangeResponse(syntheticMp4(), init!);
+    return base(value);
+  });
+  // Cold searches deliberately publish neutral facts first. Await the actual
+  // bounded proof owner, then require the same verified conflict on every route.
+  const cold = await GET(
+    new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=2&ep=3")
+  );
+  const coldRelease = (await parseStringPromise(await cold.text())).rss.channel[0].item[0];
+  expect(coldRelease.title[0]).toContain("UNKNOWN");
+  expect(
+    (
+      await downloadNzb(
+        new NextRequest(new URL(coldRelease.enclosure[0].$.url, "http://localhost"))
+      )
+    ).status
+  ).toBe(409);
+  expect(state.addToQueue).not.toHaveBeenCalled();
+  await sourceMediaFacts.idle();
+  const identities = new Set<string>();
+  for (const query of [
+    "tvdbid=123&season=2&ep=3",
+    "tvdbid=123&season=2",
+    "q=Synthetic.series&season=2&ep=3",
+    "q=Synthetic%20series&season=2",
+  ]) {
+    const response = await GET(new NextRequest(`http://localhost/api/newznab?t=tvsearch&${query}`));
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel.item).toHaveLength(1);
+    const release = channel.item[0];
+    identities.add(release.guid[0]._);
+    expect(release.title[0]).toContain("S02E03.Actual.title");
+    expect(release.title[0]).toContain("1080p");
+    expect(release.title[0]).toContain("GERMAN");
+    expect(release.description[0]).toContain("Laufzeitkonflikt");
+    expect(release.description[0]).toContain("±15 %");
+    const nzb = await downloadNzb(
+      new NextRequest(new URL(release.enclosure[0].$.url, "http://localhost"))
+    );
+    expect(nzb.status).toBe(409);
+    expect(await nzb.text()).not.toContain("<nzb");
+  }
+  // Newly bound text searches enter the existing verified-ID namespace, not a
+  // second GUID per transport. Persisted legacy generic GUIDs are not rewritten.
+  expect(identities.size).toBe(1);
+  expect(state.addToQueue).not.toHaveBeenCalled();
+});
+
+it("does not bind a title-only query to either of two authoritative alias owners", async () => {
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation(async (value: string) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/series"))
+      return Response.json([
+        {
+          id: 12,
+          tvdbId: 123,
+          title: "First series",
+          monitored: true,
+          alternateTitles: [{ title: "Shared alias", seasonNumber: -1 }],
+        },
+        {
+          id: 13,
+          tvdbId: 124,
+          title: "Second series",
+          monitored: true,
+          alternateTitles: [{ title: "Shared alias", seasonNumber: -1 }],
+        },
+      ]);
+    return base(value);
+  });
+  const response = await GET(
+    new NextRequest("http://localhost/api/newznab?t=tvsearch&q=Shared%20alias&season=2&ep=3")
+  );
+  expect(response.status).toBe(200);
+  const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+  expect(channel.item ?? []).toHaveLength(0);
+  expect(
+    fetchMock.mock.calls.some(([value]) => new URL(value).hostname === "mediathekviewweb.de")
+  ).toBe(false);
 });
 
 it("finds an already listed future-airdate episode by exact/season search without granting RSS advance access", async () => {
@@ -367,10 +487,21 @@ it.each(["ard", "arte", "zdf"] as const)(
       }
       return base(value);
     });
-    const response = await GET(
-      new NextRequest(`http://localhost/api/newznab?t=tvsearch&tvdbid=${tvdbId}&season=${season}`)
-    );
+    const request = () =>
+      new NextRequest(`http://localhost/api/newznab?t=tvsearch&tvdbid=${tvdbId}&season=${season}`);
+    let response = await GET(request());
     expect(response.status).toBe(200);
+    if (provider === "zdf") {
+      // Cold public MP4 evidence is deliberately deferred, not a foreground
+      // dependency of catalogue discovery. The native bulk/RSS test separately
+      // verifies real imports without this second unit-level search.
+      const cold = await response.text();
+      expect(cold.match(/\.UNKNOWN\./g)).toHaveLength(count);
+      expect(fetchMock.mock.calls.some(([url]) => url.includes("rodlzdf-a"))).toBe(false);
+      await sourceMediaFacts.idle();
+      response = await GET(request());
+      expect(response.status).toBe(200);
+    }
     const channel = (await parseStringPromise(await response.text())).rss.channel[0];
     expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: String(count) });
     expect(channel.item).toHaveLength(count);
@@ -665,45 +796,58 @@ it("does not turn an unavailable missing episode into a cached empty HTTP succes
   expect(await response.text()).not.toContain("private upstream payload");
 });
 
-it("retains independently verified exact and RSS base hits during a Sonarr outage", async () => {
-  state.rulesets = [
-    {
-      id: 1,
-      mediaId: 1,
-      topic: "Synthetic series",
-      priority: 1,
-      filters: "[]",
-      titleRegexRules: JSON.stringify([{ type: "regex", field: "title", pattern: "^(.*)$" }]),
-      seasonRegex: null,
-      episodeRegex: null,
-      matchingStrategy: "ItemTitleExact" as Ruleset["matchingStrategy"],
-      media: {
-        media_id: 1,
-        media_name: "Synthetic series",
-        media_type: "tv",
-        media_tvdbId: 123,
-        media_tmdbId: null,
-        media_imdbId: null,
-      },
-    },
-  ];
-  const independent = { ...source, title: "Existing episode", duration: 2400 };
-  const original = fetchMock.getMockImplementation()!;
-  fetchMock.mockImplementation(async (value: string) => {
-    const url = new URL(value);
-    if (url.pathname.endsWith("/system/status")) return new Response(null, { status: 401 });
-    if (url.hostname === "mediathekviewweb.de")
-      return Response.json({ result: { results: [independent] }, err: null });
-    return original(value);
-  });
-  for (const query of ["t=tvsearch&tvdbid=123&season=1&ep=1", "t=tvsearch&cat=5000"]) {
-    const response = await GET(new NextRequest(`http://localhost/api/newznab?${query}`));
-    expect(response.status).toBe(200);
-    const rss = await response.text();
-    expect(rss).toContain("S01E01");
-    expect(rss).not.toContain("S02E03");
+it.each([false, true])(
+  "retains independently verified exact and RSS base hits during a Sonarr outage (delivery fails=%s)",
+  async (deliveryFails) => {
+    const unavailable = deliveryFails
+      ? vi
+          .spyOn(delivery, "getTvSearchDeliveryItems")
+          .mockRejectedValue(new Error("Synthetic journal inventory unavailable"))
+      : null;
+    try {
+      state.rulesets = [
+        {
+          id: 1,
+          mediaId: 1,
+          topic: "Synthetic series",
+          priority: 1,
+          filters: "[]",
+          titleRegexRules: JSON.stringify([{ type: "regex", field: "title", pattern: "^(.*)$" }]),
+          seasonRegex: null,
+          episodeRegex: null,
+          matchingStrategy: "ItemTitleExact" as Ruleset["matchingStrategy"],
+          media: {
+            media_id: 1,
+            media_name: "Synthetic series",
+            media_type: "tv",
+            media_tvdbId: 123,
+            media_tmdbId: null,
+            media_imdbId: null,
+          },
+        },
+      ];
+      const independent = { ...source, title: "Existing episode", duration: 2400 };
+      const original = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (value: string) => {
+        const url = new URL(value);
+        if (url.pathname.endsWith("/system/status")) return new Response(null, { status: 401 });
+        if (url.hostname === "mediathekviewweb.de")
+          return Response.json({ result: { results: [independent] }, err: null });
+        return original(value);
+      });
+      for (const query of ["t=tvsearch&tvdbid=123&season=1&ep=1", "t=tvsearch&cat=5000"]) {
+        const response = await GET(new NextRequest(`http://localhost/api/newznab?${query}`));
+        expect(response.status).toBe(200);
+        const rss = await response.text();
+        expect(rss).toContain("S01E01");
+        expect(rss).not.toContain("S02E03");
+      }
+      expect(
+        fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/v3/episode"))
+      ).toHaveLength(0);
+      if (unavailable) expect(unavailable).toHaveBeenCalledOnce();
+    } finally {
+      unavailable?.mockRestore();
+    }
   }
-  expect(
-    fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/v3/episode"))
-  ).toHaveLength(0);
-});
+);

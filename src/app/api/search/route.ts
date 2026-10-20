@@ -6,12 +6,14 @@ import {
   getConfiguredLanguagePolicy,
   queryContentWindow,
   type SearchProviderId,
+  type ContentSearchWindow,
 } from "@/services/content-search";
 import { selectLanguageVariants } from "@/services/language-editions";
 import { eligibleRenditionItem, selectRenditions } from "@/services/rendition-quality";
 import { createUiNzbDownloads, uiNzbFingerprints } from "@/services/ui-nzb";
 import type { ApiResultItem, UiNzbDownloads, UiSearchCoverage } from "@/types";
 import { recordDecision, withDecisionDiagnostics } from "@/server/decision-diagnostics";
+import { searchTvSourceReviews } from "@/services/tv-source-review";
 
 export interface SearchResult {
   id: string;
@@ -113,10 +115,93 @@ async function handleSearchRequest(request: NextRequest) {
     recordDecision("request", "request_invalid", "conflicting");
     return NextResponse.json({ results: [], error: "Invalid search parameters" }, { status: 400 });
   }
-
   try {
     return await withSettingsSnapshot(async () => {
       const limit = Number(rawLimit);
+      // UI searches and Newznab use the same enabled sources.
+      if (!type || type === "series" || type === "all") {
+        try {
+          const windows: ContentSearchWindow["coverage"][] = [];
+          const bound = await searchTvSourceReviews(q, (coverage) => windows.push(coverage));
+          if (bound !== null) {
+            // A provider selector cannot bypass an already verified series conflict.
+            // This review follows the common enabled-source owner, not a separate indexer.
+            if (provider)
+              return NextResponse.json(
+                {
+                  results: [],
+                  error: "Für die Quellenprüfung bitte alle aktivierten Quellen wählen",
+                },
+                { status: 409 }
+              );
+            if (!windows.length) throw new Error("Missing bounded search coverage");
+            const sources = PROVIDERS.flatMap((providerId) => {
+              const reports = windows.flatMap((window) =>
+                window.sources.filter((source) => source.providerId === providerId)
+              );
+              if (!reports.length) return [];
+              return [
+                {
+                  providerId,
+                  state: reports.some((source) => source.state === "failed")
+                    ? ("failed" as const)
+                    : reports.every((source) => source.state === "disabled")
+                      ? ("disabled" as const)
+                      : ("complete" as const),
+                  // Query alternatives overlap. Report the largest observed raw
+                  // source window, never add them into a fabricated catalogue total.
+                  candidateCount: Math.max(...reports.map((source) => source.candidateCount)),
+                },
+              ];
+            });
+            const returnedCount = Math.min(limit, 100, bound.length);
+            const coverage: UiSearchCoverage = {
+              complete: windows.every((window) => window.complete),
+              candidateWindowLimited:
+                windows.length > 1 || windows.some((window) => window.candidateWindowLimited),
+              resultLimitReached: bound.length > returnedCount,
+              eligibleCount: bound.length,
+              returnedCount,
+              sources,
+            };
+            return NextResponse.json(
+              {
+                coverage,
+                results: bound.slice(0, Math.min(limit, 100)).map(({ info, review }) => {
+                  const nzbDownloads = review.runtimeConflict
+                    ? {}
+                    : createUiNzbDownloads(info.item, false, info.episode);
+                  return {
+                    id: review.selector.sourceId,
+                    channel: info.item.channel,
+                    topic: info.item.topic,
+                    title: info.item.title,
+                    description: info.item.description,
+                    timestamp: info.item.filmlisteTimestamp,
+                    duration: info.item.duration,
+                    size: info.item.size,
+                    url_video: info.item.url_video,
+                    url_video_hd: info.item.url_video_hd,
+                    url_video_low: info.item.url_video_low,
+                    url_website: info.item.url_website,
+                    category: "tv",
+                    tvReview: review,
+                    nzbDownloads,
+                    nzbFingerprints: review.runtimeConflict ? {} : uiNzbFingerprints(nzbDownloads),
+                  };
+                }),
+              },
+              { headers: { "Cache-Control": "no-store" } }
+            );
+          }
+        } catch {
+          // A bound but unverifiable series must not escape through generic source-only NZBs.
+          return NextResponse.json(
+            { results: [], error: "Serienquellen nicht eindeutig verifiziert" },
+            { status: 502 }
+          );
+        }
+      }
       // All selected sources and retries share the same attempts and wallclock.
       // Generic browsing never borrows the larger explicit TV identity budget.
       const requestBudget = new HttpRequestBudget();

@@ -226,6 +226,12 @@ async function processOwnedDownload(downloadId: string, lease: WorkerLease): Pro
       return;
     }
     const expectations = readPersistedMediaExpectations(download.mediaExpectations);
+    if (expectations?.version === 4) {
+      // Approval belongs to this durable job and exact source, including after
+      // restart. Revalidate before transferring any bytes, not just at UI time.
+      const { revalidateApprovedTvJob } = await import("@/services/tv-source-review");
+      await revalidateApprovedTvJob(download, expectations);
+    }
 
     console.log(`[Download] Starting: ${download.title}`);
 
