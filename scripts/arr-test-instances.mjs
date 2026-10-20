@@ -120,6 +120,9 @@ async function up() {
   const placeholderEpisode = process.env.PINGUFUNK_ARR_QA_TBA === "1";
   const localizedEpisode = process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1";
   const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
+  const runtimeConflict = process.env.PINGUFUNK_ARR_QA_RUNTIME_CONFLICT === "1";
+  if (runtimeConflict && !placeholderEpisode)
+    throw new Error("Runtime conflict requires the owned TBA fixture");
   const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
   if (localizedEpisode && (placeholderEpisode || !sourceAudio || renditionQuality !== "720p"))
     throw new Error("Owned localized episode QA requires its positive source-audio fixture");
@@ -151,6 +154,7 @@ async function up() {
     sourceAudio,
     placeholderEpisode,
     localizedEpisode,
+    runtimeConflict,
     renditionQuality,
     tvDelivery,
     apps: {},
@@ -259,6 +263,7 @@ async function up() {
         ]
       : []),
     ...(localizedEpisode ? ["-e", "PINGUFUNK_ARR_QA_LOCALIZED_EPISODE=1"] : []),
+    ...(runtimeConflict ? ["-e", "PINGUFUNK_ARR_QA_RUNTIME_CONFLICT=1"] : []),
     ...(renditionQuality ? ["-e", `PINGUFUNK_ARR_QA_RENDITION_QUALITY=${renditionQuality}`] : []),
     ...(movieCorrelation
       ? [
@@ -643,6 +648,10 @@ async function seriesFixture(root, manifest) {
             ).run(series.Id, season, episode, 2147483003 + (season - 1) * 40 + episode - 1);
           }
       }
+      if (manifest.runtimeConflict)
+        db.prepare(
+          "UPDATE Episodes SET Runtime=50,AirDateUtc='2099-01-01 20:00:00',AirDate='2099-01-01' WHERE SeriesId=? AND TvdbId=?"
+        ).run(series.Id, 2147483003);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -684,6 +693,7 @@ async function movieSearch(root, manifest, app = "radarr") {
     ...(app === "sonarr" && (manifest.placeholderEpisode || manifest.localizedEpisode)
       ? { "integration.sonarr.enabled": "true", "integration.sonarr.url": "http://sonarr:8989" }
       : {}),
+    ...(manifest.runtimeConflict ? { "matching.sonarr.tolerancePercent": "15" } : {}),
   });
   const movie = await fixtureTarget(root, manifest, app);
   if (!movie || movie.monitored) throw new Error("Owned unmonitored synthetic movie required");
@@ -759,6 +769,88 @@ async function movieSearch(root, manifest, app = "radarr") {
         console.log(
           `sonarr: ${transport} ${manifest.localizedEpisode ? "localized" : "TBA"} source accepted as S01E01/German/720p; metadata preserved; no grab`
         );
+        if (manifest.runtimeConflict) {
+          // Never POST a native grab. Inspect only the owned candidate's NZB
+          // GET and assert that its download is denied before any queue write.
+          const target = new URL(release.downloadUrl);
+          if (
+            target.protocol !== "http:" ||
+            !["pingufunk", "prowlarr"].includes(target.hostname) ||
+            ports[target.hostname] !== Number(target.port)
+          )
+            throw new Error("Conflict NZB escaped the owned QA transport");
+          // Prowlarr redirects NZB GETs. Follow only validated owned origins,
+          // never a CDN or an arbitrary redirect, and never read a success body.
+          // A 404/500 is not proof of the protected runtime-conflict rejection.
+          const probe = String.raw`
+            const http = require("node:http");
+            const allowed = {pingufunk: "6767", prowlarr: "9696"};
+            const deadline = Date.now() + 20000;
+            setTimeout(() => process.exit(1), 20000).unref();
+            let input = "";
+            function get(raw, hops = 0) {
+              let received = false;
+              try {
+                const url = new URL(raw);
+                if (url.protocol !== "http:" || url.username || url.password ||
+                    allowed[url.hostname] !== url.port || hops > 3 || Date.now() >= deadline)
+                  throw new Error("Owned origin/deadline required");
+                const req = http.get(url, response => {
+                  received = true;
+                  const status = response.statusCode;
+                  if ([301,302,303,307,308].includes(status) && response.headers.location) {
+                    response.destroy();
+                    get(new URL(response.headers.location, url).href, hops + 1);
+                  } else if (status !== 409) {
+                    response.destroy(); console.log(status);
+                  } else {
+                    let body = "";
+                    response.setEncoding("utf8");
+                    response.on("data", part => {
+                      body += part;
+                      if (Buffer.byteLength(body) > 4096) response.destroy(new Error("Bounded denial required"));
+                    });
+                    response.on("end", () => {
+                       try { console.log(JSON.parse(body).error === "Episode runtime conflict; review the source in Pingufunk" ? 409 : 0); }
+                      catch { process.exitCode = 1; }
+                    });
+                    response.on("error", () => { process.exitCode = 1; });
+                  }
+                });
+                req.setTimeout(Math.max(1, deadline - Date.now()), () => req.destroy());
+                req.on("error", () => { if (!received) process.exitCode = 1; });
+              } catch { process.exitCode = 1; }
+            }
+            process.stdin.on("data", part => input += part);
+            process.stdin.on("end", () => { try { get(JSON.parse(input)); } catch { process.exitCode = 1; } });
+          `;
+          const status = Number(
+            execFileSync(
+              "docker",
+              ["exec", "-i", manifest.apps.pingufunk.name, "node", "-e", probe],
+              {
+                input: JSON.stringify(target.href),
+                encoding: "utf8",
+                timeout: 25000,
+                stdio: ["pipe", "pipe", "pipe"],
+              }
+            ).trim()
+          );
+          console.log(`sonarr: ${transport} owned conflict NZB HTTP ${status}`);
+          if (status !== 409)
+            throw new Error("Owned runtime conflict lacks its verified denial; no grab submitted");
+          if (
+            (await api(root, manifest, "pingufunk", "/api/download?mode=queue")).queue.noofslots !==
+              0 ||
+            (await api(root, manifest, "pingufunk", "/api/download?mode=history")).history
+              .noofslots !== 0 ||
+            (await api(root, manifest, "sonarr", "/api/v3/history")).totalRecords !== 0
+          )
+            throw new Error("Conflict fixture created a download/import/history");
+          console.log(
+            `sonarr: ${transport} future TBA runtime conflict visible; NZB denied; no queue/history/import`
+          );
+        }
       }
       if (app === "radarr" && manifest.renditionQuality) {
         const expected =

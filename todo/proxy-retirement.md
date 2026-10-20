@@ -1,6 +1,6 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 08.10.2026. **Alle 14 Architekturpakete P12–P16 sind implementiert und einschließlich ihrer Backend-/Fork-/Containerketten sowie zutreffenden Desktopgates abgenommen. Die unabhängige allgemeine Sprachabdeckung P03.4, optionale P11.9-Arbeit und gesonderte Betriebs-/Entfernungsgates bleiben davon getrennt. Keine Produktions-, Mainintegrations- oder Publikationsfreigabe aus dieser Entwicklungsabnahme. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Produktvollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
+Stand: 10.10.2026. **Die historische Architekturabnahme P12–P16 bleibt dokumentiert; P15.1/P15.4 sind nach einem frisch reproduzierten PostgreSQL-Ausfall-/Quittierungsbefund wieder offen. Ebenso sind P06.4/P09.5 für die neue Vorabfolgen-/Laufzeit-/MP4-Kombination wieder geöffnet. Die unabhängige allgemeine Sprachabdeckung P03.4, optionale P11.9-Arbeit und gesonderte Betriebs-/Entfernungsgates bleiben getrennt. Keine Produktions-, Mainintegrations- oder Publikationsfreigabe aus einer Entwicklungsabnahme. Frühere Entwicklungs- und Betriebsabnahmen bleiben historische Evidenz, keine pauschale Produktvollabnahme. Historische Freigabestopps sind keine Aussage gegen später ausdrücklich autorisierte Operationen.**
 
 Gesondert beauftragte Mainintegration am 08.10.2026 über
 [PR #5](https://github.com/superions/pingufunk/pull/5): Topicstand `81404b8`
@@ -351,6 +351,27 @@ B05/B07, A2/A3, R4.
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
 - [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+      Ergänzungsbefund 08.10.2026: Der ARD-Producer-/Worker-Gate schloss den
+      bestätigten RBB-CDN aus, obwohl das bestehende strukturierte Page-Gateway
+      Sprache und Maße pro exakter URL deklarierte. Gemeinsamen präzisen
+      URL-Gate erweitern, Film-RSS→NZB sowie frische Workerprüfung regressieren
+      und native Radarr-Wege direkt/via Prowlarr prüfen. Keine Senderheuristik,
+      Domainwildcard, Profilabschwächung oder neue Schema-/Payloadversion.
+      Entwicklungsseitig abgenommen: synthetisches Film-RSS→NZB→Parser,
+      frische Workerprüfung, negative Player-/URL-/Rechte-/Sprachfälle und
+      native Deutsch/1080p-Erkennung direkt/via Prowlarr bestanden. Die beiden
+      neuen positiven Regressionen scheitern am unveränderten alten Owner.
+      Main-Fix `9c52fff`, schemafreier Rückport `23b15e0`, kompatibler
+      Worker-Rückfallstand `ba2e9f9`; alle drei Fork-/Containerketten grün.
+      Gezielten Rückport produktiv abgenommen: schreibgeschützter Start,
+      PostgreSQL-/Daten-/Datei-/Consumervergleich, native Deutsch-/1080p- und
+      720p-Akzeptanz via Prowlarr und anschließender Schreibbetrieb bestanden.
+      Vollständige Imageprüfungen mit ausdrücklich genehmigter, befristeter
+      Ausnahme ausschließlich für die veraltete offizielle Trivy-DB; kein
+      normaler Frische-Gate-Pass, CVE-Ignore oder Abschwächen der übrigen Gates.
+      Zusätzlicher Controller-/Imagebefund privat dokumentiert und separat
+      entscheidungsbedürftig. Kein neuer Dateiimport behauptet;
+      allgemeine P03.4-Abdeckung bleibt offen.
       Ergänzung unter Nutzerauftrag vom 03.10.2026, vor weiterer Sprachabnahme:
       `source-audio.ts`, `mp4-audio-language.ts`, bestehende ARTE-/Sprachowner,
       Film-ID-/Text-/RSS-Consumer, RSS→NZB→Queue/Restart/Retry sowie Medienprobe
@@ -1510,6 +1531,69 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       Vollständige Live-Datei-/Importabnahme bleibt bis zum regulären RSS-/
       Download-/Importabschluss offen; kein Completed-Command als Importbeweis.
 
+      Historischer Ergänzungsvertrag vom 10.10.2026: Die nachfolgenden
+      Aussagen „nicht implementiert“ beschreiben den damaligen Checkpoint,
+      nicht den späteren geprüften Einzelquellenowner. Dessen Implementierung
+      und Desktopprüfung sind im Integrationsreview vom 21.10.2026 erfasst;
+      vollständige Live-Abnahme und P15.1/P15.4-Ursachengate bleiben offen.
+      Wieder geöffnet 10.10.2026: Die historische Abnahme schützt nicht die
+      Kombination Vorabfolge/TBA, positive aber widersprüchliche Episodendauer,
+      Textweiterleitung ohne ID und große reale MP4-Metadatenlayouts. Aktueller
+      Nutzerentscheid: konfliktbehaftete Quellen mit eindeutiger Serie und
+      vollständigen S/E sichtbar lassen, jedoch ohne automatische Freigabe;
+      konfigurierte Serientoleranz bleibt unverändert. Identität vor Laufzeit
+      auflösen; Dauer darf mehrdeutige Titel nicht disambiguieren. Vollständige
+      eindeutige Sonarr-Textnamen/serienweite Aliasse auf denselben ID-Suchowner
+      führen, Mehrfachaliasse fail closed; optionale Integration bleibt optional.
+      Quellen-/Metadatenkonflikt im RSS erklären; Newznab-Beschreibung allein
+      ist keine Consumersperre. Deshalb NZB-Abruf sowie SAB/direct Enqueue vor
+      Job-/Intent-Write und Workerstart sperren; manueller normaler Grab hebt
+      das nicht auf. Historische v1/v2, RSS-Datumsfenster, bereits gebundene
+      GUIDs, Profile und Datenbestände erhalten. Erstmalig gebundene generische
+      Texttreffer wechseln ausdrücklich in den bestehenden TVDB/S/E-GUID-Raum;
+      gleiche ID/Text-/Exact-/Staffelidentität prüfen und den Cutover getrennt
+      auf Doppelgrabs prüfen, keine Altjobs oder History umschreiben.
+      Owner zusätzlich `media-expectations.ts`,
+      `fake_nzb_download/route.ts`, `download.ts`, `sab-api.ts`; Dokumentation
+      `docs/tv-search-contract.md`. Neue Abnahme: ID/Text, exakt/Staffel,
+      TBA-Konflikt bis RSS/409/Nicht-Enqueue, inklusive Grenzfälle/Fremdserie/
+      Titel-/Koordinaten-/Aliasambiguität und SQLite-/PG-Nichtschreibnachweis,
+      native Sonarr/Prowlarr gegen eigene Fixture ohne Grab, Fork-CI sowie
+      bestehende Produktgates. Aktuelle Implementierung ist kein Produktivrollout.
+
+      Nutzerentscheidung 10.10.2026: Zusätzlich eine ausdrücklich bestätigte
+      manuelle Freigabe einer konkret geprüften Einzelquelle in Pingufunk.
+      Kein zweiter Indexerendpoint, kein Auto-/Manualraten im NZB-GET und keine
+      permanente automatische Ausnahmeliste. Eigene GUI-Operation mit
+      serverseitig frischer, eindeutiger Serien-/S/E-/Quellen-/Fassungsbindung;
+      nur den belegten Laufzeitkonflikt für diesen bewussten Auftrag ausnehmen,
+      Sprache, Auflösung, Quelllaufzeit und tatsächliche Datei weiter prüfen.
+      Quelle/Metadatenlaufzeit und unveränderte globale Toleranz im Dialog
+      anzeigen; Abbruch erzeugt keinen Auftrag. Ursprüngliche Erwartungen und
+      explizite Einzelentscheidung dauerhaft an die tatsächliche Job-ID binden,
+      atomarer idempotenter UI-Auftrag samt Bestätigung; reload/lost-response
+      erzeugt keine weitere Einreihung. Normale Sonarr/Prowlarr-/SAB-Abrufe
+      bleiben gesperrt, fremde/geänderte Quellen und andere Identitäts-/Sprach-
+      oder Qualitätskonflikte sind keine Runtime-Ausnahme. Diese neue Freigabe
+      ist weder implementiert noch abgenommen. P15.1/P15.4-Ausfallbefund vorher
+      klären; bestehende gemeinsame Owner statt browserseitigem XML-Umschreiben.
+      Die bisherige generische GUI-Suche liefert Source-only-NZBs ohne
+      Sonarr-Episodenreferenz; daraus weder eine implizite Freigabe noch eine
+      belegte Episodenidentität ableiten. Verifizierbar gebundene GUI-Treffer
+      müssen den gemeinsamen Konflikt-/Reviewowner verwenden; ungebundene
+      reine Quellen bleiben ausdrücklich ungebunden, Integration optional.
+      Abnahme zusätzlich: bestätigte/abgebrochene/geänderte/fremde Einzelquelle,
+      unveränderte Settings und automatische Sperre, atomarer Job-/Audit-/
+      Receipt-Nachweis beider Backends, Quellen-/Worker-Revalidation und
+      desktop-only Dialog-/Fokus-/Reload-/Fehler-/Konsolenprüfung auf tatsächlich
+      servierter synthetischer Testinstanz. Kein realer Grab oder Rollout dadurch.
+      Entwicklungscheckpoint: ursprünglicher TV-/MP4-Fix in `14ea228`,
+      1336 reguläre Tests sowie Produktgates bestanden; fünf native Varianten
+      direkt/via Prowlarr auf eigener Entwicklungslaufzeit bestanden, keine
+      Grabs/Imports. Fork-CI 38004013768 und vollständige Containerkette
+      38004013774 (`c65bf8b`) erfolgreich. Einzelquellenfreigabe bleibt noch
+      unimplementiert; reproduzierter dev-03-Recovery-Befund getrennt offen.
+
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
 Ergebnis: identitätsgesicherte Mehrserien-/Sprachzuordnung. Abhängigkeit P06;
@@ -2034,7 +2118,7 @@ Abhängigkeit P08; B10/R7.
       Dokumentationsabnahme verändert die Produktinputs nicht; diese Evidenz
       bleibt gültig. Keine Produktivursache oder produktive Installation behauptet.
 
-- [x] **P09.5 — ZDF-/ARD-MP4-Dimensionen aus begrenzten Quellenproben.**
+- [ ] **P09.5 — ZDF-/ARD-MP4-Dimensionen aus begrenzten Quellenproben.**
       Nutzerauftrag 06.10.2026; Owner `mp4-audio-language.ts`, `source-audio.ts`,
       bestehender Rendition-/RSS-/NZB-/Workervertrag; abhängig von P09.2/P09.3.
       Im vorhandenen höchstens viermal 1-MiB-/Deadlinebudget kodierte Maße aus
@@ -2053,6 +2137,17 @@ Abhängigkeit P08; B10/R7.
       reguläre ZDF-Quellen zusätzlich begrenzt lesend als Deutsch/1920×1080
       geprüft; keine realen Antworten als Fixture oder Gitinhalt persistiert.
       Dieser Quellengegencheck ersetzt keinen produktiven Treffer/Import.
+
+      Wieder geöffnet 10.10.2026: Große Sampletabellen mit Tracktrailern können
+      fast überlappende Vor-/Rückwärtsfenster erzwingen und das Vierfensterbudget
+      vor den Belegen aufbrauchen. Fensterwahl mit begrenztem Parent-Lookbehind
+      korrigieren, Parsercachegeneration invalidieren; keine neuen Hosts,
+      höheren Budgets oder geratenen Auflösungen. Neue Abnahme: kausaler großer
+      synthetischer Track-/Trailerfall (ohne Fix unbekannt, mit Fix Sprache und
+      1080p), widersprüchliche Tracks/Assetwechsel/mehr als vier nötige Fenster
+      weiterhin neutral; positive unveränderte Native-/Worker-/Backendgates und
+      P06.4-Konfliktkette/Fork-CI. `docs/rendition-quality-contract.md` pflegen.
+      Historische Abnahme und laufende Images bleiben getrennt vom neuen Fix.
 
 P09-Grundlagencheckpoint 01.10.2026, keine P09-Abnahme: Der neue streng
 versionierte Erwartungsparser und lokale Probeowner sind implementiert und
@@ -2734,7 +2829,7 @@ für jeden Kandidaten. Bestehende MediathekView-, ORF-/SRF- und Arr-Verträge er
 Ergebnis: sichere Jobbesitzgrenze, skalierende Historyreads und verlässlicher
 Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhöhung.
 
-- [x] **P15.1 — Jobbesitz und Shutdown im Single-Worker-Vertrag absichern.**
+- [ ] **P15.1 — Jobbesitz und Shutdown im Single-Worker-Vertrag absichern.**
       Owner: `download-manager.ts`, `instrumentation.ts`, `download.ts`,
       `scripts/application-entrypoint.mjs` und bei Bedarf beide Prisma-Ketten.
       Prozesslokales `processingPromise`/Semaphore verhindert keinen zweiten
@@ -2788,6 +2883,15 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Assertion. Erstversuch wegen Registry-429 gescheitert; genau ein
       kontrollierter Wiederlauf nach dieser externen Pullstörung. Einzelworker,
       keine gemischten alten/neuen Writer oder produktiver Restart freigegeben.
+      Wieder geöffnet 10.10.2026: Der frische isolierte PG-Mediengate erreicht
+      alle regulären Medien-/Mux-/Restartfälle, scheitert jedoch nach der
+      gezielten DB-Unterbrechung beim Folgejob. Quittierte UUID fehlt sowohl
+      im Prisma-Read (P2025) als auch im unabhängigen SQL-Read. Ursache noch
+      nicht lokalisiert; kein nachgewiesener Produktionsfehler und keine
+      Gleichsetzung mit dem TV-/MP4-Fix. Bestehenden Ausfall-/Recoveryvertrag
+      gemeinsam mit P15.4 kausal diagnostizieren und neu abnehmen; keine
+      Wiederholungsgrabs, Connection-/Pool-/Timeoutlockerung oder grüne
+      Umdeutung einer Quittierung ohne tatsächlich vorhandenen Job.
 - [x] **P15.2 — History-/Queue-Reads und Polling begrenzen, ohne Arr-Einträge zu verlieren.**
       Owner: `download.ts::{getHistory,getQueue}`, `sab-api.ts`,
       `/downloads` und beide DB-Querypfade. Aktuell wird die gesamte History
@@ -2868,7 +2972,7 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       unveränderten Quellstand wiederverwendet. Die zuvor fehlende explizite
       `.dockerignore`-Helperfreigabe korrigiert; gescheiterter erster Build
       bleibt als Befund dokumentiert. P15.1-Besitzgrenze hierdurch nicht erledigt.
-- [x] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
+- [ ] **P15.4 — Bestätigte Enqueues von ungewissen Wiederholungen unterscheiden.**
       Owner: `sab-api.ts::POST`, `download.ts::addToQueue`, UI-NZB-Consumer und
       bei Bedarf beide append-only DB-Ketten. Requestbody/Parameter vor Parsing
       begrenzen; kompatible NZB-Versionen und Endpoints erhalten. Eigene UI
@@ -2925,6 +3029,16 @@ Runtimezustand. Keine Erlaubnis für mehrere Worker, Redis oder Replikazahlerhö
       Imageablehnung und kompatible aktuelle Maintenance geprüft, kein
       funktionaler historischer Code-Rollback behauptet. Desktopgates und
       vorhandene Produktgates wiederverwendet; keine neue DDL seit diesem Stand.
+      Wieder geöffnet 10.10.2026: Im gezielten PG-Reconnectfall bestätigt die
+      tatsächliche SAB-API HTTP-Erfolg, status=true und eine neue gültige UUID,
+      die anschließend im tatsächlichen PG-Ziel nicht vorhanden ist. Der
+      unkeyed Auftrag darf nicht als bestätigter Download gelten. Ergänzte
+      Testdiagnostik unterscheidet geschlossene Prisma-Codes, historischen
+      Receipt und unabhängigen SQL-Nachweis; keine Secrets/rohen Exceptions.
+      Reguläre keyed Restart-/Same-ID- und SQLitefälle bestehen weiterhin.
+      Vor Abschluss ursächlichen Owner lokalisieren, den bestehenden
+      Quittierungs-/Nichtwiederholungsvertrag reparieren und beide Backend-
+      sowie Ausfall-/Folgequeuegates unverändert erneut bestehen lassen.
 
 ## Phase P16 — Ownergrenzen bereinigen, ohne das Produkt neu zu schreiben
 

@@ -168,6 +168,7 @@ globalThis.fetch = async (input, init) => {
           process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1"
             ? "Lokalisierter Quelltitel (S01E01)"
             : "Synthetic Series S01E01 - Synthetic Episode",
+        ...(process.env.PINGUFUNK_ARR_QA_RUNTIME_CONFLICT === "1" ? { duration: 3540 } : {}),
       };
       if (matches(episode)) rows.push(episode);
     }

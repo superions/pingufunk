@@ -52,6 +52,13 @@ Testserver sind anschließend mit null angelegten Jobs beendet worden.
 Separater aktueller Auditbefund: eine hohe transitive Vite-Entwicklungsabhängigkeits-
 Meldung; `npm audit --omit=dev` meldet keine Produktionsabhängigkeitslücke.
 Kein beiläufiges Dependency-Upgrade oder Sicherheitsabschluss aus dieser Integration.
+Auch die zusätzliche Main-basierte Linie `94ccec7` wird integriert: native
+Konfliktnegative, Nichtschreibnachweise beider Enqueue-Wege und unabhängiger
+SQL-Nachweis nach gezielter PG-Unterbrechung bleiben ausführbar. Die bereits
+implementierten Produktowner sind semantisch enthalten und werden nicht durch
+ihre ältere Variante ersetzt. Der historische umgebungsabhängige Recoverybefund
+wird nicht allein durch grüne Forkläufe geschlossen. P15.1/P15.4 sowie die
+zusätzlichen P09.5-Gates bleiben getrennt offen; kein neuer Produktfix daraus.
 P03.4, P06.4 und die gesonderten Betriebs-/Entfernungsgates bleiben offen; reale
 Dateien ersetzen keinen geklärten Herkunfts- und Freigabenachweis.
 
@@ -2383,6 +2390,210 @@ und das bestehende TODO. Format-/Link-/Struktur-/Diffprüfung separat ausgeführ
 die erfolgreichen Produkt-/Backend-/Containergates des Mergecommits bleiben
 ohne neue Produktinputs gültig. Keine erneute Ausführung allein für den
 Dokumentationscommit behauptet.
+
+## ARD-CDN-Beleglücke — gezielter Hotfix (08.10.2026)
+
+Der vorhandene ARD-Adapter prüfte bereits Player-CRID, Rechte, exakte Medien-URL,
+Audiodeklarationen und Maße. Seine Caller erlaubten jedoch nur den älteren
+Das-Erste-CDN. Der bestätigte RBB-CDN wurde schon vor dem Providerabruf
+übersprungen; Worker-Revalidation hatte dieselbe Beschränkung. Das erzeugte
+neutrale Sprache und unbekannte Qualität, obwohl die strukturierte Quelle beide
+Fakten belegte. Kein Prowlarr-Routenfehler und kein fehlender Filmkandidat.
+
+`isArdProgressiveMp4` am vorhandenen ARD-Owner ist nun gemeinsamer Gate für
+Producer-Eignung, Quellenergänzung und Worker. Zwei exakte HTTPS-CDNs,
+kanonische CRID und exakter URL-Abgleich bleiben nötig. Keine Domainwildcards,
+Accounts, HTML-/Sendercrawler, Originalsprachendefaults oder Range-Probeausweitung.
+Renditionmaße und Sprache bleiben unabhängig. Synthetische Regressionen tragen
+Film-RSS bis NZB/Parser und prüfen alle drei Qualitäts-URLs, Originalenglisch
+gegen tatsächlich deutschen Ton, fremde Player/Selektoren, Ablauf/Blockaden und
+frischen Workerbeleg. Der native Consumerharness ergänzt `ard-1080p` für beide
+Radarr-Routen und Sonarrs echten Qualitätssuffixparser, ohne Grab.
+
+Upstream `4ebaa8e8fa839fe44fa7862be0b49896385f5b49` erneut abgerufen: kein
+entsprechender Belegowner/Fix. Gezielt gelocktes `source-map-js` von 1.2.1 auf
+1.2.2 aktualisiert, innerhalb aller vorhandenen Ranges; keine direkten
+Abhängigkeiten oder Frameworkmajors geändert. Primäradvisory:
+[GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
+PostCSS, Tailwind und die Test-Coverage bleiben mit ihren bisherigen Ownern.
+
+Main enthält getrennt neue Receipt-DDL/v3-/Workerverträge. Der ausdrücklich
+genehmigte CDN-Hotfix wird für die vorhandene Produktionsserie zurückportiert,
+nicht mit diesem Architektur-/Schemarollout vermischt. Ein Rückfallbuild muss
+die neue RBB-Worker-Evidenz verstehen und frisch gescannt sein; der alte
+CDN-ausschließende Worker ist nach neuen RBB-Jobs kein sicherer Rückweg.
+Fork-/Containernachweise und Betriebsabnahme folgen im Abnahmenachtrag.
+Allgemeine P03.4-Abdeckung wird mit diesem Einzelfix nicht geschlossen.
+
+Abnahmenachtrag desselben Auftrags: Main-Fix `9c52fff` mit
+[CI](https://github.com/superions/pingufunk/actions/runs/37777023312) und
+[Containerkette](https://github.com/superions/pingufunk/actions/runs/37777023328)
+grün; 1322 reguläre Tests, separate PG-Gates, Lint/Types/Format/Build.
+Schemafreier Produktionsrückport `23b15e0` mit
+[CI](https://github.com/superions/pingufunk/actions/runs/37777239200) und
+[Containerkette](https://github.com/superions/pingufunk/actions/runs/37777239086)
+grün; 1037 reguläre Tests, separate PG-Gates und native `ard-1080p` direkt/via
+Prowlarr. Worker-kompatibler Rückfallstand `ba2e9f9` mit
+[CI](https://github.com/superions/pingufunk/actions/runs/37777126389) und
+[Containerkette](https://github.com/superions/pingufunk/actions/runs/37777126384)
+grün; 1036 reguläre Tests. Jeweils frisches `npm ci`/Node 24.21.0, Audit null.
+Reguläre bedingte PG-Skips nicht als dort ausgeführt zählen; die separaten
+PG- und SQLite-/Container-/Medien-/Rollbackgates sind ausgeführt. RBB-spezifische
+Abnahme ist Quellbeleg/Serialisierung/Worker-Revalidation und native Suche,
+kein vollständiger neuer RBB-Dateiimport. Vorhandene Tracingwarnungen bleiben.
+Der Gegencheck des alten `source-audio.ts` zeigt genau den fehlenden Producer-
+und Workerpfad; Wiederherstellung geprüft, keine Änderung am veröffentlichten
+Altstand. Review durch Implementierer, kein unabhängiger Peerreview behauptet.
+
+Beide Linux/amd64-Builds wurden aus committed Git-Archiven vorbereitet. Der
+vorgeschriebene Imagegate stoppte zunächst an der
+abgelaufenen offiziellen Trivy-DB. Frische isolierte Direktabrufe bei GHCR,
+ECR und Docker Hub ergaben denselben veralteten Stand. Die aktuellen
+offiziellen Trivy-DB-Builds scheiterten nach der DB-Erzeugung beim Registrylogin,
+ohne veröffentlichtes DB-Artefakt. Dies war der zunächst gemeldete Blocker.
+
+Nach ausdrücklich bestätigter Risikoentscheidung wurde ausschließlich die
+DB-Frische für diesen Rollout befristet ausgenommen: unveränderter offizieller
+DB-Inhalt und Metadaten, höchstens 36 Stunden alt, feste zwei Archive/Image-IDs,
+Integrität und OS-/Anwendungspaketabdeckung vor/nach dem vollständigen Scan,
+keine HIGH/CRITICAL-Befunde im akzeptierten DB-Stand. Der globale Gate blieb
+unverändert; kein CVE-Ignore, Scanüberspringen oder vorgetäuschter Frischepass.
+Neue Schwachstellen nach diesem DB-Stand sind damit ausdrücklich nicht bewertet.
+
+Rückport `23b15e0` produktiv abgenommen: tatsächlicher gesunder Image-/Revisions-
+Nachweis, zuerst schreibgeschützter Start, unveränderter PostgreSQL-Datenbestand,
+Schema-/Migrations-/Schreibcheckpoint sowie Dateien und Consumerkonfiguration.
+Native Radarr-Suche über die bestehende Prowlarr-Route akzeptiert belegtes
+Deutsch/WEBDL-1080p und WEBDL-720p ohne Ablehnung. Niedrige unbekannte Qualität
+bleibt wahrheitsgemäß unbekannt. Schreibbetrieb anschließend wieder aktiviert;
+ein Worker, Queue leer, Health/API geprüft. Kein neuer Grab oder Medienimport,
+keine DB-Migration und keine Vermischung mit dem Architekturstand auf Main.
+Produktgates wurden ohne neue Produktinputs wiederverwendet, nicht erneut
+ausgeführt. Sicherung, kompatibler Rückfall und volle operative Belege liegen
+ausschließlich im privaten Runbook.
+
+Ein zusätzlicher nativer Controller-/Mutable-Tag-Befund ist dort separat offen
+und dem Nutzer gemeldet. Die Abnahme des Pingufunk-Hotfixes ist keine allgemeine
+Sicherheitsabnahme aller laufenden Dienste; allgemeine P03.4 bleibt offen.
+
+## Folgeprüfung 10.10.2026 — TV-Vorabfolgen, Laufzeitkonflikte und MP4-Fenster
+
+Die frühere Vorabfolgen-Korrektur entfernt allein die TV-Termin-Sperre. Sie
+garantiert nicht, dass andere unabhängige Laufzeit-/Qualitätsgates passieren.
+Eine positive Episodenlaufzeit bei TBA ist nicht automatisch eine nachweislich
+falsche Seriendurchschnittslaufzeit: Die geprüfte Sonarr-Version reicht
+`Episode.Runtime` durch ([EpisodeResource 4.0.20.3014](https://github.com/Sonarr/Sonarr/blob/v4.0.20.3014/src/Sonarr.Api.V3/Episodes/EpisodeResource.cs),
+[SkyHook-Mapping](https://github.com/Sonarr/Sonarr/blob/v4.0.20.3014/src/NzbDrone.Core/MetadataSource/SkyHook/SkyHookProxy.cs)).
+Bei widersprüchlichen konkreten Quelldaten ist daher keine automatische
+Metadatenkorrektur begründet. Nutzerentscheidung: sichtbar, aber nicht freigeben.
+
+Der strukturierte ID-Pfad konnte bei Laufzeitkonflikt leer bleiben, während eine
+Textsuche denselben Katalogtreffer ohne denselben Episoden-Laufzeitgate ausgab.
+Eindeutig zuordenbare Sonarr-Textanfragen benutzen jetzt denselben ID-Owner;
+Suchwörter und Mehrfachaliasse begründen keine neue Identität. Der Matcher
+prüft Eindeutigkeit vor Laufzeit und bietet positiv coordinate-bound Konflikte
+nur im expliziten Suchpfad zur Prüfung an. RSS-Datums-/Dauerpolitik bleibt.
+Beschreibung und fehlende ID sind kein verlässliches Auto-Grab-Verbot. Der
+versionierte Quellen-/Metadatenkonflikt wird deshalb vor NZB-Ausgabe und vor
+beiden Enqueue-Schreibwegen gesperrt. Auch normaler manueller Grab hebt diese
+Sperre nicht auf; ein eigener Ausnahmeworkflow ist damit nicht implementiert.
+
+Der ISO-BMFF-Owner verbrauchte seine vier Fenster durch Parent-/Child-Rücksprünge
+um wenige Byte. Die begrenzte 256-Byte-Vorhaltung vermeidet fast identische
+Fenster, ohne mehr Bytes/Versuche zuzulassen. Regression mit großer synthetischer
+Sampletabelle und Tracktrailern: alte Fensterwahl liefert beide Fakten NULL;
+neue Wahl liefert kohärente Sprache und 1920×1080. Ein kontrollierter Gegencheck
+mit vorübergehend ausgeschaltetem Fix fiel genau dafür durch, nach Wiederher-
+stellung grün. Neue Parsercachegeneration, starke Assetvalidatoren, alle
+Audiotracks und Obergrenzen bleiben erhalten. Kein Senderseitenparser.
+
+Die Bindung vormals generischer Texttreffer benutzt künftig die vorhandene
+TVDB/S/E-GUID der ID-Suche. Die Übergangsprüfung verlangt gleiche Identität für
+ID/Text und Exact/Staffel; die alte ungebundene GUID kann sich ändern. Altjobs
+und History werden nicht umgeschrieben. Dies ist ein expliziter Cutoverpunkt,
+keine pauschale Zusage unveränderter GUIDs für erstmalig gebundene Texttreffer.
+
+Die neue native Fixture prüft eine unüberwachte zukünftige TBA-Folge direkt
+und via Prowlarr ohne Grab-POST. Erste Containerläufe stoppten sichtbar: Die
+bekannten widersprüchlichen Referenzen benötigen nun Enqueue-409 statt späteren
+Workerfehler; außerdem blockierte der API-only-Testpreload die neuen Controller-
+Reads. Korrigiert sind getrennte Enqueue-/Worker-Negativfälle, der bestehende
+SAB-Lesealias und ein begrenzter NZB-HTTP-GET ausschließlich zu validierten
+internen QA-Adressen. Prowlarr liefert dort einen Redirect: maximal drei
+Umleitungen innerhalb der zwei erlaubten Testorigins, feste Gesamtdeadline
+und ausschließlich die konkrete Runtime-Konflikt-409-Antwort gelten als
+Downloadsperrbeleg. Beliebige 404/500 oder externe Redirects zählen nicht.
+Keine Produktbudgets oder externen Netzwerk-
+grenzen gelockert; fehlerhafte Läufe sind keine Abnahme.
+
+Die bisherigen kleinen MP4-Fixtures und passenden TBA-Laufzeiten hatten diese
+Kombination nicht geschützt. Eine bisherige reine Titel-/NZB-Roundtrip-Fixture
+enthielt außerdem widersprüchliche Dauern (Quelle 45, Metadaten 30 Minuten),
+ohne dies zu behaupten/prüfen. Ihr positiver Encodingfall ist jetzt konsistent;
+separate negative End-to-End-Tests schützen die tatsächliche Downloadsperre.
+Kein Überspringen oder Umdeuten des Konfliktfehlers für einen grünen Lauf.
+
+Owner-/Call-/Writepfad vom Matcher über Source-Audio/RSS/NZB bis Queue/Intent
+selbst reviewt. Lokal Node 24.15.0, frisches `npm ci`, 1336 reguläre Tests grün;
+21 bedingte Gates separat, nicht als ausgeführt zählen. Lint, Typecheck,
+Formatcheck, Build und Diffcheck grün; vorhandene 14 Tracingwarnungen bleiben.
+Reale Quellen wurden separat begrenzt lesend geprüft; keine Antworten/URLs/
+Secrets/privaten Helfer als öffentliche Fixture übernommen. Kein Grab, Import,
+Produktivrollout, Profil- oder Datenbankeingriff. Die noch nötige native
+Fixture-/PG-/Fork-Abnahme steht in erneut geöffneten P06.4/P09.5. Diese Befunde
+beweisen keine vollständige Proxyparität oder allgemeine Sprachabdeckung.
+
+Frische Native-Abnahme: Produktimage aus `7085448`, Testharness aus `c65bf8b`,
+auf isolierter Entwicklungslaufzeit alle fünf Qualitäts-/Konfliktvarianten
+direkt und via Prowlarr bestanden. Future-TBA bleibt sichtbar; beide echten
+NZB-GETs ergeben die konkrete 409, null Queue/History/Import. Exakte Arr-Versionen
+4.0.20.3014 / 6.4.4.10685 / 2.6.5.5623; ausschließlich unüberwachte synthetische
+Bestände. Alle eigenen Arr-Testcontainer anschließend gestoppt, Config erhalten.
+Auch Fork-Containerlauf `38004013774` hat diesen Native-Schritt erfolgreich
+abgeschlossen; seine übrige Kette ist damit noch nicht abgenommen. Fork-CI
+[38004013768](https://github.com/superions/pingufunk/actions/runs/38004013768)
+einschließlich separater PostgreSQL-Integration erfolgreich.
+
+Separater Abnahmeblocker: Der reale Mediengate auf SQLite vollständig bestanden;
+auf PostgreSQL ebenfalls reguläre Downloads, negative Quellen, v3-Referenzen,
+SAB-Remove/Retry, Receipt-Restart und tatsächlicher Mux-SIGTERM/Restart/Folgejob.
+Nach gezielter PG-Unterbrechung bestätigt die API jedoch einen weiteren
+unkeyed Auftrag mit status=true und gültiger neuer UUID, dessen Zeile sowohl
+Prisma (P2025) als auch ein unabhängiger SQL-Read nicht finden. Zusätzliche
+Receipt-/SQL-Diagnostik reproduziert den Befund; kein geschluckter Fehler,
+kein erfolgreicher Recovery-Gate. Ursache noch offen, keine Behauptung eines
+Produktionsfehlers oder einer Kausalität zum Matchingfix. P15.1/P15.4 erneut
+geöffnet, P06.4/P09.5-Gesamtabnahme weiterhin offen. Fehlgeschlagene synthetische
+Medieninstanzen werden durch den eigenen begrenzten Teardown entfernt;
+Produktionsdaten/Jobs unverändert. Kein Rollout dieses Entwicklungsstands.
+
+Weitere begrenzte Diagnose: Die erwartete INSERT-Anfrage für die quittierte
+UUID wird im eigenen synthetischen PG-Serverlog beobachtet, die Zeile fehlt
+danach dennoch. Ein geloggter INSERT-Versuch ist kein Commitbeweis; Ursache
+zwischen Queryausführung, Quittierung und Recovery weiterhin offen. Rohe SQL-
+Parameter/URLs werden nicht ausgegeben, nur geschlossen korrelierte Counts/
+Booleans. Keine Änderung von Produktpool, Timeouts oder Retrypolitik.
+
+Nutzer hat inzwischen die explizite geprüfte Einzelquellenfreigabe bestätigt.
+Sie ist im bestehenden P06.4-Vertrag konkretisiert: bewusst manueller einzelner
+Auftrag mit ursprünglichem Runtime-Konflikt/Audit, frischer Quellen-/Identitäts-
+prüfung, unveränderter globaler Toleranz und weiterhin blockiertem nativen NZB.
+Noch keine UI-/API-Implementierung oder Desktopabnahme dieser Erweiterung.
+Die generische UI liefert bisher Source-only-NZBs ohne Episode-Metadaten;
+das ist weder der neue geprüfte Ausnahmeweg noch ein Sonarr-Identitätsnachweis.
+
+Nachlauf: Die vollständigen Fork-Containerketten
+[38004013774](https://github.com/superions/pingufunk/actions/runs/38004013774)
+(`c65bf8b`) und
+[38004221752](https://github.com/superions/pingufunk/actions/runs/38004221752)
+(`0af57a0`) sind erfolgreich, einschließlich realer Medien und PG-Ausfall-/
+Folgequeue. Damit ist der Ausfallbefund bislang umgebungsabhängig auf dev-03
+reproduziert, nicht pauschal ein Fehler aller Installationen. App dort ebenfalls
+Node 24.21.0, PG 17.11; externer Testcontroller Node 26.11.1, Forkcontroller
+Node 24.21.0. Diese Differenz ist noch keine bewiesene Ursache. Neuere unabhängige
+SQL-/Receipt-Diagnostik war in diesen zwei grünen Läufen noch nicht enthalten.
+Nicht allein wegen grüner Forkläufe den mehrfach konkret reproduzierten
+dev-03-Befund schließen; Ursachengate bleibt P15.1/P15.4.
 
 ## Episodenabdeckung und Suchbelege (10.10.2026)
 

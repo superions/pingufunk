@@ -27,7 +27,9 @@ cleanup() {
 trap cleanup EXIT
 docker network create --internal "$QA_NETWORK" >/dev/null
 NETWORK_CREATED=1
-docker run -d --name "$PG_CONTAINER" --network "$QA_NETWORK" --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine >/dev/null
+pg_options=()
+if [[ "${PINGUFUNK_MEDIA_QA_TRACE:-}" == 1 ]]; then pg_options=(postgres -c log_statement=all); fi
+docker run -d --name "$PG_CONTAINER" --network "$QA_NETWORK" --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine "${pg_options[@]}" >/dev/null
 PG_STARTED=1
 ready=0
 for ((attempt=0;attempt<30;attempt++)); do
@@ -38,7 +40,14 @@ done
 docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c 'CREATE ROLE pingufunk_media_qa LOGIN' -c 'CREATE DATABASE pingufunk_media_qa OWNER pingufunk_media_qa' >/dev/null
 
-for provider in sqlite postgresql; do
+providers=(sqlite postgresql)
+if [[ -n "${PINGUFUNK_MEDIA_QA_PROVIDER:-}" ]]; then
+  case "$PINGUFUNK_MEDIA_QA_PROVIDER" in
+    sqlite|postgresql) providers=("$PINGUFUNK_MEDIA_QA_PROVIDER") ;;
+    *) echo "Unsupported disposable media provider" >&2; exit 1 ;;
+  esac
+fi
+for provider in "${providers[@]}"; do
   mkdir "$QA_ROOT/$provider"
   if [[ "$provider" == sqlite ]]; then
     QA_URL=file:/qa/database.sqlite

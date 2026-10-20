@@ -12,14 +12,17 @@ cleanup() {
   if [[ -n "$QA_DIRECTORY" ]]; then node scripts/arr-test-instances.mjs stop "$QA_DIRECTORY"; fi
 }
 trap cleanup EXIT
-for variant in 720p localized-720p unknown conflicting ard-1080p; do
-  unset PINGUFUNK_ARR_QA_LOCALIZED_EPISODE
+for variant in 720p localized-720p unknown conflicting ard-1080p runtime-conflict; do
+  unset PINGUFUNK_ARR_QA_LOCALIZED_EPISODE PINGUFUNK_ARR_QA_RUNTIME_CONFLICT
   quality="$variant"
   if [[ "$variant" == localized-720p ]]; then
     quality=720p
     export PINGUFUNK_ARR_QA_LOCALIZED_EPISODE=1
+  elif [[ "$variant" == runtime-conflict ]]; then
+    quality=720p
+    export PINGUFUNK_ARR_QA_RUNTIME_CONFLICT=1
   fi
-  if [[ "$variant" == 720p ]]; then export PINGUFUNK_ARR_QA_TBA=1; else unset PINGUFUNK_ARR_QA_TBA; fi
+  if [[ "$variant" == 720p || "$variant" == runtime-conflict ]]; then export PINGUFUNK_ARR_QA_TBA=1; else unset PINGUFUNK_ARR_QA_TBA; fi
   export PINGUFUNK_ARR_QA_RENDITION_QUALITY="$quality"
   output="$(node scripts/arr-test-instances.mjs up)"
   QA_DIRECTORY="$(sed -n 's/^QA_DIRECTORY=//p' <<< "$output")"
