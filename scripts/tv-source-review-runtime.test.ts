@@ -19,6 +19,7 @@ const fixture = vi.hoisted(() => ({
     url_video_low: "",
   },
   failJobWrite: false,
+  enqueueSourceFacts: vi.fn(),
 }));
 vi.mock("@/services/sonarr-provider", async (original) => ({
   ...(await original<object>()),
@@ -47,6 +48,11 @@ vi.mock("@/services/mediathek", () => ({
   queryTvSourceCandidates: async () => [structuredClone(fixture.source)],
 }));
 vi.mock("@/services/tv-search-terms", () => ({ verifiedRuleTopics: () => [] }));
+// DB atomicity is independent of HTTP proof warming; the source-worker suite
+// owns real bounded probe behavior. Never schedule broadcaster traffic here.
+vi.mock("@/services/source-media-facts", () => ({
+  sourceMediaFacts: { enqueue: fixture.enqueueSourceFacts },
+}));
 vi.mock("@/services/source-audio", async (original) => ({
   ...(await original<object>()),
   enrichSourceAudio: async (items: Array<typeof fixture.source>) =>
@@ -82,6 +88,7 @@ afterEach(async () => {
   disconnect = undefined;
   delete (globalThis as { prisma?: unknown }).prisma;
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.resetModules();
   if (directory) rmSync(directory, { recursive: true, force: true });
   directory = undefined;
@@ -101,6 +108,9 @@ for (const provider of ["sqlite", "postgresql"] as const) {
       vi.stubEnv("DATABASE_URL_FILE", undefined);
       vi.stubEnv("DATABASE_PROVIDER", provider);
       vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "1");
+      fixture.enqueueSourceFacts.mockClear();
+      const network = vi.fn().mockRejectedValue(new Error("Network forbidden in database fixture"));
+      vi.stubGlobal("fetch", network);
       const migration = spawnSync(
         process.execPath,
         [path.resolve("scripts/database-migrate.mjs")],
@@ -118,6 +128,11 @@ for (const provider of ["sqlite", "postgresql"] as const) {
       });
       let review = await import("@/services/tv-source-review");
       const found = await review.searchTvSourceReviews("Synthetic review series");
+      expect(fixture.enqueueSourceFacts).toHaveBeenCalledWith([
+        fixture.source.url_video_hd,
+        "",
+        "",
+      ]);
       const preview = await review.previewTvSource(found![0].review.selector);
       expect(await prisma.download.count()).toBe(0);
       expect(await prisma.config.count()).toBe(1);
@@ -197,6 +212,7 @@ for (const provider of ["sqlite", "postgresql"] as const) {
       await prisma.download.delete({ where: { id: jobId } });
       await prisma.config.deleteMany();
       fixture.source.duration = 3540;
+      expect(network).not.toHaveBeenCalled();
     },
     60000
   );

@@ -119,7 +119,7 @@ async function handleSearchRequest(request: NextRequest) {
     return await withSettingsSnapshot(async () => {
       const limit = Number(rawLimit);
       // UI searches and Newznab use the same enabled sources.
-      if (!type || type === "series") {
+      if (!type || type === "series" || type === "all") {
         try {
           const windows: ContentSearchWindow["coverage"][] = [];
           const bound = await searchTvSourceReviews(q, (coverage) => windows.push(coverage));
@@ -170,7 +170,7 @@ async function handleSearchRequest(request: NextRequest) {
                 results: bound.slice(0, Math.min(limit, 100)).map(({ info, review }) => {
                   const nzbDownloads = review.runtimeConflict
                     ? {}
-                    : createUiNzbDownloads(info.item, false);
+                    : createUiNzbDownloads(info.item, false, info.episode);
                   return {
                     id: review.selector.sourceId,
                     channel: info.item.channel,

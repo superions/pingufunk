@@ -42,6 +42,7 @@ import { clearMetadataCaches, mediathekCache } from "@/lib/cache";
 import { clearSettingsCache } from "@/lib/settings";
 import { mediaSourceIdentity } from "./source-audio";
 import { sourceMediaFacts } from "./source-media-facts";
+import * as delivery from "./tv-search-delivery";
 import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
 
 let fetchMock: ReturnType<typeof vi.fn<(value: string) => Promise<Response>>>;
@@ -795,45 +796,58 @@ it("does not turn an unavailable missing episode into a cached empty HTTP succes
   expect(await response.text()).not.toContain("private upstream payload");
 });
 
-it("retains independently verified exact and RSS base hits during a Sonarr outage", async () => {
-  state.rulesets = [
-    {
-      id: 1,
-      mediaId: 1,
-      topic: "Synthetic series",
-      priority: 1,
-      filters: "[]",
-      titleRegexRules: JSON.stringify([{ type: "regex", field: "title", pattern: "^(.*)$" }]),
-      seasonRegex: null,
-      episodeRegex: null,
-      matchingStrategy: "ItemTitleExact" as Ruleset["matchingStrategy"],
-      media: {
-        media_id: 1,
-        media_name: "Synthetic series",
-        media_type: "tv",
-        media_tvdbId: 123,
-        media_tmdbId: null,
-        media_imdbId: null,
-      },
-    },
-  ];
-  const independent = { ...source, title: "Existing episode", duration: 2400 };
-  const original = fetchMock.getMockImplementation()!;
-  fetchMock.mockImplementation(async (value: string) => {
-    const url = new URL(value);
-    if (url.pathname.endsWith("/system/status")) return new Response(null, { status: 401 });
-    if (url.hostname === "mediathekviewweb.de")
-      return Response.json({ result: { results: [independent] }, err: null });
-    return original(value);
-  });
-  for (const query of ["t=tvsearch&tvdbid=123&season=1&ep=1", "t=tvsearch&cat=5000"]) {
-    const response = await GET(new NextRequest(`http://localhost/api/newznab?${query}`));
-    expect(response.status).toBe(200);
-    const rss = await response.text();
-    expect(rss).toContain("S01E01");
-    expect(rss).not.toContain("S02E03");
+it.each([false, true])(
+  "retains independently verified exact and RSS base hits during a Sonarr outage (delivery fails=%s)",
+  async (deliveryFails) => {
+    const unavailable = deliveryFails
+      ? vi
+          .spyOn(delivery, "getTvSearchDeliveryItems")
+          .mockRejectedValue(new Error("Synthetic journal inventory unavailable"))
+      : null;
+    try {
+      state.rulesets = [
+        {
+          id: 1,
+          mediaId: 1,
+          topic: "Synthetic series",
+          priority: 1,
+          filters: "[]",
+          titleRegexRules: JSON.stringify([{ type: "regex", field: "title", pattern: "^(.*)$" }]),
+          seasonRegex: null,
+          episodeRegex: null,
+          matchingStrategy: "ItemTitleExact" as Ruleset["matchingStrategy"],
+          media: {
+            media_id: 1,
+            media_name: "Synthetic series",
+            media_type: "tv",
+            media_tvdbId: 123,
+            media_tmdbId: null,
+            media_imdbId: null,
+          },
+        },
+      ];
+      const independent = { ...source, title: "Existing episode", duration: 2400 };
+      const original = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (value: string) => {
+        const url = new URL(value);
+        if (url.pathname.endsWith("/system/status")) return new Response(null, { status: 401 });
+        if (url.hostname === "mediathekviewweb.de")
+          return Response.json({ result: { results: [independent] }, err: null });
+        return original(value);
+      });
+      for (const query of ["t=tvsearch&tvdbid=123&season=1&ep=1", "t=tvsearch&cat=5000"]) {
+        const response = await GET(new NextRequest(`http://localhost/api/newznab?${query}`));
+        expect(response.status).toBe(200);
+        const rss = await response.text();
+        expect(rss).toContain("S01E01");
+        expect(rss).not.toContain("S02E03");
+      }
+      expect(
+        fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/v3/episode"))
+      ).toHaveLength(0);
+      if (unavailable) expect(unavailable).toHaveBeenCalledOnce();
+    } finally {
+      unavailable?.mockRestore();
+    }
   }
-  expect(
-    fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/v3/episode"))
-  ).toHaveLength(0);
-});
+);

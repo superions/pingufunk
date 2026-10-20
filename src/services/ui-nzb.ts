@@ -1,4 +1,4 @@
-import type { ApiResultItem, UiNzbDownloads } from "@/types";
+import type { ApiResultItem, UiNzbDownloads, TvdbEpisode } from "@/types";
 import { selectRenditions } from "./rendition-quality";
 import { mediaSourceIdentity } from "./source-audio";
 import { generateFakeNzb } from "./nzb-release";
@@ -35,8 +35,14 @@ export function uiNzbFingerprints(downloads: UiNzbDownloads): UiNzbDownloads {
   );
 }
 
-/** Opaque server-authored releases; the browser never invents an expectation or XML. */
-export function createUiNzbDownloads(item: ApiResultItem, hlsEnabled: boolean): UiNzbDownloads {
+/** Opaque server-authored releases; the browser never invents an expectation or XML.
+ * Only a verified episode owner supplies metadata runtime; generic browsing stays unknown.
+ */
+export function createUiNzbDownloads(
+  item: ApiResultItem,
+  hlsEnabled: boolean,
+  episode?: Pick<TvdbEpisode, "runtime">
+): UiNzbDownloads {
   // Preserve the shipped UI filename convention, including replacement of XML/path punctuation.
   const title = `${item.topic} - ${item.title}`.replace(/[<>:"/\\|?*]/g, "_");
   const downloads: UiNzbDownloads = {};
@@ -53,8 +59,9 @@ export function createUiNzbDownloads(item: ApiResultItem, hlsEnabled: boolean): 
           item.sourceAudioEvidence.mediaIdentity !== mediaSourceIdentity(url)
           ? { ...item, sourceAudioEvidence: undefined, audioLanguage: undefined }
           : item,
-        null,
-        url
+        episode?.runtime ?? null,
+        url,
+        episode ? "series" : "unknown"
       ),
     });
   }

@@ -62,6 +62,21 @@ zusätzlichen P09.5-Gates bleiben getrennt offen; kein neuer Produktfix daraus.
 P03.4, P06.4 und die gesonderten Betriebs-/Entfernungsgates bleiben offen; reale
 Dateien ersetzen keinen geklärten Herkunfts- und Freigabenachweis.
 
+Der automatische PR-Review hat fünf zusätzliche Befunde bestätigt: `type=all`
+darf gebundene TV-Konflikte nicht umgehen; normale verifizierte UI-Aufträge
+behalten den eingefrorenen Episodenbezug statt eines Source-only-NZB. Zusätzliche
+benannte Koordinaten und nicht konsumierte Bereichs-/Slashreste verhindern eine
+falsche Einzelfolgenzuordnung. Ausgefallene optionale Nachlieferlookups halten
+unverifizierte Ergänzungen zurück, ohne unabhängig belegte Basis-RSS-Treffer zu
+verdrängen. Der Review-DB-Test mockt den Medienbelegworker ausdrücklich und
+weist Netzwerknichtbenutzung nach.
+
+Zehn Regressionen scheiterten vor diesen Korrekturen; der separate Ausfalltest
+scheitert beim kontrollierten Rückbau der Fehlergrenze (503 statt Basis-RSS).
+Nach Wiederherstellung 1.415 reguläre Tests, ESLint, Typecheck, Format und Build
+grün. Die 23 regulären bedingten Skips sind keine ausgeführten Backendtests;
+die geänderte kombinierte Container-/PG-Kette muss auf diesem Stand neu laufen.
+
 ## Historisches Urteil vom 28.09.2026
 
 Der Plan beschreibt einen tragfähigen Weg zur vollständigen Ablösung, wenn

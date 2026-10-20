@@ -27,6 +27,7 @@ vi.mock("@/lib/settings", () => ({
 import { GET } from "./route";
 const bound = {
   info: {
+    episode: { runtime: 59 },
     item: {
       channel: "ZDF",
       topic: "Synthetic Series",
@@ -54,7 +55,7 @@ beforeEach(() => {
     return [bound];
   });
 });
-it.each(["", "&providers=true"])(
+it.each(["", "&providers=true", "&type=all", "&providers=true&type=all"])(
   "does not expose source-only NZBs for verified conflicts %s",
   async (suffix) => {
     const response = await GET(
@@ -102,6 +103,7 @@ it("keeps canonical enqueue fingerprints on nonconflicting bound TV sources", as
   expect(mocks.fingerprints).toHaveBeenCalledExactlyOnceWith({
     hd: "synthetic-server-authored-nzb",
   });
+  expect(mocks.nzb).toHaveBeenCalledExactlyOnceWith(bound.info.item, false, bound.info.episode);
   expect(mocks.query).not.toHaveBeenCalled();
   bound.review.runtimeConflict = true;
 });

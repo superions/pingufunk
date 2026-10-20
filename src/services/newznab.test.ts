@@ -22,16 +22,23 @@ it.each(["Example (S02/E03-E05)", "Example S02E03-05", "Example S02/E03–E05"])
     expect(parseEpisodeFromTitle(title)).toMatchObject({ season: 2, episodes: [3, 4, 5] });
   }
 );
-it.each(["Example S02E03 S03E03", "Example S02E03-E01", "Example Staffel 3 (S02/E03)"])(
-  "does not choose one conflicting source coordinate: %s",
-  (title) => {
-    expect(parseEpisodeFromTitle(title)).toEqual({
-      season: null,
-      episodes: [],
-      episodeName: title,
-    });
-  }
-);
+it.each([
+  "Example S02E03 S03E03",
+  "Example S02E03-E01",
+  "Example Staffel 3 (S02/E03)",
+  "Example S02E03 Staffel 2 Folge 4",
+  "Example S02E03/04",
+  "Example Staffel 2 Folge 3-5",
+  "Example Staffel 2 Folge 3 Folge 4",
+  "Example S02E03 (4/5)",
+  "Example S02E03 Staffel 3 Folge 3",
+])("does not choose one conflicting source coordinate: %s", (title) => {
+  expect(parseEpisodeFromTitle(title)).toEqual({
+    season: null,
+    episodes: [],
+    episodeName: title,
+  });
+});
 
 it.each(["Example S02E12", "Example S02/E12", "Example S02E12E13"])(
   "recognizes source coordinates before an unknown-candidate fallback: %s",

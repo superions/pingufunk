@@ -385,16 +385,21 @@ export async function fetchSearchResultsForRssSync(limit: number, offset: number
   // Ordinary RSS always reads fresh catalogue rows. Only deferred delivery
   // freezes one bounded consumer poll so background proofs cannot shift pages.
   let supplementalMatches: MatchedEpisodeInfo[] = [];
-  const deliveryItems = await getTvSearchDeliveryItems(
-    getBaseShowForSonarrRss,
-    budget,
-    quality,
-    hlsEnabled
-  );
+  let deliveryItems: NewznabItem[] = [];
   let sonarrUnavailable = false;
   try {
+    deliveryItems = await getTvSearchDeliveryItems(
+      getBaseShowForSonarrRss,
+      budget,
+      quality,
+      hlsEnabled
+    );
     supplementalMatches = await getSonarrRssMatches(getBaseShowForSonarrRss, budget);
   } catch {
+    // Withhold every optional instance-dependent item on an incomplete lookup,
+    // while independently proven base releases retain their existing fallback.
+    deliveryItems = [];
+    supplementalMatches = [];
     sonarrUnavailable = true;
     recordDecision("catalogue", "source_failed", "unavailable");
   }
