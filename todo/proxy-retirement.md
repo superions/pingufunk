@@ -624,7 +624,21 @@ einsatzbereite Produktionsbefehle zu behandeln.
 Produktive Anwendung des PG-Runbooks ist optional und gehört bei PG-Wahl
 ausschließlich P10.3–P10.5.
 
-- [x] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
+- [ ] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
+      Eng wieder geöffnet am 22.10.2026: PostgreSQL 18 katalogisiert
+      NOT-NULL-Constraints zusätzlich in `pg_constraint`; der bisherige
+      Strukturcheck behandelt sie fälschlich als fremde Relationsconstraints.
+      Validierte NOT-NULL-Einträge werden nach der unveränderten
+      `attnotnull`-Prüfung aus dem FK-Vergleich ausgeschlossen; unvalidierte
+      und sonstige unbekannte Constraints bleiben gesperrt. Kein DDL,
+      Ledgeradoptieren, Datenrestore oder Backendfallback. Reale disposable
+      PG17-/PG18-Gates einschließlich kausalem Abfragerückbau und NULL-/CHECK-/
+      FK-Negativen sind auf der bisherigen Schemalinie erfolgreich.
+      Der identische Fix ist auf Main portiert; dessen eigene aktuelle
+      PG17-/PG18-/Container-Gates bleiben vor erneutem Schließen nachzuweisen.
+      Die separat autorisierte Betriebsreparatur bleibt auf der bisherigen
+      Schemalinie und startet schreibgesperrt; keine Main-Schemaaktualisierung,
+      Bibliotheksaktion oder allgemeine Produktabnahme daraus ableiten.
       `prisma/schema.prisma`, historische SQLite-Migrationen,
       `prisma/legacy/sqlite/init-db.sql`,
       `src/lib/db.ts`, `Dockerfile`, `entrypoint.sh`, `.env.example` und
