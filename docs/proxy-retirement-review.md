@@ -33,9 +33,14 @@ ist kein Produktfehler und wird nicht als erfolgreiche Fachprüfung gezählt.
 Der Main-Port erhält dessen spätere additive Migrationskette und Owner.
 1.415 lokale reguläre Tests, Typecheck und Formatprüfung sind erfolgreich;
 aktuelle Main-basierte Produkt-CI `39684884491` einschließlich realer PG17/PG18
-ebenfalls. P11.1 bleibt ausschließlich für die noch laufende native Containerkette
-eng geöffnet; eine
-separat genehmigte Betriebsreparatur führt keine neue Main-Migration aus.
+ebenfalls. Beide nativen Containerketten sind inzwischen vollständig erfolgreich:
+`39682936558` auf der bisherigen Schemalinie und `39684674648` auf dem Main-Port
+`fd40b39`. Sie prüfen direkte und weitergeleitete Kaltketten, Migration/Rollback,
+SQLite-Persistenz sowie tatsächlichen Medienabschluss und TV-Review-Worker auf
+beiden Backends. P11.1 ist damit in diesem eng begrenzten Readiness-Scope wieder
+geschlossen. Für diese reine Statusfortschreibung werden die unveränderten grünen
+Produkt-/Containerinputs wiederverwendet; kein erneuter Langlauf ist nötig.
+Die separat genehmigte Betriebsreparatur führt keine neue Main-Migration aus.
 Konkrete Images, Sicherheitsreports und Betriebswerte bleiben im privaten
 Runbook. Quellenzuordnung, reale Grabs und Bibliotheksänderungen sind nicht
 Teil dieses Fixes; bestehende offene Fachbefunde bleiben getrennt bestehen.

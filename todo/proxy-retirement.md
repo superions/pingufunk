@@ -624,8 +624,8 @@ einsatzbereite Produktionsbefehle zu behandeln.
 Produktive Anwendung des PG-Runbooks ist optional und gehört bei PG-Wahl
 ausschließlich P10.3–P10.5.
 
-- [ ] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
-      Eng wieder geöffnet am 22.10.2026: PostgreSQL 18 katalogisiert
+- [x] **P11.1 — Beide Schema-/Client-Ketten und kompatibler Start.**
+      Eng nachgeprüft und wieder geschlossen am 22.10.2026: PostgreSQL 18 katalogisiert
       NOT-NULL-Constraints zusätzlich in `pg_constraint`; der bisherige
       Strukturcheck behandelt sie fälschlich als fremde Relationsconstraints.
       Validierte NOT-NULL-Einträge werden nach der unveränderten
@@ -635,11 +635,15 @@ ausschließlich P10.3–P10.5.
       PG17-/PG18-Gates einschließlich kausalem Abfragerückbau und NULL-/CHECK-/
       FK-Negativen sind auf der bisherigen Schemalinie erfolgreich.
       Der identische Fix ist auf Main portiert; dessen aktuelle Produkt-CI
-      einschließlich PG17/PG18 ist erfolgreich (`39684884491`). Die native
-      Containerkette läuft noch; ihr Abschluss bleibt vor erneutem Schließen
-      nachzuweisen. Die reinen Statusnotizen ändern keine Produktinputs.
+      einschließlich PG17/PG18 ist erfolgreich (`39684884491`). Die nativen
+      Containerketten der bisherigen Schemalinie (`39682936558`) und des
+      Main-Ports (`39684674648`, Codecheckpoint `fd40b39`) sind vollständig
+      erfolgreich: direkte/weitergeleitete Kaltketten, Migration/Rollback,
+      SQLite-Persistenz sowie reale Medien-/Workerprüfungen auf beiden Backends.
+      Die reinen Statusnotizen ändern keine Produktinputs; diese grünen
+      ausführbaren Gates werden ohne erneuten Containerlauf wiederverwendet.
       Die separat autorisierte Betriebsreparatur bleibt auf der bisherigen
-      Schemalinie und startet schreibgesperrt; keine Main-Schemaaktualisierung,
+      Schemalinie; keine Main-Schemaaktualisierung,
       Bibliotheksaktion oder allgemeine Produktabnahme daraus ableiten.
       `prisma/schema.prisma`, historische SQLite-Migrationen,
       `prisma/legacy/sqlite/init-db.sql`,
