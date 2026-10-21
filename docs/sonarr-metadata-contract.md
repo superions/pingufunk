@@ -91,6 +91,34 @@ Keine Query-ID auf einen unbestätigten Suchtreffer schreiben. Vor P09 nur
 progressive HTTP(S)-Renditions im Sonarr-Fallback; vorhandene unabhängige HLS-
 Pfade bleiben unverändert. Sprach-/Fassungsregeln aus P03 behalten.
 
+## Belegte Katalogergänzung vom 22.10.2026
+
+Der bestehende `data/shows.json`-Katalog ergänzt für `Letzte Spur Berlin`
+(TVDB 258535) ausschließlich zwei öffentlich belegte Episoden:
+
+| Episode | Titel                                                                            | Erstausstrahlung | Soll-Laufzeit |
+| ------- | -------------------------------------------------------------------------------- | ---------------- | ------------- |
+| S07E04  | [Entgleist](https://thetvdb.com/series/letzte-spur-berlin/episodes/6555207)      | 16.03.2018       | 45 Minuten    |
+| S07E06  | [Lebensretterin](https://thetvdb.com/series/letzte-spur-berlin/episodes/6555210) | 23.03.2018       | 45 Minuten    |
+
+Dies ist ein partieller Metadatenbestand, keine Behauptung einer vollständigen
+Staffel oder Serie. Die übrigen Sonarr-Episoden werden weiterhin über den
+bestehenden Merge ergänzt. Dessen Titel, Dateien und lokale IDs werden nicht
+verändert; ein Platzhalter `TBA` ist kein konkreter Titelwiderspruch. Die
+Soll-Laufzeiten stammen aus den Episodenreferenzen, nicht aus Videolaufzeiten
+oder einem Serienmittelwert. Das JSON-Schema akzeptiert das vom Loader bereits
+unterstützte optionale Feld `runtime` in Minuten; ohne Wert bleibt die Dauer
+unbekannt. Matching, Sprache, Toleranzen und Konfliktpolitik bleiben unverändert.
+
+`shows-catalogue.test.ts` prüft die tatsächliche Katalogdatei über URL-Loader und
+Dateifallback bis zu exakter Einzel-/Staffel-Newznab-Ausgabe und GUI-Quellenprüfung mit synthetischem
+Sonarr-/Quellnetzwerk und gesperrten Writes. Titelrückbau auf `TBA` verliert die
+Zuordnung; fremde Themen/Staffeln, unpassende Dauer und konkrete
+anbieterübergreifende Titelkonflikte bleiben abgewiesen. Das ist kein Grab-,
+Medien-, Import- oder Gesamtproduktabschluss. Eine installierte gepinnte
+`SHOWS_URL` muss gesondert auf die geprüfte Datenrevision aktualisiert werden;
+ein Fork-Push ändert weder diesen Pin noch den laufenden Katalogcache.
+
 ## Dauer und begrenztes RSS
 
 Die genehmigten technischen Startwerte stehen im TODO; keine Sonarr-Zusagen:

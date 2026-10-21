@@ -19,5 +19,27 @@
     "germanName": "Solo für Weiss",
     "aliases": ["Solo für Weiss"],
     "episodes": []
+  },
+  {
+    "tvdbId": 258535,
+    "name": "Letzte Spur Berlin",
+    "germanName": "Letzte Spur Berlin",
+    "aliases": [],
+    "episodes": [
+      {
+        "name": "Entgleist",
+        "seasonNumber": 7,
+        "episodeNumber": 4,
+        "aired": "2018-03-16",
+        "runtime": 45
+      },
+      {
+        "name": "Lebensretterin",
+        "seasonNumber": 7,
+        "episodeNumber": 6,
+        "aired": "2018-03-23",
+        "runtime": 45
+      }
+    ]
   }
 ]
