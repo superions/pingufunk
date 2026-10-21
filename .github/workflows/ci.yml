@@ -43,6 +43,10 @@ jobs:
 
   postgresql-integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["postgres:17-alpine", "postgres:18-alpine"]
     permissions:
       contents: read
 
@@ -62,4 +66,6 @@ jobs:
         run: npm ci
 
       - name: Test PostgreSQL migration and runtime against disposable PostgreSQL
+        env:
+          PINGUFUNK_CI_POSTGRES_IMAGE: ${{ matrix.postgres }}
         run: npm run test:pg
