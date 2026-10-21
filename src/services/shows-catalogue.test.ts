@@ -2,13 +2,24 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { parseStringPromise } from "xml2js";
 import catalogue from "../../data/shows.json";
-import type { ApiResultItem } from "@/types";
+import type { ApiResultItem, Ruleset, TvdbData } from "@/types";
 
 const state = vi.hoisted(() => ({
   settings: new Map<string, string>(),
+  rules: [] as Ruleset[],
+  tvdb: vi.fn<() => Promise<TvdbData | null>>(),
+  tmdb: vi.fn<() => Promise<TvdbData | null>>(),
   forbiddenWrite: vi.fn(() => {
     throw new Error("Catalogue checks must not write or enqueue");
   }),
+}));
+vi.mock("./tvdb", async (original) => ({
+  ...(await original<typeof import("./tvdb")>()),
+  getShowInfoByTvdbId: state.tvdb,
+}));
+vi.mock("./tmdb", async (original) => ({
+  ...(await original<typeof import("./tmdb")>()),
+  getShowInfoByTvdbId: state.tmdb,
 }));
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -25,9 +36,10 @@ vi.mock("@/lib/db", () => ({
 vi.mock("./rulesets", () => ({
   getRulesetContext: () => "synthetic-catalogue-rules",
   ensureRulesetsLoaded: async () => {},
-  getAllTopics: () => [],
-  getRulesetsForTopic: () => [],
-  getRulesetsForTopicAndTvdbId: () => [],
+  getAllTopics: () => state.rules.map((rule) => rule.topic),
+  getRulesetsForTopic: (topic: string) => state.rules.filter((rule) => rule.topic === topic),
+  getRulesetsForTopicAndTvdbId: (topic: string, tvdbId: number) =>
+    state.rules.filter((rule) => rule.topic === topic && rule.media.media_tvdbId === tvdbId),
   getOrGenerateRulesetForShow: async () => null,
 }));
 
@@ -73,6 +85,7 @@ const sources: ApiResultItem[] = episodes.map((episode, index) => ({
   url_website: `https://example.invalid/programme-${index}`,
 }));
 let fallback = false;
+let extraSources: ApiResultItem[] = [];
 let fetchMock: ReturnType<typeof vi.fn>;
 let catalogueClock = Date.now();
 
@@ -90,7 +103,11 @@ beforeEach(() => {
   state.settings.set("integration.sonarr.url", "https://example.invalid/sonarr");
   state.settings.set("download.quality", "720p");
   state.forbiddenWrite.mockClear();
+  state.rules = [];
+  state.tvdb.mockReset().mockResolvedValue(null);
+  state.tmdb.mockReset().mockResolvedValue(null);
   fallback = false;
+  extraSources = [];
   vi.stubEnv("PINGUFUNK_SONARR_API_KEY", "synthetic-catalogue-key");
   vi.stubEnv("PINGUFUNK_SONARR_API_KEY_FILE", undefined);
   // This is an isolated read-only check, not a production maintenance change.
@@ -106,10 +123,94 @@ beforeEach(() => {
     if (url.hostname === "example.invalid" && url.pathname.endsWith("/episode"))
       return Response.json(sonarrEpisodes);
     if (url.hostname === "mediathekviewweb.de")
-      return Response.json({ result: { results: sources }, err: null });
+      return Response.json({ result: { results: [...sources, ...extraSources] }, err: null });
     throw new Error(`Unexpected synthetic catalogue request: ${init?.method ?? "GET"}`);
   });
   vi.stubGlobal("fetch", fetchMock);
+});
+
+it.each([
+  ["tvdb", false],
+  ["tvdb", true],
+  ["tmdb", false],
+  ["tmdb", true],
+] as const)(
+  "preserves %s episodes outside the partial catalogue without Sonarr, local fallback=%s",
+  async (provider, localFallback) => {
+    fallback = localFallback;
+    state.settings.set("integration.sonarr.enabled", "false");
+    state.settings.set(`api.${provider}.key`, provider === "tmdb" ? "eyJsynthetic" : "synthetic");
+    const additional = {
+      name: "Synthetic additional episode",
+      seasonNumber: 7,
+      episodeNumber: 8,
+      aired: new Date("2018-04-06"),
+      runtime: 45,
+    };
+    const metadata: TvdbData = {
+      id: 258535,
+      name: series.name,
+      germanName: series.germanName,
+      aliases: [],
+      episodes: [{ ...additional, name: "Synthetic provider title", episodeNumber: 4 }, additional],
+    };
+    const original = structuredClone(metadata);
+    state[provider].mockResolvedValue(metadata);
+    state.rules = [
+      {
+        id: 1,
+        mediaId: 1,
+        topic: series.name,
+        priority: 1,
+        filters: "[]",
+        titleRegexRules: JSON.stringify([{ type: "regex", field: "title", pattern: "^(.+)$" }]),
+        episodeRegex: null,
+        seasonRegex: null,
+        matchingStrategy: "ItemTitleExact" as Ruleset["matchingStrategy"],
+        media: {
+          media_id: 1,
+          media_name: series.name,
+          media_type: "tv",
+          media_tvdbId: 258535,
+          media_tmdbId: null,
+          media_imdbId: null,
+        },
+      },
+    ];
+    extraSources = [{ ...sources[0], title: additional.name, duration: 2700 }];
+    const show = await getShowInfoByTvdbId(258535);
+    expect(show?.episodes).toHaveLength(3);
+    expect(show?.episodes.find((episode) => episode.episodeNumber === 4)?.name).toBe("Entgleist");
+    expect(show?.episodes.find((episode) => episode.episodeNumber === 8)).toEqual(additional);
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=258535&season=7&ep=8")
+    );
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel.item).toHaveLength(1);
+    expect(channel.item[0].title[0]).toContain("S07E08");
+    expect(channel.item[0].title[0]).toContain("Synthetic.additional.episode");
+    expect(metadata).toEqual(original);
+    expect(state.forbiddenWrite).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(([input]) => new URL(input).pathname.startsWith("/sonarr/"))
+    ).toBe(false);
+  }
+);
+
+it("keeps independent catalogue episodes usable if configured providers fail", async () => {
+  state.settings.set("integration.sonarr.enabled", "false");
+  state.settings.set("api.tvdb.key", "synthetic");
+  state.settings.set("api.tmdb.key", "eyJsynthetic");
+  state.tvdb.mockRejectedValue(new Error("Synthetic provider outage"));
+  state.tmdb.mockRejectedValue(new Error("Synthetic provider outage"));
+  const show = await getShowInfoByTvdbId(258535, new HttpRequestBudget(32));
+  expect(show?.episodes).toEqual(
+    episodes.map(({ aired, ...episode }) => ({ ...episode, aired: new Date(aired) }))
+  );
+  expect(state.tvdb).toHaveBeenCalled();
+  expect(state.tmdb).toHaveBeenCalled();
+  expect(state.forbiddenWrite).not.toHaveBeenCalled();
 });
 
 afterEach(async () => {

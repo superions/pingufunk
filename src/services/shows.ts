@@ -153,11 +153,30 @@ function localShowMetadata(show: LocalShow): TvdbData {
   };
 }
 
+/** Curated coordinates retain precedence, but a partial list cannot hide provider episodes. */
+function supplementLocalShow(local: TvdbData | null, provider: TvdbData): TvdbData {
+  if (!local) return provider;
+  if (provider.id !== local.id) throw new ProviderResponseError();
+  const coordinates = new Set(
+    local.episodes.map((episode) => `${episode.seasonNumber}:${episode.episodeNumber}`)
+  );
+  return {
+    ...local,
+    episodes: [
+      ...local.episodes,
+      ...provider.episodes.filter(
+        (episode) => !coordinates.has(`${episode.seasonNumber}:${episode.episodeNumber}`)
+      ),
+    ],
+  };
+}
+
 /**
  * Get show info by TVDB ID from multiple sources:
- * 1. Local shows.json (always checked first)
+ * 1. Local shows.json (curated values take precedence)
  * 2. TVDB API (if api.tvdb.key is configured in settings)
  * 3. TMDB API (if api.tmdb.key is configured in settings)
+ * The first available configured provider supplements coordinates absent locally.
  */
 export async function getBaseShowInfoByTvdbId(
   tvdbId: number,
@@ -172,7 +191,6 @@ export async function getBaseShowInfoByTvdbId(
   const localShow = getLocalShow(tvdbId);
   if (localShow) {
     console.log(`[Shows] Found "${localShow.name}" in local database`);
-    return localShow;
   }
 
   // 2. Try TVDB if API key is configured
@@ -182,7 +200,7 @@ export async function getBaseShowInfoByTvdbId(
     console.log(`[Shows] Trying TVDB for ID ${tvdbId}`);
     try {
       const tvdbResult = await getTvdbShow(tvdbId, budget);
-      if (tvdbResult) return tvdbResult;
+      if (tvdbResult) return supplementLocalShow(localShow, tvdbResult);
     } catch {
       // An independent configured provider may recover, but never on a new budget.
       budget?.assertAvailable();
@@ -196,13 +214,15 @@ export async function getBaseShowInfoByTvdbId(
     console.log(`[Shows] Trying TMDB for ID ${tvdbId}`);
     try {
       const tmdbResult = await getTmdbShow(tvdbId, budget);
-      if (tmdbResult) return tmdbResult;
+      if (tmdbResult) return supplementLocalShow(localShow, tmdbResult);
     } catch {
       budget?.assertAvailable();
       providerUnavailable = true;
     }
   }
 
+  // An unavailable supplement must not discard independently usable catalogue data.
+  if (localShow) return localShow;
   if (providerUnavailable) throw new ProviderResponseError();
 
   console.log(`[Shows] No show found for TVDB ID ${tvdbId} in any source`);
