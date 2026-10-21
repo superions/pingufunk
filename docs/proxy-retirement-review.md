@@ -19,7 +19,7 @@ Constraintkatalog bisher fälschlich dem erwarteten FK-Vertrag zu. Das ist
 ein Startprüfungsfehler, kein Beleg für fehlende Migrationen oder beschädigte
 Daten. Der bestehende Spaltenvergleich schützt Typen und `attnotnull`
 weiterhin; nur bereits validierte NOT-NULL-Katalogeinträge entfallen im
-anschließenden Relationsvergleich. Unvalidierte Constraints sowie zusätzliche
+anschließenden Relationsvergleich. Unvalidierte NOT-NULL-Constraints sowie zusätzliche
 CHECKs, fehlende FKs und fehlendes NOT NULL bleiben Ablehnungsfälle.
 
 Die Fork-CI prüft dieselben isolierten PostgreSQL-Gates nun gegen 17 und 18.
@@ -31,7 +31,10 @@ Eine zunächst an einem Registry-Rate-Limit abgebrochene native Container-CI
 ist kein Produktfehler und wird nicht als erfolgreiche Fachprüfung gezählt.
 
 Der Main-Port erhält dessen spätere additive Migrationskette und Owner.
-P11.1 bleibt für die zugehörigen aktuellen Main-Gates eng geöffnet; eine
+1.415 lokale reguläre Tests, Typecheck und Formatprüfung sind erfolgreich;
+aktuelle Main-basierte Produkt-CI `39684884491` einschließlich realer PG17/PG18
+ebenfalls. P11.1 bleibt ausschließlich für die noch laufende native Containerkette
+eng geöffnet; eine
 separat genehmigte Betriebsreparatur führt keine neue Main-Migration aus.
 Konkrete Images, Sicherheitsreports und Betriebswerte bleiben im privaten
 Runbook. Quellenzuordnung, reale Grabs und Bibliotheksänderungen sind nicht

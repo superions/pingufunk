@@ -634,8 +634,10 @@ ausschließlich P10.3–P10.5.
       Ledgeradoptieren, Datenrestore oder Backendfallback. Reale disposable
       PG17-/PG18-Gates einschließlich kausalem Abfragerückbau und NULL-/CHECK-/
       FK-Negativen sind auf der bisherigen Schemalinie erfolgreich.
-      Der identische Fix ist auf Main portiert; dessen eigene aktuelle
-      PG17-/PG18-/Container-Gates bleiben vor erneutem Schließen nachzuweisen.
+      Der identische Fix ist auf Main portiert; dessen aktuelle Produkt-CI
+      einschließlich PG17/PG18 ist erfolgreich (`39684884491`). Die native
+      Containerkette läuft noch; ihr Abschluss bleibt vor erneutem Schließen
+      nachzuweisen. Die reinen Statusnotizen ändern keine Produktinputs.
       Die separat autorisierte Betriebsreparatur bleibt auf der bisherigen
       Schemalinie und startet schreibgesperrt; keine Main-Schemaaktualisierung,
       Bibliotheksaktion oder allgemeine Produktabnahme daraus ableiten.
