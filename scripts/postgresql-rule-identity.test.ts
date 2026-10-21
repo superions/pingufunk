@@ -101,7 +101,7 @@ it.skipIf(!required)(
           JOIN pg_namespace n ON n.oid=c.relnamespace
           WHERE n.nspname=current_schema() AND con.contype='n' AND con.convalidated
         `;
-        expect(count).toBeGreaterThan(0n);
+        expect(count).toBeGreaterThan(BigInt(0));
         // Reproduce the former query against the real PG18 catalog: omitting
         // only this exclusion must turn the same valid schema into a rejection.
         const formerCatalogQuery = {
