@@ -90,8 +90,37 @@ it.skipIf(!required)(
           .split(";")
           .filter((sql) => sql.trim()))
           await pg.$executeRawUnsafe(statement);
+      const [{ version }] = await pg.$queryRaw<{ version: number }[]>`
+        SELECT current_setting('server_version_num')::integer AS version
+      `;
+      if (version >= 180000) {
+        const [{ count }] = await pg.$queryRaw<{ count: bigint }[]>`
+          SELECT count(*) FROM pg_constraint con
+          JOIN pg_class c ON c.oid=con.conrelid
+          JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname=current_schema() AND con.contype='n' AND con.convalidated
+        `;
+        expect(count).toBeGreaterThan(0n);
+        // Reproduce the former query against the real PG18 catalog: omitting
+        // only this exclusion must turn the same valid schema into a rejection.
+        const formerCatalogQuery = {
+          $queryRaw: (query: TemplateStringsArray, ...parameters: unknown[]) => {
+            expect(parameters).toEqual([]);
+            return pg.$queryRawUnsafe(
+              query.join("").replace("AND NOT (con.contype='n' AND con.convalidated)", "")
+            );
+          },
+        };
+        await expect(validatePostgresqlStructure(formerCatalogQuery)).rejects.toThrow(
+          "PostgreSQL relation constraint drift"
+        );
+      }
       await validatePostgresqlStructure(pg);
       const driftCases = [
+        [
+          'ALTER TABLE "Config" ADD CONSTRAINT synthetic_check CHECK (length(value) >= 0)',
+          'ALTER TABLE "Config" DROP CONSTRAINT synthetic_check',
+        ],
         ["CREATE SEQUENCE synthetic_orphan_sequence", "DROP SEQUENCE synthetic_orphan_sequence"],
         [
           'ALTER TABLE "Config" ALTER COLUMN "value" TYPE VARCHAR(255)',

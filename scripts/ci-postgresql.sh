@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export DATABASE_PROVIDER=postgresql
+CI_PG_IMAGE="${PINGUFUNK_CI_POSTGRES_IMAGE:-postgres:17-alpine}"
+case "$CI_PG_IMAGE" in
+  postgres:17-alpine|postgres:18-alpine) ;;
+  *) echo "Only reviewed disposable PostgreSQL test images are allowed" >&2; exit 1 ;;
+esac
 
 # Disposable, loopback-only PostgreSQL for fork CI and local development gates.
 # Trust auth is safe only inside this short-lived local container; never reuse
@@ -26,7 +31,7 @@ docker network create "$CI_PG_NETWORK" >/dev/null
 CI_PG_NETWORK_CREATED=1
 docker run --rm -d --name "$CI_PG_CONTAINER" --network "$CI_PG_NETWORK" \
   -e POSTGRES_HOST_AUTH_METHOD=trust \
-  -p 127.0.0.1::5432 postgres:17-alpine >/dev/null
+  -p 127.0.0.1::5432 "$CI_PG_IMAGE" >/dev/null
 CI_PG_STARTED=1
 
 ready=0
