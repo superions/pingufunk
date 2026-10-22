@@ -201,6 +201,8 @@ export async function validatePostgresqlStructure(pg) {
     JSON.stringify(canonical(indexes)) !== JSON.stringify(canonical(expectedIndexes))
   )
     throw new Error("PostgreSQL index drift");
+  // PostgreSQL 18 also catalogs NOT NULL constraints. Validated entries are
+  // already checked via attnotnull above; unvalidated ones still fail closed.
   const constraints = await pg.$queryRaw`
     SELECT c.relname AS table_name, con.contype::text AS kind,
       con.confdeltype::text AS on_delete, con.confupdtype::text AS on_update,
@@ -213,6 +215,7 @@ export async function validatePostgresqlStructure(pg) {
     JOIN pg_namespace n ON n.oid=c.relnamespace
     LEFT JOIN pg_class ref ON ref.oid=con.confrelid LEFT JOIN pg_namespace rn ON rn.oid=ref.relnamespace
     WHERE n.nspname=current_schema() AND c.relname <> '_prisma_migrations' AND con.contype <> 'p'
+      AND NOT (con.contype='n' AND con.convalidated)
   `;
   const expectedRelations = models.flatMap((model) =>
     model.fields

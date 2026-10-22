@@ -12,6 +12,39 @@ unterstützt, PostgreSQL ist optional und kein Proxy-Ablösegate. Aktuell gilt
 ausschließlich der [Phasenvertrag](../todo/proxy-retirement.md); frühere
 Pflicht-, HAProxy- und RPO-Aussagen in diesem Review sind nicht operativ.
 
+## PostgreSQL-18-Readinessreview 22.10.2026
+
+Der Read-only-Strukturcheck ordnet PostgreSQL-18-NOT-NULL-Einträge im
+Constraintkatalog bisher fälschlich dem erwarteten FK-Vertrag zu. Das ist
+ein Startprüfungsfehler, kein Beleg für fehlende Migrationen oder beschädigte
+Daten. Der bestehende Spaltenvergleich schützt Typen und `attnotnull`
+weiterhin; nur bereits validierte NOT-NULL-Katalogeinträge entfallen im
+anschließenden Relationsvergleich. Unvalidierte NOT-NULL-Constraints sowie zusätzliche
+CHECKs, fehlende FKs und fehlendes NOT NULL bleiben Ablehnungsfälle.
+
+Die Fork-CI prüft dieselben isolierten PostgreSQL-Gates nun gegen 17 und 18.
+Auf 18 weist die Regression echte NOT-NULL-Katalogzeilen nach und reproduziert
+durch Rückbau nur dieser Abfrageausnahme den alten falschen Driftfehler.
+Die bisherige Schemalinie besteht beide Jobs und den isolierten Start des
+konkret gebauten Reparaturimages mit lesbaren APIs und null Modellwrites.
+Eine zunächst an einem Registry-Rate-Limit abgebrochene native Container-CI
+ist kein Produktfehler und wird nicht als erfolgreiche Fachprüfung gezählt.
+
+Der Main-Port erhält dessen spätere additive Migrationskette und Owner.
+1.415 lokale reguläre Tests, Typecheck und Formatprüfung sind erfolgreich;
+aktuelle Main-basierte Produkt-CI `39684884491` einschließlich realer PG17/PG18
+ebenfalls. Beide nativen Containerketten sind inzwischen vollständig erfolgreich:
+`39682936558` auf der bisherigen Schemalinie und `39684674648` auf dem Main-Port
+`fd40b39`. Sie prüfen direkte und weitergeleitete Kaltketten, Migration/Rollback,
+SQLite-Persistenz sowie tatsächlichen Medienabschluss und TV-Review-Worker auf
+beiden Backends. P11.1 ist damit in diesem eng begrenzten Readiness-Scope wieder
+geschlossen. Für diese reine Statusfortschreibung werden die unveränderten grünen
+Produkt-/Containerinputs wiederverwendet; kein erneuter Langlauf ist nötig.
+Die separat genehmigte Betriebsreparatur führt keine neue Main-Migration aus.
+Konkrete Images, Sicherheitsreports und Betriebswerte bleiben im privaten
+Runbook. Quellenzuordnung, reale Grabs und Bibliotheksänderungen sind nicht
+Teil dieses Fixes; bestehende offene Fachbefunde bleiben getrennt bestehen.
+
 ## Main-/TV-Integrationsreview 21.10.2026
 
 Der gesonderte Integrationsauftrag vom 20.10.2026 führt Main `e435804` und
