@@ -2827,3 +2827,46 @@ Consumer-ACKs. Retention, frische Sprach-/Pixel-/Identitätsprüfung und GUIDs b
 unverändert. Die Regression prüft diese Reihenfolge über den tatsächlichen
 Feedowner; echte SQLite-/PostgreSQL-Verbindungen prüfen die Persistenz. Kapazität,
 ungültige Zeitpunkte und Schreibfehler scheitern geschlossen und atomar.
+
+### Sicherheitsupdates der Entwicklungswerkzeuge (24.10.2026)
+
+Vitest und sein V8-Coverage-Provider sind gemeinsam auf 4.1.12 aktualisiert;
+die zugehörigen Vitest-Pakete einschließlich Mocker bleiben versionsgleich.
+Vite wird innerhalb des von Vitest unterstützten Bereichs auf 8.3.5 aufgelöst,
+AJVs transitive URI-Bibliothek auf fast-uri 3.1.9. Vite 8.3.5 enthält die
+Sicherheitskorrekturen aus 8.3.3 und weitere Korrekturen derselben Patchlinie.
+Npm erzeugt das Lockfile; keine neuen direkten Abhängigkeiten, Overrides,
+Majorwechsel oder Audit-Ignores. Der schon freigegebene Next-/Env-Stand 16.4.3
+und Zod 4.6.6 der getrennten Produktions-Hotfixlinie wird auch in diesem auf
+Main basierenden Quellstand erhalten. Prisma und beide Schemaketten bleiben
+unverändert; daraus folgt kein erneuter Produktionsrollout.
+
+Primärquellen: [Vitest 4.1.12](https://github.com/vitest-dev/vitest/releases/tag/v4.1.12),
+[Vite 8.3.5](https://github.com/vitejs/vite/releases/tag/v8.3.5),
+[Mock-Registrierung](https://github.com/advisories/GHSA-qxg6-89mg-rqv8),
+[Windows-Pfadprüfung](https://github.com/advisories/GHSA-xp26-3454-mjgp),
+[Vite/Editor-Prüfung](https://github.com/advisories/GHSA-587h-7wmj-h5pm) und
+[URI-Normalisierung](https://github.com/advisories/GHSA-w74x-v6f9-j3xg).
+
+`npm run audit:dependencies` prüft bei jedem normalen CI-Lauf ausdrücklich
+Laufzeit- und Dev-Abhängigkeiten und scheitert ab LOW. Die zweiminütige
+Stepgrenze sowie Registry-/Auditfehler bleiben sichtbare fehlgeschlagene Gates.
+Es gibt keinen automatischen Force-Fix oder unterdrückten Auditexit. Ein
+isolierter Kontrolllauf mit dem unveränderten alten Dev-Lockfile wurde exakt
+wegen der fünf Paketmeldungen mit Exit 1 abgewiesen, auch mit
+`NODE_ENV=production` und gesetztem `omit=dev`: das explizite `--include=dev`
+verhindert dort einen fälschlich grünen Lauf. Derselbe Gate auf dem neuen
+Lockfile meldet null Befunde. Die CI führt die bestehende Testsuite einmal mit
+dem tatsächlichen V8-Coverage-Provider aus; Tests und Coverage werden dafür
+nicht doppelt gestartet. Der Paket-Audit ersetzt weiterhin keinen OCI-Scan
+oder eine Betriebsabnahme.
+
+Frisches `npm ci` erzeugt beide Datenbankclients und meldet null Befunde. Neu
+ausgeführt: 1426 Tests mit V8-Coverage bestanden, 23 bedingte Opt-in-Tests lokal
+nicht ausgeführt; diese werden nicht als PostgreSQL-Nachweis gezählt.
+Statements 88,32 %, Branches 85,64 %, Funktionen 91,81 %, Zeilen 90,79 %.
+Lint, Typecheck, Formatcheck, der tatsächliche AJV-Datenvalidator und der
+Next-Produktionsbuild sind grün. Bekannte Vite-Configloader-/Node- und
+Next-Dateitracingwarnungen bleiben sichtbar. Fork-CI einschließlich ihrer
+separaten PostgreSQL- und nativen Containergates ist ein eigener Nachweis;
+lokales Grün ersetzt dessen Abschluss nicht.
