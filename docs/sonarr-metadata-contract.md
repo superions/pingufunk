@@ -72,6 +72,11 @@ unvollständige Bestände bleiben unsicher. HLS-only im Player verwirft die
 bereits indexierte MP4-Fassung nicht; Tonsprachenbeleg erst über deren exakte URL.
 
 Basislookup unverändert lokale Shows → TVDB → TMDB, soweit konfiguriert.
+Der erste verfügbare konfigurierte API-Anbieter ergänzt die im lokalen Katalog
+fehlenden Koordinaten; lokale Serienwerte und vorhandene Episoden behalten
+ihren Vorrang. Ein Teilkatalog darf bei deaktiviertem Sonarr keine zuvor vom
+API-Anbieter verfügbaren Episoden verdecken. Ohne API-Konfiguration oder bei
+Anbieterausfall bleiben die unabhängig belegten lokalen Episoden nutzbar.
 Danach optional Sonarr-Ergänzung. Ein früher lokaler Treffer darf diesen Schritt
 nicht überspringen. Merge-Schlüssel `(Staffel, Folge)`; vorhandene IDs, Titel,
 Daten und Laufzeiten bleiben unverändert. Nur ein konkreter Titelwiderspruch
@@ -92,6 +97,12 @@ progressive HTTP(S)-Renditions im Sonarr-Fallback; vorhandene unabhängige HLS-
 Pfade bleiben unverändert. Sprach-/Fassungsregeln aus P03 behalten.
 
 ## Dauer und begrenztes RSS
+
+Der Consumerregressionstest prüft diesen Vertrag bei deaktiviertem Sonarr über
+TVDB und TMDB, jeweils mit URL-Lader und Dateifallback: eine zusätzliche
+Anbieterepisode bleibt bis zur exakten Newznab-Ausgabe erhalten. Lokale
+Korrekturen behalten Vorrang; ein Anbieterausfall verwirft den lokalen Bestand
+nicht. Private Bibliotheksdaten sind kein Bestandteil dieser Fixtures.
 
 Die genehmigten technischen Startwerte stehen im TODO; keine Sonarr-Zusagen:
 

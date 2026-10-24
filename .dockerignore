@@ -64,6 +64,7 @@ scripts/*
 !scripts/load-database-environment.mjs
 !scripts/generate-database-clients.mjs
 !scripts/check-database-schema.mjs
+!scripts/download-directories.mjs
 !scripts/check-sqlite-schema.mjs
 !scripts/sqlite-schema.mjs
 !scripts/sqlite-baseline.mjs

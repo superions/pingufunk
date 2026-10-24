@@ -56,6 +56,11 @@
               "type": ["string", "null"],
               "description": "Air date in ISO format (YYYY-MM-DD)",
               "format": "date"
+            },
+            "runtime": {
+              "type": ["number", "null"],
+              "description": "Expected episode runtime in minutes; absent or null means unknown",
+              "minimum": 0
             }
           }
         }

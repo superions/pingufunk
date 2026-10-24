@@ -103,7 +103,7 @@ COPY --from=builder /app/prisma/legacy/sqlite ./prisma/legacy/sqlite
 COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/check-database-schema.mjs scripts/check-sqlite-schema.mjs scripts/sqlite-schema.mjs scripts/check-postgresql-schema.mjs ./scripts/
+COPY scripts/resolve-database-url.mjs scripts/database-config.mjs scripts/check-database-schema.mjs scripts/check-sqlite-schema.mjs scripts/sqlite-schema.mjs scripts/check-postgresql-schema.mjs scripts/download-directories.mjs ./scripts/
 
 # Create directories for data and downloads
 # Symlink system FFmpeg and yt-dlp so the app finds them at expected locations
