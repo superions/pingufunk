@@ -2870,3 +2870,100 @@ Next-Produktionsbuild sind grün. Bekannte Vite-Configloader-/Node- und
 Next-Dateitracingwarnungen bleiben sichtbar. Fork-CI einschließlich ihrer
 separaten PostgreSQL- und nativen Containergates ist ein eigener Nachweis;
 lokales Grün ersetzt dessen Abschluss nicht.
+
+## Planreview P17 — YouTube und vollständiger deklarierter Katalogvertrag (25.10.2026)
+
+Nutzerbeauftragte Planung auf Main `1c9d4f9`, Upstream `345f5ed` erneut gelesen:
+kein vorhandener YouTube-Provider in dessen Provider-/Service-/Typowner.
+Einziger ausführbarer Vertrag bleibt P17 in `todo/proxy-retirement.md`;
+der [YouTube-Katalogvertrag](youtube-source-contract.md) enthält Datenmodell,
+Feldvergleich, Quellbelege und Grenzen. Keine Produktimplementierung oder
+Betriebsabnahme, alle sechs neuen Checkboxen offen. Andere Checkboxen und
+historische Abnahmen bleiben unverändert.
+
+### Kritische Befunde und im Entwurf behobene Lücken
+
+1. **„Wir bekommen nur die Kernfelder“ wäre ungenau.** Der gepinnte
+   MediathekViewWeb-Parser liefert zusätzlich `url_subtitle`; Pingufunk verwirft
+   es tatsächlich. `timestamp` wird dagegen normalisiert und nicht einfach
+   verloren. Transportstatistik ist von Inhaltsfeldern zu trennen. P17.1
+   schließt echte Feld-/Adapterverluste, bewahrt aber die Rohbeleg-Whitelist.
+2. **Ein eigenes YouTube-Katalogformat würde bestehende Regeln umgehen.**
+   Der Entwurf benutzt `ApiResultItem` und den vorhandenen Provideradapter;
+   getrennt sind nur administratives Register, kanonische Bindung und kleine
+   typisierte Quellenreferenz. Watch-HTML ist keine MP4-URL. Taggenauer Upload,
+   Erstfund, Indexupdate, Airdate und Filmjahr bleiben getrennte Fakten.
+3. **ID-Vorbelegung allein löst die Episoden nicht.** TVDB 133771 ist geprüft,
+   KultKrimis S02E01 „Auf dem Stundenplan: Mord“ ist jedoch kanonisch S01E13.
+   Das bisherige Nummerierungsmatching würde hier systematisch abweisen oder
+   falsch stempeln. P17.3 übersetzt nur ausdrücklich deklarierte
+   Anbieternummerierung über eindeutige konkrete Titel; Doppelpunkte im
+   Episodentitel bleiben erhalten. Globale Konfliktguards bleiben unverändert.
+   97 kanonische Berichtzeilen sind Pflicht; beobachtete 94 Playlistvideos
+   und ein Verfügbarkeitshinweis beweisen keine vollständige Abrufbarkeit.
+4. **GUI-Konfiguration kann Bestand indirekt stören.** Ein ungültiger großer
+   Registryblob im globalen Settingssnapshot könnte jede normale Suche stoppen;
+   zwei GUI-Schreibende könnten einander überschreiben. P17.2 hält Registry/
+   Index in geschützten internen Configkeys, verwendet revisionsgebundene
+   atomare Saves und begrenzte eigene Reads. Kein neuer DB-Service oder Schema-
+   cutover, keine Überschreibung lokaler Anpassungen durch Seedupdates.
+5. **Ein bloß eingehängter Provider wäre noch kein funktionierender Download.**
+   Der bestehende Worker verzweigt nach direkten/HLS-/SRF-Referenzen, der
+   Nachlieferjournalparser akzeptiert progressive MP4s. P17.4 bewegt deshalb
+   Suchproducer, Format-/Sprachbeleg, NZBparser, gespeicherten Job, Resolver,
+   Worker und Nachlieferung gemeinsam. Neue öffentliche Quelldeklarationen
+   verleihen keine interne v4-Freigabe. CDN-Rotation und Sourcewechsel werden
+   nicht als neue oder still herabgestufte Medienidentität angenommen.
+6. **Ausfallisolation darf den Basisvertrag nicht heimlich lockern.** Die
+   erforderliche bisherige Basis muss insgesamt erfolgreich sein, damit deren
+   Antwort bei ausgefallenem optionalem YT nutzbar bleibt. GUI-Teilcoverage und
+   der strenge erforderliche Indexerscope sind verschiedene Grenzen. YT wird
+   dabei nicht erfolgreich leer oder negativ gecacht; nur davon abhängige
+   ausgefallene Scopes bleiben unavailable. Kalter Medienbeleg braucht echte
+   Nachlieferung, keine zweite manuelle Suche als vermeintlichen Abschluss.
+7. **Ein externer Erfolgsbeleg fehlt weiterhin.** Vorhandenes yt-dlp und ein
+   JSON-/Mocktest beweisen keinen YouTube-Transfer aus dem Zielimage. Node 24 /
+   gebündeltes EJS zuerst nutzen, ohne Token-Daemon oder Runtimeinstaller.
+   P17.5 fordert native synthetische Consumer auf SQLite/PG einschließlich
+   Restart/Receipt/Datei-/Arr-Readback; wirkliche YouTube-Medien und Produktion
+   bleiben die eigenen Freigabestopps des optionalen P17.6.
+8. **Nachträgliche Änderungen dürfen angenommene Jobs nicht umdeuten.** Im
+   Nachreview Enqueueprüfung gegen aktuelle Registry und Transferprüfung gegen
+   den eingefrorenen Job getrennt. Disable oder ID-Korrektur storniert oder
+   rebindet keinen angenommenen Auftrag. Außerdem ist ein yt-dlp-Aufruf kein
+   gezählter einzelner HTTP-Versuch: zwölf begrenzte Detailaufrufe/Minute mit
+   eigener Prozessgrenze sind von bestehenden HTTP-Budgets getrennt. Die
+   Mediathek-Pipeline behält ihre Zähler und wird nicht von YT-Arbeit verdrängt.
+9. **Ein nicht verfügbares Video ist kein kaputter JSON-Datensatz.** Ein
+   expliziter privater/gelöschter Platzhalter bleibt als Verfügbarkeitszustand
+   erhalten; ohne frühere oder unabhängige Identität wird ihm keine kanonische
+   Folge zugewiesen. Normale Videozeilen ohne Pflichtdaten bleiben Scanfehler.
+   So führen weder stilles Überspringen noch ein unnötiger Gesamtabbruch zu
+   einer falschen Vollständigkeitsbehauptung.
+
+### Vollständigkeit und KISS
+
+| Nutzeranforderung                                   | Verbleibender Owner / Abnahme                                                          |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Separat pflegbare Kanäle, GUI statt JSON-Pflicht    | P17.2, `/settings`, persistenter revisionsgeprüfter Readback                           |
+| Automatische Serien-/Film-ID und Vorbelegungen      | P17.3, Seed/Metadaten/gezielte Ausnahme, keine First-result-Heuristik                  |
+| Mediathek-nahes JSON und Erklärung der Auslassungen | P17.1 plus Feldmatrix/Adapter-/Routennachweis, P17.4 Quellenreferenz                   |
+| Der Kommissar als vollständiges Beispiel            | P17.3 gesamter 97-Episodenbericht, P17.5 kanonische Consumerregression                 |
+| Zügige, begrenzte Umsetzung                         | Früher Nutzen aus P17.1–P17.3; ein Quellenadapter, Configspeicher, bestehende Pipeline |
+| Bestand nicht stören, keine Grabs aus Planung       | P17.2 null Jobs, P17.4 Bestandsgates, P17.6 eigene explizite Freigaben                 |
+
+Keine Framework-/Microservicephase, Webstreamingoberfläche, vollständige
+Senderinventur, parallele Pythonpipeline, neue Metadatenkonten oder pauschale
+Vollmatrix pro Mikroschritt. Das Transport-/Consumerpaket P17.4 bleibt trotz
+Wiederverwendung ein echtes M-Paket; es wird nicht als bloßer Konfigschalter
+oder durch die frühere PoC-Testzahl als bereits erledigt dargestellt.
+Review durch den Implementierer in getrennten Entwurfs-/Nachreviewdurchgängen,
+kein behaupteter unabhängiger Peerreview. Reine Markdownplanung löst keine
+Produkttests, Entwicklungsruntime oder Produktionsoperation aus.
+
+Dokumentationsabnahme: fünf neue/ergänzte Markdownbereiche mit dem vorhandenen
+Formatter geprüft, fünf relative Ressourcenlinks und zwölf bestehende bzw.
+ausdrücklich neu geplante Dateianchors abgeglichen, `git diff --check` sauber.
+Alle 63 bisherigen Checkboxen und die historischen Inhalte der drei ergänzten
+Dokumente sind unverändert; genau sechs neue offene P17-Punkte. Keine Produkt-
+oder Containertests für diese reine Planänderung ausgeführt.

@@ -27,6 +27,12 @@ Ausgangsrepository keine separate Roh-TODO-Datei; die offenen Reviewbefunde
 sind hier mit aufgenommen. Analyse und bestandene Bestandstests sind keine
 erledigte Implementierung.
 
+Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad strukturierte,
+GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
+und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
+Start bei P17.1; die bestehenden offenen Phasen werden weder umgedeutet noch
+pauschale Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
+
 ## Gemeinsame Regeln und Abnahme
 
 - PostgreSQL ist für Pingufunks eigene Datenbank optional, nicht erneut eine
@@ -3129,3 +3135,196 @@ leichter überprüfbare künftige Upstreamübernahmen.
       Abhängigkeit oder DDL durch die Extraktion; bekannte 14 Tracingwarnungen
       und transitive Auditfinding nicht als behoben ausgegeben. Nur anschließende
       Dokumentationsabnahme, unveränderte Produktgates werden wiederverwendet.
+
+## Phase P17 — YouTube-Quellen im bestehenden Katalogvertrag
+
+Ergebnis: separat gepflegte ÖR-YouTube-Kanäle und automatisch gebundene Serien/
+Filme als zusätzliche Quellen derselben Suche und Downloadpipeline.
+Nutzerentscheidungen und [Feld-/Quellenvertrag](../docs/youtube-source-contract.md)
+gehören zur Abnahme jedes betroffenen Punkts. Standardmäßig aus; keine Streaming-
+Webseite, zweite Pythonpipeline, neuer Dienst, Datenbankwechsel oder globale
+Matchinglockerung. Der Pflichtreferenzfall ist KultKrimi / Der Kommissar,
+TVDB 133771; Quellenumfang und korrektes Mapping sind getrennte Nachweise.
+Umfang K/M bezeichnet relative Paketgröße einschließlich sinnvoller Gates,
+kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
+
+- [ ] **P17.1 — Mediathek-nahen Katalogvertrag explizit vervollständigen (K).**
+      Unabhängiger Start auf aktuellem Main; bestehende P14-/P12-Verträge erhalten.
+      Owner: `src/types/index.ts::ApiResultItem`, `src/types/provider.ts`,
+      `src/lib/mediathek-client.ts::queryMediathekView`,
+      `src/providers/content-item.ts` und `src/app/api/search/route.ts`.
+      Den belegten Verlust von `url_subtitle` durch ein validiertes optionales
+      Feld bis zur GUI-Suchantwort beheben; kein Untertitel-Downloader.
+      Deklarierte interne Sprach-/Fassungsflags und belegtes `productionYear`
+      durch beide Provideradapter erhalten. Gültige Katalog-/Sendetermine
+      unabhängig normalisieren, ohne Legacy-ID/pubDate umzuschreiben.
+      `contentDates.providerDay` als validierten optionalen Kalendertag ohne
+      erfundenen Zeitpunkt ergänzen; neue YT-Erstfund-/Upload-/Indexzeiten
+      gemäß Feldmatrix trennen, bestehende Quellenzeitsemantik erhalten.
+      Keine neue dritte Inhaltsklasse, kein `...rawResponse` und keine
+      Rohfelder als Sprach-/Pixel-/Rechtebeleg. `queryInfo` bleibt Suchhülle;
+      Coverage wird aus tatsächlich geprüften Fenstern gebildet.
+      Abnahme: kausale Client→Adapter→Suchroutenfälle bewahren alle benannten
+      Felder und Einheiten; fehlende/ungültige optionale Angaben bleiben Unknown,
+      vorhandene Mediathek-Antworten ohne neue Felder kompatibel. Rohbeleg-Injektion,
+      HLS/MP4-Slots, getrennte Uhrzeiten und unveränderte IDs/NZBs negativ prüfen.
+      Betroffene Feldmatrix/`docs/bounded-search-contract.md` fortschreiben;
+      Review von Producer, Adapter und Consumer ohne offene Findings.
+- [ ] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
+      Abhängigkeit P17.1. Owner: neue `data/youtube-sources.json` samt Schema/
+      `scripts/validate-data.ts`, `src/lib/settings-schema.ts`, bestehender
+      Settings-/Config-/Bestätigungsowner und `/settings`, neuer begrenzter
+      `src/services/youtube-catalogue.ts`-/`/api/youtube/catalogue`-Owner mit
+      Metadatenhelpern in `src/server/ytdlp.ts`. Kanäle und Programmzuordnungen
+      getrennt und ohne notwendige JSON-Editierung bedienbar machen; Channel-/
+      Playlist-/Video-IDs statt Namen als Schlüssel. Seed + lokales Override/
+      Disable atomar und generationsgebunden zusammenführen; Upgrade überschreibt
+      keine Nutzerwerte. KultKrimi plus vier dort verlinkte Serienkanäle vor
+      Seedlieferung anhand konkreter IDs prüfen, alle zunächst deaktiviert.
+      Metadatenscan als eigene ausdrückliche Aktion mit Fortschritt/Fehlern,
+      100 Zeilen/Batch, zehn Batches/Playlist, 30 s/8 MiB stdout je Child,
+      Parallelität eins; vollständiger Index atomar bis 8 MiB in bestehender
+      Config. 64 Kanäle/256 Zuordnungen/1 MiB Registry, manuell und frühestens
+      nach sechs Stunden seriell refreshen. Fehlende IDs, ungültige Zeilen,
+      Fremduploader, Kapazität, Timeout oder Folgeseitenfehler sind sichtbar;
+      explizite private/gelöschte Platzhalter als unverfügbar erhalten, ohne
+      Identität oder kanonische Episode aus ihrer Listenposition zu erfinden.
+      Normale verfügbare Zeilen ohne Pflichtdaten bleiben Scanfehler;
+      letzter vollständiger Index ist kein Verfügbarkeitsbeleg. Speichern allein
+      startet keinen fremden Abruf; Scan/Enable erzeugen keine Downloadjobs.
+      Reine gemeinsame Schema-/Normalisierung von serverseitigem I/O trennen;
+      nur kanonische YouTube-IDs/-Hosts/feste Argumente zulassen. Registryrevision
+      mit Compare-and-swap prüfen, veralteter Write 409 statt Überschreiben;
+      neue Registry-Bodygrenze nicht auf andere Settings übertragen.
+      `provider.youtube.enabled` bleibt ein Default-false-Control;
+      `internal.youtube.registry.v1`/`internal.youtube.catalogue.v1` getrennt vom
+      globalen Policy-Snapshot/Settingsread halten. Derselbe neue API-Owner
+      speichert Registry+Enable atomar oder startet ausdrücklich Refresh;
+      GET-Inventar höchstens 100 Zeilen, Save-Body vor Parsing höchstens 1 MiB.
+      Keine indexgroßen DB-/Browserreads oder globalen Suchfehler durch eine
+      ungültige deaktivierte YT-Registry; vorhandene Config-/Write-Gate-/
+      Invalidierungs-/Bestätigungsowner weiterverwenden.
+      Abnahme: reale SQLite-/PG-Configwrites mit Neustart/Upgrade/Unknown-Readback
+      und erhaltenen Fremdkeys; Desktop auf `/settings`: URL prüfen, Seed sehen,
+      ergänzen/korrigieren/deaktivieren, speichern/neuladen und ungültigen
+      Eintrag erklären, Pointer/Keyboard und saubere Konsole. Synthetischer
+      Metadatenscan über echten begrenzten Child-Owner, Abort/Disable/alte
+      Generation, strikte Fehler- statt Leersemantik und null Medienjobs belegt.
+      Konfigurations-/Scanvertrag im YouTube-Katalogvertrag aktualisieren.
+- [ ] **P17.3 — IDs automatisch auflösen und Der Kommissar vollständig abgleichen (M).**
+      Abhängigkeit P17.2. Owner: neuer enger Mappingowner bei
+      `youtube-catalogue.ts`, vorhandene `shows.ts`, `sonarr-provider.ts`,
+      `tvdb.ts`/`tmdb.ts`, Radarr-Metadatenowner und TV-/Filmmatcher.
+      Priorität lokale bestätigte Bindung → geprüfter Seed → eindeutiger
+      bestehender Metadatenlookup. Typ/Jahr/Alias und Cross-ID prüfen;
+      `searchMulti`/`searchMovieByTitle` mit erstem Treffer nicht unverändert als Auto-ID verwenden.
+      Unklare IDs sichtbar zur Korrektur anbieten; manuelle Eingabe ist der
+      Ausnahmeweg. Keine neue Konto-/API-/KI-Pflicht. Fehlende kanonische
+      Metadaten bleiben `metadata_unavailable`; Seed-ID allein erfindet keine
+      Episoden. Sonarr aus darf andere verfügbare Metadaten nicht verdecken.
+      KultKrimi-Playlist `PL_H50xx0qoB_bynOI7Esvpfj6EhvxOFS5` an TVDB 133771
+      binden; alle 97 regulären kanonischen Episoden mit `mapped`/`missing`/
+      `ambiguous`/`unavailable` ausweisen, zusätzliche Videos separat. Für
+      ausdrücklich erklärte Anbieternummerierung eindeutige konkrete Titel
+      auf die kanonische Ausstrahlungsreihenfolge übersetzen: „Auf dem
+      Stundenplan: Mord“ Quelle S02E01 → S01E13 und „Der Papierblumenmörder“
+      Quelle S02E03 → S02E01. Originaltitel/-koordinaten und Mappingrevision
+      erhalten; andere bestehende Koordinatenkonflikte bleiben gesperrt.
+      Episodentitel mit eigenem Doppelpunkt erhalten; Zielorder gegen den
+      geladenen Bestand prüfen, Sonarrs Nummerierung niemals umstellen.
+      Abnahme: gesamte 97-Zeilen-Referenz statt Stichprobe/Videozahl;
+      Serien-/Filmseed automatisch ohne ID-Eingabe, sichere neue Lookupfälle,
+      Homonyme/Jahr-/Cross-ID-Konflikte, gleiche Titel mehrerer Folgen,
+      fehlende/geänderte Metadaten, gemischte Playlist, falscher Uploader,
+      doppelte Video-ID und Quellenalternativen kausal geschützt. Kein
+      Positionszählen, S01-Fallback, Marathon-Split oder Uploadjahr als Filmjahr.
+      Öffentlichen KultKrimi-Metadatenabgleich strikt lesend und begrenzt vom
+      synthetischen Testlauf trennen; keine Liveantworten als Git-Fixtures.
+      Aktuell beobachtete 94 Playlistvideos/ein Verfügbarkeitshinweis ersetzen
+      keine nachgewiesene 97/97-Abdeckung. Bericht in derselben GUI erreichbar;
+      Programmbindung, Scanabdeckung und Medienbereitschaft getrennt anzeigen.
+- [ ] **P17.4 — Neue Quelle bis zum vorhandenen Downloadconsumer gemeinsam integrieren (M).**
+      Abhängigkeit P17.3. Owner: `content-search.ts::queryContentWindow`,
+      Providerregistry/-adapter, Rendition-/Sprach-/Medienbelegowner,
+      `mediathek.ts`/`newznab.ts`, `ui-nzb.ts`/`nzb-release.ts`,
+      `media-expectations.ts`, `sab-api.ts`, `download-manager.ts`,
+      `download-completion.ts`, `source-media-facts.ts` und `tv-search-delivery.ts`.
+      `sourceProviderId=youtube` und kleine servervalidierte `sourceRef` für
+      Video-/Channel-/Playlist-/Format-/Audiospuridentität ergänzen. Watch-URL
+      bleibt Website, keine gefälschte MP4-/HLS-URL in Katalogslots.
+      Neuer expliziter Resolver löst kurzlebige CDN-Adressen vor Transfer frisch
+      auf; Video/Format/Sprache und gespeicherte Policy bleiben gebunden.
+      Producer, Parser, persistierter typisierter Job und Worker atomar auf
+      dieselbe eng versionierte Erweiterung bringen; alle alten Jobs und
+      Mediathek-IDs/GUIDs/Paths erhalten. Kein Legacyfallback bei fremder Version,
+      kein stilles Qualitäts-/Sprachdowngrade. Vorhandenes Node 24/yt-dlp/EJS
+      nutzen und im tatsächlichen Image prüfen; zusätzlich notwendiger Cookie-/
+      Token-Dienst oder Infrastrukturbedarf stoppt diesen Punkt zur Entscheidung,
+      kein beiläufiger neuer Service oder Runtimeinstaller.
+      Metadatenindex vor Suchfreischaltung bereitstellen, keine Scans im
+      15-Sekunden-Suchrequest. Medienbeleg und Nachlieferung gemeinsam für die
+      typisierte Quelle erweitern: der vorhandene MP4-only-Journalparser ist
+      kein bereits kompatibler YouTube-Pfad. Alte Episoden nach einer einzigen
+      angeforderten kalten Suche über reguläres RSS nachliefern; keine neue
+      Such-/Grabsteuerung und keine globalen RSS-Fenster-/Budgetänderungen.
+      NZB-Quelldeklarationen erneut gegen Registry/Uploader/Bindung prüfen;
+      vor Enqueue gilt die aktuelle Registry, der angenommene Job friert
+      Mapping-/Quellenbindung ein. Vor Transfer frische externe Fakten gegen
+      diesen Job prüfen; Disable oder neue ID-Korrektur storniert/rebindet
+      keinen angenommenen Job. Geprüfte YT-Bindung explizit konsumieren, nicht
+      fremde Originalkoordinaten durch globale Parserlockerung akzeptieren.
+      YT-Detailbelege nur für passende Videos asynchron: zwölf Calls/Minute,
+      ein Child, 15 s/8 MiB je Child, keine Extraktorretries; vorhandene
+      Mediathek-Belege bleiben fair bedient. Eigene Prozess-/Rategrenze statt
+      interner yt-dlp-HTTP-Aufrufe als einen HTTP-Versuch zu deklarieren.
+      Seed oder ID-Korrektur ersetzt keine interne v4-Freigabe. YT als optionale
+      Ergänzung ausfallisolieren: insgesamt erfolgreicher bisheriger Basisabruf samt
+      echtem Leerfenster bleibt erhalten, ausgefallenes YT nicht leer cachen;
+      bei YT-Ausfall bleibt expliziter YT-only-Scope/fehlende erfolgreiche Basis
+      pending/unavailable. GUI-Gesamtcoverage und Basis-Erfolg getrennt,
+      erforderliche MVW-/ORF-/SRF-Fehler weiterhin geschlossen behandeln.
+      Medien erst nach tatsächlicher Datei-/ffprobe-/Audio-/Pixel-/Dauerprüfung
+      Completed; Unknown nicht deutsch.
+      Abnahme: echte GUI-/direkte/via-Prowlarr-NZB→SAB→persistierter Job→Worker-
+      Consumerfixtures auf beiden Backends, Formatrotation/Expiry/Fremduploader,
+      gemuxte Video-/Audioauswahl, Sprachwechsel, Restart/Retry/Receipt und
+      Unknown negativ; Ausschalten verändert keine schon angenommenen Jobs.
+      Neue reine YT-Namespace-GUIDs bleiben bei Rotation stabil, alte exakt gleich.
+      Source-/Frische-/Erwartungs-/Rollbackreferenzen im betroffenen Vertrag pflegen.
+- [ ] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
+      Abhängigkeit P17.1–P17.4; keine pauschale Schließung anderer offener Phasen.
+      Owner: vorhandene Produkt-/PG-/OCI-Workflows und native Arr-Testharnesses,
+      `docs/youtube-source-contract.md`, Feldmatrix und Reviewbericht.
+      Ein kohärenter Gateabschluss statt Vollmatrix pro Mikroschritt:
+      Audit/Tests mit Coverage, Lint, Typecheck, Format, Datenvalidator und Build,
+      echte disposable SQLite- und PG-17-/18-Gates sowie nicht publizierende
+      native Containerkette gemäß aktuellen Workflows. Gültige unveränderte
+      Belege wiederverwenden. Regresse durch kontrollierten Rückbau der
+      Feldweitergabe, Seed-/Titelbindung, Resolver-/Versionsgrenze und
+      Nachlieferung kausal zeigen; keine Testzahl-/HTTP-/XML-Alleinabnahme.
+      Native kalte Einmal-Mehrstaffelsuche mit warmem vollständigem Setupindex,
+      kalten Medienbelegen und anschließendem RSS muss alle sicheren synthetischen
+      Ziele genau einmal real importieren; vorbereitete Alt-/Queuefälle bleiben
+      unverändert. YT-Ausfall/Indexfehler verdrängt keinen unabhängigen
+      Mediathek-Basistreffer. Neuer Job über Neustart/Retry und kompatiblen
+      Rollback erhalten, unbekannte Version am alten Image sicher abgelehnt.
+      Desktopjourney `/settings`→Zuordnungsbericht→`/search` bis zum bestehenden
+      Prüf-/Auftragsdialog, Cancel ohne Job und bewusst bestätigter synthetischer
+      Auftrag mit eigenem Readback; kein Mobiletest. Synthetisches Netzwerk
+      erzwingen; isolierte reale Dateien/Arr-Importe sind keine echten YouTube-
+      Downloads oder Produktionsbibliotheksänderungen. Finaler vollständiger
+      Owner-/Call-/Write-/Feld-/Linkreview ohne offene P17-Findings und kohärenter
+      Commit/Push zum eigenen Topicbranch. P17.6 bleibt davon unabhängig offen.
+- [ ] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
+      Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
+      Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach
+      P17.5 genau benanntes freigegebenes Referenzvideo in einem isolierten Ziel
+      durch denselben Resolver/Worker übertragen und physisch/medial bestätigen;
+      Metadaten-/Mock-Erfolg genügt nicht. Zusätzlicher Login-/Token-/Servicebedarf
+      ist eine eigene Entscheidung, keine automatische Wiederholung oder Umgehung.
+      Produktionsaktivierung erst nach separatem versions-/scan-/ownergebundenem
+      Rolloutplan samt kompatiblem Rückweg; vorhandene Bibliothek, Profile,
+      Jobs/History und Backend unverändert. Kein globaler Such-/RSS-Auftrag,
+      Retry/Grab oder Altdateiersatz aus dieser Planfreigabe. Konkrete private
+      Antworten/Topologie/Dateien nicht öffentlich dokumentieren. Nachweise und
+      verbleibende Abdeckung ehrlich trennen; kein Gesamtprodukt-/Proxyabschluss.

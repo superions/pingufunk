@@ -12,6 +12,14 @@ optionale Datenvertrag steht in der [PostgreSQL-Fachreferenz](postgresql-migrati
 Einziger ausführbarer Arbeitsvertrag: [Phasen-TODOs](../todo/proxy-retirement.md).
 Dieses Dokument bleibt Analyse, Inventar und Priorisierungsgrundlage.
 
+Ergänzender Nutzerauftrag 25.10.2026: YouTube als optionale zusätzliche Quelle,
+mit separat gepflegtem Kanalregister, automatischer Programm-ID-Zuordnung und
+Mediathek-nahem Inhaltsvertrag. Der aktuelle
+[YouTube-Entwurf mit Feldvergleich](youtube-source-contract.md) gehört zum
+unabhängigen P17-Pfad im bestehenden Phasen-TODO. Er erweitert nicht die
+historische Proxy-Paritätsdefinition und ist keine Implementierungs- oder
+Betriebsabnahme.
+
 ## Ergebnis und Reihenfolge
 
 Die Funktionen des Proxys lassen sich überwiegend in bestehende Pingufunk-
