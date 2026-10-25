@@ -26,7 +26,7 @@ git clone https://github.com/your-username/rundfunkarr.git
 cd rundfunkarr
 
 # Dependencies installieren
-npm install
+npm ci
 
 # Datenbank initialisieren
 npx prisma migrate dev
@@ -46,6 +46,20 @@ npm run dev
 | `npm run format` | Formatiert Code mit Prettier |
 | `npm run format:check` | Prüft Formatierung mit Prettier |
 | `npm run typecheck` | Führt TypeScript Type-Checking aus |
+| `npm run test:coverage` | Führt die Tests mit dem V8-Coverage-Provider aus |
+| `npm run audit:dependencies` | Prüft Laufzeit- und Dev-Abhängigkeiten auf bekannte Sicherheitsbefunde |
+
+Der Dependency-Audit gehört zur normalen CI und bricht bereits bei LOW-Befunden
+ab. `--include=dev` schließt Test-/Buildwerkzeuge ausdrücklich ein. Audit- oder
+Registryfehler bleiben fehlgeschlagene Gates; keine pauschalen Ignores oder
+`npm audit fix --force` verwenden. Der Audit prüft bekannte Paketbefunde und
+ersetzt keinen Scan eines tatsächlich gebauten Images.
+
+Vitest und `@vitest/coverage-v8` gemeinsam auf kompatible, identische Versionen
+aktualisieren. Transitive Updates zuerst über die erlaubten Versionsbereiche
+der übergeordneten Pakete auflösen und mit `npm ci` sowie der tatsächlich
+verwendeten Coverage-/Schema-Prüfung verifizieren; zusätzliche Overrides nur bei
+einer belegten, anderweitig nicht lösbaren Abhängigkeitsgrenze einführen.
 
 ## Pull Requests
 
@@ -56,6 +70,8 @@ npm run dev
 3. Mache deine Änderungen
 4. Stelle sicher, dass alle Checks bestehen:
    ```bash
+   npm run audit:dependencies
+   npm run test:coverage
    npm run lint
    npm run format:check
    npm run typecheck
