@@ -3360,3 +3360,29 @@ Keine neue Dependency, Schemaänderung, produktive Suche, Grab, Bibliotheks-
 oder Dienständerung, Publikation oder Mainintegration. Die Fork-CI wird mit dem
 Codecheckpoint gestartet; daraus wird ohne terminales Ergebnis keine zusätzliche
 CI-/Containerabnahme behauptet.
+
+## CI-Nachbefund vor Branding-Mainintegration (26.10.2026)
+
+Brandingcheckpoint `e9a394a` bestand beide PG-Gates, scheiterte jedoch unter
+Coverage im echten SQLite-Katalogconsumer: erwartet `limited`, geliefert
+`interrupted`. Ein Manifestread kann `running` erfassen und erst zurückkehren,
+nachdem der eigene Scan seine Fehlermeldung persistiert und den Work-Promise
+freigegeben hat. Der alte Snapshot kombinierte den alten Read mit dem neuen
+Prozesszustand. Dies ist kein Branding-/Datenverlustfehler, aber ein belegter
+Statusfehler und deshalb ein Mergeblocker.
+
+Die neue Regression hält exakt diesen echten Manifestread bis nach dem
+beendeten Größenfehler zurück. Ohne Produktfix entsteht deterministisch
+derselbe Assertionfehler; mit Fix bleibt `limited` erhalten. Ein anderer
+Versuchstoken mit derselben Registryrevision wird weiterhin als fremd/
+unterbrochen erkannt statt durch den letzten lokalen Terminalstatus überdeckt.
+Der Snapshot erfasst eine lokale Versuchsgeneration synchron und liest deren
+veraltetes Runningmanifest nach Abschluss einmal erneut, damit auch Indexzeit
+und Status zusammenpassen. Kein neuer Write, Schemawechsel, Retry oder Scan.
+
+33 betroffene Tests, Lint/Typecheck und Build grün; vollständiger Coverage-Lauf
+mit 1.510 Tests, 24 bedingten Skips, Statements 88,34 %, Branches 85,59 %,
+Funktionen 91,86 %, Lines 90,78 % grün. Nach ergänzter Fremdversuchsassertion
+derselbe reale SQLite-Consumer erneut grün. P17.2 für die erneute terminale
+CI-/PG-Abnahme vor Mainintegration geöffnet; die unveränderte Branding-
+Desktopprüfung wird wiederverwendet. Kein Merge bei laufenden/roten Gates.

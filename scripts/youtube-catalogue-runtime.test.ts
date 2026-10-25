@@ -355,6 +355,60 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
         mode(failure);
         const count = callCount();
         expect((await post({ action: "refresh", revision: current.revision })).status).toBe(202);
+        if (failure === "pagecapacity") {
+          const read = prisma.config.findUnique.bind(prisma.config);
+          let captured = false;
+          let release = () => {};
+          const held = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          const delayedRead = vi.spyOn(prisma.config, "findUnique").mockImplementation((async (
+            ...args: unknown[]
+          ) => {
+            const row = await (read as (...args: unknown[]) => Promise<{ value: string } | null>)(
+              ...args
+            );
+            const request = args[0] as { where?: { key?: string } };
+            if (
+              !captured &&
+              request.where?.key === YOUTUBE_INDEX_KEY &&
+              row &&
+              JSON.parse(row.value).scan.state === "running"
+            ) {
+              captured = true;
+              await held;
+            }
+            return row;
+          }) as typeof prisma.config.findUnique);
+          const pending = snapshot();
+          try {
+            await waitFor(async () => captured);
+            await waitFor(async () => {
+              const row = await read({ where: { key: YOUTUBE_INDEX_KEY } });
+              return !!row && JSON.parse(row.value).scan.state === "limited";
+            });
+            await service.cancelYoutubeCatalogue();
+            release();
+            expect((await pending).scan.state).toBe("limited");
+          } finally {
+            release();
+            await pending;
+            delayedRead.mockRestore();
+          }
+          const previous = await read({ where: { key: YOUTUBE_INDEX_KEY } });
+          const foreignAttempt = JSON.parse(previous!.value);
+          foreignAttempt.token = "00000000-0000-4000-8000-000000000001";
+          foreignAttempt.scan.state = "running";
+          await prisma.config.update({
+            where: { key: YOUTUBE_INDEX_KEY },
+            data: { value: JSON.stringify(foreignAttempt) },
+          });
+          expect((await snapshot()).scan.state).toBe("interrupted");
+          await prisma.config.update({
+            where: { key: YOUTUBE_INDEX_KEY },
+            data: { value: previous!.value },
+          });
+        }
         await settled();
         const result = await snapshot();
         expect(result.scan.state).toBe(

@@ -30,7 +30,8 @@ erledigte Implementierung.
 Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad strukturierte,
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
-P17.1/P17.1a/P17.2 sind entwickelt und abgenommen; nächster offener Punkt ist P17.3.
+P17.1/P17.1a sind abgenommen; P17.2 ist für einen CI-Nachbefund der Statusabfrage
+vor der Mainintegration erneut offen. Danach folgt P17.3.
 Die bestehenden offenen Phasen werden weder umgedeutet noch pauschale
 Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
@@ -3229,7 +3230,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       HLS-/Mux-Dateien, Persistenz, Abbruch/Recovery und TV-Freigabe auf SQLite/PG.
       Ausführlicher Ownerreview im bestehenden Review; keine Produktion,
       Mainintegration, Publikation, Schema- oder Bibliotheksänderung.
-- [x] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
+- [ ] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
       Abhängigkeit P17.1. Owner: neue `data/youtube-sources.json` samt Schema/
       `scripts/validate-data.ts`, `src/lib/settings-schema.ts`, bestehender
       Settings-/Config-/Bestätigungsowner und `/settings`, neuer begrenzter
@@ -3281,6 +3282,13 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       UTF-8-Seitenüberlauf, jeweils kausal regressionsgeschützt; keine offenen
       Findings. Automatische ID-/Episodenbindung und Medienintegration bleiben
       P17.3/P17.4. Keine produktiven Grabs, Bibliotheksänderungen oder Rollout.
+      CI-Nachbefund 26.10.2026: Ein verzögerter Manifestread konnte nach
+      beendetem Versuch dessen alten `running`-Stand als `interrupted` anzeigen.
+      Deterministische echte Consumerregression reproduziert; Status und
+      Abschlussmetadaten werden jetzt an dieselbe Versuchsgeneration gebunden.
+      Lokale Coverage/Build und Gegenprüfung grün; erneute PG-/Fork-CI-Abnahme
+      vor Schließen und Mainintegration ausstehend. Keine gelockerte Assertion
+      oder blinde Wiederholung des fehlgeschlagenen Gates.
 - [ ] **P17.3 — IDs automatisch auflösen und Der Kommissar vollständig abgleichen (M).**
       Abhängigkeit P17.2. Owner: neuer enger Mappingowner bei
       `youtube-catalogue.ts`, vorhandene `shows.ts`, `sonarr-provider.ts`,

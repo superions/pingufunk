@@ -89,6 +89,7 @@ const globalState = globalThis as typeof globalThis & {
     probe: boolean;
     probeWork?: Promise<unknown>;
     revision?: string;
+    token?: string;
     scan: YoutubeScanState;
     timer?: ReturnType<typeof setInterval>;
     stopped: boolean;
@@ -146,10 +147,27 @@ async function loadManifest(): Promise<{ value: Manifest | null; raw: string | n
 
 export async function youtubeCatalogueSnapshot(): Promise<YoutubeSnapshot> {
   const [loaded, manifest] = await Promise.all([loadRegistry(), loadManifest()]);
-  const persisted = manifest.value;
+  // Capture one local attempt synchronously: completion may have happened while
+  // the database read was pending. Refresh its stale running manifest so status
+  // and completed-index metadata describe the same committed attempt.
+  const local = {
+    revision: runtime.revision,
+    token: runtime.token,
+    scan: runtime.scan,
+    active: !!(runtime.work || runtime.probe),
+  };
+  let persisted = manifest.value;
+  if (
+    local.revision === loaded.revision &&
+    local.token === persisted?.token &&
+    persisted?.scan.state === "running" &&
+    local.scan.state !== "running"
+  )
+    persisted = (await loadManifest()).value;
+  const sameAttempt = local.revision === loaded.revision && local.token === persisted?.token;
   const scan =
-    runtime.work && runtime.revision === loaded.revision
-      ? runtime.scan
+    sameAttempt && (local.active || persisted?.scan.state === "running")
+      ? local.scan
       : (persisted?.scan ?? idle());
   return {
     revision: loaded.revision,
@@ -158,7 +176,7 @@ export async function youtubeCatalogueSnapshot(): Promise<YoutubeSnapshot> {
     presetChannelIds: seed.channels.map((channel) => channel.id),
     presetMappingKeys: seed.programMappings.map(youtubeMappingKey),
     scan:
-      scan.state === "running" && (!runtime.work || persisted?.revision !== loaded.revision)
+      scan.state === "running" && !(sameAttempt && local.active)
         ? {
             ...scan,
             state: "interrupted",
@@ -453,6 +471,7 @@ export async function refreshYoutubeCatalogue(revision: string): Promise<void> {
     scan: runtime.scan,
   };
   const raw = JSON.stringify(reservation);
+  runtime.token = reservation.token;
   try {
     await prisma.$prepareMutation();
     await prisma.$transaction(async (tx) => {
