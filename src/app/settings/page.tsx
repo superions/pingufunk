@@ -184,7 +184,7 @@ export default function SettingsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground text-sm">Konfiguriere RundfunkArr</p>
+        <p className="text-muted-foreground text-sm">Konfiguriere Pingufunk</p>
       </div>
 
       {invalidKeys.length > 0 && (
@@ -714,7 +714,7 @@ export default function SettingsPage() {
                     <h4 className="text-sm font-medium mb-3">Versionen</h4>
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                       <div>
-                        <p className="text-xs text-muted-foreground">RundfunkArr</p>
+                        <p className="text-xs text-muted-foreground">Pingufunk</p>
                         <p className="font-medium">{packageJson.version}</p>
                       </div>
                       <div>

@@ -1,5 +1,5 @@
 services:
-  rundfunkarr:
+  pingufunk:
     environment:
       DATABASE_PROVIDER: postgresql
       DATABASE_URL: !reset null

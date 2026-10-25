@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/brand";
 import { createHash } from "node:crypto";
 import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { Builder } from "xml2js";
@@ -67,8 +68,8 @@ export function generateAttributes(
 export function getEmptyRssResult(offset: number = 0): NewznabRss {
   return {
     channel: {
-      title: "RundfunkArr",
-      description: "RundfunkArr API results",
+      title: PRODUCT_NAME,
+      description: `${PRODUCT_NAME} API results`,
       response: {
         offset,
         total: 0,
@@ -132,8 +133,8 @@ export function convertItemsToRss(items: NewznabItem[], limit: number, offset: n
 
   const rss: NewznabRss = {
     channel: {
-      title: "RundfunkArr",
-      description: "RundfunkArr API results",
+      title: PRODUCT_NAME,
+      description: `${PRODUCT_NAME} API results`,
       response: {
         offset: offset,
         total: items.length,
@@ -185,8 +186,8 @@ export function getValidationRss(requestedCategoryIds: string[], now: Date = new
     categoryIds.some((categoryId) => MOVIE_CATEGORY_IDS.has(categoryId)) &&
     !categoryIds.some((categoryId) => TV_CATEGORY_IDS.has(categoryId));
   const title = movieOnly
-    ? "RundfunkArr.Validation.2024.1080p.WEB.h264-TEST"
-    : "RundfunkArr.Validation.S01E01.1080p.WEB.h264-TEST";
+    ? "Pingufunk.Validation.2024.1080p.WEB.h264-TEST"
+    : "Pingufunk.Validation.S01E01.1080p.WEB.h264-TEST";
 
   const validationItem: NewznabItem = {
     title,
@@ -198,7 +199,7 @@ export function getValidationRss(requestedCategoryIds: string[], now: Date = new
     comments: "https://example.invalid/rundfunkarr-validation",
     pubDate: now.toUTCString(),
     category: movieOnly ? "Movies > HD" : "TV > HD",
-    description: "Synthetic result used to validate RundfunkArr category support.",
+    description: "Synthetic result used to validate Pingufunk category support.",
     enclosure: {
       url: "https://example.invalid/rundfunkarr-validation.nzb",
       length: 1_000_000,
@@ -846,7 +847,7 @@ export function getCapabilitiesXml(): string {
       server: {
         $: {
           version: "1.0",
-          title: "RundfunkArr",
+          title: PRODUCT_NAME,
           strapline: "German Public TV Indexer",
           email: "",
           url: "",

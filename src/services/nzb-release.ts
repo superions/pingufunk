@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/brand";
 import { indexerDownloadUrl } from "@/lib/indexer-url";
 import {
   MediaExpectationsError,
@@ -157,7 +158,7 @@ export function generateFakeNzb(release: NzbRelease): string {
   <head>
     <meta type="title">${escapedTitle}</meta>${expectationsMeta}
   </head>
-  <file poster="RundfunkArr" date="${Math.floor(Date.now() / 1000)}" subject="${escapedTitle}">
+  <file poster="${PRODUCT_NAME}" date="${Math.floor(Date.now() / 1000)}" subject="${escapedTitle}">
     <groups>
       <group>a.b.zdf</group>
     </groups>

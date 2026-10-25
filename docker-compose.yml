@@ -1,8 +1,7 @@
 services:
-  rundfunkarr:
+  pingufunk:
     build: .
-    # image: ghcr.io/rundfunkarr/rundfunkarr:latest  # Uncomment when using pre-built image
-    container_name: rundfunkarr
+    container_name: pingufunk
     environment:
       - TZ=Europe/Berlin
       - TVDB_API_KEY=${TVDB_API_KEY:-} # Optional metadata account

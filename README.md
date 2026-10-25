@@ -1,26 +1,25 @@
 <p align="center">
-  <img src="public/logo.png" alt="RundfunkArr Logo" width="128">
+  <img src="public/logo.png" alt="Pingufunk Logo" width="128">
 </p>
 
-# RundfunkArr
+# Pingufunk
 
-[![GitHub Release](https://img.shields.io/github/v/release/rundfunkarr/rundfunkarr?logo=github&label=Release)](https://github.com/rundfunkarr/rundfunkarr/releases)
-[![License](https://img.shields.io/github/license/rundfunkarr/rundfunkarr?label=License)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/rundfunkarr/rundfunkarr?style=flat&logo=github&label=Stars)](https://github.com/rundfunkarr/rundfunkarr)
-[![GitHub Issues](https://img.shields.io/github/issues/rundfunkarr/rundfunkarr?logo=github&label=Issues)](https://github.com/rundfunkarr/rundfunkarr/issues)
+[![CI](https://github.com/superions/pingufunk/actions/workflows/ci.yml/badge.svg)](https://github.com/superions/pingufunk/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+[![GitHub Issues](https://img.shields.io/github/issues/superions/pingufunk?logo=github&label=Issues)](https://github.com/superions/pingufunk/issues)
 
 Rundfunk-Indexer für Sonarr/Radarr - Automatischer Download von ARD, ZDF und anderen deutschen Mediatheken.
 
-> Pingufunk-Fork: Der PostgreSQL-Wechsel wird in
-> [P11/P10](todo/proxy-retirement.md) entwickelt. Dieser Branch ist kein
-> freigegebenes Image und darf nicht gegen die vorhandene SQLite-Installation
-> gestartet werden. Der bisherige Compose-/Image-Abschnitt unten beschreibt
-> den veröffentlichten Upstream, nicht das neue PostgreSQL-Cutover-Verfahren.
+> Pingufunk wird eigenständig weiterentwickelt. SQLite und PostgreSQL werden
+> gleichwertig unterstützt. Der YouTube-Kanal- und Metadatenkatalog ist in der
+> Entwicklung umgesetzt; automatische Episodenzuordnung, YouTube-Suche und
+> Medienintegration folgen separat. Entwicklungsabnahme und produktiver Rollout
+> sind unterschiedliche Schritte. Siehe [Projektstand](todo/proxy-retirement.md).
 
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Dashboard">
+  <img src="docs/screenshots/pingufunk-settings.jpg" alt="Pingufunk: Einstellungen mit eigenem Pinguin-Logo">
 </p>
 
 ## Features
@@ -30,7 +29,8 @@ Rundfunk-Indexer für Sonarr/Radarr - Automatischer Download von ARD, ZDF und an
 - **Optionale MKV-Konvertierung** - FFmpeg-Integration mit deutschen Sprachmetadaten
 - **Flexible Metadaten-Quellen** - Lokale Datenbank, TVDB oder TMDB
 - **Community-Rulesets** - Lokale Rulesets via Pull Request erweiterbar
-- **PostgreSQL-Ziel** - Persistente Speicherung und kontrollierte Übernahme des SQLite-Bestands (Fork in Entwicklung)
+- **SQLite und PostgreSQL** - Bewusste Backendwahl, versionierte Migrationen und getrennte Bestandsübernahme
+- **YouTube-Quellenregister** - Kanäle und Programmzuordnungen per GUI pflegen; zunächst reine Metadatenerfassung
 
 ## SRF und ORF über HLS
 
@@ -49,97 +49,43 @@ Die MKV-Einstellung gilt auch für HLS: aktiviert ergibt MKV, deaktiviert MP4.
 Docker enthält eine feste yt-dlp-Version mit Prüfsummenprüfung. Native Installationen
 können einen eigenen Programmpfad oder den ebenfalls geprüften automatischen Download nutzen.
 
-## Installation mit Docker
+## Einstieg
 
-### docker-compose.yml
+Für eine neue isolierte Quellcodeinstallation: Node.js ab 24, npm und FFmpeg
+verwenden. Installation und explizite Datenbankinitialisierung sind im
+[Backend-Leitfaden](docs/database-backends.md#lokale-entwicklung-mit-sqlite) beschrieben.
+Normale Appstarts initialisieren oder migrieren keine Datenbank.
 
-```yaml
-services:
-  rundfunkarr:
-    image: ghcr.io/rundfunkarr/rundfunkarr:latest
-    container_name: rundfunkarr
-    environment:
-      - TZ=Europe/Berlin
-      - PUID=1000                           # User ID (id -u)
-      - PGID=1000                           # Group ID (id -g)
-      - DOWNLOAD_FOLDER_PATH=/downloads
-    volumes:
-      - ./data:/app/prisma/data
-      - ./downloads:/downloads
-    ports:
-      - 6767:6767
-    restart: unless-stopped
-```
+Die [Compose-Vorlage](docker-compose.yml) baut Pingufunk aus diesem Checkout;
+der optionale [PostgreSQL-Override](docker-compose.postgresql.yml) nutzt einen
+separaten Secretpfad. Ein neues Containerziel benötigt vorher den passenden
+One-shot-Migrator. Veröffentlichte Image- oder Nightly-Tags werden hier nicht
+vorausgesetzt. Vor einer Bestandsübernahme gelten die
+[SQLite-](docs/sqlite-baseline-transition.md) bzw.
+[PostgreSQL-Anleitung](docs/postgresql-migration-runbook.md).
 
-Nach dem Start ist die Web-Oberfläche unter `http://localhost:6767` erreichbar. Beim ersten Start führt der **Setup-Wizard** durch die Konfiguration (API Keys, Pfade, etc.).
-
-Für Tests mit dem aktuellen `main`-Stand werden täglich Nightly-Images für `linux/amd64` und `linux/arm64` gebaut. `nightly` zeigt immer auf den neuesten Daily-Build; datierte Tags wie
-`nightly-20260517` bleiben als konkreter Build erhalten:
-
-```yaml
-image: ghcr.io/rundfunkarr/rundfunkarr:nightly
-```
-
-Für reproduzierbare Deployments kann statt `latest` auch eine feste Version verwendet werden:
-
-```yaml
-image: ghcr.io/rundfunkarr/rundfunkarr:1.3.0
-```
-
-Der Git-Tag-Alias mit `v`-Präfix ist ebenfalls verfügbar:
-
-```bash
-docker pull ghcr.io/rundfunkarr/rundfunkarr:v1.3.0
-```
-
-### Starten
-
-```bash
-docker-compose up -d
-```
-
-## Manuelle Installation
-
-### Voraussetzungen
-
-- Node.js >= 24
-- npm
-- FFmpeg (für MKV-Konvertierung)
-
-### Setup
-
-```bash
-# Dependencies installieren
-npm install
-
-# Datenbank initialisieren
-npx prisma migrate dev
-
-# Development Server starten
-npm run dev
-
-# Oder Production Build
-npm run build
-npm start
-```
+Der Compose-Dienst heißt jetzt `pingufunk`. Bei vorhandenen Compose-Installationen
+den alten Dienst vor dem Wechsel geordnet mit seiner bisherigen Konfiguration
+stoppen; Datenmounts und die historische SQLite-Datei bleiben erhalten. Details
+zu [Marke und Kompatibilität](artwork/README.md).
 
 ## Konfiguration
 
 ### Umgebungsvariablen
 
-| Variable | Beschreibung | Standard |
-|----------|--------------|----------|
-| `PUID` | User ID für Dateiberechtigungen | `1001` |
-| `PGID` | Group ID für Dateiberechtigungen | `1001` |
-| `DOWNLOAD_FOLDER_PATH` | Pfad für fertige Downloads im Container | `/downloads` |
-| `DOWNLOAD_TEMP_PATH` | Pfad für laufende Downloads (incomplete) | `$DOWNLOAD_FOLDER_PATH/incomplete` |
-| `DATABASE_URL_FILE` | Absoluter Pfad zur PostgreSQL-URL als Docker Secret | erforderlich im Container |
-| `DATABASE_URL` | Direkte PostgreSQL-URL nur für isolierte Entwicklung; nicht gleichzeitig mit `_FILE` | kein Default |
-| `PINGUFUNK_WRITES_ENABLED` | Explizite Freigabe der Anwendungsschreibpfade nach PostgreSQL-Abnahme | `0` |
+| Variable                   | Beschreibung                                                                      | Standard                           |
+| -------------------------- | --------------------------------------------------------------------------------- | ---------------------------------- |
+| `PUID`                     | User ID für Dateiberechtigungen                                                   | `1001`                             |
+| `PGID`                     | Group ID für Dateiberechtigungen                                                  | `1001`                             |
+| `DOWNLOAD_FOLDER_PATH`     | Pfad für fertige Downloads im Container                                           | `/downloads`                       |
+| `DOWNLOAD_TEMP_PATH`       | Pfad für laufende Downloads (incomplete)                                          | `$DOWNLOAD_FOLDER_PATH/incomplete` |
+| `DATABASE_URL_FILE`        | Absoluter privater Pfad zur gewählten Datenbank-URL; alternativ zu `DATABASE_URL` | nicht gesetzt                      |
+| `DATABASE_URL`             | `file:` für SQLite, `postgres:`/`postgresql:` für PostgreSQL                      | bisherige SQLite-Datei             |
+| `PINGUFUNK_WRITES_ENABLED` | Expliziter Anwendungsschreibschalter                                              | SQLite `1`, PostgreSQL `0`         |
 
 ### Web-Oberfläche
 
-RundfunkArr bietet eine vollständige Web-Oberfläche mit:
+Pingufunk bietet eine vollständige Web-Oberfläche mit:
 
 - **Dashboard** - Übersicht über aktive Downloads und letzte Aktivitäten
 - **Suche** - Direkte Suche in den Mediatheken
@@ -153,33 +99,30 @@ RundfunkArr bietet eine vollständige Web-Oberfläche mit:
 
 ### Metadaten-Quellen
 
-RundfunkArr sucht Show-Informationen in folgender Reihenfolge:
-
-1. **Lokale Datenbank** (`data/shows.json`) - Kein API Key nötig
-2. **TVDB** - Wenn in den Einstellungen konfiguriert (Project API Key ohne PIN oder Subscriber-Key mit optionalem PIN)
-3. **TMDB** - Wenn in den Einstellungen konfiguriert (kostenlos)
-
-Für Shows die nicht in TVDB/TMDB sind, können Einträge in `data/shows.json` hinzugefügt werden.
+Sonarr kann als Metadatenquelle eingebunden werden. Der lokale Katalog ergänzt
+bestätigte Zuordnungen; konfigurierte TVDB-/TMDB-Provider bleiben für andere
+Episoden verfügbar. Identität und Episodenbindung werden vor einer Freigabe
+geprüft. Details im [Metadatenvertrag](docs/sonarr-metadata-contract.md).
 
 ## API Endpoints
 
 ### Indexer (Newznab)
 
-| Endpoint | Beschreibung |
-|----------|--------------|
-| `GET /api/newznab?t=caps` | Capabilities XML |
+| Endpoint                                 | Beschreibung          |
+| ---------------------------------------- | --------------------- |
+| `GET /api/newznab?t=caps`                | Capabilities XML      |
 | `GET /api/newznab?t=tvsearch&tvdbid=123` | TV-Suche nach TVDB ID |
-| `GET /api/newznab?t=tvsearch&q=Tatort` | TV-Suche nach Name |
-| `GET /api/newznab?t=search` | RSS Feed |
+| `GET /api/newznab?t=tvsearch&q=Tatort`   | TV-Suche nach Name    |
+| `GET /api/newznab?t=search`              | RSS Feed              |
 
 ### Downloader (SABnzbd-kompatibel)
 
-| Endpoint | Beschreibung |
-|----------|--------------|
-| `GET /api?mode=version` | Version |
-| `GET /api?mode=get_config` | Konfiguration |
-| `GET /api?mode=queue` | Download-Queue |
-| `GET /api?mode=history` | Download-Historie |
+| Endpoint                            | Beschreibung        |
+| ----------------------------------- | ------------------- |
+| `GET /api?mode=version`             | Version             |
+| `GET /api?mode=get_config`          | Konfiguration       |
+| `GET /api?mode=queue`               | Download-Queue      |
+| `GET /api?mode=history`             | Download-Historie   |
 | `POST /api?mode=addfile&cat=sonarr` | Download hinzufügen |
 
 ## Sonarr/Radarr Einrichtung
@@ -187,18 +130,18 @@ Für Shows die nicht in TVDB/TMDB sind, können Einträge in `data/shows.json` h
 ### Als Indexer (in Prowlarr oder direkt)
 
 1. Indexer hinzufügen → Generic Newznab
-2. URL: `http://rundfunkarr:6767/api/newznab`
+2. URL: `http://pingufunk:6767/api/newznab`
 3. API Key: beliebig (wird nicht validiert)
 
 ### Als Download Client
 
 1. Download Client hinzufügen → SABnzbd
-2. Host: `rundfunkarr`
+2. Host: `pingufunk`
 3. Port: `6767`
 4. API Key: beliebig
 
-Prowlarr synchronisiert nur den Indexer zu Sonarr und Radarr. Richte RundfunkArr
-als Download Client zusätzlich direkt in jeder *arr App ein. Ein in Prowlarr
+Prowlarr synchronisiert nur den Indexer zu Sonarr und Radarr. Richte Pingufunk
+als Download Client zusätzlich direkt in jeder \*arr App ein. Ein in Prowlarr
 konfigurierter Download Client wird nur für manuelle Downloads aus Prowlarr
 verwendet.
 
@@ -207,6 +150,7 @@ verwendet.
 ### Neue Show hinzufügen
 
 1. Show in `data/shows.json` hinzufügen:
+
 ```json
 {
   "tvdbId": 123456,
@@ -220,6 +164,7 @@ verwendet.
 ```
 
 2. Ruleset in `data/rulesets.json` hinzufügen:
+
 ```json
 {
   "id": 1001,
@@ -256,7 +201,7 @@ npx tsc --noEmit
 # Lint
 npm run lint
 
-# Datenbank-Migration erstellen
+# Ausgewählte versionierte Migrationen ausdrücklich anwenden
 npm run db:migrate
 ```
 
@@ -296,7 +241,9 @@ data/
 └── rulesets.json      # Matching Rulesets
 ```
 
-## Credits
+## Ursprung und Credits
+
+- [RundfunkArr](https://github.com/rundfunkarr/rundfunkarr) – historischer Ursprung; Pingufunk wird eigenständig weiterentwickelt.
 
 - [PCJones/MediathekArr](https://github.com/PCJones/MediathekArr) - Original .NET Implementation
 - [MediathekViewWeb](https://github.com/mediathekview/mediathekviewweb) - Mediathek API

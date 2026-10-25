@@ -3315,3 +3315,48 @@ reale Bibliothek, Main oder Publikation verändert. Der Abschlusscheckpoint
 ändert nur Review/TODO; Produkt-, Test-, Workflow-, Dependency- und Runtimeinputs
 bleiben exakt am getesteten Codecheckpoint. Dafür werden die gültigen Gates
 wiederverwendet statt die Matrix für eine Statusfortschreibung zu wiederholen.
+
+## Vorgezogene Pingufunk-Marke und Artwork (26.10.2026)
+
+Der Nutzer hat den Pinguinkopf mit Funkwellen als Richtung bestätigt und eine
+saubere SVG-Vorlage in einem Artworkverzeichnis verlangt. `artwork/` enthält
+den mit integriertem Imagegen erzeugten Originalentwurf und eine bereinigte,
+von Hand gezeichnete Vektorfassung: echte Pfade/Gradienten, transparent,
+ohne eingebettete Rasterdaten, Fonts, Skripte oder externe Ressourcen.
+Die beiden öffentlichen SVG-Adressen sind bytegleich zur Vorlage; PNG- und
+Browserexporte stammen daraus. Bild-/Wortmarke wird über eine gemeinsame
+Komponente eingebunden, der Produktname ist für HTTP-/XML-Metadaten zentral.
+
+Bereinigt sind Navigation, Dashboard, Setup, Settings/System, Browsermetadaten,
+Feed-/Capabilitiesnamen, NZB-Absender, HTTP-User-Agents und Paketname.
+Lockfileänderung betrifft ausschließlich den Rootnamen, keine Version/Kante.
+Die Compose-Beispiele heißen in Basis und PG-Override konsistent `pingufunk`;
+beide Konfigurationen mit `docker compose config --format json` geprüft.
+Der Bestandsübergang des Dienstnamens ist im Artwork-README beschrieben.
+SQLite-Datei, URL-Qualitätsfragmente, gespeicherte Releasekennungen, historische
+Migrationen und bestehende Katalog-Quelladresse bleiben erhalten. Branding
+wechselt keine Datenbank und löst keinen Auftrag aus.
+
+README-Titel/Logo, eigene Badgeziele, Produktnamen und ein echtes eigenes
+Entwicklungsbild ersetzt. Fremde Image-/Nightlyzusagen und der unsichere
+`migrate dev`-Einstieg werden nicht als Pingufunk-Anleitung fortgeschrieben;
+bestehende Backend-/Bestandsrunbooks sind verlinkt. Herkunft/Copyright erhalten.
+Dies schließt P18.1s umfassende DE-/EN-Neugestaltung und Vergleich nicht vorzeitig.
+
+Desktop auf der isolierten SQLite-Instanz: Settings vor/nach bei 1280×720 und
+System-Dark verglichen, Dashboard/Setup/System und Titel/Favicons/Bildladung
+geprüft, Markennavigation mit Pointer und Return bedient. Kein sichtbares
+RundfunkArr, kein horizontaler Overflow, keine Konsolenfehler; eine erwartete
+Next-Fast-Refresh-Warnung während der Quelländerung. Eine helle Appdarstellung
+wurde nicht als geprüft behauptet. Null Download- und Configzeilen vor Cleanup;
+eigene Browser-/Server-/DB-Fixture geschlossen/entfernt. Privates Vergleichsbild
+unter `downloads/branding-ui/`, öffentlich nur der bereinigte eigene UI-Stand.
+
+118 betroffene Tests und anschließend 1.510 Tests in 137 Dateien grün,
+6 Dateien/24 Tests bedingt übersprungen. Lint, Typecheck, Formatcheck und
+Produktionsbuild grün. Bestehende GUID-/URL-/NZB-Roundtripassertions bleiben
+aktiv; zusätzlicher tatsächlicher NZB-Consumer prüft den neuen Absender.
+Keine neue Dependency, Schemaänderung, produktive Suche, Grab, Bibliotheks-
+oder Dienständerung, Publikation oder Mainintegration. Die Fork-CI wird mit dem
+Codecheckpoint gestartet; daraus wird ohne terminales Ergebnis keine zusätzliche
+CI-/Containerabnahme behauptet.

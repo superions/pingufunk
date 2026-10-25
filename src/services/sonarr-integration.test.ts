@@ -300,7 +300,7 @@ it("finds an already listed future-airdate episode by exact/season search withou
   // The native endpoint preserves its shipped empty-feed validation item, not the future episode.
   expect(rssBody).not.toContain("S02E03");
   expect(rssBody).not.toContain(source.url_video);
-  expect(rssBody).toContain("RundfunkArr.Validation");
+  expect(rssBody).toContain("Pingufunk.Validation");
   expect(state.addToQueue).not.toHaveBeenCalled();
 });
 
@@ -731,7 +731,7 @@ it("refreshes exact ARD URL/audio/rights in repeated RSS, never returning the pr
   token = "rotated";
   language = "fra";
   const second = await read();
-  expect(second.item[0].title[0]).toContain("RundfunkArr.Validation");
+  expect(second.item[0].title[0]).toContain("Pingufunk.Validation");
   expect(JSON.stringify(second)).not.toContain("S02E03");
   expect(JSON.stringify(second)).not.toContain(mediaUrl());
   // The configured German policy rejects the newly French rendition; a
@@ -746,7 +746,7 @@ it("refreshes exact ARD URL/audio/rights in repeated RSS, never returning the pr
   expect(parseNzbContent(await nzb.text())?.url).toBe(mediaUrl());
   expired = true;
   const final = await read();
-  expect(final.item[0].title[0]).toContain("RundfunkArr.Validation");
+  expect(final.item[0].title[0]).toContain("Pingufunk.Validation");
   expect(JSON.stringify(final)).not.toContain("S02E03");
   expect(JSON.stringify(final)).not.toContain(mediaUrl());
   expect(

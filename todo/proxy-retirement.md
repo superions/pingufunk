@@ -3420,6 +3420,15 @@ Visitenkarte in Deutsch und Englisch. RundfunkArr erscheint als Ursprung und
 als fair dargestellte Vergleichsquelle. Es ist keine Produktvorgabe. Entwicklungs-
 und Betriebsstatus werden ehrlich getrennt; P18 ist keine Produktvollabnahme.
 
+Vorgezogener Nutzerauftrag 26.10.2026: Die sichtbare Appmarke heißt jetzt
+Pingufunk; Pinguin-/Funkwellen-Artwork und echte SVG-Vorlage liegen unter
+`artwork/`. UI/Browser, Feed-/Capabilitiesnamen, NZB-Absender, User-Agent,
+Paketname und Compose-Beispiele sind bereinigt. README-Markenstellen und
+eigenes Entwicklungsbild ersetzt; Herkunft bleibt in den Credits. Reale
+Bibliotheken, gespeicherte Kennungen und historische Datenbankpfade bleiben
+erhalten. P18.1 bleibt für die vollständige DE-/EN-Visitenkarte, den geprüften
+Vergleich und dessen GitHub-Darstellungsabnahme offen.
+
 - [ ] **P18.1 — README als eigenständige Produktvisitenkarte gestalten und abnehmen (M).**
       Unabhängig von offenen Implementierungs-/Betriebsphasen startbar; P17
       erst nach eigener Abnahme als verfügbare Funktion darstellen. Owner:

@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -69,16 +69,7 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Logo */}
       <div className="p-4 border-b border-border">
         <Link href="/" className="flex items-center gap-3">
-          <Image
-            src="/logo.svg"
-            alt="RundfunkArr"
-            width={32}
-            height={32}
-            className="flex-shrink-0"
-          />
-          <span className="font-bold text-lg whitespace-nowrap md:opacity-0 md:group-hover:opacity-100 lg:opacity-100 transition-opacity">
-            RundfunkArr
-          </span>
+          <Brand wordmarkClassName="md:opacity-0 md:group-hover:opacity-100 lg:opacity-100 transition-opacity" />
         </Link>
       </div>
 
