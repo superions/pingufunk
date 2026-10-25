@@ -33,6 +33,12 @@ und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md
 Start bei P17.1; die bestehenden offenen Phasen werden weder umgedeutet noch
 pauschale Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
+Weiterer Nutzerentscheid 25.10.2026: **P18** gestaltet Pingufunks eigenständige
+deutsche/englische README als öffentliche Visitenkarte grundlegend neu, samt
+belegtem Vergleich. RundfunkArr wird ausschließlich als Ursprung und
+Vergleichsquelle geführt, nicht als Produkt-, Architektur- oder Abnahmevorgabe.
+P18 ist unabhängig von der noch offenen YouTube-Implementierung startbar.
+
 ## Gemeinsame Regeln und Abnahme
 
 - PostgreSQL ist für Pingufunks eigene Datenbank optional, nicht erneut eine
@@ -69,7 +75,8 @@ pauschale Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
   sie werden nicht als ausgeführt markiert und blockieren P10.6–P10.7 nicht.
   Ein späterer PG-Wunsch aktiviert sie erst nach P11.1–P11.8 und eigener Freigabe.
 - AGENTS.md und vollständige einschlägige Skills lesen. Upstream vor dem
-  betroffenen Paket prüfen; bereits gefixte Verträge erhalten statt duplizieren.
+  tatsächlichen Vergleich oder einer ausgewählten Übernahme revisionsgebunden
+  prüfen; Upstreamparität ist kein Start-/Abnahmegate für Pingufunk.
   Unautorisierter Scopewechsel bleibt unzulässig. Ungeklärte Entscheidungen
   blockieren nur ihren benannten Punkt, nicht andere unabhängige Entwicklung.
 - Synthetische, unabhängig implementierte Fixtures; kein privater Proxycode,
@@ -3334,6 +3341,8 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       anderer offener Phasen.
       Owner: vorhandene Produkt-/PG-/OCI-Workflows und native Arr-Testharnesses,
       `docs/youtube-source-contract.md`, Feldmatrix und Reviewbericht.
+      Bereits gemäß P18 neu gestaltete READMEs/Vergleich in beiden Sprachen
+      anhand der tatsächlichen P17-Abnahme aktualisieren; P18 ist kein Startgate.
       Ein kohärenter Gateabschluss statt Vollmatrix pro Mikroschritt:
       Audit/Tests mit Coverage, Lint, Typecheck, Format, Datenvalidator und Build,
       echte disposable SQLite- und PG-17-/18-Gates sowie nicht publizierende
@@ -3372,3 +3381,66 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Retry/Grab oder Altdateiersatz aus dieser Planfreigabe. Konkrete private
       Antworten/Topologie/Dateien nicht öffentlich dokumentieren. Nachweise und
       verbleibende Abdeckung ehrlich trennen; kein Gesamtprodukt-/Proxyabschluss.
+
+## Phase P18 — Eigenständige zweisprachige Projektdarstellung
+
+Ergebnis: Pingufunks README ist eine hochwertige, verständliche öffentliche
+Visitenkarte in Deutsch und Englisch. RundfunkArr erscheint als Ursprung und
+als fair belegte Vergleichsquelle. Es ist keine Produktvorgabe. Entwicklungs-
+und Betriebsstatus werden ehrlich getrennt; P18 ist keine Produktvollabnahme.
+
+- [ ] **P18.1 — README als eigenständige Produktvisitenkarte gestalten und abnehmen (M).**
+      Unabhängig von offenen Implementierungs-/Betriebsphasen startbar; P17
+      erst nach eigener Abnahme als verfügbare Funktion darstellen. Owner:
+      `README.md` als deutscher Einstieg und neue `README.en.md` als gleichwertige
+      englische Fassung, bestehende `docs/screenshots/`, bei Bedarf kleine
+      versionierte README-Assets unter `docs/assets/pingufunk/`, `CONTRIBUTING.md`,
+      Projektbeschreibung in `AGENTS.md`, bestehende Fachreferenzen sowie eigene
+      CI-/Image-/Releaseverweise. Keine zweite Website oder TODO-Liste aufbauen.
+      Informationsarchitektur und visuelles Konzept zuerst entwerfen und
+      kritisch reviewen: klare Pingufunk-Wort-/Bildmarke, präzises Nutzenversprechen,
+      erkennbare Hierarchie, ruhige Abstände, gezielte echte Screenshots/Diagramme,
+      wenige passende Badges und leicht auffindbarer Sprachwechsel am Anfang.
+      Bestehendes brauchbares Branding verwenden, nötige README-Assets gezielt
+      gestalten; keine ungefragte Neugestaltung der App oder zusätzliche Designplattform.
+      Beide Sprachen vollständig, natürlich und inhaltlich gleichwertig pflegen:
+      gleicher Funktionsstand, Vergleich, Grenzen, Befehle, Links und Status.
+      Produktnutzen → Funktionen/Status → Vergleich → kurzer geprüfter Einstieg
+      → weiterführende Dokumentation/Support → Ursprung/Credits/Lizenz führen.
+      Die lange API-/Entwicklungsreferenz sinnvoll verlinken statt den Einstieg
+      mit Implementierungsdetails zu überladen. Alttexte in beiden Sprachen,
+      portable relative Bildlinks und lesbare Darstellung auf GitHub vorsehen.
+      Einen kompakten Vergleich mit etwa sechs bis zehn relevanten Kriterien
+      aufbauen: Pingufunk, RundfunkArr, konkreter Unterschied/Nutzen und Beleg.
+      Eigenen Main-/Releasezustand sowie Vergleichsrevision/-datum nennen;
+      gegen aktuelle Quell-/Vertragsbelege prüfen. Vorhanden, geplant, ungeprüft
+      und konkrete Betriebsabnahme nicht vermischen. YouTube/Modulgrenzen bis
+      erfülltem P17 offen als geplant führen; keine behauptete Mehrleistung aus
+      bloßen TODOs. Native Arr-Verträge, Metadaten-/Sprach-/Medienprüfung,
+      SQLite/PG, Queue/Fehlerverhalten, CI und Diagnose sind Vergleichskandidaten,
+      keine vorab behaupteten exklusiven Vorteile. Ungeprüftes nicht als
+      „Upstream fehlt“ ausgeben; Gleichstand, Grenzen und Mehraufwand fair benennen.
+      Alle fremden Projekt-/Badge-/Image-/Issue-/Releaseziele im heutigen README
+      auditieren und eigene Verweise verwenden, soweit es Pingufunk betrifft.
+      RundfunkArr samt Link im Ursprung/Creditsbereich würdigen, vorhandene
+      Copyright-/Lizenzhinweise erhalten. Keine Verpflichtung zu Upstreamparität
+      oder dessen Release-/Supportzusagen als eigene übernehmen.
+      Installation, Backenddefault, optionale PG-Konfiguration, Auth-/Arr-Einrichtung
+      und Migrationstexte gegen die heutigen Owner prüfen. Reproduzierbare eigene
+      OCI-Referenzen oder klar getrennten Sourcebuild nennen; keine erfundenen
+      Release-/Nightlytags, fremden grünen CI-Belege oder pauschales produktives
+      `migrate dev`. Ausführbare Einstiegsbeispiele isoliert mit disposable Daten
+      qualifizieren; keine Livekonfiguration, Secrets, Bibliotheksaufträge oder
+      Infrastrukturzugriffe aus dieser Dokuaufgabe.
+      Abnahme: beide Dateien tatsächlich auf GitHub vom eigenen Topicstand auf
+      Desktop gerendert lesen und visuell in heller/dunkler Darstellung prüfen;
+      Wort-/Bildhierarchie, Tabellenbreite, Bildlesbarkeit, Alttexte, Sprachwechsel,
+      Inhaltsnavigation und alle Ressourcenlinks funktionieren. Screenshots aus
+      passendem eigenen Teststand mit synthetischen Daten, keine Upstreambilder
+      als Pingufunk-Nachweis oder Mockups als fertige UI ausgeben. Vergleichszellen
+      revisionsgebunden belegen, DE/EN sachlich und sprachlich gegeneinander
+      reviewen, Findings beheben und erneut prüfen. Markdownformat/Diff/Referenzen
+      prüfen, unveränderte Produktgates wiederverwenden; keine Vollmatrix nur
+      wegen Dokuänderungen. Kohärenten eigenen Topiccommit pushen; Mainmerge,
+      Imagepublikation, Produktrollout und Medienaufträge sind nicht enthalten.
+      Öffentliches Ergebnis bleibt frei von privaten Topologie-/API-/Mediendaten.

@@ -92,11 +92,13 @@ Netz-/Prozessabrufe aus. Bereits angenommene Jobs behalten ihren eingefrorenen
 Vertrag. Fehler bleiben ihrer Quelle zugeordnet. Adapteraustausch und wirklicher
 Aufruf-/Datei-/Statusreadback beweisen diese Grenzen, keine Ordner-/Source-String-Abnahme.
 
-RundfunkArr bleibt Herkunft und Vergleichsquelle für übernehmbare Änderungen.
-Der neue Funktionsumfang wird gegen Pingufunks eigene geprüfte Verträge
-entwickelt und abgenommen. Auf eine entsprechende Upstreamarchitektur warten
-wir nicht; Mainkompatibilität und gezielte Übernahme nützlicher Upstreamfixes
-bleiben davon unberührt.
+RundfunkArr ist historischer Ursprung und ausschließlich Vergleichsquelle.
+Pingufunks Architektur, Funktionsumfang und Abnahme richten sich nach eigenen
+geprüften Verträgen; Upstreamparität ist kein Ziel oder Freigabegate.
+Ausgelieferte Pingufunk-/Arr-/Datenverträge bleiben geschützt. Einzelne nützliche
+Quelländerungen können nach eigener Prüfung übernommen werden, ohne Bindung
+an die weitere RundfunkArr-Entwicklung. Die eigenständige deutsche/englische
+Produktdarstellung ist der separate P18-Pfad im bestehenden Phasen-TODO.
 
 ## Tatsächlicher Mediathek-Datenvertrag und Feldverluste
 

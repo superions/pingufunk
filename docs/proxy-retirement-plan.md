@@ -26,6 +26,15 @@ Queue- und Medienabschlussowner. Die Grundlage P17.1a wird zunächst mit dem
 bestehenden Mediathekpfad konsumiert; Upstream ist Vergleichsquelle, keine
 Voraussetzung für diese eigene Erweiterung.
 
+Eigenständige Positionierung laut weiterem Nutzerentscheid vom 25.10.2026:
+RundfunkArr ist ausschließlich Ursprung und Vergleichsquelle; Upstreamparität
+ist kein Architektur-, Start- oder Abnahmekriterium. Der unabhängige P18-Pfad
+in den [Phasen-TODOs](../todo/proxy-retirement.md) gestaltet die deutsche und
+englische README als Produktvisitenkarte samt belegtem Vergleich grundlegend
+neu. Vorhandene Funktions-/Betriebsgrenzen bleiben sichtbar, geplante Merkmale
+werden nicht als ausgeliefert beworben. Historische Upstreamanalysen unten
+bleiben historische Evidenz.
+
 ## Ergebnis und Reihenfolge
 
 Die Funktionen des Proxys lassen sich überwiegend in bestehende Pingufunk-

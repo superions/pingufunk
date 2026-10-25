@@ -3015,3 +3015,51 @@ in drei Dokumenten unverändert; fünf formatierte Bereiche, fünf relative Link
 und 19 bestehende bzw. ausdrücklich geplante Dateianchors geprüft, Diff sauber.
 Vier getrennte Quellenmodule sind ausdrücklich auch bei gemeinsamem Werkzeug
 verbindlich. Nur Markdown geändert; keine Produkt-/Runtimegates ausgeführt.
+
+## Planreview P18 — Eigenständige Produktvisitenkarte in Deutsch und Englisch (25.10.2026)
+
+Nutzerauftrag: RundfunkArr ausschließlich als Ursprung und Vergleichsquelle,
+Pingufunk eigenständig darstellen; die README hochwertig gestalten und einen
+belegten Überblick über bessere bzw. andere Eigenschaften anbieten. Einziger
+ausführbarer Punkt ist P18.1 im bestehenden Phasen-TODO. Das ist eine neue
+offene Dokumentationsaufgabe, keine bereits umgesetzte README oder Produktabnahme.
+
+### Befunde und nachgeschärfte Abnahme
+
+- Die vollständig gelesene heutige `README.md` führt RundfunkArr in Titel,
+  Logo-Alttext, Badges und Docker-/Releasezielen. Ein zusätzlicher Forkhinweis
+  löst diese widersprüchliche Produktdarstellung nicht; P18.1 verlangt einen
+  vollständigen eigenen Einstieg mit klarer visueller Hierarchie.
+- README-Installations- und Konfigurationstexte mischen Upstreambeispiele und
+  einen älteren PG-Entwicklungsstand. Fremde Images/Releasezusagen dürfen nicht
+  als Pingufunk-Artefakte erscheinen; SQLite und optionales PostgreSQL, echte
+  Start-/Auth-/Migrationsverträge werden gegen ihre heutigen Owner abgeglichen.
+- Die bisherige Upstream-Kompatibilitätsvorgabe in `AGENTS.md` widersprach dem
+  neuen Nutzerentscheid. Sie ist jetzt durch Schutz eigener ausgelieferter
+  Verträge ersetzt; Herkunft, Lizenz und historische Analysen bleiben erhalten.
+  Auch der neue Quellenentwurf enthält keine Upstreamparität mehr als Ziel.
+- Zwei Sprachen sind zwei gleichwertige Produktzugänge, nicht eine Kurzfassung
+  und ein vollständiges Original. `README.md`/`README.en.md` bekommen dieselben
+  Aussagen, Nachweise, Befehle, Grenzen und gut sichtbare wechselseitige Links.
+- Ein Vergleich braucht Revisions-/Datumsbindung und Belege je Aussage.
+  Funktionen in einem TODO sind keine Verbesserung des ausgelieferten Produkts;
+  unbekanntes Upstreamverhalten bedeutet nicht fehlende Funktion. Vorteile,
+  Gleichstand, andere Entscheidungen und Grenzen werden fair getrennt.
+- Gestaltung ist eine Abnahme: tatsächlich gerenderte GitHub-Darstellung beider
+  Sprachen auf Desktop, helle/dunkle Darstellung, lesbare Tabelle/Bilder,
+  Navigation/Alttexte und geprüfte Links. Screenshots müssen zum eigenen
+  belegten Teststand passen; keine erfundene Fertigstellung durch Mockups.
+
+KISS: ein zusammenhängender README-Auftrag mit bestehender Dokumentation und
+kleinen versionierten Assets; keine Website, neue Plattform oder zweite
+Roadmap. Er kann vor P17 fertig werden und nennt YouTube dann ausdrücklich
+geplant. P17.5 aktualisiert bereits vorhandene neue READMEs erst mit eigener
+Abnahme. Produkt-/Betriebsarbeit und Main-/Releasefreigaben bleiben unabhängig.
+Jetzt ausschließlich Planung und geltende Projektpositionierung angepasst;
+README, Produktcode, Images und Laufzeit bleiben durch diesen Plancommit unberührt.
+
+Planabnahme: acht betroffene Markdownbereiche formatiert, fünf relative Links
+und Diff geprüft; alle 70 vorherigen Checkboxen unverändert. Genau P18.1 ist
+neu offen. Historische Analyse-/Reviewinhalte und Sicherheitsregeln bleiben
+erhalten, `README.md` und `LICENSE` sind unverändert. Keine Produktgates für
+diese Plan-/Anweisungsänderung gestartet.
