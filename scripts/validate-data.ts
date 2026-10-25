@@ -9,6 +9,7 @@ import Ajv, { type AnySchema } from "ajv";
 import addFormats from "ajv-formats";
 import * as fs from "fs";
 import * as path from "path";
+import { youtubeRegistrySchema } from "../src/lib/youtube-catalogue";
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const DATA_DIR = path.join(ROOT_DIR, "data");
@@ -180,6 +181,21 @@ async function main(): Promise<void> {
   console.log("Starting data validation...\n");
   let hasErrors = false;
   const allErrors: string[] = [];
+
+  const youtube = youtubeRegistrySchema.safeParse(
+    loadJson(path.join(DATA_DIR, "youtube-sources.json"))
+  );
+  if (
+    !youtube.success ||
+    youtube.data.channels.some((channel) => channel.enabled) ||
+    youtube.data.programMappings.some((mapping) => mapping.enabled)
+  ) {
+    hasErrors = true;
+    allErrors.push(
+      "youtube-sources.json: invalid registry or active seed; all presets must be disabled"
+    );
+  }
+  console.log(`YouTube seed: ${youtube.success && !hasErrors ? "PASS" : "FAIL"}`);
 
   // Validate shows.json
   console.log("Validating shows.json...");

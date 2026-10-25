@@ -4,8 +4,9 @@ Stand: 25.10.2026, geprüft gegen Main `1c9d4f9` und Upstream `345f5ed`.
 Nutzerauftrag: separat und über die GUI pflegbare ÖR-YouTube-Kanäle,
 automatische Serien-/Film-ID-Zuordnung mit Vorbelegungen, Mediathek-nahes
 JSON, KISS und Bestandsschutz. Pflichtreferenz ist KultKrimi / Der Kommissar.
-Die YouTube-Erweiterung bleibt ein **Entwicklungsentwurf**; P17.1 und die
-Mediathek-Modulgrenzen aus P17.1a sind im Entwicklungscode umgesetzt.
+Die Such-/Downloadintegration bleibt ein **Entwicklungsentwurf**; P17.1,
+die Mediathek-Modulgrenzen aus P17.1a und die Register-/Metadatenoberfläche
+P17.2 sind im Entwicklungscode umgesetzt.
 Keine Betriebsfreigabe. Reihenfolge, Status und Abnahme ausschließlich in
 [P17](../todo/proxy-retirement.md#phase-p17--youtube-quellen-im-bestehenden-katalogvertrag).
 Keine Streaming-Webseite, Impressumsinventur oder zusätzliche Medienverwaltung.
@@ -241,6 +242,91 @@ der bestehende `/api/settings`-Vertrag wird nicht zu einer freien Blob-API.
 Bestätigten Zustand zurücklesen; bei ungewissem Commit keine Writewiederholung.
 Speichern ruft keine fremden Systeme auf. Scan/Enable reiht keine Medien in
 die Downloadqueue ein.
+
+## Implementierter Register- und Scanvertrag P17.2
+
+`src/lib/youtube-catalogue.ts` ist der reine gemeinsame Schema-/Normalisierungs-
+owner. `scripts/validate-data.ts` verwendet dieselbe Zod-Definition für
+`data/youtube-sources.json`; keine zweite handgepflegte Schemakopie.
+`src/services/youtube-catalogue.ts` besitzt Configtransaktionen, Generationen
+und seriellen Scan; `src/server/ytdlp.ts::readYoutubeMetadata` nur den begrenzten
+Metadatenprozess. `/settings` bietet einen eigenen YouTube-Tab mit getrennten
+Kanälen, Programmzuordnungen und Inventar. Vorhandene Card-/Input-/Button-
+Komponenten, Settingsantwortreihenfolge und bestätigter Datenbankreadback werden
+wiederverwendet. Kein frei editierbarer JSON-Blob im Browser.
+
+Die fünf deaktivierten Vorgaben wurden am 25.10.2026 direkt an den öffentlichen
+YouTube-Kanalmetadaten und den Verlinkungen der KultKrimi-Startseite geprüft:
+[KultKrimi](https://www.youtube.com/channel/UCNMj6SRjtvagiUBKYoqsW_w),
+[Der Kommissar](https://www.youtube.com/channel/UCpvShrzBCVTGfyPILXJdacQ),
+[Derrick](https://www.youtube.com/channel/UCbPtvkOcfOQdJLLFIGwOiuw),
+[Der Alte](https://www.youtube.com/channel/UCBJSg2Gll35hMOiJhaR1JMA) und
+[Ein Fall für zwei](https://www.youtube.com/channel/UCXtdewPPx-SXbCo9g6Z2k1Q).
+Die Kommissar-Playlist gehört laut Playlistowner KultKrimi und ist als einzige
+hier ausgelieferte Programmbindung TVDB 133771 zugeordnet. Keine weiteren IDs
+geraten; keine vollständige Episodenabdeckung daraus abgeleitet.
+
+Das lokale Register speichert `version`, eine neue UUID-Generation und die
+bearbeiteten Registerzeilen. Kanäle werden über Channel-ID, Programme über
+Channel-ID/Typ/Playlist- bzw. Video-ID zusammengeführt. Lokale Werte gewinnen;
+neu hinzugekommene Seeds bleiben aus. Vorgaben bleiben sichtbar und lassen
+sich deaktivieren, lokale Ergänzungen auch entfernen. Quell-IDs stammen aus
+der URLprüfung und bleiben im Formular unverändert; Name, Ziel-ID und Aktiv-
+zustand sind korrigierbar. Neue Ziel-IDs sind in P17.2 manuelle Zuordnungen;
+die automatische ID-/Episodenprüfung folgt in P17.3.
+
+Die API hat ausschließlich begrenzte Operationen:
+
+- GET ohne Parameter: Register, Revision, Enablewert und Scanstatus; kein
+  Quellabruf. GET `?page=N`: höchstens 100 normalisierte Inventarzeilen.
+- POST `save`: höchstens 1 MiB vor JSON-Parsing, striktes Schema, erwartete
+  Revision. Compare-and-swap und Enablewert liegen in derselben Transaktion;
+  ein überholter Stand ergibt 409. Ungewisse Writes werden nicht wiederholt.
+- POST `inspect`: kanonische Kanal-/Playlist-/Videoadresse oder ID lesend
+  auflösen. Fremde Hosts, Credentials, Fragmente, mehrdeutige Parameter und
+  beliebige Extraktorargumente sind gesperrt.
+- POST `refresh`: ausdrücklich gespeicherte aktive Quellen seriell einlesen,
+  Fortschritt über GET. Alle zehn Seiten gehören zum selben Versuch; nach
+  dem letzten Versuch frühestens sechs Stunden erneut. Die GUI zeigt den
+  frühesten nächsten Zeitpunkt. POST `cancel` beendet eigene Kindprozesse.
+
+Alle POSTs benutzen den bestehenden Writer-Gate und einen eigenen Same-origin-
+Header. Das allgemeine `/api/settings` kann den YouTube-Schalter nicht allein
+ändern; unverändertes historisches Bulk-Readback bleibt ein No-op. Allgemeine
+Settingsreads filtern `internal.*` bereits in der Datenbankabfrage. Der
+Settingssnapshot lädt weiterhin nur seine kleinen benannten Policykeys;
+ein ungültiges deaktiviertes Register stoppt die unabhängige Mediatheksuche nicht.
+
+Der Index bleibt im vorhandenen Configmodell: `internal.youtube.catalogue.v1`
+enthält ein maximal 64-KiB-Manifest, referenzierte interne Seiten enthalten je
+höchstens 100 Zeilen/1 MiB. Manifest und alle Seiten zusammen bleiben unter
+8 MiB. Ein vollständiger neuer Stand ersetzt den alten atomar; GUI- und
+allgemeine Settingsreads materialisieren keinen mehrmegabytegroßen Gesamtindex.
+Registrygeneration, Versuch und Indexgeneration werden beim Publizieren erneut
+gebunden. „Vollständig“ erscheint erst nach bestätigtem Indexcommit. Ein
+unterbrochener oder ungewisser Versuch ist kein leerer Erfolg; letzter
+vollständiger Stand und ursprünglicher Erstfund pro Video bleiben erhalten.
+
+Der Prozess verwendet feste Metadaten-/Simulationsargumente des bestehenden
+gepinnten yt-dlp, ausschließlich YouTube-Extraktoren und die vorhandene Node-
+Runtime. Kein Requestinstaller, Medienabruf, freier Plugin-/Config-/Cookiepfad,
+Runtimeupdate oder Nachladen von Skripten. 30 Sekunden/8 MiB stdout, begrenzte
+Pufferanzahl, keine Extraktorretries; Fehlertexte sind geschlossen und enthalten
+keine Rohantworten oder Toolstderr. Abbruch wartet auf die eigene Prozessgruppe.
+Der Hintergrundtimer wird nur im schreibfreigegebenen App-Lebenszyklus gestartet,
+führt beim Start keine Suche aus und prüft frühestens nach sechs Stunden.
+Readiness/Health startet keinen Scan. Shutdown, Abbruch und Registerwechsel
+beenden den eigenen Prozess und verhindern die Publikation alter Generationen.
+
+Normale Zeilen benötigen stabile Video-/Uploader-ID und Titel. Fremduploader,
+fehlende IDs, doppelte Video-IDs und ungültige Zeilen scheitern sichtbar. Explizite
+private/gelöschte Platzhalter bleiben unverfügbar, auch ohne Video-ID; keine
+Episodenbindung aus Listenpositionen. Inhaltsfelder bleiben Mediathek-nah:
+Sekunden, unbekannte Größe `0`, Watch-Seite nur in `url_website`, leere
+Medienslots, Erstfund getrennt von Indexzeit/Uploadtag. Rohe Formate, Sprache,
+Staffel-/Folgenbehauptungen oder komplette Tooldumps werden hier nicht zu
+kanonischen Medienbelegen. Inventar, Programmzuordnung und Medienfreigabe
+bleiben getrennt. Keine YouTube-Suchantwort, NZB oder Medienqueue in P17.2.
 
 ## Automatik am Pflichtfall Der Kommissar
 

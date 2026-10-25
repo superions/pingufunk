@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "channels": [
+    { "id": "UCNMj6SRjtvagiUBKYoqsW_w", "name": "KultKrimi", "enabled": false },
+    {
+      "id": "UCpvShrzBCVTGfyPILXJdacQ",
+      "name": "Der Kommissar – Offizieller Kanal",
+      "enabled": false
+    },
+    { "id": "UCbPtvkOcfOQdJLLFIGwOiuw", "name": "Derrick – Offizieller Kanal", "enabled": false },
+    { "id": "UCBJSg2Gll35hMOiJhaR1JMA", "name": "Der Alte – Offizieller Kanal", "enabled": false },
+    {
+      "id": "UCXtdewPPx-SXbCo9g6Z2k1Q",
+      "name": "Ein Fall für zwei – Offizieller Kanal",
+      "enabled": false
+    }
+  ],
+  "programMappings": [
+    {
+      "kind": "series",
+      "channelId": "UCNMj6SRjtvagiUBKYoqsW_w",
+      "sourceId": "PL_H50xx0qoB_bynOI7Esvpfj6EhvxOFS5",
+      "name": "Der Kommissar",
+      "targetId": 133771,
+      "enabled": false
+    }
+  ]
+}

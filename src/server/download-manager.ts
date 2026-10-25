@@ -152,7 +152,8 @@ export async function shutdownDownloadProcessing(): Promise<void> {
   await Promise.all(runtime.directWork);
 }
 
-export function installWorkerShutdownHandlers(): void {
+/** The app composes background cleanup; the queue never needs source-specific shutdown branches. */
+export function installWorkerShutdownHandlers(stopBackground?: () => Promise<void>): void {
   if (runtime.shutdownHandlersInstalled) return;
   runtime.shutdownHandlersInstalled = true;
   for (const signal of ["SIGINT", "SIGTERM"] as const)
@@ -160,7 +161,7 @@ export function installWorkerShutdownHandlers(): void {
       // This exact process owns the worker and tools. If persistence is unavailable,
       // leave expiry/recovery to the next owner instead of pretending a release.
       const limit = setTimeout(() => process.exit(1), 12_000);
-      void shutdownDownloadProcessing()
+      void Promise.all([shutdownDownloadProcessing(), stopBackground?.()])
         .then(async () => {
           await prisma.$disconnect();
           clearTimeout(limit);

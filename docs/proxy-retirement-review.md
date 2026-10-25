@@ -3170,3 +3170,77 @@ erfolgreich abgeschlossen. Der abschließende Abnahmecommit ändert ausschließl
 Dokumentation/TODO; Produkt-, Test-, Workflow-, Dependency- und Runtimeinputs
 bleiben exakt am getesteten Codecheckpoint. Diese gültigen Gates werden
 wiederverwendet, keine erneute vollständige Matrix für die Statusfortschreibung.
+
+## P17.2 — GUI-Register und begrenzter Metadatenindex (25.10.2026)
+
+`/settings` hat einen eigenen YouTube-Tab mit getrennten Kanälen,
+Programmzuordnungen und Inventar. Fünf öffentlich direkt geprüfte, deaktivierte
+Kanalvorgaben; nur die ausdrücklich geprüfte Kommissar-Playlist hat eine
+ausgelieferte TVDB-Zuordnung. Die gemeinsame reine Zod-/Normalisierungsdefinition
+liegt in `lib/youtube-catalogue.ts`, I/O/Transaktionen im Service, der begrenzte
+Child-Owner im vorhandenen `server/ytdlp.ts`. Keine neue Dependency, DDL,
+Contentklasse, Workerqueue oder Laufzeitinstallation. Automatische neue ID-/
+Episodenbindung und Medienintegration bleiben P17.3/P17.4.
+
+Review von Producer, API, Speicher, CLI und GUI ohne offene Findings:
+Compare-and-swap schützt dasselbe Register und Enableflag atomar; Unknown-
+Commit wird nicht wiederholt und über tatsächlichen Readback aufgelöst.
+Allgemeine Settings filtern interne Indexseiten bereits im Datenbankquery,
+behalten Fremdkeys und historisches unverändertes Bulk-Readback. Der neue
+API-Owner hat Same-origin-/Writer-Gate, 1-MiB-Bodygrenze vor JSON-Parsing und
+begrenzte Inventarseiten. Schema und Prozess-I/O sind getrennt. Die benannten
+Metadatenargumente wurden auch gegen die Dokumentation des gepinnten
+yt-dlp-Releases 2026.08.19 geprüft; kein Toolupdate.
+
+Ein vollständiger Index wird als kleines Manifest und atomar ersetzte
+100-Zeilen-Seiten im vorhandenen Configmodell gehalten. Gesamtbudget 8 MiB,
+keine indexgroßen allgemeinen DB-/Browserreads. Erstfund bleibt über Refresh
+stabil; Uploadtag bleibt ein Tag. Kein Produktionsjahr, Medienschacht,
+Audio-/Pixelbeleg oder Episodenstempel aus rohen Toolfeldern. Private/gelöschte
+Platzhalter bleiben ausdrücklich unverfügbar. Fehler bei normalen IDs,
+Uploader, Folgeseite, Kapazität oder Prozess werden nicht zu leeren Erfolgen.
+Nur ein Metadatenchild je App, feste 30 Sekunden/8 MiB, zehn 100er-Batches,
+sechs Stunden Abstand, kein Requestinstaller/Plugin-/Config-/Shellfallback.
+Abbruch wartet auf die eigene Prozessgruppe; Generationenwechsel verhindern
+späte Indexpublikation. Startup/Health starten keinen Scan.
+
+Die echte isolierte SQLite-Probe umfasst Configwrites/Restart, erhaltene
+Fremdkeys, konkurrierende Writes, Fehler der zweiten nativen Statementgrenze,
+tatsächlich committed aber verlorene Rückmeldung, vollständige und fehlerhafte
+Scans über einen echten synthetischen Childprozess, 100+2 Zeilen einschließlich
+ID-losem Privatplatzhalter, Limits, stabilen Erstfund, Atomizität des Indexwrites,
+Abbruch inklusive Kindprozessbaum und null Medienjobs. Derselbe ausführbare
+Gate ist in die bestehende PG17-/PG18-CI eingebunden; noch keine lokale
+PostgreSQL- oder abschließende Containerabnahme behauptet.
+
+Drei kontrollierte Mutationen erzeugten die erwarteten Assertionfehler:
+fehlender CAS-Valueguard, vorzeitig veröffentlichter Complete-Status und
+ignorierter Fremduploader. Produktcode vollständig wiederhergestellt. Das
+angehaltene Indexcommit bleibt vor Commit in `running`; DB-Schreibfehler
+erhalten den vorherigen vollständigen Index. Ein alter Bulk-Settings-Readback
+wurde im ersten fokussierten Lauf zunächst abgewiesen; der neue Schalter ist
+jetzt dabei nur ein unveränderter No-op, keine getrennte Schreibmöglichkeit.
+
+Desktop auf der isolierten SQLite-Instanz `127.0.0.1:3187/settings`, tatsächlich
+servierter Entwicklungsstand: Vorgaben sehen, URL per Keyboard prüfen,
+fremde URL/fehlende Ziel-ID erklären, Kanal und Playlist ergänzen, Ziel-ID
+erfassen, speichern/DB-Readback, 103 Inventarzeilen auf 100+3 Seiten, Scan
+abbrechen, 409 nach echter konkurrierender Generation, korrigieren und
+deaktivieren sowie Neuladen nach Seitenneustart erfolgreich. Fokus beim
+URLabruf und nach Speichern bleibt erhalten. Vorher/Nachher der allgemeinen
+Settings bei 1280×720/System-Dark geprüft, zusätzlich Register und Programm-
+felder visuell geprüft; keine horizontalen Überläufe oder Anwendungs-/Pagefehler.
+Nur die erwartete Next-Dev-Fast-Refresh-Warnung nach Sourceänderung. Private
+JPEGs im ignorierten `downloads/p172-ui/`; keine Bilder/Antwortdumps im Git.
+Der eigene Devserver und Browsertab sind beendet; UI-Datenbank hatte null Jobs.
+
+Finaler lokaler Coverage-Lauf: 137 Dateien/1.510 Tests grün, 6 Dateien/24 Tests
+bedingt übersprungen (einschließlich des neuen separaten PG-Gates). Statements
+88,31 %, Branches 85,55 %, Funktionen 91,85 %, Lines 90,76 %. Lint, Typecheck,
+Formatcheck, Datenvalidierung, Shellsyntax und Produktionsbuild grün; elf
+Tracingwarnungen derselben bekannten Art. Nach abschließender Testisolation
+gegen vorhandene Credential-/Proxyenvs und gezielter API-Textkorrektur nochmals
+129 betroffene Tests grün. Kein Produktinput für andere Tests geändert;
+umfangreiche unveränderte Gates wiederverwendet. PG17/18 und finale native
+Container-CI des Codecheckpoints stehen noch aus; P17.2 bleibt bis dahin offen.
+Keine Grabs, Bibliotheks-, Produktions-, Main- oder Publikationsänderungen.

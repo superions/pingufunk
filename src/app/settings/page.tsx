@@ -29,6 +29,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useSettingsForm } from "./use-settings-form";
+import { YoutubeSettings } from "./youtube-settings";
 import {
   ToleranceSettingsCard,
   SonarrMetadataCard,
@@ -223,7 +224,7 @@ export default function SettingsPage() {
             defaultValue="general"
             onValueChange={(value) => value === "system" && fetchSystemInfo()}
           >
-            <TabsList className="grid w-full grid-cols-5 mb-6">
+            <TabsList className="grid w-full grid-cols-6 mb-6">
               <TabsTrigger value="general" className="flex items-center gap-2">
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Allgemein</span>
@@ -236,6 +237,7 @@ export default function SettingsPage() {
                 <Sliders className="w-4 h-4" />
                 <span className="hidden sm:inline">Matching</span>
               </TabsTrigger>
+              <TabsTrigger value="youtube">YouTube</TabsTrigger>
               <TabsTrigger value="cache" className="flex items-center gap-2">
                 <Database className="w-4 h-4" />
                 <span className="hidden sm:inline">Cache</span>
@@ -245,6 +247,10 @@ export default function SettingsPage() {
                 <span className="hidden sm:inline">System</span>
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="youtube">
+              <YoutubeSettings />
+            </TabsContent>
 
             {/* General Tab */}
             <TabsContent value="general" className="space-y-4">
