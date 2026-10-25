@@ -3155,7 +3155,7 @@ TVDB 133771; Quellenumfang und korrektes Mapping sind getrennte Nachweise.
 Umfang K/M bezeichnet relative Paketgröße einschließlich sinnvoller Gates,
 kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
 
-- [ ] **P17.1 — Mediathek-nahen Katalogvertrag explizit vervollständigen (K).**
+- [x] **P17.1 — Mediathek-nahen Katalogvertrag explizit vervollständigen (K).**
       Unabhängiger Start auf aktuellem Main; bestehende P14-/P12-Verträge erhalten.
       Owner: `src/types/index.ts::ApiResultItem`, `src/types/provider.ts`,
       `src/lib/mediathek-client.ts::queryMediathekView`,
@@ -3177,6 +3177,13 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       HLS/MP4-Slots, getrennte Uhrzeiten und unveränderte IDs/NZBs negativ prüfen.
       Betroffene Feldmatrix/`docs/bounded-search-contract.md` fortschreiben;
       Review von Producer, Adapter und Consumer ohne offene Findings.
+      Abnahme 25.10.2026: optionale Metadaten explizit validiert und über Client,
+      beide Adapter und beide GUI-Antwortpfade erhalten; Rohbeleg-Injektion
+      bleibt gesperrt. Zwei neue Regressionen scheiterten vor dem Fix; finale
+      Coverage 1.460 Tests grün, 23 bestehende bedingte Skips, Lint/Typecheck/
+      Format/Build grün. 14 bekannte Tracingwarnungen unverändert. Keine
+      sichtbare UI-, DB-/Job-/Produktionsänderung oder Untertitelübertragung.
+
 - [ ] **P17.1a — Such- und Downloadmodule am bestehenden Mediathekpfad konsumieren (M).**
       Abhängigkeit P17.1; Grundlage für P17.4, kein Startblocker der unabhängigen
       GUI-/Katalogarbeit P17.2/P17.3. Owner: `src/types/provider.ts`,

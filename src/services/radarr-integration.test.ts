@@ -188,7 +188,9 @@ it("does not rescan all source videos for every nonmatching film in a large RSS 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("Beispielfilm.1998.UNKNOWN.h264");
     expect(matcher).toHaveBeenCalledTimes(1);
-    expect(matcher.mock.calls[0][0]).toEqual([source]);
+    expect(matcher.mock.calls[0][0]).toEqual([
+      { ...source, contentDates: { catalogueUpdatedAt: source.filmlisteTimestamp } },
+    ]);
   } finally {
     matcher.mockRestore();
   }

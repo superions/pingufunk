@@ -1,5 +1,7 @@
 "use client";
 
+import type { CatalogueMetadata } from "@/lib/catalogue-metadata";
+
 import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,7 +32,7 @@ import type {
 } from "@/services/tv-source-review";
 import { submitTvReview } from "@/lib/tv-review-client";
 
-interface SearchResult {
+interface SearchResult extends CatalogueMetadata {
   id: string;
   channel: string;
   topic: string;

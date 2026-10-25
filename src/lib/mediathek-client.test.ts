@@ -48,9 +48,36 @@ const validItem = {
   url_video_low: "",
   url_video_hd: "",
 };
+const catalogueItem = { ...validItem, contentDates: { catalogueUpdatedAt: 1 } };
 it("returns only the documented provider fields for valid items", async () => {
   vi.mocked(fetchWithRetry).mockResolvedValue(Response.json({ result: { results: [validItem] } }));
-  expect(await queryMediathekView([], 10)).toEqual([validItem]);
+  expect(await queryMediathekView([], 10)).toEqual([catalogueItem]);
+});
+
+it("retains subtitles and an independent catalogue clock without trusting injected metadata", async () => {
+  vi.mocked(fetchWithRetry).mockResolvedValue(
+    Response.json({
+      result: {
+        results: [
+          {
+            ...validItem,
+            timestamp: null,
+            url_subtitle: "https://example.invalid/subtitles.ttml?version=one",
+            productionYear: 2020,
+            audioDescription: true,
+            contentDates: { providerDay: "2020-02-29" },
+          },
+        ],
+      },
+    })
+  );
+  expect(await queryMediathekView([], 10)).toEqual([
+    {
+      ...validItem,
+      url_subtitle: "https://example.invalid/subtitles.ttml?version=one",
+      contentDates: { catalogueUpdatedAt: 1 },
+    },
+  ]);
 });
 
 it("caps each source page and honors its offset", async () => {
@@ -82,7 +109,7 @@ it("does not promote uncontracted response properties to language or resolution 
     })
   );
 
-  expect(await queryMediathekView([], 10)).toEqual([validItem]);
+  expect(await queryMediathekView([], 10)).toEqual([catalogueItem]);
 });
 
 it("separates the real broadcast timestamp from the catalogue update without accepting arbitrary rights", async () => {
@@ -104,7 +131,7 @@ it.each([0, null, -1, "2026-01-01", NaN])(
     vi.mocked(fetchWithRetry).mockResolvedValue(
       Response.json({ result: { results: [{ ...validItem, timestamp }] } })
     );
-    expect(await queryMediathekView([], 10)).toEqual([validItem]);
+    expect(await queryMediathekView([], 10)).toEqual([catalogueItem]);
   }
 );
 
@@ -131,7 +158,7 @@ it("normalizes the unknown size of live ORF HLS entries to zero", async () => {
     })
   );
   expect(await queryMediathekView([], 10)).toEqual([
-    { ...validItem, size: 0, url_video: "https://example.org/orf.m3u8" },
+    { ...catalogueItem, size: 0, url_video: "https://example.org/orf.m3u8" },
   ]);
 });
 
@@ -141,7 +168,10 @@ it.each([null, ""])(
     vi.mocked(fetchWithRetry).mockResolvedValue(
       Response.json({ result: { results: [validItem, { ...validItem, duration }] } })
     );
-    expect(await queryMediathekView([], 10)).toEqual([validItem, { ...validItem, duration: 0 }]);
+    expect(await queryMediathekView([], 10)).toEqual([
+      catalogueItem,
+      { ...catalogueItem, duration: 0 },
+    ]);
   }
 );
 

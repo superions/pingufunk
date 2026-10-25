@@ -3071,3 +3071,36 @@ Nutzerpräzisierung: sichtbare Belege schaden der gewünschten Vergleichsdarstel
 P18.1 trennt deshalb interne redaktionelle Prüfung von der öffentlichen, gut
 lesbaren Gegenüberstellung. Die vorherige Pflicht zu öffentlichen Beleg-/
 Revisionsangaben ist entfernt; sachliche Richtigkeit bleibt erforderlich.
+
+## P17.1 — Vollständiger deklarierter Katalogvertrag (25.10.2026)
+
+Client, interne Provideradapter und generischer wie gebundener GUI-Antwortpfad
+erhalten validierte optionale Untertiteladresse, Audio-/Untertitelsprache,
+OV-/AD-/Gebärden-/Klarspracheflags, explizites Produktionsjahr und getrennte
+Datumsfakten. Der enge `catalogue-metadata.ts`-Projektor enthält keine internen
+Quell-/Pixel-/Assetbelege. Der rohe MVW-Client reicht ihm nur dokumentierte
+Untertitel-/Timestampfelder; frei eingeschleuste Adapterfakten bleiben verworfen.
+
+Im Review URLschemata/Userinfo/Whitespace, exaktes Erhalten signierter Adressen,
+explizites `false`, Unknown/Null, Kalender-/Schaltjahre und unabhängige Uhrzeiten
+geprüft. Legacytimestamp und Identitäts-/NZB-Erzeugung bleiben unverändert.
+Keine Datumsableitung aus Filmjahr, keine Mitternacht aus einem Uploadtag,
+kein Untertiteldownload und keine neue sichtbare UI-Funktion. Die einzige
+neue Typform ist eine explizite Metadatenprojektion des vorhandenen Inhaltstyps.
+
+Kausaler Gegencheck vor Implementierung: genau zwei neue Regressionen scheitern
+am verlorenen Untertitelfeld/Adaptermetadaten und fehlendem unabhängigen
+Katalogzeitpunkt. Nach Umsetzung alle fokussierten Consumer grün. Der erste
+Gesamtlauf fand zwei alte Vollobjekt-Erwartungen ohne den nun erhaltenen
+Katalogzeitpunkt; diese explizit erweitert, keine Assertions abgeschwächt.
+Final `npm run test:coverage`: 131 Testdateien/1.460 Tests bestanden,
+6 Dateien/23 Tests wie bisher bedingt übersprungen. Statements 88,41 %,
+Branches 85,89 %, Funktionen 91,84 %, Lines 90,85 %. `npm ci` mit beiden
+generierten Prisma-Clients und Audit ohne bekannte Findings; Lint, Typecheck,
+Formatcheck und Produktionsbuild erfolgreich. Die 14 bekannten Build-
+Tracingwarnungen sind unverändert. Keine Produkt-/Betriebsfreigabe daraus.
+
+SQLite-/PG-Persistenz und Worker werden hier nicht geändert; deren tatsächliche
+Backend-/Dateigates gehören zur folgenden Modulabnahme P17.1a. Lokaler Docker-
+Daemon ist nicht gestartet; keine Infrastruktur dafür verändert. Die bestehenden
+isolierten CI-Gates bleiben für die betroffenen Backend-/Workerpfade vorgesehen.

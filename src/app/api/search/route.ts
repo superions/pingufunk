@@ -14,8 +14,9 @@ import { createUiNzbDownloads, uiNzbFingerprints } from "@/services/ui-nzb";
 import type { ApiResultItem, UiNzbDownloads, UiSearchCoverage } from "@/types";
 import { recordDecision, withDecisionDiagnostics } from "@/server/decision-diagnostics";
 import { searchTvSourceReviews } from "@/services/tv-source-review";
+import { catalogueMetadata, type CatalogueMetadata } from "@/lib/catalogue-metadata";
 
-export interface SearchResult {
+export interface SearchResult extends CatalogueMetadata {
   id: string;
   channel: string;
   topic: string;
@@ -69,6 +70,7 @@ function searchResult(
     url_video_hd: item.url_video_hd,
     url_video_low: item.url_video_low,
     url_website: item.url_website,
+    ...catalogueMetadata(item),
     category,
     ...(providerForm ? { providerId: itemProvider(item) } : {}),
     nzbDownloads,
@@ -184,6 +186,7 @@ async function handleSearchRequest(request: NextRequest) {
                     url_video_hd: info.item.url_video_hd,
                     url_video_low: info.item.url_video_low,
                     url_website: info.item.url_website,
+                    ...catalogueMetadata(info.item),
                     category: "tv",
                     tvReview: review,
                     nzbDownloads,

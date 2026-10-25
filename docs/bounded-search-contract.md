@@ -22,6 +22,24 @@ und exakte URL-gebundene Dimensions-/Quellaudiobelege aus internen Adaptern.
 Die Raw-MediathekView-Whitelist akzeptiert solche Felder weiterhin nicht.
 Eine HD-URL wird niemals aus einer fehlenden HD-URL und der Standard-URL erfunden.
 
+P17.1 erhält deklarierte optionale Inhaltsfelder über Client, beide
+Provideradapter und beide GUI-Antwortpfade: `url_subtitle`/`subtitleUrl`,
+explizites `productionYear`, Audio-/Untertitelsprache und OV-/AD-/Gebärden-/
+Klarspracheflags. `catalogue-metadata.ts` projiziert nur diese benannten Fakten
+und validiert ihre Typen; explizites `false` und unbekannte Sprache bleiben
+unterscheidbar. Ungültige optionale Felder entfallen ohne Verlust des Inhalts.
+Untertitel-URLs müssen HTTP(S) ohne Credentials, Steuer-/Leerzeichen sein;
+ihre Signaturen bleiben unverändert. Es gibt keinen Untertiteldownload.
+
+Katalogupdate und Sendetermin werden unabhängig normalisiert; Legacytimestamp,
+GUI-/RSS-Identität und NZB-Vertrag bleiben unverändert. Ein expliziter
+`contentDates.providerDay` ist ein echter ISO-Kalendertag, kein erfundener
+Zeitpunkt, Sendetermin oder Filmjahr. MVW-Rohantworten liefern weiterhin nur
+ihre dokumentierte Untertiteladresse und tatsächlichen Timestampfelder;
+eingeschleuste Sprache, Fassungsflags, Produktionsjahr, Rechte, Tagesangaben
+oder Pixelbelege werden nicht zu vertrauenswürdigen Adapterfakten. Die GUI
+erhält keine internen Asset-/Quellaudiobelege aus dieser Metadatenprojektion.
+
 ## Bounded GUI-Vertrag
 
 `GET /api/search` akzeptiert einen getrimmten Suchtext mit 2–256 Zeichen, ohne

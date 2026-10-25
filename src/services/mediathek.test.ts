@@ -155,7 +155,7 @@ describe("Sonarr supplemental search consumer", () => {
     mockApi([source]);
     expect(
       await queryTvSourceCandidates(show, makeTvSearchContext(), new HttpRequestBudget(32), report)
-    ).toEqual([source]);
+    ).toEqual([{ ...source, contentDates: { catalogueUpdatedAt: source.filmlisteTimestamp } }]);
     expect(report).toHaveBeenCalledWith({
       complete: true,
       candidateWindowLimited: false,

@@ -37,6 +37,13 @@ export interface ProviderContentItem {
   size: number;
   /** Only set from provider metadata that explicitly identifies the audio track language. */
   audioLanguage?: string | null;
+  subtitleLanguage?: string | null;
+  originalVersion?: boolean;
+  audioDescription?: boolean;
+  signLanguage?: boolean;
+  clearSpeech?: boolean;
+  /** Optional subtitle resource; never proof of the video's audio language. */
+  subtitleUrl?: string;
   /** Trusted adapter facts remain bound to their exact rendition, never a slot label. */
   sourceAudioEvidence?: import("@/types").ApiResultItem["sourceAudioEvidence"];
   sourceVideoDimensions?: import("@/types").ApiResultItem["sourceVideoDimensions"];
