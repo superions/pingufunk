@@ -2,12 +2,21 @@
 
 ## Owner und Erhaltungsgrenze
 
-`content-search.ts::queryContentWindow` ist der Quellenowner für die normale
+`content-search.ts::queryContentWindow` ist der gemeinsame Koordinator für die normale
 GUI-Suche, `providers=true`, den expliziten `provider` und den bisherigen
 Indexerwrapper `queryContent`. Es gibt keine zweite Suchroute oder XML-
 Umschreibung. MediathekView und opt-in ORF teilen eine paginierte Katalogabfrage;
 SRF behält seinen bestehenden API-/Credential-/HLS-Vertrag. Keine Senderseiten
 abgrasen oder fremde Daten aus HTML als Sprach-/Identitätsbeleg übernehmen.
+
+P17.1a kapselt Pagination, MVW-/ORF-/SRF-Zugriff, Quellklassifikation und
+ARTE-Editionsauflösung in `providers/mediathek/search.ts`. Der gemeinsame
+`ContentSearchAdapter` liefert normalisierte Zeilen und Coverage. Deadline,
+Gesamtbudget, Rendition-/Sprachpolicy und In-flight-Coalescing bleiben beim
+Koordinator. Die Registry verwaltet nur Providerinitialisierung und Status;
+ihre ungenutzten Suchaggregatoren sind entfernt. Bestehende exportierte
+MVW-/ORF-Einzel-Seitenhelper verwenden denselben Quellenowner; SRF bleibt
+dessen Lowlevelclient. Keine doppelte MVW-/ORF-Abfrage oder Import-I/O.
 
 GUI-Browsing kennt ohne geprüften Film-/TV-Kontext keine sichere Medienidentität.
 Kategorie, Titel und Katalogslot erfinden keinen Film, keine Folge, Sprache oder

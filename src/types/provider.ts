@@ -184,14 +184,90 @@ export interface ProviderConfig {
   settings?: Record<string, string>;
 }
 
-/**
- * Aggregate search result from multiple providers
- */
-export interface AggregatedSearchResult {
-  /** All items from all providers */
-  items: ProviderContentItem[];
-  /** Provider-specific result counts */
-  providerCounts: Record<string, number>;
-  /** Any errors that occurred during search */
-  errors: Array<{ providerId: string; error: string }>;
+export interface ContentQueryField {
+  fields: string[];
+  query: string;
+}
+
+export interface ContentSearchOptions {
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  future?: boolean;
+  offset?: number;
+  deadlineAt?: number;
+  requestBudget?: import("@/lib/fetch-retry").HttpRequestBudget;
+  /** Callers can restrict their candidate window to progressive renditions. */
+  progressiveOnly?: boolean;
+  /** Verified metadata owner; shared-topic ARTE editions are resolved before language selection. */
+  arteSeries?: import("@/types").TvdbData;
+  /** Internal catalogue owner must resolve verified editions before final selection. */
+  deferLanguageSelection?: boolean;
+  /** Supplemental RSS owners may bound raw pages to protect the shared primary budget. */
+  maxCandidatePages?: number;
+}
+
+export type SearchProviderId = "mediathekview" | "orf" | "srf";
+
+export interface ContentSearchWindow {
+  items: import("@/types").ApiResultItem[];
+  /** Successful bounded retrieval is not a claim that the complete catalogue was searched. */
+  coverage: {
+    complete: boolean;
+    candidateWindowLimited: boolean;
+    sources: Array<{
+      providerId: SearchProviderId;
+      state: "complete" | "failed" | "disabled";
+      candidateCount: number;
+    }>;
+  };
+}
+
+/** Source modules own retrieval; the coordinator owns shared policy and consumers. */
+export interface ContentSearchAdapter {
+  readonly cacheSettingKeys: readonly string[];
+  readonly providerIds: readonly SearchProviderId[];
+  readonly rssWindowAttempts: number;
+  providerForItem(item: import("@/types").ApiResultItem): SearchProviderId;
+  searchWindow(
+    queries: ContentQueryField[],
+    size: number,
+    options: ContentSearchOptions,
+    hlsEnabled: boolean,
+    providerId?: SearchProviderId
+  ): Promise<ContentSearchWindow>;
+}
+
+/** Existing persisted jobs have a Mediathek URL, not an inferred YouTube extractor target. */
+export interface SourceDownloadReference {
+  family: "mediathek";
+  url: string;
+}
+
+/** The worker owns directories, policy and persistence; source modules only transfer bytes. */
+export interface SourceDownloadContext {
+  stagingDirectory: string;
+  filename: string;
+  /** Read once when needed: streams before transfer, direct files before postprocessing. */
+  getContainer: () => Promise<"mkv" | "mp4">;
+  expectations: import("@/lib/media-expectations").MediaExpectations | null;
+  signal: AbortSignal;
+  onProgress: (
+    percent: number,
+    downloadedBytes: number,
+    totalBytes: number,
+    speed: number
+  ) => Promise<void>;
+}
+
+export interface SourceDownloadArtifact {
+  path: string;
+  /** Selected output suffix, not a replacement for the common physical media probe. */
+  extension: string;
+}
+
+export interface SourceDownloadAdapter {
+  transfer(
+    source: SourceDownloadReference,
+    context: SourceDownloadContext
+  ): Promise<SourceDownloadArtifact>;
 }

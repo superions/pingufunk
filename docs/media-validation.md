@@ -31,6 +31,23 @@ Prüfergebnisse; Restart erhält beides.
 
 ## Gemeinsamer Abschlussowner
 
+Seit P17.1a lösen `providers/mediathek/download.ts` und der begrenzte
+`server/source-download.ts`-Dispatch direkte Dateien, HLS und stabile SRF-
+Referenzen auf. Das Modul erhält eigenes Staging, eingefrorene Erwartungen,
+Abortsignal und einen abgewarteten Fortschrittscallback. Es schreibt keine
+Queue-/DB-/Completed-Zustände. Der Dispatch verlangt eine positive reguläre
+Datei direkt im Staging ohne Symlink und mit erlaubtem Ausgabesuffix;
+dieses Suffix ersetzt keine physische Containerprüfung.
+
+Der gemeinsame Downloadmanager behält Lease, v4-Revalidierung, Fortschritt,
+Abbruch, Pfadbesitz und optionale MP4→MKV-Konvertierung. Die Präferenz wird
+einmal bei Bedarf gelesen, für Streams vor Transfer, für direkte MP4 vor
+Konvertierung; andere Dateiformate benötigen sie nicht. Fertiges MKV wird
+nicht doppelt konvertiert. Alle Quellenartefakte durchlaufen denselben Move-
+und Completion-Aufruf; unbekannte Familien scheitern ohne Quellenfallback.
+Bestehende Jobversionen gehen ausdrücklich an den Mediathekadapter. Neue
+Quellen benötigen eine eigene validierte Payloadversion, keine URLvermutung.
+
 Alle progressiven, HLS- und Konvertierungszweige prüfen nach erfolgreichem
 Transfer/Mux und vor `completed` dieselbe lokale Datei. Bei unkodiertem Body
 mit gültiger `Content-Length` müssen die empfangenen Bytes exakt passen.

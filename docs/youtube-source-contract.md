@@ -4,8 +4,9 @@ Stand: 25.10.2026, geprüft gegen Main `1c9d4f9` und Upstream `345f5ed`.
 Nutzerauftrag: separat und über die GUI pflegbare ÖR-YouTube-Kanäle,
 automatische Serien-/Film-ID-Zuordnung mit Vorbelegungen, Mediathek-nahes
 JSON, KISS und Bestandsschutz. Pflichtreferenz ist KultKrimi / Der Kommissar.
-Dies ist ein **Entwicklungsentwurf**, keine implementierte Schnittstelle oder
-Betriebsfreigabe. Reihenfolge, Status und Abnahme ausschließlich in
+Die YouTube-Erweiterung bleibt ein **Entwicklungsentwurf**; P17.1 und die
+Mediathek-Modulgrenzen aus P17.1a sind im Entwicklungscode umgesetzt.
+Keine Betriebsfreigabe. Reihenfolge, Status und Abnahme ausschließlich in
 [P17](../todo/proxy-retirement.md#phase-p17--youtube-quellen-im-bestehenden-katalogvertrag).
 Keine Streaming-Webseite, Impressumsinventur oder zusätzliche Medienverwaltung.
 
@@ -20,22 +21,21 @@ Die vier Quellenmodule bleiben auch dann getrennt, wenn sie dieselbe
 HTTP-/yt-dlp-/FFmpeg-Bibliothek verwenden. Werkzeugwiederverwendung ist kein
 Grund, Mediathek- und YouTube-Abruf in einem Backend zusammenzufassen.
 
-Der heutige Code erfüllt diese Grenze noch nicht durchgehend:
-`ContentProvider`/`providerRegistry` existieren, aber der konsumierte
-`content-search.ts::queryContentWindow` ruft MediathekView/SRF selbst auf.
-`download-manager.ts::processOwnedDownload` wählt direkten Transfer bzw.
-HLS/SRF und setzt Quellreferenzen um. `getDownloadInfo` liefert dagegen nur
-Informationen; es ist kein vom Worker konsumierter Downloadbackendvertrag.
-Eine zusätzliche Providerklasse allein würde diese Verzweigungen nicht ablösen.
+P17.1a zieht den konsumierten MVW-/ORF-/SRF-Abruf in
+`src/providers/mediathek/search.ts` und den direkten/HLS-/SRF-Transfer in
+`src/providers/mediathek/download.ts`. `queryContentWindow` konsumiert den
+`ContentSearchAdapter`; `processOwnedDownload` konsumiert den
+`SourceDownloadAdapter` über den begrenzten `source-download.ts`-Dispatch.
+`getDownloadInfo` bleibt ein Informationshelper, kein zweiter Transferpfad.
 
-| Verantwortung                                                              | Gemeinsamer Owner                                                    | Quellenspezifischer Owner                                                                                     |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Suchaufruf, Scope, Gesamtdeadline, Zusammenführen und Coverageentscheidung | `src/services/content-search.ts`, bestehende Providertypen/-registry | Neue `src/providers/mediathek/search.ts` und `src/providers/youtube/search.ts`                                |
-| Abruf, Pagination, Quellbudget, Rohdatenvalidierung und Normalisierung     | Derselbe Suchfenster-/Inhaltsvertrag                                 | Mediathekadapter benutzt vorhandenen MVW-/ORF-/SRF-Zugriff; YouTubeadapter den begrenzten registrierten Index |
-| Programm-/Episodenbindung, Sprache, Qualität und NZB                       | Bestehende zentrale Metadaten-, Matching-, Beleg- und Releaseowner   | Adapter liefern Fakten/Identität, erteilen keine eigene Freigabe                                              |
-| Transferauflösung und Medienübertragung                                    | Neuer enger Vertrag/Dispatch `src/server/source-download.ts`         | Neue `src/providers/mediathek/download.ts` und `src/providers/youtube/download.ts`                            |
-| Queue, Lease, Receipt, Status, Fortschritt und Abbruch                     | Bestehender Downloadmanager/Worker                                   | Module melden Fortschritt/Phase und beachten das übergebene Abortsignal; keine eigenen DB-Writes oder Worker  |
-| Containerkonvertierung, Pfade, Medienprüfung und Completed                 | Bestehende gemeinsame FFmpeg-/Completion-/Pfadowner                  | Module liefern das Artefakt im zugewiesenen Job-Staging; kein eigener Completed-/Importpfad                   |
+| Verantwortung                                                          | Gemeinsamer Owner                                                     | Quellenspezifischer Owner                                                                                     |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Suchaufruf, Scope, Gesamtdeadline, gemeinsame Policy und Consumer      | `src/services/content-search.ts`, Verträge in `src/types/provider.ts` | `src/providers/mediathek/search.ts`; später `src/providers/youtube/search.ts`                                 |
+| Abruf, Pagination, Quellbudget, Rohdatenvalidierung und Normalisierung | Derselbe Suchfenster-/Inhaltsvertrag                                  | Mediathekadapter benutzt vorhandenen MVW-/ORF-/SRF-Zugriff; YouTubeadapter den begrenzten registrierten Index |
+| Programm-/Episodenbindung, Sprache, Qualität und NZB                   | Bestehende zentrale Metadaten-, Matching-, Beleg- und Releaseowner    | Adapter liefern Fakten/Identität, erteilen keine eigene Freigabe                                              |
+| Transferauflösung und Medienübertragung                                | Enger Vertrag/Dispatch `src/server/source-download.ts`                | `src/providers/mediathek/download.ts`; später `src/providers/youtube/download.ts`                             |
+| Queue, Lease, Receipt, Status, Fortschritt und Abbruch                 | Bestehender Downloadmanager/Worker                                    | Module melden Fortschritt/Phase und beachten das übergebene Abortsignal; keine eigenen DB-Writes oder Worker  |
+| Containerkonvertierung, Pfade, Medienprüfung und Completed             | Bestehende gemeinsame FFmpeg-/Completion-/Pfadowner                   | Module liefern das Artefakt im zugewiesenen Job-Staging; kein eigener Completed-/Importpfad                   |
 
 Die Familie `mediathek` ersetzt keine veröffentlichten Provider-IDs:
 `mediathekview`, `orf` und `srf` samt Einstellungen, Abdeckung und Referenzen
@@ -52,8 +52,13 @@ ihren Konfigurations-/Index-Revisionsfingerprint zum gemeinsamen Cachekontext;
 ein Registrywechsel darf keine alten Treffer oder Bindungen wiederverwenden.
 Vorhandene Providertypen gezielt erweitern; kein drittes Inhaltsmodell,
 zweiter Aggregator oder paralleler aktiver Suchpfad neben `queryContentWindow`.
-Registry und exportierte Providerpfade verwenden denselben Adapterowner;
-belegte ungenutzte Zweige gezielt ablösen, keine Rundumerneuerung.
+Die Registry verwaltet Registrierung, Initialisierung und Status. Ihre
+ungenutzten Suchaggregatoren wurden nach Aufrufprüfung entfernt; GUI und
+Indexer verwenden weiter `queryContentWindow`. Exportierte MVW-/ORF-Suchhelper
+benutzen denselben Quellenowner bei unverändertem Einzel-Seitenvertrag; der
+SRF-Provider bleibt dessen bestehendes Lowlevel-API-Primitiv. Die sourceigenen
+Settingskeys fließen in den gemeinsamen Cachekontext ein. Kein zweiter
+Aggregator und keine Rundumerneuerung.
 Die Aufrufrichtung bleibt Koordinator → Quellenadapter → Lowlevelclient;
 ein Adapter ruft keine Providerfassade zurück, die wiederum an ihn delegiert.
 Modulimport und Registrierung starten keine Netz-/Toolaufrufe. Eine fehlende
@@ -63,8 +68,12 @@ Mediatheksuche nicht beim App-Import abbrechen; Prüfung erst im benannten Pfad.
 Der Transfervertrag nimmt eine validierte, im Job eingefrorene Quellenreferenz,
 Medienerwartungen und den kontrollierten Ausführungskontext entgegen:
 zugewiesenes Staging, Abortsignal und Fortschritts-/Phasenmeldungen. Er liefert
-ein vorhandenes lokales Artefakt samt tatsächlichem Container oder einen
-geschlossenen Fehler. Gemeinsame Status- und Dateibesitzprüfung bleibt Pflicht.
+ein vorhandenes lokales Artefakt mit ausgewähltem Ausgabesuffix oder einen
+geschlossenen Fehler. Das Suffix ist kein Beweis des physischen Containers;
+den tatsächlichen Container bestätigt ausschließlich die gemeinsame ffprobe-
+Prüfung. Der Dispatch verlangt eine positive reguläre Datei direkt im eigenen
+Staging, ohne Symlink und mit begrenztem Suffix. Gemeinsame Status- und
+Dateibesitzprüfung bleibt Pflicht.
 Quellenauflösung und Format-/Audiospurprüfung gehören ins jeweilige Modul;
 Enqueue-Freigabe, interne v4-Prüfung und finale ffprobe-Abnahme bleiben zentral.
 Der Belegpfad benutzt dieselbe Quellenauflösung wie der Transfer, keinen
@@ -77,6 +86,12 @@ automatisch YouTube: Mediathek-HLS benutzt es bereits. Quellenspezifisches
 Muxing darf im Modul erfolgen; eine passende Datei wird im gemeinsamen
 Containerpfad nicht nochmals konvertiert. Pfadnamen und Konvertierungspräferenz
 bleiben gegenüber dem bisherigen Mediathekverhalten unverändert.
+
+Die Containerpräferenz wird pro Job einmal bei Bedarf gelesen: Streams vor
+dem Transfer, direkte MP4 vor der optionalen Konvertierung. Andere fertige
+Dateiformate benötigen diese Einstellung nicht. Alle Pfade münden in genau
+einen gemeinsamen Move-/Completion-Aufruf. Das Quellmodul darf diesen Gate
+weder überspringen noch einen eigenen Completed-Status speichern.
 
 Eine feste geschlossene Zuordnung im Dispatch genügt. GUI, SAB/Newznab,
 Queueorchestrierung und Completion enthalten keine Quell-URLtests oder eigenen

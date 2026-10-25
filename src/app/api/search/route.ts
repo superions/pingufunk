@@ -5,6 +5,8 @@ import { HttpRequestBudget } from "@/lib/fetch-retry";
 import {
   getConfiguredLanguagePolicy,
   queryContentWindow,
+  contentProviderForItem,
+  SEARCH_PROVIDER_IDS,
   type SearchProviderId,
   type ContentSearchWindow,
 } from "@/services/content-search";
@@ -35,17 +37,11 @@ export interface SearchResult extends CatalogueMetadata {
   nzbFingerprints: UiNzbDownloads;
 }
 
-const PROVIDERS = ["mediathekview", "orf", "srf"] as const;
+const PROVIDERS = SEARCH_PROVIDER_IDS;
 const MAX_QUERY_LENGTH = 256;
 const MAX_GUI_RESULTS = 100;
 
-function itemProvider(item: ApiResultItem): SearchProviderId {
-  return /^ORF\b/i.test(item.channel)
-    ? "orf"
-    : item.sourceProviderId === "srf"
-      ? "srf"
-      : "mediathekview";
-}
+const itemProvider = contentProviderForItem;
 
 function searchResult(
   item: ApiResultItem,

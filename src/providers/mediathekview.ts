@@ -1,9 +1,9 @@
+import { queryProviderCatalogue } from "./mediathek/search";
 import { selectRenditions } from "@/services/rendition-quality";
 import { apiResultToProviderItem } from "./content-item";
 import { BaseProvider } from "./base";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
-import { queryMediathekView } from "@/lib/mediathek-client";
 import type { ApiResultItem } from "@/types";
 import type {
   ProviderCapabilities,
@@ -71,13 +71,7 @@ export class MediathekViewProvider extends BaseProvider {
     console.log(`[${this.id}] Searching bounded catalogue`);
 
     try {
-      const results = await queryMediathekView(
-        [{ fields: ["topic", "title"], query: searchQuery }],
-        limit * 3, // Fetch more to account for filtering
-        { requestBudget: query.requestBudget, deadlineAt: query.deadlineAt }
-      );
-
-      if (results === null) throw new Error("MediathekView search failed");
+      const results = await queryProviderCatalogue("mediathekview", query);
       const items = this.filterResults(results, query.type);
 
       console.log(`[${this.id}] Found ${items.length} items after filtering`);

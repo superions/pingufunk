@@ -10,9 +10,9 @@
  * query and breaking ruleset auto-generation for every show. Consolidating
  * to one implementation removes that whole class of bug.
  */
-import { fetchWithRetry, requestDeadline, type HttpRequestBudget } from "@/lib/fetch-retry";
+import { fetchWithRetry, requestDeadline } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
-import type { ApiResultItem, MediathekApiResponse, TvdbData } from "@/types";
+import type { ApiResultItem, MediathekApiResponse } from "@/types";
 import { catalogueMetadata } from "./catalogue-metadata";
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
@@ -21,27 +21,15 @@ const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 // MediathekViewWeb caps every response page at 1,000 results; callers page with offset.
 export const MEDIATHEK_VIEW_MAX_PAGE_SIZE = 1000;
 
-export interface MediathekQueryField {
-  fields: string[];
-  query: string;
-}
-
-export interface MediathekQueryOptions {
-  sortBy?: string;
-  sortOrder?: "asc" | "desc";
-  future?: boolean;
-  offset?: number;
-  deadlineAt?: number;
-  requestBudget?: HttpRequestBudget;
-  /** Callers can restrict their candidate window to progressive renditions. */
-  progressiveOnly?: boolean;
-  /** Verified metadata owner; shared-topic ARTE editions are resolved before language selection. */
-  arteSeries?: TvdbData;
-  /** Internal catalogue owner must resolve verified editions before final selection. */
-  deferLanguageSelection?: boolean;
-  /** Supplemental RSS owners may bound raw pages to protect the shared primary budget. */
-  maxCandidatePages?: number;
-}
+// Keep the shipped import paths while the source-neutral query contract has one owner.
+export type {
+  ContentQueryField as MediathekQueryField,
+  ContentSearchOptions as MediathekQueryOptions,
+} from "@/types/provider";
+import type {
+  ContentQueryField as MediathekQueryField,
+  ContentSearchOptions as MediathekQueryOptions,
+} from "@/types/provider";
 
 /**
  * Query MediathekViewWeb and return the parsed result items.

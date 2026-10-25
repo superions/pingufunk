@@ -1,47 +1,39 @@
-import {
-  MEDIATHEK_VIEW_MAX_PAGE_SIZE,
-  queryMediathekView,
-  type MediathekQueryField,
-  type MediathekQueryOptions,
-} from "@/lib/mediathek-client";
 import { createHash } from "node:crypto";
 import { getIndexerBaseUrl } from "@/lib/indexer-url";
 import { cacheContextEpoch } from "@/lib/cache";
 import { getSetting } from "@/lib/settings";
 import { LANGUAGE_POLICY_SETTING_KEY, readLanguagePolicy } from "@/lib/language-policy";
-import { srfProvider } from "@/providers/srf";
-import { selectLanguageVariants } from "@/services/language-editions";
-import type { ApiResultItem } from "@/types";
-import { resolveArteSeriesEditions } from "./arte-editions";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
-import { providerItemToApiResult } from "@/providers/content-item";
-import { recordDecision } from "@/server/decision-diagnostics";
+import { selectLanguageVariants } from "./language-editions";
 import { eligibleRenditionItem } from "./rendition-quality";
+import { recordDecision } from "@/server/decision-diagnostics";
+import { mediathekSearchAdapter } from "@/providers/mediathek/search";
+import type { ApiResultItem } from "@/types";
+import type {
+  ContentQueryField,
+  ContentSearchOptions,
+  ContentSearchWindow,
+  SearchProviderId,
+} from "@/types/provider";
+export type { ContentSearchWindow, SearchProviderId } from "@/types/provider";
 
-const MAX_MEDIATHEK_CANDIDATES = 5000;
-// The shared source owner clamps the legacy 6,000 request to its 5,000 cap.
-// Supplemental owners must reserve the real window, not count logical queries.
+// Preserve the shipped RSS reservation without importing a concrete API into the coordinator.
 export const RSS_SYNC_CANDIDATE_LIMIT = 6000;
-export const RSS_SOURCE_WINDOW_ATTEMPTS = Math.ceil(
-  Math.min(RSS_SYNC_CANDIDATE_LIMIT, MAX_MEDIATHEK_CANDIDATES) / MEDIATHEK_VIEW_MAX_PAGE_SIZE
-);
+export const RSS_SOURCE_WINDOW_ATTEMPTS = mediathekSearchAdapter.rssWindowAttempts;
+export const SEARCH_PROVIDER_IDS = mediathekSearchAdapter.providerIds;
 const MAX_PENDING_SEARCHES = 128;
 const pendingSearches = new Map<string, Promise<ApiResultItem[] | null>>();
 
 /** Fingerprint source identity and mutable matching policy without exposing secrets in keys. */
 export async function searchCacheContext(): Promise<string> {
   const keys = [
-    "provider.mediathekview.enabled",
-    "provider.orf.enabled",
-    "provider.srf.enabled",
+    ...mediathekSearchAdapter.cacheSettingKeys,
     "download.enableHLS",
     "download.quality",
     "matching.strategy",
     "matching.threshold",
     "matching.minDuration",
     LANGUAGE_POLICY_SETTING_KEY,
-    "api.srgssr.consumerKey",
-    "api.srgssr.consumerSecret",
     "api.tvdb.key",
     "api.tvdb.pin",
     "api.tmdb.key",
@@ -79,57 +71,6 @@ export async function searchCacheContext(): Promise<string> {
     .slice(0, 24);
 }
 
-export type SearchProviderId = "mediathekview" | "orf" | "srf";
-
-export interface ContentSearchWindow {
-  items: ApiResultItem[];
-  /** Successful bounded retrieval is not a claim that the complete catalogue was searched. */
-  coverage: {
-    complete: boolean;
-    candidateWindowLimited: boolean;
-    sources: Array<{
-      providerId: SearchProviderId;
-      state: "complete" | "failed" | "disabled";
-      candidateCount: number;
-    }>;
-  };
-}
-
-async function queryMediathekCandidateWindow(
-  queries: MediathekQueryField[],
-  requestedSize: number,
-  options: MediathekQueryOptions
-): Promise<{ items: ApiResultItem[]; limited: boolean } | null> {
-  if (requestedSize <= 0) return { items: [], limited: false };
-
-  const candidates: ApiResultItem[] = [];
-
-  // Scan a bounded source window before edition selection. MediathekViewWeb's
-  // `id` hashes its full source row, so it is not a stable cursor or release key.
-  const pages = options.maxCandidatePages;
-  if (pages !== undefined && (!Number.isSafeInteger(pages) || pages < 1 || pages > 5))
-    throw new Error("Invalid candidate window");
-  const candidateLimit = Math.min(
-    MAX_MEDIATHEK_CANDIDATES,
-    (pages ?? 5) * MEDIATHEK_VIEW_MAX_PAGE_SIZE
-  );
-  for (let offset = 0; offset < candidateLimit; offset += MEDIATHEK_VIEW_MAX_PAGE_SIZE) {
-    const pageSize = Math.min(MEDIATHEK_VIEW_MAX_PAGE_SIZE, candidateLimit - offset);
-    const page = await queryMediathekView(queries, pageSize, { ...options, offset });
-    if (page === null || page.length > pageSize) {
-      recordDecision("catalogue", offset > 0 ? "followup_failed" : "source_failed", "unavailable");
-      return null;
-    }
-
-    candidates.push(...page);
-    if (page.length < pageSize) return { items: candidates, limited: false };
-  }
-
-  // This is intentionally a bounded candidate set, not a claim that the provider
-  // catalog or all matching releases have been exhausted.
-  return { items: candidates, limited: true };
-}
-
 export async function getConfiguredLanguagePolicy() {
   return readLanguagePolicy(await getSetting(LANGUAGE_POLICY_SETTING_KEY));
 }
@@ -139,9 +80,9 @@ export async function getConfiguredLanguagePolicy() {
  * partial sources; automatic matching must use queryContent's fail-closed wrapper.
  */
 export async function queryContentWindow(
-  queries: MediathekQueryField[],
+  queries: ContentQueryField[],
   size: number,
-  options: MediathekQueryOptions = {},
+  options: ContentSearchOptions = {},
   providerId?: SearchProviderId
 ): Promise<ContentSearchWindow> {
   if (options.arteSeries && !options.requestBudget)
@@ -150,134 +91,42 @@ export async function queryContentWindow(
     options.deadlineAt ?? Date.now() + 20_000,
     options.requestBudget?.deadlineAt ?? Infinity
   );
-  const [mvSetting, orfSetting, hlsSetting] = await Promise.all([
-    getSetting("provider.mediathekview.enabled"),
-    getSetting("provider.orf.enabled"),
-    getSetting("download.enableHLS"),
-  ]);
-  const languagePolicy = await getConfiguredLanguagePolicy();
-  const mvEnabled = (!providerId || providerId === "mediathekview") && mvSetting !== "false";
-  const orfEnabled =
-    (!providerId || providerId === "orf") && orfSetting === "true" && hlsSetting === "true";
-  // This scope cannot publish HLS/SRF references; avoid spending its bounded
-  // Sonarr budget on sources whose only renditions are currently ineligible.
-  const srfEnabled =
-    (!providerId || providerId === "srf") &&
-    !options.progressiveOnly &&
-    (await srfProvider.isEnabled());
-
   try {
-    const [indexedResult, swissResult] = await Promise.allSettled([
-      mvEnabled || orfEnabled
-        ? queryMediathekCandidateWindow(
-            !mvEnabled && orfEnabled
-              ? [...queries, { fields: ["channel"], query: "ORF" }]
-              : queries,
-            size,
-            { ...options, deadlineAt }
-          )
-        : Promise.resolve({ items: [], limited: false }),
-      srfEnabled && size > 0
-        ? srfProvider.search({
-            query: queries.find((q) => q.fields.includes("topic"))?.query || "",
-            limit: Math.min(size, 100),
-            requestBudget: options.requestBudget,
-            deadlineAt,
-          })
-        : Promise.resolve([]),
-    ]);
-    // Never publish earlier pages of a failed source as complete candidates.
-    const indexed = indexedResult.status === "fulfilled" ? indexedResult.value : null;
-    const swiss = swissResult.status === "fulfilled" ? swissResult.value : null;
-    const sources: ContentSearchWindow["coverage"]["sources"] = (
-      ["mediathekview", "orf", "srf"] as const
-    )
-      .filter((id) => !providerId || id === providerId)
-      .map((id) => {
-        const enabled = id === "mediathekview" ? mvEnabled : id === "orf" ? orfEnabled : srfEnabled;
-        const candidates =
-          id === "srf"
-            ? swiss
-            : indexed?.items.filter((item) => /^ORF\b/i.test(item.channel) === (id === "orf"));
-        return {
-          providerId: id,
-          state: !enabled
-            ? "disabled"
-            : candidates === null || candidates === undefined
-              ? "failed"
-              : "complete",
-          candidateCount: enabled ? (candidates?.length ?? 0) : 0,
-        };
-      });
-    const items = (indexed?.items ?? []).filter((item) =>
-      /^ORF\b/i.test(item.channel) ? orfEnabled : mvEnabled
+    const hlsEnabled = (await getSetting("download.enableHLS")) === "true";
+    const policy = await getConfiguredLanguagePolicy();
+    const window = await mediathekSearchAdapter.searchWindow(
+      queries,
+      size,
+      { ...options, deadlineAt },
+      hlsEnabled,
+      providerId
     );
-    for (const item of swiss ?? []) {
-      const converted = providerItemToApiResult(item);
-      if (
-        queries.every(({ fields, query }) =>
-          fields.some((field) =>
-            String(converted[field as keyof ApiResultItem] ?? "")
-              .toLowerCase()
-              .includes(query.toLowerCase())
-          )
-        )
-      )
-        items.push(converted);
-    }
-    const editions = options.arteSeries
-      ? await resolveArteSeriesEditions(items, options.arteSeries, options.requestBudget!)
-      : items;
-    const complete = sources.every((source) => source.state !== "failed") && editions !== null;
-    const available = (editions ?? []).map((item) =>
-      eligibleRenditionItem(item, hlsSetting === "true")
-    );
+    const available = window.items.map((item) => eligibleRenditionItem(item, hlsEnabled));
     for (const item of available)
       recordDecision(
         "language",
         item.audioLanguage ? "language_verified" : "language_unknown",
         item.audioLanguage ? "proven" : "missing"
       );
-    for (const source of sources) {
-      if (source.state === "failed") recordDecision("catalogue", "source_failed", "unavailable");
-      else if (source.state === "complete")
-        recordDecision(
-          "catalogue",
-          source.candidateCount ? "catalogue_candidates" : "catalogue_empty",
-          "proven",
-          source.candidateCount || 1
-        );
-    }
-    if (sources.every((source) => source.state === "disabled"))
-      recordDecision("catalogue", "sources_disabled", "not_required");
-    if (indexed?.limited || (srfEnabled && size > 0 && (swiss?.length ?? 0) >= Math.min(size, 100)))
-      recordDecision("catalogue", "window_limited", "missing");
     return {
-      items:
-        editions === null
-          ? []
-          : options.deferLanguageSelection
-            ? available
-            : selectLanguageVariants(available, languagePolicy),
-      coverage: {
-        complete,
-        candidateWindowLimited:
-          indexed?.limited === true ||
-          (srfEnabled && size > 0 && (swiss?.length ?? 0) >= Math.min(size, 100)),
-        sources,
-      },
+      ...window,
+      items: options.deferLanguageSelection ? available : selectLanguageVariants(available, policy),
     };
   } catch {
     console.error("[ContentSearch] Provider failed");
-    // Configuration/edition failures are not a successful empty catalogue.
     throw new Error("Content source unavailable");
   }
 }
 
+/** Source-owned classification, never inferred separately by a GUI consumer. */
+export function contentProviderForItem(item: ApiResultItem): SearchProviderId {
+  return mediathekSearchAdapter.providerForItem(item);
+}
+
 async function queryContentUncoalesced(
-  queries: MediathekQueryField[],
+  queries: ContentQueryField[],
   size: number,
-  options: MediathekQueryOptions = {}
+  options: ContentSearchOptions = {}
 ): Promise<ApiResultItem[] | null> {
   try {
     const result = await queryContentWindow(queries, size, options);
@@ -290,9 +139,9 @@ async function queryContentUncoalesced(
 
 /** Share only simultaneous identical searches; never retain failures or expiring media URLs. */
 export async function queryContent(
-  queries: MediathekQueryField[],
+  queries: ContentQueryField[],
   size: number,
-  options: MediathekQueryOptions = {}
+  options: ContentSearchOptions = {}
 ): Promise<ApiResultItem[] | null> {
   // An explicit caller deadline is part of its contract and must not inherit
   // another request's remaining budget through coalescing.

@@ -90,6 +90,7 @@ import { unknownMediaExpectations } from "@/lib/media-expectations";
 import { mediaSourceIdentity } from "@/services/source-audio";
 import { validateMediaProbe, MediaProbeError } from "./media-probe";
 import type { TransferFailure } from "./download-failure";
+import { mediathekDownloadAdapter } from "@/providers/mediathek/download";
 
 const basicFacts = {
   durationSeconds: 120,
@@ -152,6 +153,49 @@ function failedTransfer(): TransferFailure {
   expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(false);
   return JSON.parse(call.data.error.slice("Download failed: ".length));
 }
+
+it("consumes an interchangeable source artifact through the same progress, file and media completion owners", async () => {
+  const expectations = unknownJobMediaExpectations();
+  const job = progressiveJob("adapter-job", JSON.stringify(expectations));
+  configFindUnique.mockImplementation(async ({ where }: { where: { key: string } }) => {
+    if (where.key === "download.convertToMkv") throw new Error("Unrelated setting unavailable");
+    return where.key === "download.path" ? { value: testRoot } : null;
+  });
+  const source = vi
+    .spyOn(mediathekDownloadAdapter, "transfer")
+    .mockImplementation(async (reference, context) => {
+      expect(reference).toEqual({ family: "mediathek", url: job.url });
+      expect(context.expectations).toEqual(expectations);
+      const output = path.join(context.stagingDirectory, context.filename + ".webm");
+      await context.onProgress(90, 5, 5, 1);
+      await writeFile(output, "media");
+      return { path: output, extension: ".webm" };
+    });
+  try {
+    await processDownload(job.id);
+    const completed = downloadUpdate.mock.calls.find(
+      ([call]) => call.data.status === "completed"
+    )?.[0].data;
+    expect(completed).toBeDefined();
+    expect(completed.filePath).toBe(
+      path.join(testRoot, "sonarr", jobDirectoryName(job.title, job.id), job.title + ".webm")
+    );
+    expect(await readFile(completed.filePath, "utf8")).toBe("media");
+    expect(probeJobMedia).toHaveBeenCalledWith(
+      completed.filePath,
+      expect.any(String),
+      expectations,
+      0,
+      undefined,
+      expect.any(AbortSignal)
+    );
+    expect(source).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(downloadHlsStream).not.toHaveBeenCalled();
+  } finally {
+    source.mockRestore();
+  }
+});
 
 it("persists the media probe's closed cause through the real worker failure path", async () => {
   const job = progressiveJob();
@@ -756,6 +800,7 @@ it.each(["mkv", "mp4"])(
       `Rundschau.${container}`
     );
     expect(await readFile(finalPath, "utf8")).toBe("media");
+    expect(convertMp4ToMkv).not.toHaveBeenCalled();
     expect(downloadUpdate).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

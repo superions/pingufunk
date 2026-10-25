@@ -12,6 +12,11 @@ Entwicklungsvertrag P14.3; Status und Abnahme ausschließlich im
   Katalogstand. Null/0/ungültig bleibt unbekannt. Der SRF-Adapter bezeichnet seine
   ansonsten unspezifizierte API-Date nur als `providerDate`; keine erfundene Rechte-
   oder Filmjahrsemantik. Provideradapter behalten diese transienten Fakten.
+  Seit P17.1 werden gültiger Katalogupdate und Sendetermin unabhängig voneinander
+  erhalten, auch wenn der jeweils andere Wert fehlt. Das optionale
+  `contentDates.providerDay` erhält einen echten ISO-Kalendertag ohne erfundene
+  Mitternacht oder Zeitzone. Es ist weder Sendetermin noch Filmproduktionsjahr;
+  MVW-Rohantworten dürfen es nicht als zusätzliches Belegfeld einschleusen.
 - `TvdbEpisode.aired` bleibt das Metadaten-Airdate, `TmdbMovieData.productionYear`
   bzw. belegtes Releasejahr das Filmjahr. Weder Katalog- noch Sendetag erzeugt ein
   Filmproduktionsjahr. Der ältere Provider-Filenamehelper ergänzt ein Jahr nur

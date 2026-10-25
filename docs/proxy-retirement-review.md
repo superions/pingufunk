@@ -3104,3 +3104,50 @@ SQLite-/PG-Persistenz und Worker werden hier nicht geändert; deren tatsächlich
 Backend-/Dateigates gehören zur folgenden Modulabnahme P17.1a. Lokaler Docker-
 Daemon ist nicht gestartet; keine Infrastruktur dafür verändert. Die bestehenden
 isolierten CI-Gates bleiben für die betroffenen Backend-/Workerpfade vorgesehen.
+
+## P17.1a — Konsumierte Such- und Downloadmodule (25.10.2026)
+
+Der gemeinsame Suchkoordinator konsumiert `ContentSearchAdapter`; das
+Mediathekmodul besitzt MVW-/ORF-Pagination, SRF-Zugriff, ARTE-Auflösung,
+Quellklassifikation und Quellkonfiguration. Query-/Optionsform, Budgets,
+Coverage und flüchtige Cacheinvalidierung bleiben erhalten. Exportierte
+MVW-/ORF-Helper benutzen denselben Quellenowner bei unverändertem
+Einzel-Seitenvertrag. Die Registry hat keine aktiven Suchconsumer mehr;
+ihre ungenutzten Aggregationsmethoden samt Ergebnistyp wurden nach vollständiger
+Aufrufsuche entfernt. Keine zweite Suchpipeline oder zyklische Rückdelegation.
+
+Der Worker konsumiert `SourceDownloadAdapter` über einen festen begrenzten
+Dispatch. Direkter Transfer, HLS und SRF-Referenzauflösung liegen im
+Mediathekmodul. Queue, Lease, v4-Revalidierung, eingefrorene Erwartungen,
+Fortschritt, Abbruch, optionale Konvertierung und physische Completion bleiben
+zentral. Der Dispatch akzeptiert nur positive reguläre Stagingdateien ohne
+Symlink und mit begrenztem Suffix. Das Suffix behauptet keine Containerfakten;
+die bestehende gemeinsame ffprobe-Prüfung bleibt der physische Owner.
+Alle Artefakte benutzen genau einen Move-/Completion-Aufruf. Kein anderes
+Backend als Fehlerfallback, keine Änderung persistierter Jobversionen/IDs,
+URLs, Profile, Datenbankschemata oder bestehenden Verzeichnisnamen.
+
+Review von Abruf, Adapter, GUI, Worker und Completion: gemeinsame MVW-/ORF-
+Abfrage nicht verdoppelt; deaktivierte Quellen und Import haben kein
+Quellen-I/O; Quelle erhält keine DB-/Completed-Verantwortung. SRF-URN und
+Höhenwahl, direkte Bytezählung, Await der Progresspersistenz und Abbruch bleiben
+erhalten. Containerpräferenz wird einmal bei Bedarf gelesen; HLS-MKV hat keine
+zweite Konvertierung. Konvertierter Input wird erst nach erfolgreichem Move
+entfernt. Rohe Toolfehler werden nicht als dauerhafte Fehlermeldung übernommen.
+
+Drei kontrollierte Gegenprüfungen erzeugten die erwarteten Consumerfehler:
+entfernte Staginggrenze, unerlaubter Quellenfallback und umgangener Suchadapter.
+Produktivcode jeweils vollständig wiederhergestellt. Ein zusätzlicher
+Nachreviewfall bewies einen unerwünschten Settingsread bei Nicht-MP4; vor
+Korrektur fehlte Completed, danach durchläuft das reale Artefakt die zentrale
+Medienprüfung auch bei nicht verfügbarer, hierfür irrelevanter MKV-Einstellung.
+
+Final lokal: 134 Testdateien/1.477 Tests bestanden, 6 Dateien/23 Tests wie zuvor
+bedingt übersprungen. Statements 88,32 %, Branches 85,62 %, Funktionen 91,76 %,
+Lines 90,77 %. Lint, Typecheck und Produktionsbuild grün; zehn Tracingwarnungen
+derselben bereits bekannten Art. Zwei durch die neuen gemeinsamen Exporte
+unvollständige Testmocks wurden auf den tatsächlichen Modulvertrag umgestellt;
+keine Produktassertions oder Laufzeitgates abgeschwächt. Keine neue sichtbare
+UI, Abhängigkeit, Runtime oder Datenbankmigration. Die native Container-CI und
+PostgreSQL-17/18-Gates des abschließenden Codecheckpoints stehen noch aus;
+P17.1a bleibt bis zu deren terminaler Abnahme offen. Keine Live-Systeme berührt.

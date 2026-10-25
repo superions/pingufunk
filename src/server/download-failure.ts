@@ -27,6 +27,16 @@ export interface TransferFailure {
   cleanupCode?: string;
 }
 
+/** Only closed source errors cross into the worker's durable failure path. */
+export class SourceDownloadError extends Error {
+  constructor(
+    message: string,
+    readonly transferFailure?: TransferFailure
+  ) {
+    super(message);
+  }
+}
+
 const safeCodes = new Set([
   "ECONNRESET",
   "ECONNREFUSED",
