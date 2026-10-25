@@ -3289,6 +3289,11 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Lokale Coverage/Build und Gegenprüfung grün; erneute PG-/Fork-CI-Abnahme
       vor Schließen und Mainintegration ausstehend. Keine gelockerte Assertion
       oder blinde Wiederholung des fehlgeschlagenen Gates.
+      PR-Reviewnacharbeit: Entwurfsrevision, Inventar-Reload, Namensnormalisierung,
+      Vorgabenreihenfolge, Erstfund bei Nichtverfügbarkeit, transaktionaler Abbruch,
+      Shutdown/Claim und paralleler Inventarwechsel korrigiert. Reale SQLite-
+      Barriereproben und Desktopinteraktionen grün; erneute terminale PG-/native
+      CI für diesen Codeinput vor Mainintegration erforderlich.
 - [ ] **P17.3 — IDs automatisch auflösen und Der Kommissar vollständig abgleichen (M).**
       Abhängigkeit P17.2. Owner: neuer enger Mappingowner bei
       `youtube-catalogue.ts`, vorhandene `shows.ts`, `sonarr-provider.ts`,

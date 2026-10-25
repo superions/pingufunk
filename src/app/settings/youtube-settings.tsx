@@ -51,6 +51,7 @@ async function requestCatalogue(body?: unknown) {
 export function YoutubeSettings() {
   const order = useRef(new SettingsResponseOrder());
   const busyRef = useRef(false);
+  const draftRevision = useRef<string | null>(null);
   const sourceInput = useRef<HTMLInputElement>(null);
   const lastIndex = useRef<number | null>(null);
   const [snapshot, setSnapshot] = useState<YoutubeSnapshot | null>(null);
@@ -62,6 +63,7 @@ export function YoutubeSettings() {
   const [url, setUrl] = useState("");
   const [pending, setPending] = useState<YoutubeMapping | null>(null);
   const [page, setPage] = useState(0);
+  const [inventoryReload, setInventoryReload] = useState(0);
   const [inventory, setInventory] = useState<ReturnType<typeof youtubePageSchema.parse> | null>(
     null
   );
@@ -76,11 +78,20 @@ export function YoutubeSettings() {
       }
       setSnapshot(value);
       if (reset) {
+        draftRevision.current = value.revision;
+        setInventoryReload((value) => value + 1);
         setRegistry(structuredClone(value.registry));
         setEnabled(value.enabled);
         setLocked(false);
         setPending(null);
         setFeedback(null);
+      } else if (draftRevision.current !== value.revision) {
+        // Poll status without rebasing an unsaved draft onto another writer.
+        setLocked(true);
+        setFeedback({
+          error: true,
+          message: "Register wurde andernorts geändert. Vor dem Speichern neu laden.",
+        });
       }
     } catch {
       if (order.current.isCurrent(token))
@@ -124,7 +135,7 @@ export function YoutubeSettings() {
         }
       });
     return () => controller.abort();
-  }, [page, completedAt]);
+  }, [page, completedAt, inventoryReload]);
 
   const dirty =
     !!snapshot &&
@@ -152,16 +163,17 @@ export function YoutubeSettings() {
   };
   const save = () =>
     run(async () => {
-      if (!snapshot || !registry || locked || !valid) return;
+      if (!snapshot || !registry || !draftRevision.current || locked || !valid) return;
       const submitted: YoutubeSave = {
         action: "save",
-        revision: snapshot.revision,
+        revision: draftRevision.current,
         enabled,
-        registry,
+        registry: youtubeRegistrySchema.parse(registry),
       };
       try {
         await order.current.enqueueWrite(async () => {
           const confirmed = confirmedYoutubeSave(await requestCatalogue(submitted), submitted);
+          draftRevision.current = confirmed.revision;
           setSnapshot(confirmed);
           setRegistry(structuredClone(confirmed.registry));
           setEnabled(confirmed.enabled);
@@ -228,12 +240,14 @@ export function YoutubeSettings() {
     });
   const addMapping = () => {
     if (!registry || !pending) return;
-    const programMappings = [
-      ...registry.programMappings.filter(
-        (mapping) => youtubeMappingKey(mapping) !== youtubeMappingKey(pending)
-      ),
-      pending,
-    ];
+    const existing = registry.programMappings.some(
+      (mapping) => youtubeMappingKey(mapping) === youtubeMappingKey(pending)
+    );
+    const programMappings = existing
+      ? registry.programMappings.map((mapping) =>
+          youtubeMappingKey(mapping) === youtubeMappingKey(pending) ? pending : mapping
+        )
+      : [...registry.programMappings, pending];
     if (programMappings.length > 256) {
       setFeedback({
         error: true,

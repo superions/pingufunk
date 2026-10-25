@@ -182,6 +182,8 @@ export const youtubeInspectionSchema = z
 export const youtubeIndexRowSchema = z
   .object({
     videoId: youtubeVideoId.nullable(),
+    // Independent of playable metadata so temporary unavailability preserves RSS age.
+    firstSeenAt: z.number().int().positive().optional(),
     channelId: youtubeChannelId.nullable(),
     mappingKey: z.string().max(160),
     availability: z.enum(["listed", "unavailable"]),
@@ -297,6 +299,7 @@ export function normalizeYoutubePage(
     if (unavailable)
       return {
         videoId: id.success ? id.data : null,
+        ...(id.success ? { firstSeenAt: indexedAt } : {}),
         channelId: null,
         mappingKey: youtubeMappingKey(mapping),
         availability: "unavailable",
@@ -315,6 +318,7 @@ export function normalizeYoutubePage(
         : undefined;
     return youtubeIndexRowSchema.parse({
       videoId: id.data,
+      firstSeenAt: indexedAt,
       channelId: channel.id,
       mappingKey: youtubeMappingKey(mapping),
       availability: "listed",

@@ -94,6 +94,7 @@ if(config.mode==='invalid'){process.stdout.write('{}');process.exit(0);}
 const count=config.mode==='limited'||config.mode==='capacity'?1000:101;
 const entries=Array.from({length:Math.min(100,Math.max(0,count-offset))},(_,i)=>({id:String(offset+i+(config.mode==='overlap'?1000:0)).padStart(11,'0'),title:'Synthetic episode '+(offset+i),channel_id:config.mode==='foreign'?'UCbbbbbbbbbbbbbbbbbbbbbb':${JSON.stringify(channel)},duration:120,description:config.mode==='pagecapacity'?'ü'.repeat(8000):config.mode==='capacity'?'x'.repeat(8000):'Synthetic metadata',upload_date:'20260228'}));
 if(config.mode==='missing')delete entries[0].id;
+if(config.mode==='unavailable'&&offset===0)entries[0]={id:'00000000000',availability:'private',title:'[Private video]'};
 if(config.mode==='success'&&offset===100)entries.push({availability:'private',id:null,title:'[Private video]'});
 process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},channel:'Synthetic channel',title:'Synthetic programme',entries}));
 }
@@ -425,6 +426,112 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
         expect(callCount() - count).toBeLessThanOrEqual(10);
         expect((await page(0)).items).toEqual(first.items);
       }
+      // A known video keeps its original RSS age through an unavailable scan.
+      for (const state of ["unavailable", "success"]) {
+        mode(state);
+        await age();
+        expect((await post({ action: "refresh", revision: current.revision })).status).toBe(202);
+        await settled();
+        expect((await snapshot()).scan.state).toBe("complete");
+        const row = (await page(0)).items[0];
+        expect(row.firstSeenAt).toBe(firstSeen);
+        if (state === "unavailable") expect(row.content).toBeNull();
+        else expect(row.content.filmlisteTimestamp).toBe(firstSeen);
+      }
+      first = await page(0);
+      oldPages = await prisma.config.findMany({
+        where: { key: { startsWith: `${YOUTUBE_INDEX_KEY}.page.` } },
+        orderBy: { key: "asc" },
+      });
+      // Abort after the real final insert, while the publishing transaction can roll back.
+      await age();
+      let inserted = false;
+      let releaseInsert = () => {};
+      const insertHeld = new Promise<void>((resolve) => {
+        releaseInsert = resolve;
+      });
+      const abortPublication = vi.spyOn(prisma, "$transaction").mockImplementation((async (
+        ...args: unknown[]
+      ) => {
+        const callback = args[0] as (tx: { config: typeof prisma.config }) => Promise<unknown>;
+        return transaction(
+          async (tx) => {
+            const create = tx.config.create.bind(tx.config);
+            const config = new Proxy(tx.config, {
+              get(target, key) {
+                if (key === "create")
+                  return async (...parameters: Parameters<typeof create>) => {
+                    const row = await create(...parameters);
+                    if (parameters[0].data.key.endsWith(".1")) {
+                      inserted = true;
+                      await insertHeld;
+                    }
+                    return row;
+                  };
+                return Reflect.get(target, key);
+              },
+            });
+            return callback({ config });
+          },
+          args[1] as { timeout?: number }
+        );
+      }) as typeof prisma.$transaction);
+      try {
+        await service.refreshYoutubeCatalogue(current.revision);
+        await waitFor(async () => inserted);
+        const cancelling = service.cancelYoutubeCatalogue();
+        releaseInsert();
+        await cancelling;
+        expect((await snapshot()).scan.state).toBe("cancelled");
+        expect(
+          await prisma.config.findMany({
+            where: { key: { startsWith: `${YOUTUBE_INDEX_KEY}.page.` } },
+            orderBy: { key: "asc" },
+          })
+        ).toEqual(oldPages);
+      } finally {
+        releaseInsert();
+        await service.cancelYoutubeCatalogue();
+        abortPublication.mockRestore();
+      }
+      // A committed replacement between manifest and page reads permits exactly one reread.
+      const originalRead = prisma.config.findUnique.bind(prisma.config);
+      const oldManifest = await prisma.config.findUniqueOrThrow({
+        where: { key: YOUTUBE_INDEX_KEY },
+      });
+      const replacement = JSON.parse(oldManifest.value);
+      const previousKey = replacement.pages[0];
+      const replacementKey = previousKey + "0";
+      let replaced = false;
+      const replaceOnRead = vi.spyOn(prisma.config, "findUnique").mockImplementation((async (
+        ...args: unknown[]
+      ) => {
+        if ((args[0] as { where: { key: string } }).where.key === previousKey && !replaced) {
+          replaced = true;
+          replacement.pages[0] = replacementKey;
+          await prisma.$transaction(async (tx) => {
+            await tx.config.update({ where: { key: previousKey }, data: { key: replacementKey } });
+            await tx.config.update({
+              where: { key: YOUTUBE_INDEX_KEY },
+              data: { value: JSON.stringify(replacement) },
+            });
+          });
+        }
+        return (originalRead as (...args: unknown[]) => Promise<unknown>)(...args);
+      }) as typeof prisma.config.findUnique);
+      try {
+        expect((await page(0)).items).toEqual(first.items);
+        expect(replaced).toBe(true);
+      } finally {
+        replaceOnRead.mockRestore();
+      }
+      await prisma.config.delete({ where: { key: replacementKey } });
+      expect(
+        (await api.GET(new NextRequest("http://localhost/api/youtube/catalogue?page=0"))).status
+      ).toBe(503);
+      await prisma.config.create({
+        data: { key: replacementKey, value: JSON.stringify(first.items) },
+      });
       await age();
       mode("wait");
       expect((await post({ action: "refresh", revision: current.revision })).status).toBe(202);
@@ -536,6 +643,65 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
         expect(fetch).not.toHaveBeenCalled();
       } finally {
         advancing.mockRestore();
+      }
+      // Shutdown while claim preparation is pending drains it and starts no child.
+      await age();
+      const revisionBeforeStop = (await snapshot()).revision;
+      let preparing = false;
+      let releasePrepare = () => {};
+      const prepareHeld = new Promise<void>((resolve) => {
+        releasePrepare = resolve;
+      });
+      const prepare = vi.spyOn(prisma, "$prepareMutation").mockImplementationOnce(async () => {
+        preparing = true;
+        await prepareHeld;
+      });
+      const beforeStopCalls = callCount();
+      const pendingRefresh = post({ action: "refresh", revision: revisionBeforeStop });
+      try {
+        await waitFor(async () => preparing);
+        let stopped = false;
+        const stopping = service.stopYoutubeCatalogueRefresh().then(() => {
+          stopped = true;
+        });
+        await Promise.resolve();
+        expect(stopped).toBe(false);
+        releasePrepare();
+        await stopping;
+        expect((await pendingRefresh).status).not.toBe(202);
+        expect(callCount()).toBe(beforeStopCalls);
+      } finally {
+        releasePrepare();
+        await pendingRefresh;
+        prepare.mockRestore();
+      }
+      // Reads that began before stop must not claim after it returned.
+      service.startYoutubeCatalogueRefresh();
+      const readMany = prisma.config.findMany.bind(prisma.config);
+      let reading = false;
+      let releaseRead = () => {};
+      const readHeld = new Promise<void>((resolve) => {
+        releaseRead = resolve;
+      });
+      const holdRead = vi.spyOn(prisma.config, "findMany").mockImplementationOnce((async (
+        ...args: unknown[]
+      ) => {
+        const rows = await (readMany as (...args: unknown[]) => Promise<unknown>)(...args);
+        reading = true;
+        await readHeld;
+        return rows;
+      }) as typeof prisma.config.findMany);
+      const lateRefresh = post({ action: "refresh", revision: revisionBeforeStop });
+      try {
+        await waitFor(async () => reading);
+        await service.stopYoutubeCatalogueRefresh();
+        releaseRead();
+        expect((await lateRefresh).status).toBe(409);
+        expect(callCount()).toBe(beforeStopCalls);
+      } finally {
+        releaseRead();
+        await lateRefresh;
+        holdRead.mockRestore();
       }
       await prisma.config.update({
         where: { key: YOUTUBE_REGISTRY_KEY },

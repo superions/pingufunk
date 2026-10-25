@@ -292,12 +292,11 @@ async function scan(
   try {
     for (const key of reservation.pages) {
       const page = await readIndexPage(key);
-      for (const row of page)
-        if (row.videoId && row.content)
-          firstSeen.set(
-            row.videoId,
-            Math.min(firstSeen.get(row.videoId) ?? Infinity, row.content.filmlisteTimestamp)
-          );
+      for (const row of page) {
+        const observed = row.firstSeenAt ?? row.content?.filmlisteTimestamp;
+        if (row.videoId && observed)
+          firstSeen.set(row.videoId, Math.min(firstSeen.get(row.videoId) ?? Infinity, observed));
+      }
     }
     const mappings = loaded.registry.programMappings.filter(
       (mapping) =>
@@ -320,11 +319,11 @@ async function scan(
           Math.floor(Date.now() / 1000)
         );
         for (const row of page) {
-          if (row.videoId && row.content) {
-            row.content.filmlisteTimestamp =
-              firstSeen.get(row.videoId) ?? row.content.filmlisteTimestamp;
-            // A video's first observation also spans overlapping playlists in this scan.
-            firstSeen.set(row.videoId, row.content.filmlisteTimestamp);
+          if (row.videoId && row.firstSeenAt) {
+            row.firstSeenAt = firstSeen.get(row.videoId) ?? row.firstSeenAt;
+            if (row.content) row.content.filmlisteTimestamp = row.firstSeenAt;
+            // First observation spans overlapping playlists and unavailable refreshes.
+            firstSeen.set(row.videoId, row.firstSeenAt);
           }
           if (row.videoId && seen.has(row.videoId))
             throw new YoutubeCatalogueDataError("duplicate_id");
@@ -393,6 +392,8 @@ async function scan(
           await tx.config.create({
             data: { key: pages[i], value: pageValues[i] },
           });
+        // Cancellation during an awaited insert must still roll back publication.
+        controller.signal.throwIfAborted();
       },
       { timeout: 15000 }
     );
@@ -452,8 +453,8 @@ export async function refreshYoutubeCatalogue(revision: string): Promise<void> {
       "Nächster Scan frühestens sechs Stunden nach dem letzten Versuch."
     );
   // Claim synchronously before the first async database write, including competing requests.
-  if (runtime.work || runtime.probe)
-    throw new YoutubeCatalogueError(409, "Ein Metadatenabruf läuft bereits.");
+  if (runtime.work || runtime.probe || runtime.stopped)
+    throw new YoutubeCatalogueError(409, "Ein Metadatenabruf läuft bereits oder wird beendet.");
   runtime.probe = true;
   const controller = new AbortController();
   runtime.controller = controller;
@@ -472,42 +473,58 @@ export async function refreshYoutubeCatalogue(revision: string): Promise<void> {
   };
   const raw = JSON.stringify(reservation);
   runtime.token = reservation.token;
+  // Track claim and handoff too: shutdown must drain every owned asynchronous write.
+  const claim = (async () => {
+    try {
+      await prisma.$prepareMutation();
+      controller.signal.throwIfAborted();
+      await prisma.$transaction(async (tx) => {
+        controller.signal.throwIfAborted();
+        if (
+          (
+            await tx.config.updateMany({
+              where: { key: YOUTUBE_REGISTRY_KEY, value: loaded.raw! },
+              data: { value: loaded.raw! },
+            })
+          ).count !== 1
+        )
+          throw conflict();
+        if (old.raw === null)
+          await tx.config.create({ data: { key: YOUTUBE_INDEX_KEY, value: raw } });
+        else if (
+          (
+            await tx.config.updateMany({
+              where: { key: YOUTUBE_INDEX_KEY, value: old.raw },
+              data: { value: raw },
+            })
+          ).count !== 1
+        )
+          throw conflict();
+        controller.signal.throwIfAborted();
+      });
+      // scan handles a cancellation after the claim committed without starting a child.
+      runtime.work = scan(loaded, reservation, raw, controller).finally(() => {
+        runtime.work = undefined;
+        if (runtime.controller === controller) runtime.controller = undefined;
+      });
+    } finally {
+      runtime.probe = false;
+      if (!runtime.work && runtime.controller === controller) runtime.controller = undefined;
+    }
+  })();
+  runtime.probeWork = claim;
   try {
-    await prisma.$prepareMutation();
-    await prisma.$transaction(async (tx) => {
-      if (
-        (
-          await tx.config.updateMany({
-            where: { key: YOUTUBE_REGISTRY_KEY, value: loaded.raw! },
-            data: { value: loaded.raw! },
-          })
-        ).count !== 1
-      )
-        throw conflict();
-      if (old.raw === null)
-        await tx.config.create({ data: { key: YOUTUBE_INDEX_KEY, value: raw } });
-      else if (
-        (
-          await tx.config.updateMany({
-            where: { key: YOUTUBE_INDEX_KEY, value: old.raw },
-            data: { value: raw },
-          })
-        ).count !== 1
-      )
-        throw conflict();
-    });
-    runtime.work = scan(loaded, reservation, raw, controller).finally(() => {
-      runtime.work = undefined;
-      runtime.controller = undefined;
-    });
+    await claim;
   } finally {
-    runtime.probe = false;
+    if (runtime.probeWork === claim) runtime.probeWork = undefined;
   }
 }
 
 export async function cancelYoutubeCatalogue(): Promise<void> {
   runtime.controller?.abort();
   await Promise.allSettled([runtime.work, runtime.probeWork]);
+  // A claim may have handed off to scan while the first await was pending.
+  await runtime.work;
 }
 
 async function readIndexPage(key: string): Promise<IndexRow[]> {
@@ -524,12 +541,24 @@ export async function youtubeCataloguePage(page: number) {
   if (!Number.isSafeInteger(page) || page < 0 || page >= 800)
     throw new YoutubeCatalogueError(400, "Ungültige Inventarseite.");
   const loaded = await loadRegistry();
-  const { value } = await loadManifest();
-  if (!value || page >= value.pages.length)
-    return { items: [], count: value?.count ?? 0, current: false };
-  const items = await readIndexPage(value.pages[page]);
-  if (items.length !== Math.min(100, value.count - page * 100)) throw invalid();
-  return { items, count: value.count, current: value.indexRevision === loaded.revision };
+  let { value } = await loadManifest();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!value || page >= value.pages.length)
+      return { items: [], count: value?.count ?? 0, current: false };
+    const selected = value.pages[page];
+    try {
+      const items = await readIndexPage(selected);
+      if (items.length !== Math.min(100, value.count - page * 100)) throw invalid();
+      return { items, count: value.count, current: value.indexRevision === loaded.revision };
+    } catch (error) {
+      if (attempt !== 0) throw error;
+      const fresh = await loadManifest();
+      // Only a committed replacement justifies retrying; corruption stays an error.
+      if (fresh.value?.pages[page] === selected) throw error;
+      value = fresh.value;
+    }
+  }
+  throw invalid();
 }
 
 /** Six-hour serial refresh; startup and health reads never trigger a scan. */

@@ -3386,3 +3386,48 @@ Funktionen 91,86 %, Lines 90,78 % grün. Nach ergänzter Fremdversuchsassertion
 derselbe reale SQLite-Consumer erneut grün. P17.2 für die erneute terminale
 CI-/PG-Abnahme vor Mainintegration geöffnet; die unveränderte Branding-
 Desktopprüfung wird wiederverwendet. Kein Merge bei laufenden/roten Gates.
+
+## PR-Reviewnacharbeit vor Mainintegration (26.10.2026)
+
+Acht nachvollziehbare Reviewbefunde in PR #9 werden vor dem Merge geschlossen:
+Statuspolling darf einen alten GUI-Entwurf nicht auf eine fremde Revision
+umbasieren; ein fehlgeschlagener Inventarread muss ausdrücklich erneut ladbar
+sein; getrimmte Namen werden bereits vor Submit kanonisiert; erneutes Übernehmen
+einer Vorgabe erhält die Reihenfolge neben lokalen Zuordnungen. Ein identifiziertes
+Video speichert seinen Erstfund unabhängig von abspielbaren Metadaten. Der
+optionale Indexwert liest alte Seiten weiterhin über deren bisherigen Timestamp;
+bei alten unbekannten Platzhaltern wird kein verlorenes Datum erfunden.
+
+Abbruch wird nach dem letzten wartenden Insert innerhalb der Veröffentlichung
+geprüft, damit die echte Transaktion zurückrollt. Shutdown prüft seinen Stopstand
+auch nach den initialen Reads und wartet Claim sowie Scanübergabe ab. Bei einem
+zwischen Manifest und Seitenread veröffentlichten Indexwechsel wird genau einmal
+die neue Seitengeneration gelesen; unveränderte fehlende oder korrupte Seiten
+bleiben Fehler. Weder externe Abrufe noch Writes werden dabei blind wiederholt.
+
+Der reale SQLite-/PG-Consumer hält den letzten Insert, Claimvorbereitung und
+initialen Registryread gezielt an. Er prüft Rollback, keine späten Kindprozesse,
+Erstfund über verfügbar → nicht verfügbar → verfügbar, atomaren Seitenwechsel
+und weiterhin fehlschlagenden Read einer wirklich fehlenden aktuellen Seite.
+Die SQLite-Ausführung ist grün; PostgreSQL muss für diesen neuen Input erneut
+in der Fork-CI terminal bestätigen.
+
+Desktopprüfung auf isoliertem synthetischem SQLite-Runtime, 1280×720/System-Dark:
+zwei Tabs mit gleichzeitigem Statuspolling, erhaltenem veraltetem Entwurf und
+Speichersperre; getrimmter Kanalname mit erfolgreichem Save/Readback; erneute
+Vorgabenzuordnung neben lokalem Programm; Inventarfehler und erneutes Laden bei
+identischem Abschlussdatum und identischer Seitennummer. Null Downloadjobs,
+externe Providerzugriffe gesperrt. Console ohne Fehler/Warnungen, auch der
+synthetische 503 wird als bedienbarer Fehler angezeigt. Private Vergleichsbilder
+bleiben ignoriert unter `downloads/branding-review-ui/`.
+
+Vollständiger lokaler Coverage-Lauf: 1.510 bestanden, 24 bedingte Skips;
+Statements 88,46 %, Branches 85,67 %, Funktionen 91,97 %, Lines 90,90 %.
+Lint, Typecheck, Formatcheck und Produktionsbuild grün. Neue Fork-CI,
+Container-/PG-Abnahme und abschließender Review bleiben Mergevoraussetzung;
+P17.2 bleibt bis dahin offen. Kein Produktrollout, Grab oder Bibliothekswrite.
+
+Vier gezielte Mutationen (finaler Abbruchcheck, Shutdowncheck nach Reads,
+Erstfundübernahme aus nicht verfügbarem Eintrag, einmaliger Seitengenerationsread)
+werden jeweils vom realen Consumer abgewiesen. Danach identischen geprüften
+Produktcode wiederhergestellt; eigene UI-Prozesse, Tabs und disposable DB entfernt.
