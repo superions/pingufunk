@@ -35,8 +35,8 @@ pauschale Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
 Weiterer Nutzerentscheid 25.10.2026: **P18** gestaltet Pingufunks eigenständige
 deutsche/englische README als öffentliche Visitenkarte grundlegend neu, samt
-belegtem Vergleich. RundfunkArr wird ausschließlich als Ursprung und
-Vergleichsquelle geführt, nicht als Produkt-, Architektur- oder Abnahmevorgabe.
+klarem, nutzenorientiertem Vergleich. RundfunkArr wird ausschließlich als
+Ursprung und Vergleichsquelle geführt, nicht als Produkt-, Architektur- oder Abnahmevorgabe.
 P18 ist unabhängig von der noch offenen YouTube-Implementierung startbar.
 
 ## Gemeinsame Regeln und Abnahme
@@ -3386,7 +3386,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
 
 Ergebnis: Pingufunks README ist eine hochwertige, verständliche öffentliche
 Visitenkarte in Deutsch und Englisch. RundfunkArr erscheint als Ursprung und
-als fair belegte Vergleichsquelle. Es ist keine Produktvorgabe. Entwicklungs-
+als fair dargestellte Vergleichsquelle. Es ist keine Produktvorgabe. Entwicklungs-
 und Betriebsstatus werden ehrlich getrennt; P18 ist keine Produktvollabnahme.
 
 - [ ] **P18.1 — README als eigenständige Produktvisitenkarte gestalten und abnehmen (M).**
@@ -3411,10 +3411,12 @@ und Betriebsstatus werden ehrlich getrennt; P18 ist keine Produktvollabnahme.
       mit Implementierungsdetails zu überladen. Alttexte in beiden Sprachen,
       portable relative Bildlinks und lesbare Darstellung auf GitHub vorsehen.
       Einen kompakten Vergleich mit etwa sechs bis zehn relevanten Kriterien
-      aufbauen: Pingufunk, RundfunkArr, konkreter Unterschied/Nutzen und Beleg.
-      Eigenen Main-/Releasezustand sowie Vergleichsrevision/-datum nennen;
-      gegen aktuelle Quell-/Vertragsbelege prüfen. Vorhanden, geplant, ungeprüft
-      und konkrete Betriebsabnahme nicht vermischen. YouTube/Modulgrenzen bis
+      aufbauen: Bereich, Pingufunk, RundfunkArr und konkreter Unterschied/Nutzen.
+      Öffentlich keine Belegspalte, Quellenfußnoten, Commit-/Testnummern oder
+      Vergleichsrevisionen/-prüfnachweise aufnehmen. Aussagen vor Veröffentlichung
+      intern gegen den aktuellen Funktionsstand prüfen; daraus keinen zusätzlichen
+      Belegreport oder öffentlichen Nachweisapparat machen. Vorhanden, geplant,
+      ungeprüft und konkrete Betriebsabnahme nicht vermischen. YouTube/Modulgrenzen bis
       erfülltem P17 offen als geplant führen; keine behauptete Mehrleistung aus
       bloßen TODOs. Native Arr-Verträge, Metadaten-/Sprach-/Medienprüfung,
       SQLite/PG, Queue/Fehlerverhalten, CI und Diagnose sind Vergleichskandidaten,
@@ -3437,8 +3439,8 @@ und Betriebsstatus werden ehrlich getrennt; P18 ist keine Produktvollabnahme.
       Wort-/Bildhierarchie, Tabellenbreite, Bildlesbarkeit, Alttexte, Sprachwechsel,
       Inhaltsnavigation und alle Ressourcenlinks funktionieren. Screenshots aus
       passendem eigenen Teststand mit synthetischen Daten, keine Upstreambilder
-      als Pingufunk-Nachweis oder Mockups als fertige UI ausgeben. Vergleichszellen
-      revisionsgebunden belegen, DE/EN sachlich und sprachlich gegeneinander
+      als Pingufunk-Nachweis oder Mockups als fertige UI ausgeben. Vergleichsaussagen
+      intern auf sachliche Richtigkeit prüfen, DE/EN sprachlich gegeneinander
       reviewen, Findings beheben und erneut prüfen. Markdownformat/Diff/Referenzen
       prüfen, unveränderte Produktgates wiederverwenden; keine Vollmatrix nur
       wegen Dokuänderungen. Kohärenten eigenen Topiccommit pushen; Mainmerge,

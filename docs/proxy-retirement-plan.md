@@ -30,10 +30,12 @@ Eigenständige Positionierung laut weiterem Nutzerentscheid vom 25.10.2026:
 RundfunkArr ist ausschließlich Ursprung und Vergleichsquelle; Upstreamparität
 ist kein Architektur-, Start- oder Abnahmekriterium. Der unabhängige P18-Pfad
 in den [Phasen-TODOs](../todo/proxy-retirement.md) gestaltet die deutsche und
-englische README als Produktvisitenkarte samt belegtem Vergleich grundlegend
-neu. Vorhandene Funktions-/Betriebsgrenzen bleiben sichtbar, geplante Merkmale
+englische README als Produktvisitenkarte samt klarem, nutzenorientiertem
+Vergleich grundlegend neu. Vorhandene Funktions-/Betriebsgrenzen bleiben sichtbar, geplante Merkmale
 werden nicht als ausgeliefert beworben. Historische Upstreamanalysen unten
 bleiben historische Evidenz.
+Die Vergleichsaussagen werden intern geprüft; die öffentliche Gegenüberstellung
+enthält keine Belegspalten, Quellenfußnoten oder Revisions-/Prüfnachweise.
 
 ## Ergebnis und Reihenfolge
 

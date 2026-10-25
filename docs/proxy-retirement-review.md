@@ -3020,7 +3020,7 @@ verbindlich. Nur Markdown geändert; keine Produkt-/Runtimegates ausgeführt.
 
 Nutzerauftrag: RundfunkArr ausschließlich als Ursprung und Vergleichsquelle,
 Pingufunk eigenständig darstellen; die README hochwertig gestalten und einen
-belegten Überblick über bessere bzw. andere Eigenschaften anbieten. Einziger
+klaren Überblick über bessere bzw. andere Eigenschaften anbieten. Einziger
 ausführbarer Punkt ist P18.1 im bestehenden Phasen-TODO. Das ist eine neue
 offene Dokumentationsaufgabe, keine bereits umgesetzte README oder Produktabnahme.
 
@@ -3040,8 +3040,11 @@ offene Dokumentationsaufgabe, keine bereits umgesetzte README oder Produktabnahm
   Auch der neue Quellenentwurf enthält keine Upstreamparität mehr als Ziel.
 - Zwei Sprachen sind zwei gleichwertige Produktzugänge, nicht eine Kurzfassung
   und ein vollständiges Original. `README.md`/`README.en.md` bekommen dieselben
-  Aussagen, Nachweise, Befehle, Grenzen und gut sichtbare wechselseitige Links.
-- Ein Vergleich braucht Revisions-/Datumsbindung und Belege je Aussage.
+  Aussagen, Befehle, Grenzen und gut sichtbare wechselseitige Links.
+- Der Vergleich ist Produktkommunikation ohne sichtbaren Belegapparat.
+  Aussagen werden vor Veröffentlichung intern auf sachliche Richtigkeit geprüft;
+  öffentlich keine Belegspalten, Quellenfußnoten, Commit-/Testnummern oder
+  Vergleichsrevisionen/-prüfnachweise aufnehmen. Kein zusätzlicher Belegreport.
   Funktionen in einem TODO sind keine Verbesserung des ausgelieferten Produkts;
   unbekanntes Upstreamverhalten bedeutet nicht fehlende Funktion. Vorteile,
   Gleichstand, andere Entscheidungen und Grenzen werden fair getrennt.
@@ -3063,3 +3066,8 @@ und Diff geprüft; alle 70 vorherigen Checkboxen unverändert. Genau P18.1 ist
 neu offen. Historische Analyse-/Reviewinhalte und Sicherheitsregeln bleiben
 erhalten, `README.md` und `LICENSE` sind unverändert. Keine Produktgates für
 diese Plan-/Anweisungsänderung gestartet.
+
+Nutzerpräzisierung: sichtbare Belege schaden der gewünschten Vergleichsdarstellung.
+P18.1 trennt deshalb interne redaktionelle Prüfung von der öffentlichen, gut
+lesbaren Gegenüberstellung. Die vorherige Pflicht zu öffentlichen Beleg-/
+Revisionsangaben ist entfernt; sachliche Richtigkeit bleibt erforderlich.
