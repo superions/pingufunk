@@ -30,7 +30,7 @@ erledigte Implementierung.
 Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad strukturierte,
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
-P17.1/P17.1a sind entwickelt und abgenommen; nächster offener Punkt ist P17.2.
+P17.1/P17.1a/P17.2 sind entwickelt und abgenommen; nächster offener Punkt ist P17.3.
 Die bestehenden offenen Phasen werden weder umgedeutet noch pauschale
 Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
@@ -3229,7 +3229,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       HLS-/Mux-Dateien, Persistenz, Abbruch/Recovery und TV-Freigabe auf SQLite/PG.
       Ausführlicher Ownerreview im bestehenden Review; keine Produktion,
       Mainintegration, Publikation, Schema- oder Bibliotheksänderung.
-- [ ] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
+- [x] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
       Abhängigkeit P17.1. Owner: neue `data/youtube-sources.json` samt Schema/
       `scripts/validate-data.ts`, `src/lib/settings-schema.ts`, bestehender
       Settings-/Config-/Bestätigungsowner und `/settings`, neuer begrenzter
@@ -3270,6 +3270,17 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Metadatenscan über echten begrenzten Child-Owner, Abort/Disable/alte
       Generation, strikte Fehler- statt Leersemantik und null Medienjobs belegt.
       Konfigurations-/Scanvertrag im YouTube-Katalogvertrag aktualisieren.
+      Abnahme 25.10.2026: GUI/Register/serieller Metadatenindex umgesetzt,
+      fünf geprüfte deaktivierte Vorgaben, lokale Werte bleiben erhalten.
+      Codecheckpoint `944ea78` mit
+      [CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40240281926)
+      und [vollständiger nativer Container-CI](https://github.com/superions/pingufunk/actions/runs/40240281946)
+      terminal grün; 1.510 Tests und separate reale SQLite-/PG-Configproben.
+      Desktop inklusive Save/Readback/Reload, Konflikt, Scan/Abort und Pagination
+      abgenommen. Nachreview behebt Erstfunddrift bei überlappenden Playlists und
+      UTF-8-Seitenüberlauf, jeweils kausal regressionsgeschützt; keine offenen
+      Findings. Automatische ID-/Episodenbindung und Medienintegration bleiben
+      P17.3/P17.4. Keine produktiven Grabs, Bibliotheksänderungen oder Rollout.
 - [ ] **P17.3 — IDs automatisch auflösen und Der Kommissar vollständig abgleichen (M).**
       Abhängigkeit P17.2. Owner: neuer enger Mappingowner bei
       `youtube-catalogue.ts`, vorhandene `shows.ts`, `sonarr-provider.ts`,

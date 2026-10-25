@@ -3235,7 +3235,7 @@ Nur die erwartete Next-Dev-Fast-Refresh-Warnung nach Sourceänderung. Private
 JPEGs im ignorierten `downloads/p172-ui/`; keine Bilder/Antwortdumps im Git.
 Der eigene Devserver und Browsertab sind beendet; UI-Datenbank hatte null Jobs.
 
-Finaler lokaler Coverage-Lauf: 137 Dateien/1.510 Tests grün, 6 Dateien/24 Tests
+Lokaler Coverage-Lauf vor den beiden Nachreviewfixes: 137 Dateien/1.510 Tests grün, 6 Dateien/24 Tests
 bedingt übersprungen (einschließlich des neuen separaten PG-Gates). Statements
 88,31 %, Branches 85,55 %, Funktionen 91,85 %, Lines 90,76 %. Lint, Typecheck,
 Formatcheck, Datenvalidierung, Shellsyntax und Produktionsbuild grün; elf
@@ -3251,7 +3251,7 @@ Kapazitätsmeldung wurde davor gezielt mit 26 Tests/Typecheck/Lint geprüft;
 der CI-Lauf umfasst den gesamten Stand. Auch seine
 [native Container-CI](https://github.com/superions/pingufunk/actions/runs/40236317277)
 ist terminal erfolgreich abgeschlossen.
-Keine Grabs, Bibliotheks-, Produktions-, Main- oder Publikationsänderungen.
+Keine produktiven Grabs, Bibliotheks-, Produktions-, Main- oder Publikationsänderungen.
 
 Der letzte Nachreview reproduzierte noch einen Zeitstempelrandfall mit zwei
 überlappenden Programmplaylists: Erstfunde derselben Video-ID konnten im
@@ -3272,8 +3272,9 @@ terminal grün: erneut 137 Dateien/1.510 Tests, 6 Dateien/24 Tests bedingt
 Statements 88,31 %, Branches 85,55 %, Funktionen 91,85 %, Lines 90,76 %.
 Audit einschließlich Dev-Dependencies ohne Befunde, Lint/Format/Typecheck/Build
 ebenfalls grün. Die ursprünglichen drei Mutationsgegenchecks und die unveränderte
-Desktop-Evidenz bleiben gültig. Der Nachreviewbefund ist behoben; nur seine
-abschließende native Container-CI steht noch aus. P17.2 bleibt bis dahin offen.
+Desktop-Evidenz bleiben gültig. Auch seine
+[native Container-CI](https://github.com/superions/pingufunk/actions/runs/40238451177)
+ist terminal erfolgreich abgeschlossen.
 
 Die abschließende Kapazitätsprobe mit langen Unicodebeschreibungen deckte
 zusätzlich eine asymmetrische Grenze auf: Ein Index unter 8 MiB konnte eine
@@ -3284,5 +3285,33 @@ Bytegrenze wie der Reader vor jeder Indextransaktion. Der alte vollständige
 Index bleibt bei Überschreitung exakt erhalten. Die Probe unterscheidet die
 1-MiB-Seiten- und 8-MiB-Gesamtgrenze über ihre tatsächlichen Fehlermeldungen;
 33 betroffene Tests, Lint, Typecheck und Format grün. Auch dieser enge
-Scanowner-Fix wird als eigener finaler CI-Checkpoint auf SQLite/PG und im
+Scanowner-Fix wurde als eigener finaler CI-Checkpoint auf SQLite/PG und im
 Container geprüft; keine Änderung an GUI, Medien-/Downloadownern oder Schema.
+
+Finale Entwicklungsabnahme 25.10.2026 für Codecheckpoint
+`944ea78cd920c52c329811cd404507ff0dced1e0`:
+[CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40240281926)
+und [vollständige native Container-CI](https://github.com/superions/pingufunk/actions/runs/40240281946)
+terminal erfolgreich, jeweils gegen exakt diesen SHA gelesen. Erneut
+137 Dateien/1.510 Tests grün, 6 Dateien/24 Tests bedingt übersprungen;
+separate echte Config-/Scanproben auf PostgreSQL 17 und 18 vollständig grün.
+Statements 88,32 %, Branches 85,56 %, Funktionen 91,86 %, Lines 90,77 %.
+Dev-inklusive Audit ohne Befunde, Lint/Format/Typecheck/Build grün.
+Die unveränderte Desktop-Evidenz wird wiederverwendet.
+
+Native Containerbelege: Qualitäts-/Sprach-/Konfliktfälle direkt und über
+Prowlarr bestanden; beide kalten Ketten von 0 initialen Grabs bis jeweils
+80/80 realen synthetischen Imports, wiederholtes RSS ohne Doppelgrab.
+SQLite-Bootstrap/Persistenz/Restart, TLS-/Post-write-Rollback, echte
+progressive/HLS-/Mux-Dateien, negative Medien, SAB-History, SIGTERM-Drain,
+PG-Ausfall-/Quittierungsgrenzen sowie TV-Review→Worker→Datei/Audit/Receipt
+auf beiden Backends erfolgreich. Keine Imagepublikation dieser Testläufe.
+
+P17.2 ist ohne offene Findings abgenommen. Die drei Mutationsgegenchecks und
+beide zusätzlich reproduzierten Nachreviewbefunde sind geschützt. Automatische
+ID-/Episodenbindung, 97-Folgen-Abgleich und YouTube-Medienintegration bleiben
+P17.3/P17.4; keine vorgezogene Quellen- oder Medienfreigabe. Keine Produktion,
+reale Bibliothek, Main oder Publikation verändert. Der Abschlusscheckpoint
+ändert nur Review/TODO; Produkt-, Test-, Workflow-, Dependency- und Runtimeinputs
+bleiben exakt am getesteten Codecheckpoint. Dafür werden die gültigen Gates
+wiederverwendet statt die Matrix für eine Statusfortschreibung zu wiederholen.
