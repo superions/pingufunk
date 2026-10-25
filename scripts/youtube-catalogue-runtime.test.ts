@@ -92,7 +92,7 @@ const offset=Number(args[args.indexOf('--playlist-start')+1])-1;
 if(config.mode==='followup'&&offset>0)process.exit(1);
 if(config.mode==='invalid'){process.stdout.write('{}');process.exit(0);}
 const count=config.mode==='limited'||config.mode==='capacity'?1000:101;
-const entries=Array.from({length:Math.min(100,Math.max(0,count-offset))},(_,i)=>({id:String(offset+i+(config.mode==='overlap'?1000:0)).padStart(11,'0'),title:'Synthetic episode '+(offset+i),channel_id:config.mode==='foreign'?'UCbbbbbbbbbbbbbbbbbbbbbb':${JSON.stringify(channel)},duration:120,description:config.mode==='capacity'?'x'.repeat(8000):'Synthetic metadata',upload_date:'20260228'}));
+const entries=Array.from({length:Math.min(100,Math.max(0,count-offset))},(_,i)=>({id:String(offset+i+(config.mode==='overlap'?1000:0)).padStart(11,'0'),title:'Synthetic episode '+(offset+i),channel_id:config.mode==='foreign'?'UCbbbbbbbbbbbbbbbbbbbbbb':${JSON.stringify(channel)},duration:120,description:config.mode==='pagecapacity'?'ü'.repeat(8000):config.mode==='capacity'?'x'.repeat(8000):'Synthetic metadata',upload_date:'20260228'}));
 if(config.mode==='missing')delete entries[0].id;
 if(config.mode==='success'&&offset===100)entries.push({availability:'private',id:null,title:'[Private video]'});
 process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},channel:'Synthetic channel',title:'Synthetic programme',entries}));
@@ -342,7 +342,15 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
             : `ALTER TABLE "Config" DROP CONSTRAINT p17_reject_page`
         );
       }
-      for (const failure of ["followup", "foreign", "missing", "invalid", "limited", "capacity"]) {
+      for (const failure of [
+        "followup",
+        "foreign",
+        "missing",
+        "invalid",
+        "limited",
+        "capacity",
+        "pagecapacity",
+      ]) {
         await age();
         mode(failure);
         const count = callCount();
@@ -350,8 +358,10 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
         await settled();
         const result = await snapshot();
         expect(result.scan.state).toBe(
-          ["limited", "capacity"].includes(failure) ? "limited" : "failed"
+          ["limited", "capacity", "pagecapacity"].includes(failure) ? "limited" : "failed"
         );
+        if (failure === "capacity") expect(result.scan.message).toContain("8 MiB");
+        if (failure === "pagecapacity") expect(result.scan.message).toContain("1 MiB");
         expect(
           await prisma.config.findMany({
             where: { key: { startsWith: `${YOUTUBE_INDEX_KEY}.page.` } },

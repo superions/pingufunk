@@ -3248,8 +3248,9 @@ umfangreiche unveränderte Gates wiederverwendet. Der exakte Codecheckpoint
 terminal erfolgreich abgeschlossen: erneut 1.510 Tests, Statements 88,31 %,
 Branches 85,53 %, Funktionen 91,85 %, Lines 90,76 %. Die letzte ergänzte
 Kapazitätsmeldung wurde davor gezielt mit 26 Tests/Typecheck/Lint geprüft;
-der CI-Lauf umfasst den gesamten Stand. Finale native Container-CI noch offen;
-P17.2 bleibt bis dahin offen.
+der CI-Lauf umfasst den gesamten Stand. Auch seine
+[native Container-CI](https://github.com/superions/pingufunk/actions/runs/40236317277)
+ist terminal erfolgreich abgeschlossen.
 Keine Grabs, Bibliotheks-, Produktions-, Main- oder Publikationsänderungen.
 
 Der letzte Nachreview reproduzierte noch einen Zeitstempelrandfall mit zwei
@@ -3263,3 +3264,25 @@ automatische Episodenfreigabe oder Deduplikation unterschiedlicher Programme
 daraus abgeleitet. 33 betroffene Tests, Lint/Typecheck/Format grün. Diese
 gezielte Änderung am Scanowner erhält einen eigenen CI-Checkpoint, einschließlich
 PG17/18 und Containerbuild; GUI und bisherige übrige Owner sind unverändert.
+
+Folgecheckpoint `b8fa19143635ca6285afb2f402e81b4dc2a7b9cf` hat
+[CI mit PG17/18](https://github.com/superions/pingufunk/actions/runs/40238451181)
+terminal grün: erneut 137 Dateien/1.510 Tests, 6 Dateien/24 Tests bedingt
+übersprungen; der separate echte PG-Gate läuft auf beiden Versionen vollständig.
+Statements 88,31 %, Branches 85,55 %, Funktionen 91,85 %, Lines 90,76 %.
+Audit einschließlich Dev-Dependencies ohne Befunde, Lint/Format/Typecheck/Build
+ebenfalls grün. Die ursprünglichen drei Mutationsgegenchecks und die unveränderte
+Desktop-Evidenz bleiben gültig. Der Nachreviewbefund ist behoben; nur seine
+abschließende native Container-CI steht noch aus. P17.2 bleibt bis dahin offen.
+
+Die abschließende Kapazitätsprobe mit langen Unicodebeschreibungen deckte
+zusätzlich eine asymmetrische Grenze auf: Ein Index unter 8 MiB konnte eine
+einzelne 100er-Seite oberhalb ihres 1-MiB-Lesebudgets enthalten. Die native
+SQLite-Regression scheitert ohne Fix an fälschlichem `complete` statt `limited`.
+Der Producer serialisiert die Seiten nun einmal und prüft dieselbe UTF-8-
+Bytegrenze wie der Reader vor jeder Indextransaktion. Der alte vollständige
+Index bleibt bei Überschreitung exakt erhalten. Die Probe unterscheidet die
+1-MiB-Seiten- und 8-MiB-Gesamtgrenze über ihre tatsächlichen Fehlermeldungen;
+33 betroffene Tests, Lint, Typecheck und Format grün. Auch dieser enge
+Scanowner-Fix wird als eigener finaler CI-Checkpoint auf SQLite/PG und im
+Container geprüft; keine Änderung an GUI, Medien-/Downloadownern oder Schema.

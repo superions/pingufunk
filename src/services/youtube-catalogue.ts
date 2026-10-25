@@ -35,6 +35,7 @@ const localSchema = z
   .object({ version: z.literal(1), generation: z.uuid(), registry: youtubeRegistrySchema })
   .strict();
 const pagePrefix = `${YOUTUBE_INDEX_KEY}.page.`;
+const pageBytes = 1024 * 1024;
 type IndexRow = YoutubeIndexRow;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const manifestSchema = z
@@ -331,10 +332,13 @@ async function scan(
       state: "complete",
       message: "Metadatenscan vollständig. Inhalte und Zuordnungen sind noch keine Medienfreigabe.",
     };
-    const pages = Array.from(
-      { length: Math.ceil(rows.length / 100) },
-      (_, i) => `${pagePrefix}${reservation.token}.${i}`
+    const pageValues = Array.from({ length: Math.ceil(rows.length / 100) }, (_, i) =>
+      JSON.stringify(rows.slice(i * 100, i * 100 + 100))
     );
+    // UTF-8 bytes can exceed the reader's per-page budget before the total index is full.
+    if (pageValues.some((value) => Buffer.byteLength(value) > pageBytes))
+      throw new YoutubeCatalogueError(413, "Inventarseite überschreitet 1 MiB.");
+    const pages = pageValues.map((_, i) => `${pagePrefix}${reservation.token}.${i}`);
     const completed: Manifest = {
       ...reservation,
       pages,
@@ -369,7 +373,7 @@ async function scan(
         await tx.config.deleteMany({ where: { key: { startsWith: pagePrefix } } });
         for (let i = 0; i < pages.length; i++)
           await tx.config.create({
-            data: { key: pages[i], value: JSON.stringify(rows.slice(i * 100, i * 100 + 100)) },
+            data: { key: pages[i], value: pageValues[i] },
           });
       },
       { timeout: 15000 }
@@ -489,7 +493,7 @@ export async function cancelYoutubeCatalogue(): Promise<void> {
 
 async function readIndexPage(key: string): Promise<IndexRow[]> {
   const row = await prisma.config.findUnique({ where: { key }, select: { value: true } });
-  if (!row || Buffer.byteLength(row.value) > 1024 * 1024) throw invalid();
+  if (!row || Buffer.byteLength(row.value) > pageBytes) throw invalid();
   try {
     return z.array(youtubeIndexRowSchema).max(100).parse(JSON.parse(row.value));
   } catch {
