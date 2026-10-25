@@ -92,7 +92,7 @@ const offset=Number(args[args.indexOf('--playlist-start')+1])-1;
 if(config.mode==='followup'&&offset>0)process.exit(1);
 if(config.mode==='invalid'){process.stdout.write('{}');process.exit(0);}
 const count=config.mode==='limited'||config.mode==='capacity'?1000:101;
-const entries=Array.from({length:Math.min(100,Math.max(0,count-offset))},(_,i)=>({id:String(offset+i).padStart(11,'0'),title:'Synthetic episode '+(offset+i),channel_id:config.mode==='foreign'?'UCbbbbbbbbbbbbbbbbbbbbbb':${JSON.stringify(channel)},duration:120,description:config.mode==='capacity'?'x'.repeat(8000):'Synthetic metadata',upload_date:'20260228'}));
+const entries=Array.from({length:Math.min(100,Math.max(0,count-offset))},(_,i)=>({id:String(offset+i+(config.mode==='overlap'?1000:0)).padStart(11,'0'),title:'Synthetic episode '+(offset+i),channel_id:config.mode==='foreign'?'UCbbbbbbbbbbbbbbbbbbbbbb':${JSON.stringify(channel)},duration:120,description:config.mode==='capacity'?'x'.repeat(8000):'Synthetic metadata',upload_date:'20260228'}));
 if(config.mode==='missing')delete entries[0].id;
 if(config.mode==='success'&&offset===100)entries.push({availability:'private',id:null,title:'[Private video]'});
 process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},channel:'Synthetic channel',title:'Synthetic programme',entries}));
@@ -426,6 +426,53 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
       stop = () => service.stopYoutubeCatalogueRefresh();
       expect((await snapshot()).enabled).toBe(false);
       expect((await page(0)).items).toEqual(first.items);
+      // One video may appear in two programme playlists; its first observation is global.
+      const overlapping = structuredClone(submitted);
+      overlapping.revision = (await snapshot()).revision;
+      overlapping.registry.programMappings.push({
+        ...overlapping.registry.programMappings.at(-1)!,
+        sourceId: "PLoverlapping123",
+      });
+      expect((await post(overlapping)).status).toBe(200);
+      mode("overlap");
+      await age();
+      const baseTime = Date.now();
+      const baseCalls = callCount();
+      const advancing = vi
+        .spyOn(Date, "now")
+        .mockImplementation(() => baseTime + (callCount() - baseCalls) * 2000);
+      try {
+        const revision = (await snapshot()).revision;
+        expect((await post({ action: "refresh", revision })).status).toBe(202);
+        await settled();
+        expect((await snapshot()).scan.state).toBe("complete");
+        const entries = [
+          ...(await page(0)).items,
+          ...(await page(1)).items,
+          ...(await page(2)).items,
+        ];
+        const copies = entries.filter((row) => row.videoId === "00000001000");
+        expect(copies).toHaveLength(2);
+        const earliest = copies[0].content.filmlisteTimestamp;
+        expect(copies[1].content.filmlisteTimestamp).toBe(earliest);
+        await age();
+        expect((await post({ action: "refresh", revision })).status).toBe(202);
+        await settled();
+        const refreshed = [
+          ...(await page(0)).items,
+          ...(await page(1)).items,
+          ...(await page(2)).items,
+        ];
+        expect(
+          refreshed
+            .filter((row) => row.videoId === "00000001000")
+            .map((row) => row.content.filmlisteTimestamp)
+        ).toEqual([earliest, earliest]);
+        expect(await prisma.download.count()).toBe(0);
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        advancing.mockRestore();
+      }
       await prisma.config.update({
         where: { key: YOUTUBE_REGISTRY_KEY },
         data: { value: "invalid private registry" },

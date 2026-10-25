@@ -274,7 +274,11 @@ async function scan(
     for (const key of reservation.pages) {
       const page = await readIndexPage(key);
       for (const row of page)
-        if (row.videoId && row.content) firstSeen.set(row.videoId, row.content.filmlisteTimestamp);
+        if (row.videoId && row.content)
+          firstSeen.set(
+            row.videoId,
+            Math.min(firstSeen.get(row.videoId) ?? Infinity, row.content.filmlisteTimestamp)
+          );
     }
     const mappings = loaded.registry.programMappings.filter(
       (mapping) =>
@@ -297,9 +301,12 @@ async function scan(
           Math.floor(Date.now() / 1000)
         );
         for (const row of page) {
-          if (row.videoId && row.content)
+          if (row.videoId && row.content) {
             row.content.filmlisteTimestamp =
               firstSeen.get(row.videoId) ?? row.content.filmlisteTimestamp;
+            // A video's first observation also spans overlapping playlists in this scan.
+            firstSeen.set(row.videoId, row.content.filmlisteTimestamp);
+          }
           if (row.videoId && seen.has(row.videoId))
             throw new YoutubeCatalogueDataError("duplicate_id");
           if (row.videoId) seen.add(row.videoId);

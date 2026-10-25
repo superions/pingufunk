@@ -3195,7 +3195,7 @@ yt-dlp-Releases 2026.08.19 geprüft; kein Toolupdate.
 Ein vollständiger Index wird als kleines Manifest und atomar ersetzte
 100-Zeilen-Seiten im vorhandenen Configmodell gehalten. Gesamtbudget 8 MiB,
 keine indexgroßen allgemeinen DB-/Browserreads. Erstfund bleibt über Refresh
-stabil; Uploadtag bleibt ein Tag. Kein Produktionsjahr, Medienschacht,
+stabil; Uploadtag bleibt ein Tag. Kein Produktionsjahr, Mediennachweis,
 Audio-/Pixelbeleg oder Episodenstempel aus rohen Toolfeldern. Private/gelöschte
 Platzhalter bleiben ausdrücklich unverfügbar. Fehler bei normalen IDs,
 Uploader, Folgeseite, Kapazität oder Prozess werden nicht zu leeren Erfolgen.
@@ -3210,8 +3210,9 @@ tatsächlich committed aber verlorene Rückmeldung, vollständige und fehlerhaft
 Scans über einen echten synthetischen Childprozess, 100+2 Zeilen einschließlich
 ID-losem Privatplatzhalter, Limits, stabilen Erstfund, Atomizität des Indexwrites,
 Abbruch inklusive Kindprozessbaum und null Medienjobs. Derselbe ausführbare
-Gate ist in die bestehende PG17-/PG18-CI eingebunden; noch keine lokale
-PostgreSQL- oder abschließende Containerabnahme behauptet.
+Gate ist in der bestehenden PG17-/PG18-CI auf beiden Versionen erfolgreich
+ausgeführt; keine lokale PostgreSQL-Ausführung oder abschließende
+Containerabnahme daraus abgeleitet.
 
 Drei kontrollierte Mutationen erzeugten die erwarteten Assertionfehler:
 fehlender CAS-Valueguard, vorzeitig veröffentlichter Complete-Status und
@@ -3241,6 +3242,24 @@ Formatcheck, Datenvalidierung, Shellsyntax und Produktionsbuild grün; elf
 Tracingwarnungen derselben bekannten Art. Nach abschließender Testisolation
 gegen vorhandene Credential-/Proxyenvs und gezielter API-Textkorrektur nochmals
 129 betroffene Tests grün. Kein Produktinput für andere Tests geändert;
-umfangreiche unveränderte Gates wiederverwendet. PG17/18 und finale native
-Container-CI des Codecheckpoints stehen noch aus; P17.2 bleibt bis dahin offen.
+umfangreiche unveränderte Gates wiederverwendet. Der exakte Codecheckpoint
+`d611b9d5fe05c0c7865c68c7bb995faff44e6393` hat die
+[CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40236317252)
+terminal erfolgreich abgeschlossen: erneut 1.510 Tests, Statements 88,31 %,
+Branches 85,53 %, Funktionen 91,85 %, Lines 90,76 %. Die letzte ergänzte
+Kapazitätsmeldung wurde davor gezielt mit 26 Tests/Typecheck/Lint geprüft;
+der CI-Lauf umfasst den gesamten Stand. Finale native Container-CI noch offen;
+P17.2 bleibt bis dahin offen.
 Keine Grabs, Bibliotheks-, Produktions-, Main- oder Publikationsänderungen.
+
+Der letzte Nachreview reproduzierte noch einen Zeitstempelrandfall mit zwei
+überlappenden Programmplaylists: Erstfunde derselben Video-ID konnten im
+ersten Scan voneinander abweichen und danach durch den späteren Wert ersetzt
+werden. Die erweiterte echte SQLite-Probe scheitert ohne Fix kausal an diesen
+unterschiedlichen Zeitstempeln. Der Scan nimmt jetzt den frühesten vorhandenen
+Erstfund und hält ihn bereits während desselben Scans playlistübergreifend
+fest. Beide Kopien und der nächste Refresh behalten denselben Wert; keine
+automatische Episodenfreigabe oder Deduplikation unterschiedlicher Programme
+daraus abgeleitet. 33 betroffene Tests, Lint/Typecheck/Format grün. Diese
+gezielte Änderung am Scanowner erhält einen eigenen CI-Checkpoint, einschließlich
+PG17/18 und Containerbuild; GUI und bisherige übrige Owner sind unverändert.
