@@ -30,8 +30,9 @@ erledigte Implementierung.
 Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad strukturierte,
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
-Start bei P17.1; die bestehenden offenen Phasen werden weder umgedeutet noch
-pauschale Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
+P17.1/P17.1a sind entwickelt und abgenommen; nächster offener Punkt ist P17.2.
+Die bestehenden offenen Phasen werden weder umgedeutet noch pauschale
+Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
 Weiterer Nutzerentscheid 25.10.2026: **P18** gestaltet Pingufunks eigenständige
 deutsche/englische README als öffentliche Visitenkarte grundlegend neu, samt
@@ -3184,7 +3185,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Format/Build grün. 14 bekannte Tracingwarnungen unverändert. Keine
       sichtbare UI-, DB-/Job-/Produktionsänderung oder Untertitelübertragung.
 
-- [ ] **P17.1a — Such- und Downloadmodule am bestehenden Mediathekpfad konsumieren (M).**
+- [x] **P17.1a — Such- und Downloadmodule am bestehenden Mediathekpfad konsumieren (M).**
       Abhängigkeit P17.1; Grundlage für P17.4, kein Startblocker der unabhängigen
       GUI-/Katalogarbeit P17.2/P17.3. Owner: `src/types/provider.ts`,
       `src/providers/registry.ts`, `content-search.ts::queryContentWindow`,
@@ -3216,6 +3217,18 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       gemeinsame Kern weder MVW aufruft noch URL-/Extractorlogik selbst ausführt;
       Backendregressionen auf SQLite/PG und Ownerreview ohne offene Findings.
       Modulgrenzen und Consumerreferenzen im Katalogvertrag fortschreiben.
+      Abnahme 25.10.2026: reale Such- und Downloadconsumer benutzen die beiden
+      Mediathekmodule; Queue, Konvertierung und physische Completion gemeinsam.
+      1.477 lokale Tests, Lint/Typecheck/Format/Build grün; 23 bestehende bedingte
+      Skips. Drei kausale Modulgegenchecks und Nicht-MP4-Nachreview grün,
+      keine offenen Findings. Codecheckpoint `a1c27b2` mit
+      [CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40228976091)
+      und [vollständiger nativer Container-CI](https://github.com/superions/pingufunk/actions/runs/40228976128)
+      terminal grün: kalte Ketten direkt/über Prowlarr jeweils 0 initiale Grabs
+      bis 80/80 echte Imports, wiederholtes RSS ohne Doppelgrab; echte progressive/
+      HLS-/Mux-Dateien, Persistenz, Abbruch/Recovery und TV-Freigabe auf SQLite/PG.
+      Ausführlicher Ownerreview im bestehenden Review; keine Produktion,
+      Mainintegration, Publikation, Schema- oder Bibliotheksänderung.
 - [ ] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
       Abhängigkeit P17.1. Owner: neue `data/youtube-sources.json` samt Schema/
       `scripts/validate-data.ts`, `src/lib/settings-schema.ts`, bestehender

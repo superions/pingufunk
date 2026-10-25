@@ -3148,6 +3148,25 @@ Lines 90,77 %. Lint, Typecheck und Produktionsbuild grün; zehn Tracingwarnungen
 derselben bereits bekannten Art. Zwei durch die neuen gemeinsamen Exporte
 unvollständige Testmocks wurden auf den tatsächlichen Modulvertrag umgestellt;
 keine Produktassertions oder Laufzeitgates abgeschwächt. Keine neue sichtbare
-UI, Abhängigkeit, Runtime oder Datenbankmigration. Die native Container-CI und
-PostgreSQL-17/18-Gates des abschließenden Codecheckpoints stehen noch aus;
-P17.1a bleibt bis zu deren terminaler Abnahme offen. Keine Live-Systeme berührt.
+UI, Abhängigkeit, Runtime oder Datenbankmigration. Keine Live-Systeme berührt.
+
+Terminale Forkabnahme für Codecheckpoint
+`a1c27b256403ddef9a23a4d30a3e210c80b40564`:
+[CI mit PostgreSQL 17 und 18](https://github.com/superions/pingufunk/actions/runs/40228976091)
+und [native Container-CI](https://github.com/superions/pingufunk/actions/runs/40228976128)
+erfolgreich. Sechs native Rendition-/Sprach-/Konfliktfälle direkt und über
+Prowlarr; beide kalten Ketten von 0 initialen Grabs bis jeweils 80/80 realen
+Imports, wiederholtes RSS ohne Doppelgrab. SQLite-Bootstrap/Persistenz/Restart,
+TLS-/Post-write-Rollback, echte progressive/HLS-/Mux-Dateien, negative Medien,
+SAB-History, SIGTERM-Drain, PG-Ausfall-/Quittierungsgrenzen und TV-Review→Worker→
+Datei/Audit/Receipt auf beiden Backends erfolgreich. Keine Publikation dieser
+Testimages. P17.1a ohne offene Findings abgenommen; YouTube-Implementierung
+P17.2–P17.5 bleibt offen.
+
+Auch P17.1s eigener Checkpoint `78c87a2` hat
+[CI](https://github.com/superions/pingufunk/actions/runs/40226935480) und
+[native Container-CI](https://github.com/superions/pingufunk/actions/runs/40226935528)
+erfolgreich abgeschlossen. Der abschließende Abnahmecommit ändert ausschließlich
+Dokumentation/TODO; Produkt-, Test-, Workflow-, Dependency- und Runtimeinputs
+bleiben exakt am getesteten Codecheckpoint. Diese gültigen Gates werden
+wiederverwendet, keine erneute vollständige Matrix für die Statusfortschreibung.
