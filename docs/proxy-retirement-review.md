@@ -2881,6 +2881,10 @@ Feldvergleich, Quellbelege und Grenzen. Keine Produktimplementierung oder
 Betriebsabnahme, alle sechs neuen Checkboxen offen. Andere Checkboxen und
 historische Abnahmen bleiben unverändert.
 
+Nachfolgender Modularisierungsauftrag: P17.1a ergänzt eine siebte offene
+Checkbox; vorhandene IDs und deren Status bleiben erhalten. Die sechs Punkte
+und Dokumentationszählungen der ersten Planabnahme beziehen sich auf `bc9663a`.
+
 ### Kritische Befunde und im Entwurf behobene Lücken
 
 1. **„Wir bekommen nur die Kernfelder“ wäre ungenau.** Der gepinnte
@@ -2943,14 +2947,15 @@ historische Abnahmen bleiben unverändert.
 
 ### Vollständigkeit und KISS
 
-| Nutzeranforderung                                   | Verbleibender Owner / Abnahme                                                          |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Separat pflegbare Kanäle, GUI statt JSON-Pflicht    | P17.2, `/settings`, persistenter revisionsgeprüfter Readback                           |
-| Automatische Serien-/Film-ID und Vorbelegungen      | P17.3, Seed/Metadaten/gezielte Ausnahme, keine First-result-Heuristik                  |
-| Mediathek-nahes JSON und Erklärung der Auslassungen | P17.1 plus Feldmatrix/Adapter-/Routennachweis, P17.4 Quellenreferenz                   |
-| Der Kommissar als vollständiges Beispiel            | P17.3 gesamter 97-Episodenbericht, P17.5 kanonische Consumerregression                 |
-| Zügige, begrenzte Umsetzung                         | Früher Nutzen aus P17.1–P17.3; ein Quellenadapter, Configspeicher, bestehende Pipeline |
-| Bestand nicht stören, keine Grabs aus Planung       | P17.2 null Jobs, P17.4 Bestandsgates, P17.6 eigene explizite Freigaben                 |
+| Nutzeranforderung                                   | Verbleibender Owner / Abnahme                                                                |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Separat pflegbare Kanäle, GUI statt JSON-Pflicht    | P17.2, `/settings`, persistenter revisionsgeprüfter Readback                                 |
+| Automatische Serien-/Film-ID und Vorbelegungen      | P17.3, Seed/Metadaten/gezielte Ausnahme, keine First-result-Heuristik                        |
+| Mediathek-nahes JSON und Erklärung der Auslassungen | P17.1 plus Feldmatrix/Adapter-/Routennachweis, P17.4 Quellenreferenz                         |
+| Der Kommissar als vollständiges Beispiel            | P17.3 gesamter 97-Episodenbericht, P17.5 kanonische Consumerregression                       |
+| Zügige, begrenzte Umsetzung                         | Früher Nutzen aus P17.1–P17.3; getrennte Quellenadapter, Configspeicher, bestehende Pipeline |
+| Modulare Suche und Downloads mit gleicher Bedienung | P17.1a echte Mediathekintegration, P17.4 YouTube-Module, P17.5 gemeinsame Consumer           |
+| Bestand nicht stören, keine Grabs aus Planung       | P17.2 null Jobs, P17.4 Bestandsgates, P17.6 eigene explizite Freigaben                       |
 
 Keine Framework-/Microservicephase, Webstreamingoberfläche, vollständige
 Senderinventur, parallele Pythonpipeline, neue Metadatenkonten oder pauschale
@@ -2967,3 +2972,46 @@ ausdrücklich neu geplante Dateianchors abgeglichen, `git diff --check` sauber.
 Alle 63 bisherigen Checkboxen und die historischen Inhalte der drei ergänzten
 Dokumente sind unverändert; genau sechs neue offene P17-Punkte. Keine Produkt-
 oder Containertests für diese reine Planänderung ausgeführt.
+
+### Nachreview der Modularisierung
+
+Der erste Entwurf verlangte gemeinsame Integration, aber noch keine hinreichend
+verbindliche Trennung der aktiven Such-/Downloadimplementierungen. Dies war eine
+Architekturlücke im Plan. Der frische Callpfadabgleich zeigt:
+
+- `content-search.ts::queryContentWindow` benutzt eigene MVW-/SRF-Aufrufe;
+  die bestehende Registry allein kapselt diesen Konsumenten nicht.
+- `download-manager.ts::processOwnedDownload` erkennt Stream-/SRF-Referenzen
+  und transferiert selbst. `ContentProvider.getDownloadInfo` ist kein konsumierter
+  Transfervertrag. Eine weitere Providerklasse würde daran nichts ändern.
+- Ein Quellenbackend ist nicht sein Werkzeug: yt-dlp wird bereits für Mediathek-
+  HLS benutzt. Die Trennung nach „HTTP gegen yt-dlp“ wäre fachlich falsch.
+- Zwei vollständige Worker würden Lease, Queue, Fortschritt, Abbruch, Konvertierung
+  und Medienabschluss duplizieren. Diese Owner bleiben zentral; Module übernehmen
+  nur Quellenabruf/-auflösung und Transfer in das zugewiesene Staging.
+- Eine naive Aufteilung von MVW und ORF könnte denselben Kandidatenblock doppelt
+  abrufen. Der Mediathekadapter bewahrt geteilten Abruf, Budget, öffentliche
+  Provider-IDs, ARTE-Editionsauflösung und bisherigen Fehlervertrag.
+
+P17.1a kapselt deshalb zuerst den echten Mediathekpfad hinter Suchfenster- und
+Transfervertrag. P17.4 ergänzt die beiden YouTube-Module. Bestehende Provider-
+Typen/-registry und Transportprimitive werden verwendet, kein Pluginframework,
+Microservice oder zweiter Katalog eingeführt. Ein gemeinsamer Revisions-/Policy-
+Cachekontext verhindert veraltete Bindungen; alte Jobs erhalten nur das exakt
+bisherige Legacyrouting. Unbekannte neue Referenzen bleiben geschlossen.
+Quellkonfiguration verhindert neue Suche/Discovery, storniert aber keinen schon
+angenommenen Auftrag. Im Nachreview diese beiden Zeitpunkte ausdrücklich getrennt.
+
+Die Abnahme fordert austauschbare Adapter im tatsächlich konsumierten Pfad,
+getrennte Modultests und gemeinsame Consumer-/Datei-/Statusfälle für beide Quellen.
+Ordner-/Interface- oder Source-String-Prüfungen allein genügen nicht. Upstream
+bleibt Vergleichsquelle; eigene Verträge tragen den neuen Funktionsumfang.
+Die Reihenfolge liefert zunächst Bestandsschutz und lässt unabhängige GUI-/
+Mappingarbeiten weiter zu. Der optionale reale Download-/Rolloutstopp bleibt.
+
+Erneute Dokumentationsabnahme: sieben offene P17-Punkte, alle 69 zuvor
+vorhandenen Checkboxen mit unverändertem Status. Historische Inhalte vor P17
+in drei Dokumenten unverändert; fünf formatierte Bereiche, fünf relative Links
+und 19 bestehende bzw. ausdrücklich geplante Dateianchors geprüft, Diff sauber.
+Vier getrennte Quellenmodule sind ausdrücklich auch bei gemeinsamem Werkzeug
+verbindlich. Nur Markdown geändert; keine Produkt-/Runtimegates ausgeführt.

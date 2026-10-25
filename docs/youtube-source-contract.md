@@ -9,6 +9,95 @@ Betriebsfreigabe. Reihenfolge, Status und Abnahme ausschließlich in
 [P17](../todo/proxy-retirement.md#phase-p17--youtube-quellen-im-bestehenden-katalogvertrag).
 Keine Streaming-Webseite, Impressumsinventur oder zusätzliche Medienverwaltung.
 
+## Verbindliche Modulgrenzen für Suche und Download
+
+Nachgeschärfter Nutzerentscheid 25.10.2026: Mediathek und YouTube erhalten
+jeweils ein eigenes Such- und Downloadmodul. Die Anwendung bedient beide über
+dieselben kleinen Verträge. Gemeinsam bleiben Inhaltsmodell, Metadatenmatching,
+GUI-/Arr-Schnittstellen und Auftragslebenszyklus. Lokale Module innerhalb
+derselben App genügen; keine neuen Dienste oder Pluginarchitektur.
+Die vier Quellenmodule bleiben auch dann getrennt, wenn sie dieselbe
+HTTP-/yt-dlp-/FFmpeg-Bibliothek verwenden. Werkzeugwiederverwendung ist kein
+Grund, Mediathek- und YouTube-Abruf in einem Backend zusammenzufassen.
+
+Der heutige Code erfüllt diese Grenze noch nicht durchgehend:
+`ContentProvider`/`providerRegistry` existieren, aber der konsumierte
+`content-search.ts::queryContentWindow` ruft MediathekView/SRF selbst auf.
+`download-manager.ts::processOwnedDownload` wählt direkten Transfer bzw.
+HLS/SRF und setzt Quellreferenzen um. `getDownloadInfo` liefert dagegen nur
+Informationen; es ist kein vom Worker konsumierter Downloadbackendvertrag.
+Eine zusätzliche Providerklasse allein würde diese Verzweigungen nicht ablösen.
+
+| Verantwortung                                                              | Gemeinsamer Owner                                                    | Quellenspezifischer Owner                                                                                     |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Suchaufruf, Scope, Gesamtdeadline, Zusammenführen und Coverageentscheidung | `src/services/content-search.ts`, bestehende Providertypen/-registry | Neue `src/providers/mediathek/search.ts` und `src/providers/youtube/search.ts`                                |
+| Abruf, Pagination, Quellbudget, Rohdatenvalidierung und Normalisierung     | Derselbe Suchfenster-/Inhaltsvertrag                                 | Mediathekadapter benutzt vorhandenen MVW-/ORF-/SRF-Zugriff; YouTubeadapter den begrenzten registrierten Index |
+| Programm-/Episodenbindung, Sprache, Qualität und NZB                       | Bestehende zentrale Metadaten-, Matching-, Beleg- und Releaseowner   | Adapter liefern Fakten/Identität, erteilen keine eigene Freigabe                                              |
+| Transferauflösung und Medienübertragung                                    | Neuer enger Vertrag/Dispatch `src/server/source-download.ts`         | Neue `src/providers/mediathek/download.ts` und `src/providers/youtube/download.ts`                            |
+| Queue, Lease, Receipt, Status, Fortschritt und Abbruch                     | Bestehender Downloadmanager/Worker                                   | Module melden Fortschritt/Phase und beachten das übergebene Abortsignal; keine eigenen DB-Writes oder Worker  |
+| Containerkonvertierung, Pfade, Medienprüfung und Completed                 | Bestehende gemeinsame FFmpeg-/Completion-/Pfadowner                  | Module liefern das Artefakt im zugewiesenen Job-Staging; kein eigener Completed-/Importpfad                   |
+
+Die Familie `mediathek` ersetzt keine veröffentlichten Provider-IDs:
+`mediathekview`, `orf` und `srf` samt Einstellungen, Abdeckung und Referenzen
+bleiben erhalten. Der Familienadapter wahrt den bisher gemeinsam abgerufenen
+MVW-/ORF-Kandidatenblock; keine verdoppelten Requests/Budgets durch naives
+Aufrufen jeder Providerklasse. ARTE-Editionsauflösung bleibt an dieser
+Quellengrenze, allgemeine Identitäts-/Sprachregeln bleiben gemeinsam.
+
+Der Suchvertrag liefert normalisierte Inhaltszeilen plus ehrlichen
+Quellenzustand, Begrenzung und Provenienz. Bestehende Query-/Optionsaufrufe
+bleiben über den jetzigen Einstieg kompatibel; der Mediathekadapter übersetzt
+in das MVW-JSON. YouTube muss keine MVW-HTTP-Anfrage nachbilden. Quellen liefern
+ihren Konfigurations-/Index-Revisionsfingerprint zum gemeinsamen Cachekontext;
+ein Registrywechsel darf keine alten Treffer oder Bindungen wiederverwenden.
+Vorhandene Providertypen gezielt erweitern; kein drittes Inhaltsmodell,
+zweiter Aggregator oder paralleler aktiver Suchpfad neben `queryContentWindow`.
+Registry und exportierte Providerpfade verwenden denselben Adapterowner;
+belegte ungenutzte Zweige gezielt ablösen, keine Rundumerneuerung.
+Die Aufrufrichtung bleibt Koordinator → Quellenadapter → Lowlevelclient;
+ein Adapter ruft keine Providerfassade zurück, die wiederum an ihn delegiert.
+Modulimport und Registrierung starten keine Netz-/Toolaufrufe. Eine fehlende
+YouTube-Runtime darf eine deaktivierte YouTube-Quelle oder die unabhängige
+Mediatheksuche nicht beim App-Import abbrechen; Prüfung erst im benannten Pfad.
+
+Der Transfervertrag nimmt eine validierte, im Job eingefrorene Quellenreferenz,
+Medienerwartungen und den kontrollierten Ausführungskontext entgegen:
+zugewiesenes Staging, Abortsignal und Fortschritts-/Phasenmeldungen. Er liefert
+ein vorhandenes lokales Artefakt samt tatsächlichem Container oder einen
+geschlossenen Fehler. Gemeinsame Status- und Dateibesitzprüfung bleibt Pflicht.
+Quellenauflösung und Format-/Audiospurprüfung gehören ins jeweilige Modul;
+Enqueue-Freigabe, interne v4-Prüfung und finale ffprobe-Abnahme bleiben zentral.
+Der Belegpfad benutzt dieselbe Quellenauflösung wie der Transfer, keinen
+zweiten YouTube-/Mediathekparser mit abweichenden Formatregeln.
+
+Mediathek-Downloads behandeln direkte Dateien, HLS und stabile SRF-Referenzen;
+YouTube-Downloads lösen Video-/Format-/Audioreferenzen auf. Beide verwenden
+vorhandene HTTP-/yt-dlp-/FFmpeg-/Prozessprimitive. `yt-dlp` bedeutet nicht
+automatisch YouTube: Mediathek-HLS benutzt es bereits. Quellenspezifisches
+Muxing darf im Modul erfolgen; eine passende Datei wird im gemeinsamen
+Containerpfad nicht nochmals konvertiert. Pfadnamen und Konvertierungspräferenz
+bleiben gegenüber dem bisherigen Mediathekverhalten unverändert.
+
+Eine feste geschlossene Zuordnung im Dispatch genügt. GUI, SAB/Newznab,
+Queueorchestrierung und Completion enthalten keine Quell-URLtests oder eigenen
+Backendauswahlzweige. Historische Jobs ohne neue Quellenreferenz laufen über
+einen engen Legacyadapter mit exakt bisheriger URLklassifikation; neue unbekannte
+Versionen/Provider werden abgewiesen. Kein Wechsel zum anderen Backend bei Fehler.
+
+P17.1a führt die Grenze zuerst mit dem tatsächlich konsumierten Mediathekpfad
+ein. P17.4 ergänzt YouTube als zweite Implementierung ohne neue Kernverzweigung.
+Getrennte Modultests und derselbe gemeinsame Consumer gegen beide Module sind
+Pflicht: Deaktivierte Quellen lösen bei neuer Suche/Discovery keine eigenen
+Netz-/Prozessabrufe aus. Bereits angenommene Jobs behalten ihren eingefrorenen
+Vertrag. Fehler bleiben ihrer Quelle zugeordnet. Adapteraustausch und wirklicher
+Aufruf-/Datei-/Statusreadback beweisen diese Grenzen, keine Ordner-/Source-String-Abnahme.
+
+RundfunkArr bleibt Herkunft und Vergleichsquelle für übernehmbare Änderungen.
+Der neue Funktionsumfang wird gegen Pingufunks eigene geprüfte Verträge
+entwickelt und abgenommen. Auf eine entsprechende Upstreamarchitektur warten
+wir nicht; Mainkompatibilität und gezielte Übernahme nützlicher Upstreamfixes
+bleiben davon unberührt.
+
 ## Tatsächlicher Mediathek-Datenvertrag und Feldverluste
 
 `src/lib/mediathek-client.ts::queryMediathekView` liest JSON aus

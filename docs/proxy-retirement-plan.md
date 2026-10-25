@@ -20,6 +20,12 @@ unabhängigen P17-Pfad im bestehenden Phasen-TODO. Er erweitert nicht die
 historische Proxy-Paritätsdefinition und ist keine Implementierungs- oder
 Betriebsabnahme.
 
+Nachgeschärfter Modulentscheid vom selben Tag: getrennte Mediathek-/YouTube-
+Such- und Downloadmodule hinter gemeinsamen Verträgen, zentrale Matching-,
+Queue- und Medienabschlussowner. Die Grundlage P17.1a wird zunächst mit dem
+bestehenden Mediathekpfad konsumiert; Upstream ist Vergleichsquelle, keine
+Voraussetzung für diese eigene Erweiterung.
+
 ## Ergebnis und Reihenfolge
 
 Die Funktionen des Proxys lassen sich überwiegend in bestehende Pingufunk-

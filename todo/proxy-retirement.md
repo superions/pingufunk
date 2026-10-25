@@ -3170,6 +3170,38 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       HLS/MP4-Slots, getrennte Uhrzeiten und unveränderte IDs/NZBs negativ prüfen.
       Betroffene Feldmatrix/`docs/bounded-search-contract.md` fortschreiben;
       Review von Producer, Adapter und Consumer ohne offene Findings.
+- [ ] **P17.1a — Such- und Downloadmodule am bestehenden Mediathekpfad konsumieren (M).**
+      Abhängigkeit P17.1; Grundlage für P17.4, kein Startblocker der unabhängigen
+      GUI-/Katalogarbeit P17.2/P17.3. Owner: `src/types/provider.ts`,
+      `src/providers/registry.ts`, `content-search.ts::queryContentWindow`,
+      neue `src/providers/mediathek/search.ts`/`download.ts` und der enge
+      Transfervertrag/Dispatch `src/server/source-download.ts`, bestehende
+      Transfer-/Worker-/Completionowner. Zwei kleine Verträge für Suchfenster
+      und Transfer gemäß Katalogvertrag festlegen und mit echten Mediathek-
+      Consumern ausführen; keine bloß unbenutzte Abstraktion vorbereiten.
+      MVW/ORF/SRF-Abruf und Quellenauflösung aus dem Koordinator ziehen,
+      direkten/HLS-/SRF-Transfer aus dem Downloadmanager ins Mediathekmodul.
+      Vorhandene Provider-/Transportprimitive benutzen, MVW/ORF nicht doppelt
+      abrufen; gleiche Query-/Options-, Budget-, Coverage- und Cacheverträge.
+      Zentrale Matcher, Queue/Lease/Receipt/Status, Pfadbesitz, optionale
+      Konvertierung und Completed-Mediengate bleiben gemeinsame Owner.
+      Modul erhält Staging/Abort/Callbacks und liefert Artefakt/Container oder
+      geschlossenen Fehler; keine eigene Queue, DB-Writes oder Completed.
+      Alte Provider-IDs, URLs, Jobs, HLS-/SRF-Verhalten und v4-Prüfung erhalten;
+      enges Legacyrouting nur für wirklich ausgelieferte Jobs. Registry und
+      exportierte Providerpfade an denselben Suchowner anbinden, keine zweite
+      Suchpipeline, zyklische Rückdelegation oder Plugin-/Servicearchitektur.
+      Modulimport/-registrierung ohne Quellen-I/O; fehlende deaktivierte
+      YouTube-Runtime darf den unabhängigen Mediathekstart nicht blockieren.
+      Keine Quellenerkennung in GUI, SAB/Newznab, Queuekern oder Completion;
+      Dispatch bleibt begrenzt.
+      Abnahme: bislang aktive Mediathekfälle laufen nachweislich durch die
+      neuen Modulgrenzen mit identischen Ergebnissen/IDs und realen isolierten
+      Dateien; direkte/HLS-/SRF-Fälle, Altjobs, Fortschritt, Abort, Fehler und
+      Konvertierungspräferenz geschützt. Adapteraustausch beweist, dass der
+      gemeinsame Kern weder MVW aufruft noch URL-/Extractorlogik selbst ausführt;
+      Backendregressionen auf SQLite/PG und Ownerreview ohne offene Findings.
+      Modulgrenzen und Consumerreferenzen im Katalogvertrag fortschreiben.
 - [ ] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
       Abhängigkeit P17.1. Owner: neue `data/youtube-sources.json` samt Schema/
       `scripts/validate-data.ts`, `src/lib/settings-schema.ts`, bestehender
@@ -3244,11 +3276,17 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       keine nachgewiesene 97/97-Abdeckung. Bericht in derselben GUI erreichbar;
       Programmbindung, Scanabdeckung und Medienbereitschaft getrennt anzeigen.
 - [ ] **P17.4 — Neue Quelle bis zum vorhandenen Downloadconsumer gemeinsam integrieren (M).**
-      Abhängigkeit P17.3. Owner: `content-search.ts::queryContentWindow`,
+      Abhängigkeit P17.1a und P17.3. Owner: neue
+      `src/providers/youtube/search.ts`/`download.ts`, gemeinsamer Suchvertrag
+      und Transferdispatch aus P17.1a, `content-search.ts::queryContentWindow`,
       Providerregistry/-adapter, Rendition-/Sprach-/Medienbelegowner,
       `mediathek.ts`/`newznab.ts`, `ui-nzb.ts`/`nzb-release.ts`,
       `media-expectations.ts`, `sab-api.ts`, `download-manager.ts`,
       `download-completion.ts`, `source-media-facts.ts` und `tv-search-delivery.ts`.
+      YouTube als zweite Implementierung beider Verträge integrieren;
+      keine YouTube-Zweige in Queue/Completion/GUI oder zweiter Worker.
+      Quellenfakten und Transfer verwenden denselben YouTube-Resolver;
+      gemeinsam benutztes yt-dlp/FFmpeg bleibt Transportprimitive, kein Backend.
       `sourceProviderId=youtube` und kleine servervalidierte `sourceRef` für
       Video-/Channel-/Playlist-/Format-/Audiospuridentität ergänzen. Watch-URL
       bleibt Website, keine gefälschte MP4-/HLS-URL in Katalogslots.
@@ -3292,7 +3330,8 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Neue reine YT-Namespace-GUIDs bleiben bei Rotation stabil, alte exakt gleich.
       Source-/Frische-/Erwartungs-/Rollbackreferenzen im betroffenen Vertrag pflegen.
 - [ ] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
-      Abhängigkeit P17.1–P17.4; keine pauschale Schließung anderer offener Phasen.
+      Abhängigkeit P17.1–P17.4 einschließlich P17.1a; keine pauschale Schließung
+      anderer offener Phasen.
       Owner: vorhandene Produkt-/PG-/OCI-Workflows und native Arr-Testharnesses,
       `docs/youtube-source-contract.md`, Feldmatrix und Reviewbericht.
       Ein kohärenter Gateabschluss statt Vollmatrix pro Mikroschritt:
@@ -3308,6 +3347,11 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       unverändert. YT-Ausfall/Indexfehler verdrängt keinen unabhängigen
       Mediathek-Basistreffer. Neuer Job über Neustart/Retry und kompatiblen
       Rollback erhalten, unbekannte Version am alten Image sicher abgelehnt.
+      Beide Quellmodule getrennt sowie denselben Such-/Transferconsumer gegen
+      beide Implementierungen prüfen. Deaktivierte Quellen verursachen bei
+      neuer Suche/Discovery keine Quellabrufe; bestehende angenommene Jobs
+      behalten ihren Vertrag. Adapterfehler dürfen weder das andere Backend
+      aufrufen noch den gemeinsamen Abschluss-/Abbruchpfad umgehen.
       Desktopjourney `/settings`→Zuordnungsbericht→`/search` bis zum bestehenden
       Prüf-/Auftragsdialog, Cancel ohne Job und bewusst bestätigter synthetischer
       Auftrag mit eigenem Readback; kein Mobiletest. Synthetisches Netzwerk
