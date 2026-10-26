@@ -23,8 +23,16 @@ function docker(args) {
       timeout: 120_000,
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-  } catch {
-    throw new Error("Owned Docker operation failed; raw diagnostics suppressed");
+  } catch (error) {
+    const diagnostic = String(error.stderr ?? "");
+    const codes = [
+      ...new Set(
+        diagnostic.match(/\b(?:P\d{4}|ENOENT|EACCES|ECONNREFUSED|MODULE_NOT_FOUND)\b/g) ?? []
+      ),
+    ];
+    throw new Error(
+      `Owned Docker ${args[0]} failed (exit=${error.status ?? "unknown"}, signal=${error.signal ?? "none"}, codes=${codes.join(",") || "none"}); raw diagnostics suppressed`
+    );
   }
 }
 function save(root, manifest) {

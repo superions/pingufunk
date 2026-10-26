@@ -49,7 +49,7 @@ function journal() {
       manifest.apps.pingufunk.name,
       "node",
       "-e",
-      'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{const row=await db.config.findUnique({where:{key:"internal.tv-delivery.v2"}});console.log(row?.value??"null");await db.$disconnect()})().catch(()=>process.exitCode=1)',
+      'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{const row=await db.config.findUnique({where:{key:"internal.tv-delivery.v2"}});console.log(row?.value??"null");})().catch(error=>{console.error(JSON.stringify({name:error.name,code:error.code}));process.exitCode=1;}).finally(()=>db.$disconnect())',
     ])
   );
 }
@@ -270,6 +270,7 @@ try {
     localPath: "/qa-downloads/",
   });
   mkdirSync(join(root, "sonarr", "synthetic-library", "Synthetic Series"), { recursive: true });
+  console.log(`Owned YouTube ${backend} ${transport}: restarting cold process`);
   docker(["restart", controller]); // Real cold process, not just a neutral RSS string assertion.
   for (let attempt = 0; attempt < 30; attempt++) {
     try {
@@ -279,6 +280,7 @@ try {
       await delay(500);
     }
   }
+  console.log(`Owned YouTube ${backend} ${transport}: reading cold discovery baseline`);
   if (journal() !== null) fail("pre-existing discovery invalidates cold gate");
   await command({ name: "MissingEpisodeSearch", seriesId: series.id });
   const cold = (await histories()).filter((row) => row.eventType === "grabbed");
