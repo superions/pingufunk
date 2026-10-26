@@ -49,7 +49,7 @@ function journal() {
       manifest.apps.pingufunk.name,
       "node",
       "-e",
-      'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{const row=await db.config.findUnique({where:{key:"internal.tv-delivery.v2"}});console.log(row?.value??"null");})().catch(error=>{console.error(JSON.stringify({name:error.name,code:error.code}));process.exitCode=1;}).finally(()=>db.$disconnect())',
+      'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"@prisma/client":"./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{const row=await db.config.findUnique({where:{key:"internal.tv-delivery.v2"}});console.log(row?.value??"null");})().catch(error=>{console.error(JSON.stringify({name:error.name,code:error.code}));process.exitCode=1;}).finally(()=>db.$disconnect())',
     ])
   );
 }
@@ -484,7 +484,7 @@ try {
         container,
         "node",
         "-e",
-        'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{console.log(JSON.stringify(await db.download.findMany({orderBy:{id:"asc"}}),(_key,value)=>typeof value==="bigint"?value.toString():value));await db.$disconnect()})().catch(()=>process.exitCode=1)',
+        'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"@prisma/client":"./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{console.log(JSON.stringify(await db.download.findMany({orderBy:{id:"asc"}}),(_key,value)=>typeof value==="bigint"?value.toString():value));await db.$disconnect()})().catch(()=>process.exitCode=1)',
       ])
     );
   const before = readJobs(controller);
@@ -608,7 +608,7 @@ try {
     rollbackContainer,
     "node",
     "-e",
-    'if(process.env.PINGUFUNK_ARR_QA_YOUTUBE!=="1"||!/^\\d+-\\d+$/.test(process.env.PINGUFUNK_MEDIA_QA_OWNER??""))throw Error("Owned fixture required");const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite"),{randomUUID,createHash}=require("node:crypto"),db=new PrismaClient({log:[]});(async()=>{const source=await db.download.findFirstOrThrow({where:{category:"sonarr",status:"completed"}}),id=randomUUID(),key=randomUUID()+":"+Date.now(),title="Synthetic.Rollback.Pending",data={id,title,url:source.url,category:"sonarr",status:"queued",progress:0,mediaExpectations:source.mediaExpectations};await db.$transaction(async tx=>{await tx.download.create({data});await tx.enqueueIntent.create({data:{id:createHash("sha256").update("ui-enqueue-v1\\0"+key).digest("hex"),payloadHash:createHash("sha256").update(JSON.stringify([1,data.url,data.title,data.category,data.mediaExpectations])).digest("hex"),downloadId:id,expiresAt:new Date(Date.now()+86400000)}});});await db.$disconnect()})().catch(()=>process.exitCode=1)',
+    'if(process.env.PINGUFUNK_ARR_QA_YOUTUBE!=="1"||!/^\\d+-\\d+$/.test(process.env.PINGUFUNK_MEDIA_QA_OWNER??""))throw Error("Owned fixture required");const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"@prisma/client":"./generated/sqlite"),{randomUUID,createHash}=require("node:crypto"),db=new PrismaClient({log:[]});(async()=>{const source=await db.download.findFirstOrThrow({where:{category:"sonarr",status:"completed"}}),id=randomUUID(),key=randomUUID()+":"+Date.now(),title="Synthetic.Rollback.Pending",data={id,title,url:source.url,category:"sonarr",status:"queued",progress:0,mediaExpectations:source.mediaExpectations};await db.$transaction(async tx=>{await tx.download.create({data});await tx.enqueueIntent.create({data:{id:createHash("sha256").update("ui-enqueue-v1\\0"+key).digest("hex"),payloadHash:createHash("sha256").update(JSON.stringify([1,data.url,data.title,data.category,data.mediaExpectations])).digest("hex"),downloadId:id,expiresAt:new Date(Date.now()+86400000)}});});await db.$disconnect()})().catch(()=>process.exitCode=1)',
   ]);
   const preserved = readJobs(rollbackContainer);
   if (
@@ -624,7 +624,7 @@ try {
         container,
         "node",
         "-e",
-        'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite"),db=new PrismaClient({log:[]});(async()=>{console.log(JSON.stringify(await db.enqueueIntent.findMany({orderBy:{id:"asc"}})));await db.$disconnect()})().catch(()=>process.exitCode=1)',
+        'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"@prisma/client":"./generated/sqlite"),db=new PrismaClient({log:[]});(async()=>{console.log(JSON.stringify(await db.enqueueIntent.findMany({orderBy:{id:"asc"}})));await db.$disconnect()})().catch(()=>process.exitCode=1)',
       ])
     );
   const receipts = readReceipts(rollbackContainer);
