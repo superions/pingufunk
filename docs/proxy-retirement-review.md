@@ -3455,3 +3455,25 @@ Erneuter kohärenter lokaler Abschluss nach diesen drei relevanten Änderungen:
 Lint, Typecheck, Format und Build grün. Die übrigen Desktopflüsse werden bei
 unveränderten Inputs wiederverwendet. Neue terminale CI-/PG-/Containerbelege
 und finaler PR-Review stehen vor Mainintegration noch aus.
+
+## Branding-/P17-Grundlagen: Mainintegration bestätigt (26.10.2026)
+
+Code `5157eb85ac36a3668222d19bc20acda7133d3828` bestand alle elf Checkruns:
+[PR-CI mit PG17/18](https://github.com/superions/pingufunk/actions/runs/40247833342),
+[PR-Validierung](https://github.com/superions/pingufunk/actions/runs/40247833299),
+[native PR-Containerkette](https://github.com/superions/pingufunk/actions/runs/40247833145)
+und entsprechende Push-Gates terminal grün. Der dritte automatische Review
+ist an genau diesen Commit gebunden und nennt keine offenen Befunde; alle
+Inlinekonversationen sind nach belegter Korrektur erledigt. Die vollständige
+Containerkette prüfte Renditions direkt/via Prowlarr, kalte einmalige Suche und
+RSS-Nachlieferung mit echten synthetischen Sonarr-Importen, TLS-/Rollback,
+SQLite-Persistenz sowie Medien-/Workerconsumer auf beiden Backends.
+
+[PR #9](https://github.com/superions/pingufunk/pull/9) wurde mit exakter
+Kopfsperre als Mergecommit `0e1d5b4ff9c826dbf3ff58ce4a740fdfaaf09512` integriert
+und ist geschlossen. Frischer Fetch bestätigt den Merge unabhängig; der
+Main-Dateibaum stimmt vollständig mit dem getesteten Kopf überein. Lokales
+Main ausschließlich fast-forward aktualisiert. P17.2 ist damit wieder
+abgenommen; die Fortsetzung P17.3 erfolgt auf eigenem Topicbranch. Diese
+reine Abschlussnotiz verwendet die grünen unveränderten Produktinputs wieder.
+Keine Imagepublikation, Produktionsänderung oder echte Medien-/Bibliotheksoperation.

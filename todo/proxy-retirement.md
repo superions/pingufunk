@@ -30,8 +30,8 @@ erledigte Implementierung.
 Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad strukturierte,
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
-P17.1/P17.1a sind abgenommen; P17.2 ist für einen CI-Nachbefund der Statusabfrage
-vor der Mainintegration erneut offen. Danach folgt P17.3.
+P17.1/P17.1a/P17.2 sind einschließlich Reviewnacharbeit abgenommen und mit
+Branding über PR #9 in Main integriert (`0e1d5b4`). Aktuell folgt P17.3.
 Die bestehenden offenen Phasen werden weder umgedeutet noch pauschale
 Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
@@ -3230,7 +3230,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       HLS-/Mux-Dateien, Persistenz, Abbruch/Recovery und TV-Freigabe auf SQLite/PG.
       Ausführlicher Ownerreview im bestehenden Review; keine Produktion,
       Mainintegration, Publikation, Schema- oder Bibliotheksänderung.
-- [ ] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
+- [x] **P17.2 — Kanalregister und Programmzuordnungen in der GUI pflegen (K–M).**
       Abhängigkeit P17.1. Owner: neue `data/youtube-sources.json` samt Schema/
       `scripts/validate-data.ts`, `src/lib/settings-schema.ts`, bestehender
       Settings-/Config-/Bestätigungsowner und `/settings`, neuer begrenzter
@@ -3294,6 +3294,13 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Shutdown/Claim und paralleler Inventarwechsel korrigiert. Reale SQLite-
       Barriereproben und Desktopinteraktionen grün; erneute terminale PG-/native
       CI für diesen Codeinput vor Mainintegration erforderlich.
+      Abschluss 26.10.2026: finaler Code `5157eb8`,
+      [CI mit PG17/18](https://github.com/superions/pingufunk/actions/runs/40247833342),
+      [native Containerkette](https://github.com/superions/pingufunk/actions/runs/40247833145)
+      und sämtliche Push-/PR-Gates terminal grün. Finaler Review ohne offene
+      Befunde; verlorener Publish-Rückkanal, fehlendes Manifest und Fristablauf
+      zusätzlich kausal/visuell geprüft. PR #9 geschlossen/gemergt nach Main
+      `0e1d5b4`; Dateibaum exakt gleich dem geprüften Kopf. Kein Rollout.
 - [ ] **P17.3 — IDs automatisch auflösen und Der Kommissar vollständig abgleichen (M).**
       Abhängigkeit P17.2. Owner: neuer enger Mappingowner bei
       `youtube-catalogue.ts`, vorhandene `shows.ts`, `sonarr-provider.ts`,
