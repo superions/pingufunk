@@ -694,7 +694,7 @@ try {
   console.error(
     error.message.startsWith("Owned")
       ? error.message
-      : "Owned cold delivery gate failed; private diagnostics suppressed"
+      : `Owned cold delivery gate failed (${error.name}); private diagnostics suppressed`
   );
   process.exitCode = 1;
 } finally {

@@ -7,6 +7,7 @@ import {
   writeFileSync,
   realpathSync,
   lstatSync,
+  existsSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
