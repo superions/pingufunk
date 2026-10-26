@@ -31,7 +31,7 @@ Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad struktu
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
 P17.1/P17.1a/P17.2 sind einschließlich Reviewnacharbeit abgenommen und mit
-Branding über PR #9 in Main integriert (`0e1d5b4`). P17.3 ist auf dem Topicbranch abgenommen. P17.4/P17.5 sind wegen vier nachträglich eingegangener, aktuell nachzuprüfender Reviewbefunde wieder offen; die bisherigen grünen Gates bleiben historische Evidenz.
+Branding über PR #9 in Main integriert (`0e1d5b4`). P17.1–P17.5 sind auf dem Topicbranch abgenommen, einschließlich der vier nachträglichen Reviewkorrekturen und ihrer frischen vollständigen nativen Gates auf `ea00f30`.
 P17.6: Mainintegration, anschließender GitOps-Rollout und gezielte Katalogaktivierung
 sind beauftragt. Eine notwendige Schemaaktualisierung sowie ein echter
 YouTube-Mediendownload sind weiterhin getrennt freizugeben; noch keine Produktionsaktivierung.
@@ -3342,7 +3342,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Öffentlicher Produktabgleich getrennt: 93/97 sicher zugeordnet,
       vier ohne sichere Quellenbindung, ein privater unbekannter Extraeintrag;
       keine behauptete 97/97-Verfügbarkeit und kein Mediendownload.
-- [ ] **P17.4 — Neue Quelle bis zum vorhandenen Downloadconsumer gemeinsam integrieren (M).**
+- [x] **P17.4 — Neue Quelle bis zum vorhandenen Downloadconsumer gemeinsam integrieren (M).**
       Abhängigkeit P17.1a und P17.3. Owner: neue
       `src/providers/youtube/search.ts`/`download.ts`, gemeinsamer Suchvertrag
       und Transferdispatch aus P17.1a, `content-search.ts::queryContentWindow`,
@@ -3404,7 +3404,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       720p-Radarr-Import, ffprobe, gepaarte History, Formatrotation, kein
       RSS-Doppelgrab sowie den Erhalt von Jobs/Quittung beim getesteten Rückweg.
       Der gesamte native Bestandslauf ist über P17.5 ebenfalls abgeschlossen.
-- [ ] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
+- [x] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
       Abhängigkeit P17.1–P17.4 einschließlich P17.1a; keine pauschale Schließung
       anderer offener Phasen.
       Owner: vorhandene Produkt-/PG-/OCI-Workflows und native Arr-Testharnesses,
@@ -3450,10 +3450,22 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Abschlussdokumentation ändert keine geprüften Runtime-/Testinputs;
       passende grüne Belege werden wiederverwendet. Kein realer YouTube-
       Mediendownload, Rollout oder pauschaler Abschluss anderer offener Phasen.
+      Erneute Abnahme nach vier nachträglichen Reviewbefunden auf `ea00f30`:
+      1.625 lokale Tests, zwölf kausale Gegenproben, alle lokalen Gates samt
+      Audit ohne Befund sowie [Produkt-CI/PG17/18](https://github.com/superions/pingufunk/actions/runs/40313723171)
+      und [vollständige native Containerkette](https://github.com/superions/pingufunk/actions/runs/40313723104)
+      terminal grün, ebenso beide Push-Gates. Identische synthetische Desktopdaten
+      reproduzieren drei statt fünf Prüfoptionen und fehlende normale Auswahl
+      am alten Bundle; korrigierte 1080p-/480p-Auswahl bis zu gespeichertem
+      Auftrag/Quittung, Cancel ohne Job und leere Fehlerkonsole bestätigt.
+      Keine Produktinputs durch die abschließende Dokumentation geändert.
 - [ ] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
       Nutzerauftrag 26.10.2026: PR #10 nach frischen grünen Gates in Main
       integrieren, geprüftes Image über den bestehenden Homelab-GitOps-Weg
       ausrollen und KultKrimi / Der Kommissar samt Metadatenindex aktivieren.
+      Den historischen `SHOWS_URL`-Revisionsoverride entfernen und die bestehende
+      automatische Main-Katalogaktualisierung nutzen; keinen neuen Bestandspin
+      einführen. Der aktuelle Mediathekbestand bleibt separat live abgefragt.
       Keine Sonarr-Suche, Grabs oder Bibliotheksänderungen. Gegenüber der
       bisherigen Produktionsschemalinie ist die append-only Tabelle
       `EnqueueIntent` zusätzlich erforderlich; diese Schemaaktualisierung

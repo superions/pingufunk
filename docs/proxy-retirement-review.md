@@ -3729,6 +3729,37 @@ werden auch alte angehängte Auswahl-/Sprach-/Pixelbelege entfernt.
 
 Lokal: 1.625 Tests mit Coverage bestanden, 26 umgebungsgebundene Skips;
 Lint, Typecheck, Format, Datenvalidator, Build und Audit einschließlich
-Entwicklungsabhängigkeiten grün (keine Auditbefunde). Die acht bisherigen
-kausalen Rückbauten bleiben erfolgreich. Vier zusätzliche Rückbauten und
-aktuelle Desktop-/CI-/OCI-Evidenz werden vor erneutem Abschluss ergänzt.
+Entwicklungsabhängigkeiten grün (keine Auditbefunde). Alle zwölf kausalen
+Rückbauten werden durch die zuständigen Verbraucherregressionen abgewiesen;
+Quellen sind anschließend hashgleich wiederhergestellt.
+
+Die [aktuelle Produkt-CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40313723171)
+und [vollständige native Containerkette](https://github.com/superions/pingufunk/actions/runs/40313723104)
+sind terminal erfolgreich, ebenso die zugehörigen Push-Gates. Die vier
+YouTube-Kombinationen bestätigen wiederum je vier tatsächliche Sonarr- und
+einen 720p-Radarr-Import einschließlich Medien-/History-/Rückwegprüfung.
+Das höher angebotene synthetische VP9-Format wird nicht unter H.264
+veröffentlicht oder übertragen. Bisherige Qualitätsfälle, beide kalten
+80/80-Mediathek-Importketten ohne RSS-Doppelgrab, SQLite-Persistenz,
+TLS-/Datenrückwege, reale Medien und explizite Freigabe bis zum Worker auf
+beiden Backends bleiben grün.
+
+Desktopvergleich mit identischen vier synthetischen Episoden, fünf AVC-
+Formaten, 1280×720, System-Light und gleicher Suchroute: `7984e19` bietet
+nur 2160p/720p/576p zur Einzelprüfung und keine normale Qualitätsauswahl.
+`ea00f30` bewahrt alle fünf Optionen; 1080p-Vorschau und Cancel ohne Job,
+480p-Freigabe mit unabhängiger v4-/Quittungsprüfung sowie normale 1080p-
+Aufnahme mit gespeichertem v5-Vertrag sind bestätigt. Beide Browserkonsolen
+bleiben leer. Keine echten Mediendownloads; alle eigenen Testprozesse,
+temporären Datenbanken und die archivierte Vergleichskopie wurden entfernt.
+
+Abschließender Caller-/Write-/Feldreview: Nur explizite Einzelprüfung fordert
+frische synchrone Auflösung an. Die drei normalen Filmassembler behalten
+unabhängige Basistreffer und den vorhandenen Belegworker. Der gemeinsame
+Auswahlowner hält Legacy-MP4-Werte sowie konkrete typisierte Auswahl bis zum
+Jobnamen und zur Quittung auseinander. Keine Schema-/Dependencyänderung durch
+diese Korrekturen, keine offenen P17.4-/P17.5-Findings. Entwicklungsabnahme
+wieder geschlossen; die reine Abschlussdokumentation verwendet die passenden
+grünen Belege weiter. Produktiver Rollout/Katalogaktivierung sind beauftragt,
+die zusätzliche Schemaaktualisierung und echte Referenzübertragung bleiben
+separat freizugeben. Kein Betriebsabschluss und keine Schließung anderer Phasen.

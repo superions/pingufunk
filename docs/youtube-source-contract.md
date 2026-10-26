@@ -1,13 +1,15 @@
-# YouTube als zusätzliche Katalogquelle — Entwurf P17
+# YouTube als zusätzliche Katalogquelle — Vertrag P17
 
-Stand: 25.10.2026, geprüft gegen Main `1c9d4f9` und Upstream `345f5ed`.
+Fachentwurf vom 25.10.2026 gegen den damaligen Main `1c9d4f9` und Upstream
+`345f5ed`; Entwicklungsabnahme am 26.10.2026 auf `ea00f30`.
 Nutzerauftrag: separat und über die GUI pflegbare ÖR-YouTube-Kanäle,
 automatische Serien-/Film-ID-Zuordnung mit Vorbelegungen, Mediathek-nahes
 JSON, KISS und Bestandsschutz. Pflichtreferenz ist KultKrimi / Der Kommissar.
-Die Such-/Downloadintegration bleibt ein **Entwicklungsentwurf**; P17.1,
-die Mediathek-Modulgrenzen aus P17.1a und die Register-/Metadatenoberfläche
-P17.2 sind im Entwicklungscode umgesetzt.
-Keine Betriebsfreigabe. Reihenfolge, Status und Abnahme ausschließlich in
+P17.1–P17.5 einschließlich der Mediathek-Modulgrenzen, Registeroberfläche,
+ID-Bindung und gemeinsamer Such-/Downloadconsumer sind in der Entwicklung
+abgenommen. Der Auftrag zur Mainintegration und zum anschließenden Rollout
+liegt vor; zusätzliche Schemaaktualisierung und echte Referenzübertragung
+bleiben getrennt freizugeben. Reihenfolge, Status und Abnahme ausschließlich in
 [P17](../todo/proxy-retirement.md#phase-p17--youtube-quellen-im-bestehenden-katalogvertrag).
 Keine Streaming-Webseite, Impressumsinventur oder zusätzliche Medienverwaltung.
 
@@ -554,6 +556,14 @@ Fork; neu gebündelte, dort noch fehlende Serienidentitäten ergänzen den
 Standardabruf. Ein explizites `SHOWS_URL` bleibt autoritativ. Providerfolgen
 werden durch einen Teilkatalog nicht verdrängt. Unbekannte Laufzeit-/Datumswerte
 dürfen nur derselbe konkrete Titel und dieselbe eindeutige Koordinate ergänzen.
+
+Dieser ergänzende Identitätskatalog ist kein eingefrorener Mediathekbestand.
+Ohne URL-Override liest die Anwendung den eigenen Main-Katalog bei Nutzung
+nach spätestens einer Stunde erneut; bei Abruffehlern bleibt der gebündelte
+Fallback. Der eigentliche Mediathekbestand kommt getrennt aus aktuellen
+Providerabfragen. Ein geprüftes App-Image erfordert keinen festen Commit-Pin
+für diesen Katalog; der im Betrieb noch vorhandene historische Override soll
+beim freigegebenen Rollout entfallen, nicht durch einen neuen Pin ersetzt werden.
 
 Der Metadatenadapter verlangt deutsche Metadatentitel (`youtube:lang=de`);
 das ist **kein** Nachweis deutscher Audiospuren. Eine vollständig feldlose
