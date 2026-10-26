@@ -3431,3 +3431,27 @@ Vier gezielte Mutationen (finaler Abbruchcheck, Shutdowncheck nach Reads,
 Erstfundübernahme aus nicht verfügbarem Eintrag, einmaliger Seitengenerationsread)
 werden jeweils vom realen Consumer abgewiesen. Danach identischen geprüften
 Produktcode wiederhergestellt; eigene UI-Prozesse, Tabs und disposable DB entfernt.
+
+Der erneute automatische Review bestätigt alle acht Korrekturen, nennt aber
+zwei zuvor übersehene Randfälle im Übersichtstext. Der Scanbutton erhält jetzt
+am gespeicherten Fristende einen eigenen Renderimpuls, ohne Scan oder Polling
+anzustoßen. Auf dem frisch gebauten isolierten Desktopbundle wurde der Button
+bei unveränderter Seite und ohne Nutzeraktion vom gesperrten zum nutzbaren
+Zustand übernommen; passende sichtbare Vorher-/Nachherbilder, keine Browser-
+Consolefehler oder Warnungen. Ein unruhiger lokaler Dev-Hot-Reload wurde für
+diese zeitabhängige Probe durch das gebaute Testbundle ersetzt; daraus wird
+keine Behebung einer allgemeinen Dev-Runtimeursache abgeleitet.
+
+Ein lokal als fehlgeschlagen gewerteter verlorener Publish-Rückkanal darf einen
+unabhängig bestätigten vollständigen DB-Stand nicht überdecken. Die Regression
+lässt den echten Publish committen, verliert dessen Rückmeldung und hält den
+nachfolgenden konditionalen Fehlerwrite zurück: der Snapshot bleibt `complete`.
+Zusätzlich darf ein zwischen zwei Reads verschwundenes Manifest nicht als
+veröffentlichter leerer Index gelten. Beide Rückbauten schlagen mit genau den
+geschützten Assertions fehl (`failed` statt `complete`, 200 statt 503).
+
+Erneuter kohärenter lokaler Abschluss nach diesen drei relevanten Änderungen:
+1.510 Tests/24 bedingte Skips, Coverage unverändert 88,46/85,67/91,97/90,90 %,
+Lint, Typecheck, Format und Build grün. Die übrigen Desktopflüsse werden bei
+unveränderten Inputs wiederverwendet. Neue terminale CI-/PG-/Containerbelege
+und finaler PR-Review stehen vor Mainintegration noch aus.

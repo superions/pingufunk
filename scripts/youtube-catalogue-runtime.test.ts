@@ -438,6 +438,47 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
         if (state === "unavailable") expect(row.content).toBeNull();
         else expect(row.content.filmlisteTimestamp).toBe(firstSeen);
       }
+      // A lost publish acknowledgement must not hide a committed complete manifest
+      // while the conditional failure-status write is still pending.
+      await age();
+      let recovering = false;
+      let releaseRecovery = () => {};
+      const recoveryHeld = new Promise<void>((resolve) => {
+        releaseRecovery = resolve;
+      });
+      const update = prisma.config.updateMany.bind(prisma.config);
+      const holdRecovery = vi.spyOn(prisma.config, "updateMany").mockImplementation((async (
+        ...args: unknown[]
+      ) => {
+        const request = args[0] as { where: { key: string }; data: { value: string } };
+        if (
+          request.where.key === YOUTUBE_INDEX_KEY &&
+          JSON.parse(request.data.value).scan.state === "failed"
+        ) {
+          recovering = true;
+          await recoveryHeld;
+        }
+        return (update as (...args: unknown[]) => Promise<unknown>)(...args);
+      }) as typeof prisma.config.updateMany);
+      let publicationTransactions = 0;
+      const losePublishAck = vi.spyOn(prisma, "$transaction").mockImplementation((async (
+        ...args: unknown[]
+      ) => {
+        const result = await (transaction as (...args: unknown[]) => Promise<unknown>)(...args);
+        if (++publicationTransactions === 2)
+          throw Error("Synthetic lost publication acknowledgement");
+        return result;
+      }) as typeof prisma.$transaction);
+      try {
+        expect((await post({ action: "refresh", revision: current.revision })).status).toBe(202);
+        await waitFor(async () => recovering);
+        expect((await snapshot()).scan.state).toBe("complete");
+      } finally {
+        releaseRecovery();
+        await service.cancelYoutubeCatalogue();
+        holdRecovery.mockRestore();
+        losePublishAck.mockRestore();
+      }
       first = await page(0);
       oldPages = await prisma.config.findMany({
         where: { key: { startsWith: `${YOUTUBE_INDEX_KEY}.page.` } },
@@ -529,6 +570,24 @@ process.stdout.write(JSON.stringify({id,channel_id:${JSON.stringify(channel)},ch
       expect(
         (await api.GET(new NextRequest("http://localhost/api/youtube/catalogue?page=0"))).status
       ).toBe(503);
+      // Losing the manifest is corruption, not a successfully published empty generation.
+      const missingManifest = vi.spyOn(prisma.config, "findUnique").mockImplementation((async (
+        ...args: unknown[]
+      ) => {
+        if ((args[0] as { where: { key: string } }).where.key === replacementKey)
+          await prisma.config.delete({ where: { key: YOUTUBE_INDEX_KEY } });
+        return (originalRead as (...args: unknown[]) => Promise<unknown>)(...args);
+      }) as typeof prisma.config.findUnique);
+      try {
+        expect(
+          (await api.GET(new NextRequest("http://localhost/api/youtube/catalogue?page=0"))).status
+        ).toBe(503);
+      } finally {
+        missingManifest.mockRestore();
+        await prisma.config.create({
+          data: { key: YOUTUBE_INDEX_KEY, value: JSON.stringify(replacement) },
+        });
+      }
       await prisma.config.create({
         data: { key: replacementKey, value: JSON.stringify(first.items) },
       });

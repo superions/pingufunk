@@ -64,6 +64,7 @@ export function YoutubeSettings() {
   const [pending, setPending] = useState<YoutubeMapping | null>(null);
   const [page, setPage] = useState(0);
   const [inventoryReload, setInventoryReload] = useState(0);
+  const [now, setNow] = useState(Date.now);
   const [inventory, setInventory] = useState<ReturnType<typeof youtubePageSchema.parse> | null>(
     null
   );
@@ -143,7 +144,13 @@ export function YoutubeSettings() {
     (enabled !== snapshot.enabled ||
       JSON.stringify(registry) !== JSON.stringify(snapshot.registry));
   const valid = !!registry && youtubeRegistrySchema.safeParse(registry).success;
-  const coolingDown = !!snapshot?.nextRefreshAt && snapshot.nextRefreshAt > Date.now();
+  const nextRefreshAt = snapshot?.nextRefreshAt;
+  useEffect(() => {
+    if (!nextRefreshAt) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, nextRefreshAt - Date.now() + 1));
+    return () => clearTimeout(timer);
+  }, [nextRefreshAt]);
+  const coolingDown = !!nextRefreshAt && nextRefreshAt > now;
   const run = async (operation: () => Promise<void>) => {
     if (busyRef.current) return;
     busyRef.current = true;

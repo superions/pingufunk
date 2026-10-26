@@ -166,9 +166,7 @@ export async function youtubeCatalogueSnapshot(): Promise<YoutubeSnapshot> {
     persisted = (await loadManifest()).value;
   const sameAttempt = local.revision === loaded.revision && local.token === persisted?.token;
   const scan =
-    sameAttempt && (local.active || persisted?.scan.state === "running")
-      ? local.scan
-      : (persisted?.scan ?? idle());
+    sameAttempt && persisted?.scan.state === "running" ? local.scan : (persisted?.scan ?? idle());
   return {
     revision: loaded.revision,
     enabled: loaded.enabled,
@@ -554,7 +552,7 @@ export async function youtubeCataloguePage(page: number) {
       if (attempt !== 0) throw error;
       const fresh = await loadManifest();
       // Only a committed replacement justifies retrying; corruption stays an error.
-      if (fresh.value?.pages[page] === selected) throw error;
+      if (!fresh.value || fresh.value.pages[page] === selected) throw error;
       value = fresh.value;
     }
   }
