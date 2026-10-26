@@ -16,6 +16,12 @@ export function SearchCoverageNotice({ coverage }: { coverage: UiSearchCoverage 
             : " Die angezeigten Treffer stammen nur aus den erfolgreich abgerufenen Quellen."}
         </p>
       )}
+      {!coverage.complete && coverage.baseComplete && (
+        <p>
+          Die Basisquellen wurden erfolgreich abgerufen. Die ergänzende Quellenabdeckung bleibt
+          unvollständig.
+        </p>
+      )}
       {(coverage.candidateWindowLimited || coverage.resultLimitReached) && (
         <p>
           Begrenztes Suchfenster: {coverage.returnedCount} von {coverage.eligibleCount} nutzbaren

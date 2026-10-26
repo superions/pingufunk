@@ -90,6 +90,8 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   -c 'CREATE SCHEMA p11_prepare AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p12_settings AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p17_catalogue AUTHORIZATION pingufunk_qa_runtime' \
+  -c 'CREATE SCHEMA p17_mapping AUTHORIZATION pingufunk_qa_runtime' \
+  -c 'CREATE SCHEMA p17_jobs AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_reads AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_enqueues AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_workers AUTHORIZATION pingufunk_qa_runtime' \
@@ -120,7 +122,7 @@ PINGUFUNK_REQUIRE_PG_TESTS=1 \
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
   DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  npx vitest run scripts/settings-runtime.test.ts scripts/youtube-catalogue-runtime.test.ts
+  npx vitest run scripts/settings-runtime.test.ts scripts/youtube-catalogue-runtime.test.ts scripts/youtube-mapping-runtime.test.ts scripts/source-admission-runtime.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \

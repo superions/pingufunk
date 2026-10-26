@@ -8,6 +8,7 @@ import { selectLanguageVariants } from "./language-editions";
 import { eligibleRenditionItem } from "./rendition-quality";
 import { recordDecision } from "@/server/decision-diagnostics";
 import { mediathekSearchAdapter } from "@/providers/mediathek/search";
+import { youtubeSearchAdapter, youtubeSearchContext } from "@/providers/youtube/search";
 import type { ApiResultItem } from "@/types";
 import type {
   ContentQueryField,
@@ -20,7 +21,10 @@ export type { ContentSearchWindow, SearchProviderId } from "@/types/provider";
 // Preserve the shipped RSS reservation without importing a concrete API into the coordinator.
 export const RSS_SYNC_CANDIDATE_LIMIT = 6000;
 export const RSS_SOURCE_WINDOW_ATTEMPTS = mediathekSearchAdapter.rssWindowAttempts;
-export const SEARCH_PROVIDER_IDS = mediathekSearchAdapter.providerIds;
+export const SEARCH_PROVIDER_IDS = [
+  ...mediathekSearchAdapter.providerIds,
+  ...youtubeSearchAdapter.providerIds,
+];
 const MAX_PENDING_SEARCHES = 128;
 const pendingSearches = new Map<string, Promise<ApiResultItem[] | null>>();
 
@@ -28,6 +32,7 @@ const pendingSearches = new Map<string, Promise<ApiResultItem[] | null>>();
 export async function searchCacheContext(): Promise<string> {
   const keys = [
     ...mediathekSearchAdapter.cacheSettingKeys,
+    ...youtubeSearchAdapter.cacheSettingKeys,
     "download.enableHLS",
     "download.quality",
     "matching.strategy",
@@ -65,6 +70,7 @@ export async function searchCacheContext(): Promise<string> {
         process.env.DATABASE_URL ?? null,
         getIndexerBaseUrl(),
         values,
+        await youtubeSearchContext(),
       ])
     )
     .digest("hex")
@@ -94,13 +100,53 @@ export async function queryContentWindow(
   try {
     const hlsEnabled = (await getSetting("download.enableHLS")) === "true";
     const policy = await getConfiguredLanguagePolicy();
-    const window = await mediathekSearchAdapter.searchWindow(
-      queries,
-      size,
-      { ...options, deadlineAt },
-      hlsEnabled,
-      providerId
-    );
+    const [base, supplemental] = await Promise.all([
+      providerId === "youtube"
+        ? null
+        : mediathekSearchAdapter.searchWindow(
+            queries,
+            size,
+            { ...options, deadlineAt },
+            hlsEnabled,
+            providerId
+          ),
+      providerId && providerId !== "youtube"
+        ? null
+        : youtubeSearchAdapter.searchWindow(
+            queries,
+            size,
+            { ...options, deadlineAt },
+            hlsEnabled,
+            providerId
+          ),
+    ]);
+    const baseComplete = base
+      ? base.coverage.complete &&
+        base.coverage.sources.some((source) => source.state === "complete")
+      : false;
+    const complete = base
+      ? base.coverage.complete && (supplemental?.coverage.complete ?? true)
+      : (supplemental?.coverage.complete ?? false);
+    const window: ContentSearchWindow = {
+      items: [...(base?.items ?? []), ...(supplemental?.items ?? [])],
+      coverage: {
+        complete,
+        ...(supplemental?.coverage.sources.length
+          ? {
+              baseComplete:
+                providerId === "youtube"
+                  ? complete
+                  : base?.coverage.complete === false
+                    ? false
+                    : baseComplete || complete,
+            }
+          : {}),
+        candidateWindowLimited: !!(
+          base?.coverage.candidateWindowLimited || supplemental?.coverage.candidateWindowLimited
+        ),
+        sources: [...(base?.coverage.sources ?? []), ...(supplemental?.coverage.sources ?? [])],
+      },
+    };
     const available = window.items.map((item) => eligibleRenditionItem(item, hlsEnabled));
     for (const item of available)
       recordDecision(
@@ -120,6 +166,7 @@ export async function queryContentWindow(
 
 /** Source-owned classification, never inferred separately by a GUI consumer. */
 export function contentProviderForItem(item: ApiResultItem): SearchProviderId {
+  if (item.sourceProviderId === "youtube") return youtubeSearchAdapter.providerForItem(item);
   return mediathekSearchAdapter.providerForItem(item);
 }
 
@@ -130,7 +177,7 @@ async function queryContentUncoalesced(
 ): Promise<ApiResultItem[] | null> {
   try {
     const result = await queryContentWindow(queries, size, options);
-    if (!result.coverage.complete) return null;
+    if (!(result.coverage.baseComplete ?? result.coverage.complete)) return null;
     return options.deferLanguageSelection ? result.items : result.items.slice(0, size);
   } catch {
     return null;

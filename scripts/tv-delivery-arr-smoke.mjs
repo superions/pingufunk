@@ -41,7 +41,7 @@ function journal() {
       manifest.apps.pingufunk.name,
       "node",
       "-e",
-      'const {PrismaClient}=require("./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{const row=await db.config.findUnique({where:{key:"internal.tv-delivery.v1"}});console.log(row?.value??"null");await db.$disconnect()})().catch(()=>process.exitCode=1)',
+      'const {PrismaClient}=require("./generated/sqlite");const db=new PrismaClient({log:[]});(async()=>{const row=await db.config.findUnique({where:{key:"internal.tv-delivery.v2"}});console.log(row?.value??"null");await db.$disconnect()})().catch(()=>process.exitCode=1)',
     ])
   );
 }

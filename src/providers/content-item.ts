@@ -1,9 +1,11 @@
 import type { ApiResultItem } from "@/types";
 import type { ProviderContentItem } from "@/types/provider";
 import { catalogueMetadata } from "@/lib/catalogue-metadata";
+import { parseYoutubeSource, youtubeSourceReferenceSchema } from "@/lib/youtube-source";
 
 /** Internal adapter only: the raw catalogue boundary never accepts these proof fields. */
 export function providerItemToApiResult(item: ProviderContentItem): ApiResultItem {
+  if ((item.sourceRenditions?.length ?? 0) > 5) throw Error("Rendition window exceeded");
   return {
     id: item.id,
     channel: item.channel,
@@ -21,11 +23,20 @@ export function providerItemToApiResult(item: ProviderContentItem): ApiResultIte
     url_video_low: item.videoUrls.low || "",
     ...(item.providerId === "mediathekview" ||
     item.providerId === "orf" ||
-    item.providerId === "srf"
+    item.providerId === "srf" ||
+    item.providerId === "youtube"
       ? { sourceProviderId: item.providerId }
       : {}),
     ...(item.sourceAudioEvidence ? { sourceAudioEvidence: item.sourceAudioEvidence } : {}),
     ...(item.sourceVideoDimensions ? { sourceVideoDimensions: item.sourceVideoDimensions } : {}),
+    ...(item.sourceRef ? { sourceRef: parseYoutubeSource(item.sourceRef) } : {}),
+    ...(item.sourceRenditions
+      ? {
+          sourceRenditions: item.sourceRenditions.map((value) =>
+            youtubeSourceReferenceSchema.parse(value)
+          ),
+        }
+      : {}),
   };
 }
 
@@ -34,6 +45,7 @@ export function apiResultToProviderItem(
   item: ApiResultItem,
   providerId: string
 ): ProviderContentItem {
+  if ((item.sourceRenditions?.length ?? 0) > 5) throw Error("Rendition window exceeded");
   const { url_subtitle, ...metadata } = catalogueMetadata(item);
   return {
     id: `${item.channel}-${item.topic}-${item.title}-${item.filmlisteTimestamp}`,
@@ -56,5 +68,13 @@ export function apiResultToProviderItem(
     },
     ...(item.sourceAudioEvidence ? { sourceAudioEvidence: item.sourceAudioEvidence } : {}),
     ...(item.sourceVideoDimensions ? { sourceVideoDimensions: item.sourceVideoDimensions } : {}),
+    ...(item.sourceRef ? { sourceRef: parseYoutubeSource(item.sourceRef) } : {}),
+    ...(item.sourceRenditions
+      ? {
+          sourceRenditions: item.sourceRenditions.map((value) =>
+            youtubeSourceReferenceSchema.parse(value)
+          ),
+        }
+      : {}),
   };
 }

@@ -5,12 +5,42 @@
     "germanName": "Take the Money and Run",
     "aliases": [],
     "episodes": [
-      { "name": "One Dream", "seasonNumber": 1, "episodeNumber": 1, "aired": "2026-01-13" },
-      { "name": "One Coin", "seasonNumber": 1, "episodeNumber": 2, "aired": "2026-01-13" },
-      { "name": "One Wish", "seasonNumber": 1, "episodeNumber": 3, "aired": "2026-01-13" },
-      { "name": "One Chance", "seasonNumber": 1, "episodeNumber": 4, "aired": "2026-01-13" },
-      { "name": "One Mistake", "seasonNumber": 1, "episodeNumber": 5, "aired": "2026-01-13" },
-      { "name": "One Truth", "seasonNumber": 1, "episodeNumber": 6, "aired": "2026-01-13" }
+      {
+        "name": "One Dream",
+        "seasonNumber": 1,
+        "episodeNumber": 1,
+        "aired": "2026-01-13"
+      },
+      {
+        "name": "One Coin",
+        "seasonNumber": 1,
+        "episodeNumber": 2,
+        "aired": "2026-01-13"
+      },
+      {
+        "name": "One Wish",
+        "seasonNumber": 1,
+        "episodeNumber": 3,
+        "aired": "2026-01-13"
+      },
+      {
+        "name": "One Chance",
+        "seasonNumber": 1,
+        "episodeNumber": 4,
+        "aired": "2026-01-13"
+      },
+      {
+        "name": "One Mistake",
+        "seasonNumber": 1,
+        "episodeNumber": 5,
+        "aired": "2026-01-13"
+      },
+      {
+        "name": "One Truth",
+        "seasonNumber": 1,
+        "episodeNumber": 6,
+        "aired": "2026-01-13"
+      }
     ]
   },
   {
@@ -39,6 +69,596 @@
         "episodeNumber": 6,
         "aired": "2018-03-23",
         "runtime": 45
+      }
+    ]
+  },
+  {
+    "tvdbId": 133771,
+    "name": "Der Kommissar",
+    "germanName": "Der Kommissar",
+    "aliases": [],
+    "episodes": [
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 1,
+        "name": "Toter Herr im Regen",
+        "aired": "1969-01-03"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 2,
+        "name": "Das Messer im Geldschrank",
+        "aired": "1969-01-17"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 3,
+        "name": "Ratten der Großstadt",
+        "aired": "1969-01-31"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 4,
+        "name": "Die Tote im Dornbusch",
+        "aired": "1969-02-21"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 5,
+        "name": "Ein Mädchen meldet sich nicht mehr",
+        "aired": "1969-03-14"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 6,
+        "name": "Die Pistole im Park",
+        "aired": "1969-03-21"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 7,
+        "name": "Keiner hörte den Schuß",
+        "aired": "1969-04-18"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 8,
+        "name": "Der Tod fährt 1. Klasse",
+        "aired": "1969-05-02"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 9,
+        "name": "Geld von toten Kassierern",
+        "aired": "1969-05-16"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 10,
+        "name": "Schrei vor dem Fenster",
+        "aired": "1969-06-06"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 11,
+        "name": "Die Schrecklichen",
+        "aired": "1969-07-11"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 12,
+        "name": "Die Waggonspringer",
+        "aired": "1969-11-07"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 13,
+        "name": "Auf dem Stundenplan: Mord",
+        "aired": "1969-11-28"
+      },
+      {
+        "seasonNumber": 1,
+        "episodeNumber": 14,
+        "name": "Das Ungeheuer",
+        "aired": "1969-12-19"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 1,
+        "name": "Der Papierblumenmörder",
+        "aired": "1970-01-16"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 2,
+        "name": "Tod einer Zeugin",
+        "aired": "1970-02-06"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 3,
+        "name": "Parkplatz-Hyänen",
+        "aired": "1970-02-27"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 4,
+        "name": "Dr. Meinhardts trauriges Ende",
+        "aired": "1970-03-13"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 5,
+        "name": "In letzter Minute",
+        "aired": "1970-04-03"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 6,
+        "name": "Messer im Rücken",
+        "aired": "1970-04-24"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 7,
+        "name": "...wie die Wölfe",
+        "aired": "1970-05-15"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 8,
+        "name": "Tod eines Klavierspielers",
+        "aired": "1970-06-05"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 9,
+        "name": "Tödlicher Irrtum",
+        "aired": "1970-06-26"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 10,
+        "name": "Eine Kugel für den Kommissar",
+        "aired": "1970-09-18"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 11,
+        "name": "Der Mord an Frau Klett",
+        "aired": "1970-10-09"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 12,
+        "name": "Die kleine Schubelik",
+        "aired": "1970-10-30"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 13,
+        "name": "Anonymer Anruf",
+        "aired": "1970-11-20"
+      },
+      {
+        "seasonNumber": 2,
+        "episodeNumber": 14,
+        "name": "Drei Tote reisen nach Wien",
+        "aired": "1970-12-18"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 1,
+        "name": "Der Moormörder",
+        "aired": "1971-01-08"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 2,
+        "name": "Besuch bei Alberti",
+        "aired": "1971-01-29"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 3,
+        "name": "Ende eines Tanzvergnügens",
+        "aired": "1971-02-26"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 4,
+        "name": "Die Anhalterin",
+        "aired": "1971-03-19"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 5,
+        "name": "Lagankes Verwandte",
+        "aired": "1971-04-16"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 6,
+        "name": "Der Tote von Zimmer 17",
+        "aired": "1971-05-07"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 7,
+        "name": "Lisa Bassenges Mörder",
+        "aired": "1971-05-28"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 8,
+        "name": "Tod eines Ladenbesitzers",
+        "aired": "1971-06-18"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 9,
+        "name": "Die andere Seite der Straße",
+        "aired": "1971-09-10"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 10,
+        "name": "Grauroter Morgen",
+        "aired": "1971-10-01"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 11,
+        "name": "Als die Blumen Trauer trugen",
+        "aired": "1971-10-22"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 12,
+        "name": "Der Tod des Herrn Kurusch",
+        "aired": "1971-11-12"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 13,
+        "name": "Kellner Windeck",
+        "aired": "1971-11-26"
+      },
+      {
+        "seasonNumber": 3,
+        "episodeNumber": 14,
+        "name": "Ein rätselhafter Mord",
+        "aired": "1971-12-17"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 1,
+        "name": "Traum eines Wahnsinnigen",
+        "aired": "1972-01-28"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 2,
+        "name": "Die Tote im Park",
+        "aired": "1972-02-18"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 3,
+        "name": "Schwester Ignatia",
+        "aired": "1972-03-10"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 4,
+        "name": "Überlegungen eines Mörders",
+        "aired": "1972-03-24"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 5,
+        "name": "Tod eines Schulmädchens",
+        "aired": "1972-04-21"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 6,
+        "name": "Toter gesucht",
+        "aired": "1972-05-12"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 7,
+        "name": "Ein Amoklauf",
+        "aired": "1972-06-02"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 8,
+        "name": "Der Tennisplatz",
+        "aired": "1972-06-30"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 9,
+        "name": "Fluchtwege",
+        "aired": "1972-10-06"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 10,
+        "name": "Das Ende eines Humoristen",
+        "aired": "1972-11-03"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 11,
+        "name": "Mykonos",
+        "aired": "1972-11-24"
+      },
+      {
+        "seasonNumber": 4,
+        "episodeNumber": 12,
+        "name": "Blinde Spiele",
+        "aired": "1972-12-22"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 1,
+        "name": "Rudek",
+        "aired": "1973-01-12"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 2,
+        "name": "Tod eines Hippiemädchens",
+        "aired": "1973-02-02"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 3,
+        "name": "Das Komplott",
+        "aired": "1973-02-23"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 4,
+        "name": "Schwarzes Dreieck",
+        "aired": "1973-03-16"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 5,
+        "name": "Der Tod von Karin W.",
+        "aired": "1973-04-06"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 6,
+        "name": "Die Nacht, in der Basseck starb",
+        "aired": "1973-04-27"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 7,
+        "name": "Der Geigenspieler",
+        "aired": "1973-05-18"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 8,
+        "name": "Ein Funken in der Kälte",
+        "aired": "1973-06-08"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 9,
+        "name": "Sonderbare Vorfälle im Hause von Professor S.",
+        "aired": "1973-09-21"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 10,
+        "name": "Ein Mädchen nachts auf der Straße",
+        "aired": "1973-10-05"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 11,
+        "name": "Sommerpension",
+        "aired": "1973-11-02"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 12,
+        "name": "Herr und Frau Brandes",
+        "aired": "1973-11-30"
+      },
+      {
+        "seasonNumber": 5,
+        "episodeNumber": 13,
+        "name": "Tod eines Buchhändlers",
+        "aired": "1973-12-28"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 1,
+        "name": "Domanns Mörder",
+        "aired": "1974-01-11"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 2,
+        "name": "Ein Anteil am Leben",
+        "aired": "1974-02-08"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 3,
+        "name": "Die Nacht mit Lansky",
+        "aired": "1974-02-22"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 4,
+        "name": "Spur von kleinen Füßen",
+        "aired": "1974-03-22"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 5,
+        "name": "Drei Brüder",
+        "aired": "1974-04-26"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 6,
+        "name": "Tod eines Landstreichers",
+        "aired": "1974-05-24"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 7,
+        "name": "Mit den Augen eines Mörders",
+        "aired": "1974-06-28"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 8,
+        "name": "Im Jagdhaus",
+        "aired": "1974-07-12"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 9,
+        "name": "Sein letzter Coup",
+        "aired": "1974-07-26"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 10,
+        "name": "Ohne auf Wiedersehen zu sagen",
+        "aired": "1974-08-09"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 11,
+        "name": "Schwierigkeiten eines Außenseiters",
+        "aired": "1974-08-30"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 12,
+        "name": "Jähes Ende einer interessanten Beziehung",
+        "aired": "1974-09-27"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 13,
+        "name": "Der Segelbootmord",
+        "aired": "1974-10-25"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 14,
+        "name": "Der Liebespaarmörder",
+        "aired": "1974-11-29"
+      },
+      {
+        "seasonNumber": 6,
+        "episodeNumber": 15,
+        "name": "Traumbilder",
+        "aired": "1974-12-27"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 1,
+        "name": "Das goldene Pflaster",
+        "aired": "1975-01-10"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 2,
+        "name": "Am Rande der Ereignisse",
+        "aired": "1975-01-31"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 3,
+        "name": "Warum es ein Fehler war, Beckmann zu erschießen",
+        "aired": "1975-02-14"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 4,
+        "name": "Ein Mord auf dem Lande",
+        "aired": "1975-03-14"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 5,
+        "name": "Der Mord an Dr. Winter",
+        "aired": "1975-04-25"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 6,
+        "name": "Die Kusine",
+        "aired": "1975-05-23"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 7,
+        "name": "Sturz aus großer Höhe",
+        "aired": "1975-06-20"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 8,
+        "name": "Noch 10 Minuten zu leben",
+        "aired": "1975-07-25"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 9,
+        "name": "Der Tod des Apothekers",
+        "aired": "1975-09-05"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 10,
+        "name": "Fährt der Zug nach Italien?",
+        "aired": "1975-09-26"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 11,
+        "name": "Ein Playboy segnet das Zeitliche",
+        "aired": "1975-10-24"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 12,
+        "name": "Mord nach der Uhr",
+        "aired": "1975-11-21"
+      },
+      {
+        "seasonNumber": 7,
+        "episodeNumber": 13,
+        "name": "Eine Grenzüberschreitung",
+        "aired": "1975-12-19"
+      },
+      {
+        "seasonNumber": 8,
+        "episodeNumber": 1,
+        "name": "Der Held des Tages",
+        "aired": "1976-01-02"
+      },
+      {
+        "seasonNumber": 8,
+        "episodeNumber": 2,
+        "name": "Tod im Transit",
+        "aired": "1976-06-30"
       }
     ]
   }

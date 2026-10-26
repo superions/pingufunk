@@ -20,7 +20,7 @@ export async function completeValidatedDownload(
   // Frozen v3 references never re-read current GUI policy. The dynamic Sonarr
   // tolerance remains only for shipped unversioned/v1/v2 compatibility.
   const tolerance =
-    expectations?.version === 3 || expectations?.version === 4
+    expectations?.version === 3 || expectations?.version === 4 || expectations?.version === 5
       ? 0
       : Number(
           configuredSetting(

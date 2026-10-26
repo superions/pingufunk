@@ -1,3 +1,4 @@
+import { applySourceAdmission, type SourceAdmission } from "@/lib/source-admission";
 import { createHash } from "node:crypto";
 import { databaseProvider, prisma } from "@/lib/db";
 import { serialSqliteEnqueue } from "@/lib/serial-enqueue";
@@ -32,20 +33,22 @@ function confirmed(row: IntentRow, payloadHash: string, now: Date): { id: string
 /** Atomic receipt/job commit, never retrying after an uncertain transaction. */
 export async function createEnqueueIntent(
   data: EnqueuePayload,
-  rawKey: string
+  rawKey: string,
+  admit?: () => Promise<SourceAdmission | undefined>
 ): Promise<{ id: string; created: boolean }> {
   assertWritesEnabled();
   // SQLite has one writer. Admit local requests before entering a transaction,
   // never retry a BUSY/uncertain commit. The durable unique receipt remains the
   // cross-process authority; native unkeyed clients keep their own contract.
   return databaseProvider === "sqlite"
-    ? serialSqliteEnqueue(() => commitEnqueueIntent(data, rawKey))
-    : commitEnqueueIntent(data, rawKey);
+    ? serialSqliteEnqueue(() => commitEnqueueIntent(data, rawKey, admit))
+    : commitEnqueueIntent(data, rawKey, admit);
 }
 
 async function commitEnqueueIntent(
   data: EnqueuePayload,
-  rawKey: string
+  rawKey: string,
+  admit?: () => Promise<SourceAdmission | undefined>
 ): Promise<{ id: string; created: boolean }> {
   assertWritesEnabled();
   const key = parseEnqueueKey(rawKey);
@@ -55,6 +58,11 @@ async function commitEnqueueIntent(
     .update(JSON.stringify([1, data.url, data.title, data.category, data.mediaExpectations]))
     .digest("hex");
   const now = new Date();
+  const previous = await prisma.enqueueIntent.findUnique({ where: { id } });
+  if (previous) return { ...confirmed(previous, payloadHash, now), created: false };
+  // A matching durable receipt acknowledges an accepted job without reapplying
+  // today's source policy. New admission must pass before cleanup or insertion.
+  const admission = await admit?.();
   // Retention removes only expired receipts, never a job/history/file.
   // At most 100 rows per keyed enqueue; expiry is also checked on every read.
   const expired = await prisma.enqueueIntent.findMany({
@@ -69,15 +77,9 @@ async function commitEnqueueIntent(
   await prisma.enqueueIntent.deleteMany({
     where: { id: { in: expired.map((row) => row.id) }, expiresAt: { lte: now } },
   });
-  const previous = await prisma.enqueueIntent.findUnique({
-    where: { id },
-  });
-  if (previous) {
-    // Never silently create another transfer for an expired or different intent.
-    return { ...confirmed(previous, payloadHash, now), created: false };
-  }
   try {
     const row = await prisma.$transaction(async (tx) => {
+      await applySourceAdmission(tx, admission);
       await tx.enqueueIntent.create({
         data: {
           id,

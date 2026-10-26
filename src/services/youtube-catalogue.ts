@@ -6,6 +6,10 @@ import { clearSettingsCache } from "@/lib/settings";
 import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
 import { readYoutubeMetadata, YoutubeMetadataError } from "@/server/ytdlp";
 import {
+  readYoutubeCataloguePage,
+  type YoutubeCatalogueChecks,
+} from "@/providers/youtube/catalogue";
+import {
   YOUTUBE_ENABLED_KEY,
   YOUTUBE_INDEX_KEY,
   YOUTUBE_REGISTRY_KEY,
@@ -242,6 +246,8 @@ export async function saveYoutubeCatalogue(input: YoutubeSave): Promise<YoutubeS
   }
   runtime.controller?.abort();
   clearSettingsCache();
+  const { sourceMediaFacts } = await import("./source-media-facts");
+  sourceMediaFacts.invalidateYoutube();
   // Independent database readback; a lost acknowledgement is never retried automatically.
   const confirmed = await youtubeCatalogueSnapshot();
   if (
@@ -267,9 +273,30 @@ export async function inspectYoutubeSource(value: string) {
   runtime.probe = true;
   const controller = new AbortController();
   runtime.controller = controller;
+  const deadlineAt = Date.now() + 30000;
+  const inspecting = (async () => {
+    const source = normalizeYoutubeInspection(
+      await readYoutubeMetadata(input, 0, controller.signal),
+      input
+    );
+    controller.signal.throwIfAborted();
+    if (source.kind === "channel") return source;
+    const loaded = await loadRegistry();
+    controller.signal.throwIfAborted();
+    const local = loaded.raw ? localSchema.parse(JSON.parse(loaded.raw)).registry : null;
+    const { suggestYoutubeIdentity } = await import("./youtube-identities");
+    const identity = await suggestYoutubeIdentity(
+      { ...source, kind: source.kind },
+      local,
+      deadlineAt
+    );
+    controller.signal.throwIfAborted();
+    return { ...source, identity };
+  })();
+  // Shutdown drains the complete inspection, including its bounded metadata lookup.
+  runtime.probeWork = inspecting;
   try {
-    runtime.probeWork = readYoutubeMetadata(input, 0, controller.signal);
-    return normalizeYoutubeInspection(await runtime.probeWork, input);
+    return await inspecting;
   } finally {
     runtime.probe = false;
     runtime.probeWork = undefined;
@@ -287,6 +314,8 @@ async function scan(
   // Reserve the bounded manifest overhead; every page stays small for GUI reads.
   let bytes = 64 * 1024;
   const firstSeen = new Map<string, number>();
+  const lastKnown = new Map<string, NonNullable<IndexRow["lastKnown"]>>();
+  const availabilityChecks: YoutubeCatalogueChecks = { count: 0, known: new Map() };
   try {
     for (const key of reservation.pages) {
       const page = await readIndexPage(key);
@@ -294,6 +323,13 @@ async function scan(
         const observed = row.firstSeenAt ?? row.content?.filmlisteTimestamp;
         if (row.videoId && observed)
           firstSeen.set(row.videoId, Math.min(firstSeen.get(row.videoId) ?? Infinity, observed));
+        if (row.videoId) {
+          const known =
+            row.content && row.channelId
+              ? { title: row.content.title, channelId: row.channelId }
+              : row.lastKnown;
+          if (known) lastKnown.set(`${row.mappingKey}/${row.videoId}`, known);
+        }
       }
     }
     const mappings = loaded.registry.programMappings.filter(
@@ -311,7 +347,7 @@ async function scan(
           throw conflict();
         const input: YoutubeInput = youtubeInput(mapping.sourceId);
         const page = normalizeYoutubePage(
-          await readYoutubeMetadata(input, batch * 100, controller.signal),
+          await readYoutubeCataloguePage(input, batch * 100, controller.signal, availabilityChecks),
           mapping,
           loaded.registry.channels.find((channel) => channel.id === mapping.channelId)!,
           Math.floor(Date.now() / 1000)
@@ -322,6 +358,10 @@ async function scan(
             if (row.content) row.content.filmlisteTimestamp = row.firstSeenAt;
             // First observation spans overlapping playlists and unavailable refreshes.
             firstSeen.set(row.videoId, row.firstSeenAt);
+          }
+          if (row.videoId && row.availability === "unavailable") {
+            const known = lastKnown.get(`${row.mappingKey}/${row.videoId}`);
+            if (known) row.lastKnown = known;
           }
           if (row.videoId && seen.has(row.videoId))
             throw new YoutubeCatalogueDataError("duplicate_id");
@@ -401,7 +441,8 @@ async function scan(
       ...runtime.scan,
       state: controller.signal.aborted
         ? "cancelled"
-        : error instanceof YoutubeCatalogueError && error.status === 413
+        : (error instanceof YoutubeCatalogueError && error.status === 413) ||
+            (error instanceof YoutubeCatalogueDataError && error.reason === "detail_limit")
           ? "limited"
           : "failed",
       message: controller.signal.aborted
@@ -581,4 +622,61 @@ export async function stopYoutubeCatalogueRefresh(): Promise<void> {
   clearInterval(runtime.timer);
   runtime.timer = undefined;
   await cancelYoutubeCatalogue();
+}
+
+/** Bounded read-only setup snapshot, never an implicit metadata scan or media proof. */
+export async function readYoutubeCatalogueIndex() {
+  const loaded = await loadRegistry();
+  let { value, raw: manifestRaw } = await loadManifest();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      let rows: IndexRow[] = [];
+      if (value?.pages.length) {
+        const pages = await prisma.config.findMany({
+          where: { key: { in: value.pages } },
+          select: { key: true, value: true },
+        });
+        const byKey = new Map(pages.map((page) => [page.key, page.value]));
+        let bytes = 0;
+        if (byKey.size !== value.pages.length) throw invalid();
+        for (const [number, key] of value.pages.entries()) {
+          const raw = byKey.get(key)!;
+          bytes += Buffer.byteLength(raw);
+          if (Buffer.byteLength(raw) > pageBytes || bytes > YOUTUBE_INDEX_BYTES) throw invalid();
+          const page = z.array(youtubeIndexRowSchema).max(100).parse(JSON.parse(raw));
+          if (page.length !== Math.min(100, value.count - number * 100)) throw invalid();
+          rows.push(...page);
+        }
+        if (rows.length !== value.count) throw invalid();
+      } else if (value?.count) throw invalid();
+      return {
+        revision: loaded.revision,
+        registry: loaded.registry,
+        enabled: loaded.enabled,
+        guardValues:
+          loaded.raw && manifestRaw
+            ? [
+                { key: YOUTUBE_REGISTRY_KEY, value: loaded.raw },
+                { key: YOUTUBE_ENABLED_KEY, value: String(loaded.enabled) },
+                { key: YOUTUBE_INDEX_KEY, value: manifestRaw },
+              ]
+            : [],
+        rows,
+        indexed: value?.completeAt !== null && value?.completeAt !== undefined,
+        current: value?.indexRevision === loaded.revision,
+        at: value?.completeAt ?? null,
+      };
+    } catch (error) {
+      if (attempt !== 0) throw error;
+      const latest = await loadManifest();
+      const fresh = latest.value;
+      if (!fresh || JSON.stringify(fresh.pages) === JSON.stringify(value?.pages)) throw error;
+      value = fresh;
+      manifestRaw = latest.raw;
+    }
+  }
+  throw invalid();
+}
+export async function assertYoutubeCatalogueRevision(revision: string) {
+  if ((await loadRegistry()).revision !== revision) throw conflict();
 }

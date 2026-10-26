@@ -9,6 +9,7 @@ import { configuredSetting } from "@/lib/settings-schema";
 import { classifyLanguageEdition } from "./language-editions";
 import { mediaSourceIdentity } from "./source-audio";
 import { renditionDimensions } from "./rendition-quality";
+import { youtubeSourceReferenceSchema, youtubeWatchUrl } from "@/lib/youtube-source";
 
 /** Catalogue durations are seconds; verified episode metadata is minutes. */
 export function releaseMediaExpectations(
@@ -18,6 +19,9 @@ export function releaseMediaExpectations(
   mediaKind: NewMediaExpectations["mediaKind"] = "unknown"
 ): NewMediaExpectations {
   const expected = unknownJobMediaExpectations();
+  const source = item.sourceRef ? youtubeSourceReferenceSchema.parse(item.sourceRef) : null;
+  if (source && renditionUrl !== youtubeWatchUrl(source))
+    throw Error("Typed source selector mismatch");
   expected.mediaKind = mediaKind;
   const dimensions = renditionDimensions(item, renditionUrl);
   if (dimensions) expected.resolution = { ...dimensions, provenance: "provider_dimensions" };
@@ -53,11 +57,15 @@ export function releaseMediaExpectations(
   if (item.sourceAudioEvidence) {
     // A provider promise is not a container tag. Its separate proof will be
     // revalidated by the worker against the exact URL, without stamping tracks.
-    if (item.sourceAudioEvidence.mediaIdentity !== mediaSourceIdentity(renditionUrl))
+    if (
+      item.sourceAudioEvidence.mediaIdentity !==
+      mediaSourceIdentity(renditionUrl, source ?? undefined)
+    )
       throw new Error("Source evidence mismatch");
     return parseMediaExpectations({
       ...expected,
       sourceAudio: item.sourceAudioEvidence,
+      ...(source ? { version: 5, sourceRef: source, mediaKind: source.programme.kind } : {}),
     }) as NewMediaExpectations;
   }
   if (edition.audioEvidence === "german")
@@ -72,6 +80,8 @@ export function releaseMediaExpectations(
     }
   }
   // Only exact-URL evidence above supplies dimensions, never a quality label.
+  if (source || (item.sourceRef && renditionUrl !== youtubeWatchUrl(item.sourceRef)))
+    throw new Error("Typed source requires verified audio");
   return parseMediaExpectations(expected) as NewMediaExpectations;
 }
 
@@ -84,7 +94,8 @@ export function tvReviewMediaExpectations(
 ): NewMediaExpectations {
   const facts = releaseMediaExpectations(item, null, url);
   return parseMediaExpectations({
-    version: 3,
+    version: facts.version,
+    ...("sourceRef" in facts ? { sourceRef: facts.sourceRef } : {}),
     mediaKind: "series",
     durations: {
       source: { seconds: item.duration, provenance: "source_catalogue", tolerancePercent: 10 },

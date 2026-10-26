@@ -649,3 +649,87 @@ export async function searchMulti(query: string): Promise<TmdbMultiSearchResult>
     return { mediaType: "unknown", tmdbId: null };
   }
 }
+
+export class ProgrammeIdentityConflictError extends Error {}
+
+/** Identity candidates only: bounded exact names, never the legacy first-result lookup. */
+export async function findProgrammeIdentity(
+  query: string,
+  kind: "series" | "movie",
+  year: number | null,
+  budget: HttpRequestBudget,
+  titleKey: (title: string) => string
+): Promise<{ available: boolean; ambiguous: boolean; targetId: number | null }> {
+  const apiKey = await getApiKey();
+  if (!apiKey) return { available: false, ambiguous: false, targetId: null };
+  const headers = getAuthHeaders(apiKey);
+  const read = async (endpoint: string) => {
+    const response = await fetchWithRetry(
+      getApiUrl(endpoint),
+      { headers },
+      { requestBudget: budget, maxRetries: 0 }
+    );
+    if (!response.ok) {
+      void response.body?.cancel();
+      throw new ProviderResponseError();
+    }
+    return readBoundedProviderJson(response, budget.deadlineAt, 1024 * 1024);
+  };
+  const search = z
+    .object({
+      total_pages: z.number().int().nonnegative(),
+      results: z
+        .array(
+          z.object({
+            id: z.number().int().positive(),
+            name: z.string().max(500).optional(),
+            original_name: z.string().max(500).optional(),
+            title: z.string().max(500).optional(),
+            original_title: z.string().max(500).optional(),
+            first_air_date: z.string().max(32).optional(),
+            release_date: z.string().max(32).optional(),
+          })
+        )
+        .max(50),
+    })
+    .parse(
+      await read(
+        `/search/${kind === "series" ? "tv" : "movie"}?query=${encodeURIComponent(query)}&language=de-DE&page=1`
+      )
+    );
+  // A truncated search window cannot establish uniqueness, even if its first page looks unique.
+  if (search.total_pages > 1) return { available: true, ambiguous: true, targetId: null };
+  const named = search.results.filter((row) =>
+    [row.name, row.original_name, row.title, row.original_title].some(
+      (name) => name && titleKey(name) === titleKey(query)
+    )
+  );
+  const matching = named.filter(
+    (row) =>
+      year === null ||
+      (kind === "series" ? row.first_air_date : row.release_date)?.slice(0, 4) === String(year)
+  );
+  const unknownYear =
+    year !== null &&
+    named.some(
+      (row) =>
+        !/^\d{4}-\d{2}-\d{2}$/.test(
+          (kind === "series" ? row.first_air_date : row.release_date) ?? ""
+        )
+    );
+  if (unknownYear || matching.length > 1)
+    return { available: true, ambiguous: true, targetId: null };
+  if (!matching.length) return { available: true, ambiguous: false, targetId: null };
+  const tmdbId = matching[0].id;
+  if (kind === "movie") return { available: true, ambiguous: false, targetId: tmdbId };
+  const external = z
+    .object({ id: z.literal(tmdbId), tvdb_id: z.number().int().positive().nullable() })
+    .parse(await read(`/tv/${tmdbId}/external_ids`));
+  if (!external.tvdb_id) return { available: true, ambiguous: false, targetId: null };
+  const reverse = z
+    .object({ tv_results: z.array(z.object({ id: z.number().int().positive() })).max(50) })
+    .parse(await read(`/find/${external.tvdb_id}?external_source=tvdb_id`));
+  if (reverse.tv_results.length !== 1 || reverse.tv_results[0].id !== tmdbId)
+    throw new ProgrammeIdentityConflictError("Conflicting TVDB/TMDB identity");
+  return { available: true, ambiguous: false, targetId: external.tvdb_id };
+}

@@ -3,6 +3,9 @@ import type { Prisma } from "../../generated/sqlite";
 import { allDownloads, type DownloadRead } from "@/lib/download-read";
 import { randomUUID } from "crypto";
 import { createEnqueueIntent } from "./enqueue-intent";
+import { applySourceAdmission } from "@/lib/source-admission";
+import { releaseSourceAdmission } from "./source-enqueue";
+import { serialSqliteEnqueue } from "@/lib/serial-enqueue";
 import { assertWritesEnabled } from "@/lib/write-gate";
 import path from "node:path";
 import {
@@ -88,6 +91,7 @@ export async function addToQueue(
   validateCategory(category);
   validateReleaseTitle(title);
   assertMediaRuntimeCompatible(mediaExpectations);
+  const admit = releaseSourceAdmission(url, mediaExpectations);
   const data = {
     id: randomUUID(),
     title,
@@ -100,8 +104,17 @@ export async function addToQueue(
   };
   const download =
     enqueueKey !== undefined
-      ? await createEnqueueIntent(data, enqueueKey)
-      : await prisma.download.create({ data });
+      ? await createEnqueueIntent(data, enqueueKey, admit)
+      : await (async () => {
+          if (!admit) return prisma.download.create({ data });
+          const admission = await admit();
+          const persist = () =>
+            prisma.$transaction(async (tx) => {
+              await applySourceAdmission(tx, admission);
+              return tx.download.create({ data });
+            });
+          return databaseProvider === "sqlite" ? serialSqliteEnqueue(persist) : persist();
+        })();
 
   // Trigger download processing asynchronously
   // Import dynamically to avoid circular dependencies and ensure server-side only

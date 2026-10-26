@@ -11,7 +11,7 @@ vi.mock("@/lib/settings", () => ({
   ),
 }));
 vi.mock("@/lib/db", () => ({ prisma: {} }));
-import { readYoutubeMetadata, YoutubeMetadataError } from "./ytdlp";
+import { readYoutubeMetadata, readYoutubeMediaMetadata, YoutubeMetadataError } from "./ytdlp";
 let child: EventEmitter & {
   stdout: PassThrough;
   stderr: PassThrough;
@@ -100,3 +100,69 @@ it("rejects an unknown extractor target before starting a process", async () => 
   expect(spawn).not.toHaveBeenCalled();
   expect(new YoutubeMetadataError("invalid").message).not.toContain("secret");
 });
+
+it("owns the shorter fifteen-second detail deadline without reporting a thirty-second timeout", async () => {
+  const result = readYoutubeMediaMetadata("abcdefghijk", new AbortController().signal);
+  const rejection = expect(result).rejects.toMatchObject({ reason: "timeout" });
+  await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+  const args = spawn.mock.calls[0][1];
+  expect(args).toContain("--no-playlist");
+  expect(args).not.toContain("--flat-playlist");
+  await vi.advanceTimersByTimeAsync(14900);
+  expect(child.kill).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(101);
+  await rejection;
+  expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+  expect(new YoutubeMetadataError("timeout").message).not.toContain("30");
+});
+
+it.each(["Privates Video", "Private video. Sign in if you have access."])(
+  "confirms explicit unavailability only for the requested video: %s",
+  async (message) => {
+    const result = readYoutubeMetadata(
+      youtubeInput("abcdefghijk"),
+      0,
+      new AbortController().signal,
+      true
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    child.stderr.write(`ERROR: [youtube] abcdefghijk: ${message}\n`);
+    child.emit("close", 1);
+    expect(await result).toEqual({ id: "abcdefghijk", availability: "unavailable" });
+    expect(spawn.mock.calls[0][1]).toEqual(
+      expect.arrayContaining(["--extractor-args", "youtube:lang=de", "--skip-download"])
+    );
+  }
+);
+it("does not reinterpret a foreign diagnostic as a private video", async () => {
+  const result = readYoutubeMetadata(
+    youtubeInput("abcdefghijk"),
+    0,
+    new AbortController().signal,
+    true
+  );
+  const rejection = expect(result).rejects.toMatchObject({ reason: "process" });
+  await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+  child.stderr.write("ERROR: [youtube] zyxwvutsrqp: Privates Video\n");
+  child.emit("close", 1);
+  await rejection;
+});
+it.each(["timeout", "normal inspect"])(
+  "preserves %s failure despite a private diagnostic",
+  async (mode) => {
+    const result = readYoutubeMetadata(
+      youtubeInput("abcdefghijk"),
+      0,
+      new AbortController().signal,
+      mode === "timeout"
+    );
+    const rejection = expect(result).rejects.toMatchObject({
+      reason: mode === "timeout" ? "timeout" : "process",
+    });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    child.stderr.write("ERROR: [youtube] abcdefghijk: Privates Video\n");
+    if (mode === "timeout") await vi.advanceTimersByTimeAsync(30001);
+    else child.emit("close", 1);
+    await rejection;
+  }
+);

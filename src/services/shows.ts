@@ -37,7 +37,7 @@ const baseShows = new LRUCache<string, TvdbData>({ max: 256, ttl: 600_000 });
 // GitHub raw URL for auto-update
 const GITHUB_SHOWS_URL =
   process.env.SHOWS_URL ||
-  "https://raw.githubusercontent.com/rundfunkarr/rundfunkarr/main/data/shows.json";
+  "https://raw.githubusercontent.com/superions/pingufunk/main/data/shows.json";
 
 const localShowsSchema = z
   .array(
@@ -110,11 +110,18 @@ async function loadLocalShows(budget?: HttpRequestBudget): Promise<void> {
     let shows = await fetchShowsFromGitHub(budget);
     if (budget && Date.now() >= budget.deadlineAt) throw new ProviderResponseError();
 
-    if (!shows) {
-      console.log("[Shows] Falling back to local file");
+    if (!shows || !process.env.SHOWS_URL) {
+      // Explicit remote pins remain authoritative. Default installations also
+      // retain newly bundled identities before the remote catalogue catches up.
+      const remote = shows;
+      console.log("[Shows] Loading bundled catalogue");
       const showsPath = path.join(process.cwd(), "data", "shows.json");
       const fileContent = await fs.readFile(showsPath, "utf-8");
       shows = localShowsSchema.parse(JSON.parse(fileContent));
+      if (remote) {
+        const known = new Set(remote.map((show) => show.tvdbId));
+        shows = [...remote, ...shows.filter((show) => !known.has(show.tvdbId))];
+      }
       console.log(`[Shows] Loaded ${shows!.length} shows from local file`);
     }
 
@@ -161,10 +168,30 @@ function supplementLocalShow(local: TvdbData | null, provider: TvdbData): TvdbDa
   const coordinates = new Set(
     local.episodes.map((episode) => `${episode.seasonNumber}:${episode.episodeNumber}`)
   );
+  const supplements = new Map<string, TvdbData["episodes"]>();
+  for (const episode of provider.episodes) {
+    const key = `${episode.seasonNumber}:${episode.episodeNumber}`;
+    supplements.set(key, [...(supplements.get(key) ?? []), episode]);
+  }
   return {
     ...local,
     episodes: [
-      ...local.episodes,
+      ...local.episodes.map((episode) => {
+        const candidates = supplements.get(`${episode.seasonNumber}:${episode.episodeNumber}`);
+        const supplement =
+          candidates?.length === 1 &&
+          candidates[0].name.normalize("NFC").trim().toLocaleLowerCase("de-DE") ===
+            episode.name.normalize("NFC").trim().toLocaleLowerCase("de-DE")
+            ? candidates[0]
+            : null;
+        return supplement
+          ? {
+              ...episode,
+              aired: episode.aired ?? supplement.aired,
+              runtime: episode.runtime ?? supplement.runtime,
+            }
+          : episode;
+      }),
       ...provider.episodes.filter(
         (episode) => !coordinates.has(`${episode.seasonNumber}:${episode.episodeNumber}`)
       ),
@@ -267,4 +294,21 @@ export async function getBaseShowForSonarrRss(tvdbId: number): Promise<TvdbData 
   const shows = JSON.parse(file) as LocalShow[];
   const show = shows.find((item) => item.tvdbId === tvdbId);
   return show ? localShowMetadata(show) : null;
+}
+
+/** Existing curated identities for explicit setup suggestions; no fuzzy or first-match selection. */
+export async function getCatalogueShowIdentities(budget: HttpRequestBudget) {
+  await loadLocalShows(budget);
+  return [...localShows.values()].map((show) => ({
+    targetId: show.tvdbId,
+    names: [show.name, show.germanName, ...show.aliases],
+    year: show.episodes
+      .filter((episode) => episode.seasonNumber > 0 && episode.aired)
+      .map((episode) => Number(episode.aired!.slice(0, 4)))
+      .filter((year) => Number.isSafeInteger(year) && year >= 1800 && year <= 2200)
+      .reduce<number | null>(
+        (earliest, year) => (earliest === null ? year : Math.min(earliest, year)),
+        null
+      ),
+  }));
 }

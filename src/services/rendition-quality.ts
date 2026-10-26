@@ -1,7 +1,16 @@
+import { RENDITION_SELECTORS, type RenditionSelector } from "@/lib/rendition-selector";
 import type { ApiResultItem } from "@/types";
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { recordDecision } from "@/server/decision-diagnostics";
 import { sourceAvailabilityState } from "@/lib/content-dates";
+import {
+  youtubeSourceReferenceSchema,
+  youtubeWatchUrl,
+  youtubeRenditionIdentity,
+  youtubeSourceIdentitySchema,
+  youtubeRenditionFingerprint,
+  type YoutubeSourceReference,
+} from "@/lib/youtube-source";
 
 export type QualityPreference = "all" | "best" | "1080p" | "720p" | "480p";
 
@@ -76,6 +85,46 @@ export function selectRenditions(
   preference: QualityPreference,
   hlsEnabled: boolean
 ) {
+  if (item.sourceRef) {
+    const parsed = youtubeSourceReferenceSchema.safeParse(item.sourceRef);
+    if (!parsed.success || item.url_website !== youtubeWatchUrl(parsed.data)) return [];
+    if ((item.sourceRenditions?.length ?? 0) > 5) return [];
+    const identity = JSON.stringify(youtubeSourceIdentitySchema.strip().parse(parsed.data));
+    const references = [parsed.data];
+    for (const value of item.sourceRenditions ?? []) {
+      const alternative = youtubeSourceReferenceSchema.safeParse(value);
+      if (
+        !alternative.success ||
+        JSON.stringify(youtubeSourceIdentitySchema.strip().parse(alternative.data)) !== identity
+      )
+        return [];
+      references.push(alternative.data);
+    }
+    const unique = [
+      ...new Map(references.map((ref) => [youtubeRenditionIdentity(ref), ref])).values(),
+    ];
+    const renditions = unique
+      .sort(
+        (a, b) => b.selection.height - a.selection.height || b.selection.width - a.selection.width
+      )
+      .map((sourceRef) => ({
+        field:
+          sourceRef.selection.height >= 1080
+            ? ("url_video_hd" as const)
+            : sourceRef.selection.height >= 720
+              ? ("url_video" as const)
+              : ("url_video_low" as const),
+        identity: youtubeRenditionIdentity(sourceRef),
+        multiplier: 1,
+        url: youtubeWatchUrl(sourceRef),
+        dimensions: { width: sourceRef.selection.width, height: sourceRef.selection.height },
+        quality: `${sourceRef.selection.height}p`,
+        sourceRef,
+      }));
+    return preference === "best"
+      ? renditions.slice(0, 1)
+      : renditions.filter((row) => preference === "all" || row.quality === preference);
+  }
   const slots = [
     { field: "url_video_hd", identity: "1080p", multiplier: 1.6 },
     { field: "url_video", identity: "720p", multiplier: 1 },
@@ -119,4 +168,82 @@ export function selectRenditions(
     seen.add(rendition.url);
     return true;
   });
+}
+
+/** Bind one declared concrete rendition to its own proof before NZB/review production. */
+export function itemForRendition(
+  item: ApiResultItem,
+  rendition: { url: string; sourceRef?: YoutubeSourceReference }
+): ApiResultItem {
+  if (!rendition.sourceRef) return item;
+  const selected = youtubeSourceReferenceSchema.parse(rendition.sourceRef);
+  const primary = youtubeSourceReferenceSchema.parse(item.sourceRef);
+  if (
+    rendition.url !== youtubeWatchUrl(selected) ||
+    item.sourceAudioEvidence?.provider !== "youtube" ||
+    item.sourceAudioEvidence.mediaIdentity !== youtubeRenditionFingerprint(primary) ||
+    ![primary, ...(item.sourceRenditions ?? [])].some(
+      (ref) => JSON.stringify(youtubeSourceReferenceSchema.parse(ref)) === JSON.stringify(selected)
+    ) ||
+    JSON.stringify(youtubeSourceIdentitySchema.strip().parse(primary)) !==
+      JSON.stringify(youtubeSourceIdentitySchema.strip().parse(selected))
+  )
+    throw Error("Rendition proof mismatch");
+  return {
+    ...item,
+    sourceRef: selected,
+    sourceRenditions: undefined,
+    duration: selected.selection.duration,
+    sourceAssetFingerprint: youtubeRenditionFingerprint(selected),
+    sourceVideoDimensions: [
+      {
+        url: youtubeWatchUrl(selected),
+        width: selected.selection.width,
+        height: selected.selection.height,
+      },
+    ],
+    sourceAudioEvidence: {
+      provider: "youtube",
+      videoId: selected.videoId,
+      channelId: selected.channelId,
+      language: "de",
+      mediaIdentity: youtubeRenditionFingerprint(selected),
+      selection: selected.selection,
+    },
+  };
+}
+
+/** Shared UI/review slot selector; source references never populate legacy video URL slots. */
+export function renditionUrl(
+  item: ApiResultItem,
+  field: "url_video" | "url_video_hd" | "url_video_low"
+): string {
+  return item.sourceRef
+    ? (selectRenditions(item, "all", false).find((row) => row.field === field)?.url ?? "")
+    : item[field];
+}
+
+/** One selector shared by opaque UI downloads and explicit review; legacy slots stay unchanged. */
+export function renditionSelector(
+  rendition: ReturnType<typeof selectRenditions>[number]
+): RenditionSelector {
+  if ("sourceRef" in rendition) {
+    const key = rendition.quality as RenditionSelector;
+    if (!RENDITION_SELECTORS.includes(key)) throw Error("Unsupported measured rendition");
+    return key;
+  }
+  return rendition.field === "url_video_hd" ? "hd" : rendition.field === "url_video" ? "sd" : "low";
+}
+export function selectedRendition(item: ApiResultItem, selector: RenditionSelector) {
+  const choices = selectRenditions(item, "all", false);
+  return (
+    choices.find((row) => renditionSelector(row) === selector) ??
+    (["hd", "sd", "low"].includes(selector)
+      ? choices.find(
+          (row) =>
+            row.field ===
+            (selector === "hd" ? "url_video_hd" : selector === "sd" ? "url_video" : "url_video_low")
+        )
+      : undefined)
+  );
 }

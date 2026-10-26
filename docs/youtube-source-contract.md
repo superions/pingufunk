@@ -1,13 +1,15 @@
-# YouTube als zusätzliche Katalogquelle — Entwurf P17
+# YouTube als zusätzliche Katalogquelle — Vertrag P17
 
-Stand: 25.10.2026, geprüft gegen Main `1c9d4f9` und Upstream `345f5ed`.
+Fachentwurf vom 25.10.2026 gegen den damaligen Main `1c9d4f9` und Upstream
+`345f5ed`; Entwicklungsabnahme am 26.10.2026 auf `ea00f30`.
 Nutzerauftrag: separat und über die GUI pflegbare ÖR-YouTube-Kanäle,
 automatische Serien-/Film-ID-Zuordnung mit Vorbelegungen, Mediathek-nahes
 JSON, KISS und Bestandsschutz. Pflichtreferenz ist KultKrimi / Der Kommissar.
-Die Such-/Downloadintegration bleibt ein **Entwicklungsentwurf**; P17.1,
-die Mediathek-Modulgrenzen aus P17.1a und die Register-/Metadatenoberfläche
-P17.2 sind im Entwicklungscode umgesetzt.
-Keine Betriebsfreigabe. Reihenfolge, Status und Abnahme ausschließlich in
+P17.1–P17.5 einschließlich der Mediathek-Modulgrenzen, Registeroberfläche,
+ID-Bindung und gemeinsamer Such-/Downloadconsumer sind in der Entwicklung
+abgenommen. Der Auftrag zur Mainintegration und zum anschließenden Rollout
+liegt vor; zusätzliche Schemaaktualisierung und echte Referenzübertragung
+bleiben getrennt freizugeben. Reihenfolge, Status und Abnahme ausschließlich in
 [P17](../todo/proxy-retirement.md#phase-p17--youtube-quellen-im-bestehenden-katalogvertrag).
 Keine Streaming-Webseite, Impressumsinventur oder zusätzliche Medienverwaltung.
 
@@ -339,15 +341,16 @@ zeigte beim lesenden Browserabruf am 25.10.2026 „94 Videos“ und einen Hinwei
 auf ein nicht verfügbares Video. Das ist kein bewiesener 97/97-Bestand und
 kein Transfer-/Mediennachweis; weitere Kanaluploads sind dadurch nicht ausgeschlossen.
 
-Vorgesehene Programmvorbelegung, noch keine implementierte Konfiguration:
+Implementierte, zunächst deaktivierte Programmvorbelegung in `data/youtube-sources.json`:
 
 ```json
 {
   "channelId": "UCNMj6SRjtvagiUBKYoqsW_w",
-  "playlistId": "PL_H50xx0qoB_bynOI7Esvpfj6EhvxOFS5",
-  "mediaType": "series",
-  "tvdbId": 133771,
-  "episodeMatching": "unique-title",
+  "sourceId": "PL_H50xx0qoB_bynOI7Esvpfj6EhvxOFS5",
+  "kind": "series",
+  "targetId": 133771,
+  "name": "Der Kommissar",
+  "enabled": false,
   "sourceNumbering": "publisher",
   "targetOrder": "aired"
 }
@@ -524,3 +527,201 @@ Ein echter YouTube-Mediendownload und späterer Rollout bleiben das separat
 freizugebende optionale P17.6. Bestehende offene P03.4/P06.4/P09.5/P15.1/P15.4
 und Proxyentfernung werden nicht pauschal geschlossen oder zu Vorbedingungen
 für die unabhängigen Register-/Mappingarbeiten erklärt.
+
+## P17.3: implementierte Bindung und Bericht
+
+`youtube-identities.ts` schlägt ausschließlich Programmidentitäten vor; die
+Prüfung speichert und aktiviert nichts. Lokale ID vor Seed, danach vorhandener
+Katalog, optionale Sonarr-/Radarr-Metadaten und konfiguriertes TMDB. Eindeutige
+TV-Suchergebnisse erfordern TVDB-Cross-ID und Rückbindung zur gleichen TMDB-ID.
+Homonyme, unvollständige Suchfenster, Jahres-/Cross-ID-Widersprüche bleiben
+unklar. Ein Jahreswert im Programmtitel ist vom Uploadtag unabhängig. Eine
+fehlende Integration verhindert weder einen verfügbaren Katalog noch einen
+unabhängigen optionalen Provider. Die ausgewählte Identität wird nochmals
+gegen konkrete kanonische Metadaten geprüft; eine Seed-ID ersetzt diese nicht.
+
+`youtube-mapping.ts` bindet nur passende registrierte Quelle, bestätigten
+Uploader und eindeutige konkrete Episodentitel. Der Standardmodus bewahrt
+Koordinatenkonflikte. Nur `sourceNumbering=publisher` erlaubt die Titelübersetzung
+mit geprüftem Serienpräfix. Eine gezielte Titelaliasliste gehört zur Bindung,
+nicht zum globalen Parser; eine ID-Korrektur entfernt alte Ausnahmen und setzt
+die Nummerierungsregel zurück. Gleiche Titel, fremde Uploader, doppelte
+Video-IDs und gleichzeitig verschiedenen Programmen zugewiesene Videos werden
+nicht automatisch passend gemacht. Alternativuploads bleiben getrennt erhalten.
+
+Der minimale kanonische Bestand in `data/shows.json` enthält alle 97 regulären
+Folgen von TVDB 133771 mit Titel, Koordinaten und Ausstrahlungsdatum. Laufzeit
+bleibt ohne Beleg unbekannt. Die Standard-Katalogadresse gehört dem eigenen
+Fork; neu gebündelte, dort noch fehlende Serienidentitäten ergänzen den
+Standardabruf. Ein explizites `SHOWS_URL` bleibt autoritativ. Providerfolgen
+werden durch einen Teilkatalog nicht verdrängt. Unbekannte Laufzeit-/Datumswerte
+dürfen nur derselbe konkrete Titel und dieselbe eindeutige Koordinate ergänzen.
+
+Dieser ergänzende Identitätskatalog ist kein eingefrorener Mediathekbestand.
+Ohne URL-Override liest die Anwendung den eigenen Main-Katalog bei Nutzung
+nach spätestens einer Stunde erneut; bei Abruffehlern bleibt der gebündelte
+Fallback. Der eigentliche Mediathekbestand kommt getrennt aus aktuellen
+Providerabfragen. Ein geprüftes App-Image erfordert keinen festen Commit-Pin
+für diesen Katalog; der im Betrieb noch vorhandene historische Override soll
+beim freigegebenen Rollout entfallen, nicht durch einen neuen Pin ersetzt werden.
+
+Der Metadatenadapter verlangt deutsche Metadatentitel (`youtube:lang=de`);
+das ist **kein** Nachweis deutscher Audiospuren. Eine vollständig feldlose
+Flat-Playlistzeile erhält höchstens einen zusätzlichen exakten Videoabruf,
+maximal zehn solche Abfragen je Scan. Nur eine eindeutige Nichtverfügbarkeits-
+Diagnose derselben Video-ID bestätigt deren Verfügbarkeitshinweis. Timeout,
+fremde ID oder Prozessfehler bleiben Fehler. Keine Episode wird aus Position
+oder fehlenden Feldern abgeleitet. Frühere bestätigte Titel/Uploader werden
+nur für jetzt nicht verfügbare Einträge als `lastKnown` erhalten.
+
+`youtube-report.ts` verwendet den vollständigen gespeicherten Index, dieselben
+Metadatenowner und die aktuelle Registerrevision. Ein alter Index wird nicht
+auf neue IDs umgebunden. Der GET-Bericht ist ohne Scan-/Jobwrites in derselben
+Settings-GUI erreichbar, mit 100 kanonischen Zeilen je Seite, Gesamtsummen und
+separaten Extras. Jede Quellenbindung enthält Originaltitel, vorhandene
+Quellkoordinaten und Mappingrevision. `mediaReady=false` ist ausdrücklich;
+P17.4 muss erst tatsächliche Audio-/Format-/Transferbelege integrieren.
+
+Der begrenzte öffentliche Produktabgleich am 26.10.2026 ergab 94 Einträge,
+93 sicher zugeordnete Episoden und vier kanonische Folgen ohne zugeordneten
+Quelleintrag. Ein explizit privater Eintrag hat keine bekannte Episodenidentität
+und bleibt separat. Er könnte zu einer der vier gehören; daraus folgen weder
+vier global fehlende Videos noch 97/97-Verfügbarkeit. Alle 97 kanonischen
+Zeilen wurden über den tatsächlichen Produktbericht ausgegeben. Kein Downloadjob,
+keine Tonspur-/Formatprüfung, kein Mediendownload. Reale Antworten und Werkzeuge
+bleiben privat ignoriert; Tests verwenden generierte synthetische Videozeilen.
+
+## P17.4: typisierte Quellen- und Mediengrenze
+
+Der neue Quelleinstieg besteht aus `providers/youtube/search.ts`, `resolve.ts`
+und `download.ts`; die Registryfassade `providers/youtube/index.ts` delegiert
+nur Suche/Status. Sie startet beim Modulimport oder bei deaktivierter Quelle
+keinen Extraktor. Beide Quellenmodule bedienen denselben Suchfenster- und
+Transfervertrag. Queue, Lease, Pfade und Completion bleiben beim vorhandenen
+Worker; kein YouTube-Downloadzweig in der GUI und kein zweiter Worker.
+
+| Feld/Owner                 | Konsumierter Vertrag                                                                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sourceProviderId=youtube` | Expliziter Quellenowner; alte drei Provider-IDs bleiben unverändert.                                                                                                                                                |
+| `sourceRef` v1             | Video-/Kanal-/Playlistidentität, kanonische Programmkoordinaten, Originaltitel und Mappingrevision. Nach Beleg zusätzlich exakte Video-/Audioformat- und Trackidentität, Sprache, Pixel und Laufzeit.               |
+| `url_website`              | Watch-URL der Video-ID. Alle drei Mediathek-Byte-Slots bleiben leer. Unversionierte YouTube-URLs gelangen nicht zum alten Dateiadapter.                                                                             |
+| `sourceRenditions` intern  | Höchstens fünf belegte Auflösungen derselben Video-/Programm-/Audioidentität aus genau einem Extraktorabruf; ohne CDN-Adressen und nie als Variantenliste im persistierten Job.                                     |
+| Medienvertrag v5           | Neue NZB-/SAB-/Jobdeklaration mit derselben typisierten Auswahl, unabhängigen Laufzeitreferenzen und Quellen-Audiobeleg. Kein Downgrade zu v1–v3 bei beschädigten Feldern.                                          |
+| Interne v4-Freigabe        | Bleibt ausschließlich die bestehende einmalige Laufzeitausnahme. Optionale typisierte Bindung muss exakt zu Freigabe, Pixeln, Dauer und Audiobeleg passen; automatische NZB-Aufnahme akzeptiert v4 weiterhin nicht. |
+| `internal.tv-delivery.v2`  | Derselbe begrenzte Discoveryowner mit typisierten Quellen. Ein unveränderter alter v1-MP4-Bestand kann übernommen werden; v1 wird nicht nachträglich als YouTube-Vertrag interpretiert oder überschrieben.          |
+| Aufnahmebedingungen        | Private gelesene Register-/Enabled-/Indexwerte werden durch bedingte No-op-Updates bis zum Jobcommit gesperrt. Keine zusätzlichen öffentlichen Payloads oder DDL.                                                   |
+
+Der Resolver ist für Belege und Transfer identisch. V1 wählt eine konkret
+belegte deutsche Standard-Audiospur und belegt je unterstützter gemessener
+Auflösung genau ein AVC/H.264-Videoformat. Der bestehende Releasevertrag heißt
+`h264`; der Transfer kopiert die Videospur ohne Transcodierung. VP9 und AV1
+werden deshalb vor Veröffentlichung ausgeschlossen, auch wenn sie höhere
+Auflösungen anbieten. Fehlt AVC, bleibt diese Quelle ungeprüft; kein falsches
+Codecetikett und kein stiller Formatwechsel eines angenommenen Jobs.
+Derselbe begrenzte Abruf liefert beispielsweise
+1080p und 720p; eine Einstellung „nur 720p“ darf nicht am höchsten Format
+scheitern. Der gemeinsame Renditionowner bindet jede RSS-/UI-NZB an ihre
+eigene Auswahl, Pixel und Audioidentität. Der Job enthält genau diese eine
+Version, keine Alternativenliste. Fehlende Qualitäten werden nicht ersetzt;
+fehlende/unklare Sprache wird nicht Deutsch. Tatsächliche Format-IDs und Track
+bleiben erhalten. Ein angenommener Job darf später nur exakt diese Auswahl
+frisch auflösen; geänderte Signaturen sind zulässig, fremder Uploader, andere
+Formate/Tracks, Sprache, Pixel oder widersprechende Laufzeit nicht. Medien-URLs
+müssen öffentliche HTTPS-`googlevideo.com`-CDN-Selektoren mit ausreichender
+Restgültigkeit sein. Keine Weiterleitung, Cookies, Remote-Plugins, Toolupdates
+oder automatische Installation. Der Transfer lädt die zwei frisch gebundenen
+Adressen über die bestehende Transferprimitive und muxiert genau Video 0 und
+Audio 0 mit dem vorhandenen FFmpeg. Der gemeinsame ffprobe-/Completiongate
+bleibt zwingend; zusätzliche/foreign Audiotracks und falsche Pixel/Dauer
+werden abgewiesen. Fehlende Container-Sprachtags werden nicht umgestempelt;
+ein unabhängiger frischer Quellenbeleg wird getrennt protokolliert.
+
+Der bestehende Belegworker verarbeitet beide Quelltypen seriell und fair.
+YouTube hat eine eigene Grenze von zwölf Detailprozessen pro gleitender Minute,
+15 Sekunden und 8 MiB pro Child ohne Extraktorretry. Das sind ausdrücklich
+Prozessaufrufe, keine Behauptung über interne yt-dlp-HTTP-Requests. Erschöpfte
+YouTube-Rate blockiert keine neu ankommenden Mediathek-Belege. Direkt vor einem
+Hintergrundabruf wird die aktuelle Discoverybindung nochmals geprüft.
+Deaktivierung/ID-Korrektur verwirft nur unangenommene YouTube-Vorarbeit;
+angenommene Jobs behalten ihre eingefrorene Bindung. Ein fehlgeschlagener
+frischer Beleg macht einen älteren positiven Hinweis nicht wieder gültig.
+Stabile typisierte Formatbelege gelten 15 Minuten; CDN-Adressen werden dabei
+nicht gespeichert. Der gehaltene Discoverybestand erneuert sie zwei Minuten
+vor Ablauf, innerhalb derselben Prozessrate. Wartende gehaltene Quellen behalten
+ihre begrenzte Discoveryfrist, damit auch 97 Ziele seriell vollständig werden.
+Die bisherigen MP4-Fristen bleiben unverändert; jeder Transfer löst frisch auf.
+
+Die Suchquelle liest ausschließlich den vorbereiteten vollständigen Index;
+keine Playlist-Scans im Suchrequest. Höchstens 1.000 YouTube-Kandidaten pro
+Fenster und 32 Programme, keine neuen globalen RSS-Budgets. Freitext sucht in
+den ausdrücklich angefragten Titel-/Thema-/Sender-/Beschreibungsfeldern der
+Indexinhalte; die Programmauswahl allein ist kein Trefferbeleg. Die konkreten
+gebundenen Inhalte werden vor Pagination und Belegaufnahme gefiltert. Ein
+kanonischer Serien-ID-Scope behält seine eigene geprüfte Identitätsgrenze.
+Alle gewöhnlichen Film-/Seriensuchen verwenden ausschließlich vorhandene oder
+asynchron eingereihte Medienbelege. Nur die ausdrückliche Prüfung einer
+Einzelquelle darf synchron frisch auflösen. Zurückgezogene Belege können
+nicht aus einem älteren Suchobjekt übernommen werden.
+Eine erfolgreiche erforderliche
+Basis einschließlich echtem Leerfenster bleibt bei optionalem YouTube-Fehler
+nutzbar. Gesamtcoverage und Basis-Erfolg sind getrennt; ein Fehlerepoch verhindert
+leeres Cachen des ausgefallenen Zusatzpfads. Expliziter YouTube-only-Ausfall
+bleibt unbestätigt. Neue reine YouTube-GUIDs enthalten einen eigenen Namespace
+und stabile Format-/Audioidentität statt kurzlebiger CDN-Signaturen.
+
+Neue Aufnahme prüft die aktuelle Bindung; dieselbe bestätigte Intentquittung
+quittiert dagegen den bereits angenommenen Auftrag auch nach Deaktivierung.
+Ein Registrywechsel zwischen Prüfung und atomarem Insert erzeugt keinen Job.
+Neuauflösung im Worker prüft die externe Quelle gegen den eingefrorenen Job,
+nicht gegen eine inzwischen andere Programmzuordnung. Retry behält denselben
+Quellenvertrag. Alte Images dürfen unbekannte v5-Deklarationen nicht als
+Legacy behandeln; ein getesteter Rückweg muss vorhandene Payloads und
+Quittungen unverändert bewahren.
+
+Der Zuordnungsbericht zeigt frische bereits vorhandene Sprach-/Pixel-/Dauer-
+belege direkt an der jeweiligen Quelle, ohne selbst einen Belegabruf auszulösen.
+GUI-NZB und Einzelquellenprüfung führen jede vorhandene konkrete Auflösung
+(`2160p`, `1080p`, `720p`, `576p`, `480p`) mit eigenem Auswahlwert bis zur
+Quittung und zum Auftrag. Eine gemeinsame Watch-URL ist kein Auswahlkriterium.
+Die bisherigen Mediathekwerte `hd`, `sd`, `low` bleiben unverändert gültig;
+die GUI konsumiert denselben serverseitigen Auswahlvertrag für beide Quellen.
+Auch ein vorbereiteter Medienbeleg ist keine physische Datei- oder Importabnahme.
+Die synthetischen nativen und Desktopgates bleiben Voraussetzung für P17.4/5;
+Produktivaktivierung und echte YouTube-Mediendownloads bleiben P17.6.
+
+Der Rückweg dieser Quellenrevision ist der gepinnte v1–v4-fähige P17.3-Stand,
+nicht eines der historischen Datenbank-Cutoverimages vor dem Medienprotokoll.
+Das isolierte Gate trennt die Protokollkontrolle (gültiges v3-NZB lesend
+lieferbar, v5 lesend und bei SAB-Aufnahme abgewiesen) vom Wartungsleser:
+Schreibgate aus und kein Bootprocessing. Ein vorbereiteter wartender v5-Auftrag
+samt Intentquittung und fünf bereits abgeschlossene synthetische Aufträge
+müssen dabei einschließlich IDs, Payloads und Status erhalten bleiben. Der
+Rücksprung startet in dieser Prüfung ebenfalls ohne automatischen Transfer;
+er ist kein Auftrag zum erneuten Download. Ein produktiver Rückweg benötigt
+den getrennten P17.6-Plan und darf keine unbekannten wartenden Verträge durch
+einen älteren Worker ausführen lassen.
+
+Das tatsächliche OCI-Image wird zusätzlich offline auf gepinntes yt-dlp,
+gebündeltes EJS und ausdrücklich ausgewähltes Node 24 geprüft. Ein absichtlich
+nicht unterstützter Input ohne verwendbaren Extraktor prüft die Toolfähigkeit,
+keine öffentliche Quelle. Der separate reale Downloadnachweis bleibt P17.6.
+
+Der typisierte Journalvertrag erlaubt höchstens zehn Veröffentlichungsidentitäten
+pro YouTube-Eintrag (fünf gemessene Auflösungen, jeweils reguläre/Jahresform).
+Der alte MP4-Vertrag bleibt bei sechs. Ein Video erzeugt weiterhin genau einen
+Discoveryeintrag und einen Detailprozess; 128 Einträge, 2 MiB, zwei Stunden
+Retention und alle globalen RSS-Fenster-/Versuchsgrenzen bleiben unverändert.
+
+Am yt-dlp-Rand bleiben optionale `null`-Werte ausdrücklich unbekannt, etwa
+Videodimensionen einer reinen Audiospur. Fehlende oder unbestimmte Codecs
+belegen keine Video-/Audiospur; unbenutzte Storyboardformate dürfen gleichzeitig
+vorhandene vollständige Medienbelege nicht verdecken. Ein ausgewähltes Format
+benötigt weiter konkrete Codecs, passende Pixel oder explizite deutsche
+Audiosprache. Sprache, Audio-/Videoformat und Auflösung werden weder aus
+Originaltitel noch aus einer lokalisierten Metadatenantwort erfunden.
+
+Die Entwicklungsabnahme von P17.1–P17.5 samt nativen Backend-/Arr-/Rückwegbelegen
+steht im [Reviewbericht](proxy-retirement-review.md); der verbindliche Status
+und die gesonderten Freigaben für echte Medien und Betrieb stehen in
+[P17](../todo/proxy-retirement.md). Synthetische echte Dateien und reale
+Metadatenabfragen ersetzen den optionalen echten Referenzdownload nicht.

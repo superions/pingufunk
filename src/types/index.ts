@@ -1,16 +1,18 @@
+import type { RenditionSelector } from "@/lib/rendition-selector";
 // Mediathek API Types
 /** Server-authored NZBs selected by rendition; clients treat the payload as opaque. */
-export type UiNzbDownloads = Partial<Record<"hd" | "sd" | "low", string>>;
+export type UiNzbDownloads = Partial<Record<RenditionSelector, string>>;
 
 /** Bounded retrieval coverage, not a total count of a provider's catalogue. */
 export interface UiSearchCoverage {
   complete: boolean;
+  baseComplete?: boolean;
   candidateWindowLimited: boolean;
   resultLimitReached: boolean;
   eligibleCount: number;
   returnedCount: number;
   sources: Array<{
-    providerId: "mediathekview" | "orf" | "srf";
+    providerId: "mediathekview" | "orf" | "srf" | "youtube";
     state: "complete" | "failed" | "disabled";
     candidateCount: number;
   }>;
@@ -72,7 +74,13 @@ export interface ApiResultItem {
   /** Server-authored dimensions bound to the exact rendition, never catalogue slot names. */
   sourceVideoDimensions?: Array<{ url: string; width: number; height: number }>;
   /** Internal source owner only, never accepted from raw catalogue properties. */
-  sourceProviderId?: "mediathekview" | "orf" | "srf";
+  sourceProviderId?: "mediathekview" | "orf" | "srf" | "youtube";
+  /** Server-bound stable source identity. No CDN URLs occupy Mediathek slots. */
+  sourceRef?:
+    | import("@/lib/youtube-source").YoutubeSourceIdentity
+    | import("@/lib/youtube-source").YoutubeSourceReference;
+  /** At most five server-proven resolutions; a job transports one sourceRef only. */
+  sourceRenditions?: import("@/lib/youtube-source").YoutubeSourceReference[];
 }
 
 // TVDB Types

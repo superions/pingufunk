@@ -287,9 +287,15 @@ export async function mergeVideoAudio(
   videoPath: string,
   audioPath: string,
   outputPath: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  allowInstall = true
 ): Promise<ConversionResult> {
-  const ffmpegExists = await ensureFfmpegExists();
+  const ffmpegExists = allowInstall
+    ? await ensureFfmpegExists()
+    : await fs.access(FFMPEG_PATH).then(
+        () => true,
+        () => false
+      );
   if (!ffmpegExists) {
     return { success: false, error: "FFmpeg not available" };
   }

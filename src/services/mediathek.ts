@@ -101,7 +101,7 @@ export async function queryTvSourceCandidates(
         reportCoverage(window.coverage);
         // Review is fail-closed just like the native indexer; reporting does not
         // turn an incomplete source window into a complete candidate set.
-        return window.coverage.complete ? window.items : null;
+        return (window.coverage.baseComplete ?? window.coverage.complete) ? window.items : null;
       })()
     )
   );

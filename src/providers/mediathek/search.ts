@@ -57,7 +57,7 @@ async function searchWindow(
   hlsEnabled: boolean,
   providerId?: SearchProviderId
 ): Promise<ContentSearchWindow> {
-  if (providerId !== undefined && !PROVIDER_IDS.includes(providerId))
+  if (providerId !== undefined && !PROVIDER_IDS.some((id) => id === providerId))
     throw new Error("Unknown content source");
   const scope = providerId ? [providerId] : undefined;
   const [mvSetting, orfSetting] = await Promise.all([

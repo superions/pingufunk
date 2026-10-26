@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SourceAdmissionError } from "@/lib/source-admission";
 import { MediaRuntimeConflictError } from "@/lib/media-expectations";
 import { InvalidDownloadInputError, UnsafeDownloadPathError } from "@/lib/download-paths";
 import { MediaExpectationsError } from "@/lib/media-expectations";
@@ -185,6 +186,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof EnqueueRequestError)
       return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof SourceAdmissionError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof EnqueueConflictError)
       return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof MediaRuntimeConflictError) {

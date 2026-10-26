@@ -397,7 +397,7 @@ it("marks partial GUI sources explicitly while the same indexer sources fail clo
     state: "failed",
     candidateCount: 0,
   });
-  expect(body.providerCounts).toEqual({ mediathekview: 1, orf: 0, srf: 0 });
+  expect(body.providerCounts).toEqual({ mediathekview: 1, orf: 0, srf: 0, youtube: 0 });
   expect(JSON.stringify(body)).not.toContain("never-display");
   expect(
     await queryContent([{ fields: ["topic", "title"], query: "Documentary" }], 100)

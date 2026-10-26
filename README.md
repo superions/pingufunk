@@ -12,9 +12,10 @@ Rundfunk-Indexer für Sonarr/Radarr - Automatischer Download von ARD, ZDF und an
 
 > Pingufunk wird eigenständig weiterentwickelt. SQLite und PostgreSQL werden
 > gleichwertig unterstützt. Der YouTube-Kanal- und Metadatenkatalog ist in der
-> Entwicklung umgesetzt; automatische Episodenzuordnung, YouTube-Suche und
-> Medienintegration folgen separat. Entwicklungsabnahme und produktiver Rollout
-> sind unterschiedliche Schritte. Siehe [Projektstand](todo/proxy-retirement.md).
+> Entwicklung umgesetzt. Automatische Programm-/Episodenbindung, kanonischer
+> Zuordnungsbericht und der gemeinsame Such-/Downloadpfad sind mit isolierten
+> Fixtures nativ geprüft. Echte YouTube-Referenzübertragung und produktive
+> Aktivierung werden separat freigegeben. Siehe [Projektstand](todo/proxy-retirement.md).
 
 ## Screenshots
 
@@ -25,12 +26,12 @@ Rundfunk-Indexer für Sonarr/Radarr - Automatischer Download von ARD, ZDF und an
 ## Features
 
 - **Newznab-kompatibler Indexer** - Funktioniert mit Prowlarr, NZB Hydra, Sonarr und Radarr
-- **SABnzbd-kompatibler Downloader** - Direkter HTTP-Download von den Mediatheken
+- **SABnzbd-kompatibler Downloader** - Gemeinsamer Downloadpfad für Mediatheken und optionale YouTube-Quellen
 - **Optionale MKV-Konvertierung** - FFmpeg-Integration mit deutschen Sprachmetadaten
 - **Flexible Metadaten-Quellen** - Lokale Datenbank, TVDB oder TMDB
 - **Community-Rulesets** - Lokale Rulesets via Pull Request erweiterbar
 - **SQLite und PostgreSQL** - Bewusste Backendwahl, versionierte Migrationen und getrennte Bestandsübernahme
-- **YouTube-Quellenregister** - Kanäle und Programmzuordnungen per GUI pflegen; zunächst reine Metadatenerfassung
+- **YouTube-Quellenregister** - Kanäle und Programmzuordnungen per GUI pflegen, IDs auflösen und die kanonische Folgenabdeckung prüfen
 
 ## SRF und ORF über HLS
 

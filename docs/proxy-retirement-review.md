@@ -3455,3 +3455,311 @@ Erneuter kohärenter lokaler Abschluss nach diesen drei relevanten Änderungen:
 Lint, Typecheck, Format und Build grün. Die übrigen Desktopflüsse werden bei
 unveränderten Inputs wiederverwendet. Neue terminale CI-/PG-/Containerbelege
 und finaler PR-Review stehen vor Mainintegration noch aus.
+
+## Branding-/P17-Grundlagen: Mainintegration bestätigt (26.10.2026)
+
+Code `5157eb85ac36a3668222d19bc20acda7133d3828` bestand alle elf Checkruns:
+[PR-CI mit PG17/18](https://github.com/superions/pingufunk/actions/runs/40247833342),
+[PR-Validierung](https://github.com/superions/pingufunk/actions/runs/40247833299),
+[native PR-Containerkette](https://github.com/superions/pingufunk/actions/runs/40247833145)
+und entsprechende Push-Gates terminal grün. Der dritte automatische Review
+ist an genau diesen Commit gebunden und nennt keine offenen Befunde; alle
+Inlinekonversationen sind nach belegter Korrektur erledigt. Die vollständige
+Containerkette prüfte Renditions direkt/via Prowlarr, kalte einmalige Suche und
+RSS-Nachlieferung mit echten synthetischen Sonarr-Importen, TLS-/Rollback,
+SQLite-Persistenz sowie Medien-/Workerconsumer auf beiden Backends.
+
+[PR #9](https://github.com/superions/pingufunk/pull/9) wurde mit exakter
+Kopfsperre als Mergecommit `0e1d5b4ff9c826dbf3ff58ce4a740fdfaaf09512` integriert
+und ist geschlossen. Frischer Fetch bestätigt den Merge unabhängig; der
+Main-Dateibaum stimmt vollständig mit dem getesteten Kopf überein. Lokales
+Main ausschließlich fast-forward aktualisiert. P17.2 ist damit wieder
+abgenommen; die Fortsetzung P17.3 erfolgt auf eigenem Topicbranch. Diese
+reine Abschlussnotiz verwendet die grünen unveränderten Produktinputs wieder.
+Keine Imagepublikation, Produktionsänderung oder echte Medien-/Bibliotheksoperation.
+
+## P17.3 — Programmidentität und vollständiger Zuordnungsbericht (26.10.2026)
+
+Implementiert auf `codex/youtube-binding`: Quellengebundene automatische
+Programm-ID, explizite Anbieternummerierung, vollständiger kanonischer Bericht
+und begrenzter Nichtverfügbarkeitsnachweis. Die vorhandenen Config- und
+Metadatenowner werden erweitert; keine Schema-/Migrationsänderung. Der Bericht
+schreibt keine Jobs und bindet keinen alten Index nach einer ID-Änderung um.
+
+Reviewkorrekturen: Titel mit Doppelpunkt erhalten, historische unbekannte
+Verfügbarkeit nicht als private Quelle erfinden, echte Uploaderdiagnose an
+exakte Video-ID binden, Zusatzabrufe auf zehn begrenzen. Gleiche Programm-ID
+mit widersprüchlichen Jahresangaben bleibt unabhängig von der Reihenfolge
+paralleler Providerantworten unklar. Titelalias-/Nummerierungsregeln werden bei
+ID-Korrektur nicht auf eine andere Serie übertragen. Der Bericht bekommt beim
+Öffnen den Fokus, damit er bei langem Register auch tatsächlich sichtbar ist.
+
+Lokale zusammenhängende Gates vor dem reinen Fokusnachtrag: 1.553 Tests grün,
+25 bedingt übersprungen; Coverage Statements 88,27 %, Branches 85,13 %,
+Functions 91,52 %, Lines 90,85 %. Lint, Typecheck, Datenvalidator und Build grün.
+Eine Formatabweichung in einer neuen Testdatei wurde korrigiert. SQLite prüft
+Scan → Persistenz → tatsächlichen API-Bericht → Neustart und unveränderte
+Altjobs. PG17/18 ist in denselben CI-Owner eingebunden, terminale Evidenz für
+diesen neuen Codeinput noch ausstehend. Native Brandinggates beweisen nicht
+automatisch diese Erweiterung.
+
+Fünf kontrollierte Rückbauten wurden von konkreten Assertions verworfen:
+Anbieternummerierung, Uploaderbindung, bidirektionale Cross-ID, finale
+Registerrevision und Vorrang der lokalen ID. Die Originalquellen wurden nach
+jedem Versuch wiederhergestellt. Öffentlicher lesender Abgleich separat:
+93/97 zugeordnet, vier ohne sichere Quellenbindung und ein unbekannter privater
+Extraeintrag, null Jobs. Kein 97/97-Medien-/Transfernachweis.
+
+P17.3 bleibt bis zum frischen Desktopabschluss und terminalen erforderlichen
+CI-Gates offen. P17.4/P17.5 folgen ohne Vorwegnahme ihrer Abnahme.
+
+Desktopnachweis des frischen gebauten Bundles: `/settings`, System-Dark,
+1280×720, isoliertes SQLite mit synthetischem Metadatenwerkzeug und gesperrtem
+externen Netzwerk. Leerer Index zeigt 97 kanonische Zeilen ohne behauptete
+Verfügbarkeit. Ausdrücklicher synthetischer Scan → 97 zugeordnete Zeilen,
+separate private Extraquelle und sichtbare Originalkoordinaten. Bericht öffnet
+mit Fokus; Reload/Schließen bedient. URL-Prüfung übernimmt bestehende ID ohne
+manuelle Eingabe. Änderung der ID setzt Anbieternummerierung zurück und sperrt
+den Bericht bis zum Speichern; Verwerfen/Readback stellt gespeicherte ID und
+Regel her. Browserkonsole ohne Warnung/Fehler, unabhängiger DB-Readback null Jobs.
+Screenshots bleiben unter dem ignorierten Testverzeichnis, keine echten
+YouTube-Antworten oder Medien. Dieses synthetische 97/97 ist ausdrücklich vom
+öffentlichen Abgleich 93/97 getrennt. Terminale PG-/CI-Abnahme bleibt ausstehend.
+
+P17.3-Abschluss: `c2ae58d`, CI 40254793646 einschließlich PG17/18 und native
+Containerkette 40254793648 terminal erfolgreich. Die zuvor offenen CI-Gates
+sind damit erfüllt; P17.3 abgenommen. Keine Mainintegration von P17.3 behauptet.
+
+## P17.4 — gemeinsamer Such-/Transferconsumer, Zwischenstand (26.10.2026)
+
+Quellenadapter, striktes v5-Protokoll und bestehende interne v4-Ausnahme sind
+verbunden. Mediathek-Slots bleiben für YouTube leer; die GUI bekommt weiter
+servererzeugte NZBs. Es gibt einen Belegworker mit fairer Aufnahme beider
+Quellen und zwölf YouTube-Detailprozessen je Minute. Getrennte Video-/Audio-
+auswahl wird vor Transfer frisch geprüft und durch gemeinsame Transfer-/Mux-/
+ffprobe-Owner geführt. Kein Schema, zweiter Worker, Runtimeinstaller oder
+Produktivwrite. P17.4/P17.5 sind noch nicht abgenommen.
+
+Reviewfunde und Korrekturen: FFmpeg-Eagerimport auf den tatsächlichen Transfer
+verschoben; Altpfad behält seine Lazy-Invariante. Verfügbarkeit der optionalen
+Zusatzquelle vom Erfolg der erforderlichen Basis getrennt; echte leere
+Basis bleibt gültig, fehlgeschlagene YouTube-Ergebnisse werden nicht leer
+gecacht. Kanonischer Bindinghash ignoriert veränderliche Sonarr-Datei- und
+Monitoringzustände, bewahrt echte Metadatenkonflikte. Disable prüft Discovery
+unmittelbar vor Childstart und stoppt unangenommene Vorarbeit. Frisch gescheiterte
+Quellen verwenden keinen früheren positiven Beleg. Typisierte Quellen werden
+beim Speichern kopiert und können keine fremde Audio-/Pixelquelle als Beleg
+spenden. V1-Discovery bleibt MP4-only, typisierter Bestand hat eigenes v2.
+
+Neue Aufnahme prüft aktuelle private Configwerte und sperrt sie bedingt im
+Jobcommit. Die bestehende Intentquittung wird vor erneuter Admission gelesen:
+identischer akzeptierter Auftrag bleibt auch nach Policyänderung quittierbar.
+SQLite-Insertion nutzt dafür die bestehende Serialisierung statt BUSY-Retries.
+Reale disposable SQLite-Barriereprobe: Policyänderung vor Insert erzeugt weder
+Job noch Quittung; angenommener Payload bleibt nach Disable, Neustart und
+bewusstem synthetischem Retry unverändert. PG17/18 ist in denselben Gate geroutet.
+
+Vor diesen letzten Guard-/Registry-/Berichtsnachträgen waren 1.603 Tests grün,
+26 bedingt übersprungen; vorherige vier breite Befunde wurden korrigiert
+(Lazyimport, neue bekannte Receiptversionen, additive Coverage). Letzte
+fokussierte Transfer-/Resolver-/Beleg-/Registry-/Berichtstests grün. Für den
+kohärenten neuen Kopf folgen erneut passende Gates, Desktopjourney und die
+neuen nativen SQLite-/PG-Arr-Ketten direkt sowie über Prowlarr. Keine Wieder-
+verwendung der alten grünen Matrix als Nachweis geänderter Runtimeinputs.
+
+P17.5 lokaler Abschlussstand: 1.613 Tests grün, 26 umgebungsabhängig
+übersprungen; Coverage 87,53/84,26/91,50/90,08 Prozent. Lint, Typecheck,
+Format, Validator und Build grün. Sechs gezielte Mutationen wurden durch
+Verhaltensfehler abgewiesen und vollständig zurückgebaut: Feldweitergabe,
+kanonische Ziel-ID, eingefrorene Resolverauswahl, Versionsgrenze,
+typisierte Nachlieferung und atomare Configbarriere. Serien- und Filmconsumer
+schützen jeweils fremde IDs; Filmverträge dürfen keine Episodenreferenz leihen.
+Kein neuer Produktinput durch den anschließenden reinen Harnessnachtrag.
+
+Desktopjourney am frisch gebauten Stand, 1280×720/System-Dark: Bericht trennt
+kanonische 97 Zeilen von synthetischer Teilabdeckung und von Sprach-/Pixel-/
+Dauerbelegen. Gemeinsame Suche liefert servererzeugte NZBs ohne Byte-URLs in
+YouTube-Katalogslots. Separater verifizierter Serienfall: kalte Belege sperren
+den Prüfknopf verständlich; frische Quelle zeigt tatsächliche 720p statt
+historischem Slotnamen SD. Vorhandener Laufzeitausnahmedialog zeigt kanonische
+Koordinate, beide Laufzeiten, unveränderte Toleranz, Sprache und Pixel. Cancel
+→ null Jobs/Quittungen; bewusste synthetische Bestätigung → genau ein wartender
+v4-Auftrag mit gebundener Quittung. Wiederholte Bestätigung quittiert dieselbe
+Entscheidung. Nach GUI-Deaktivierung bleibt dieser Auftrag bitgleich; ein
+separater Prozess validiert seine gespeicherte Quittung ohne aktuelle
+Metadaten-/Registerfreigabe. Browserkonsole ohne Warnung/Fehler. Die Queue war
+durch einen echten gehaltenen Testlease blockiert; dieser Desktopnachweis
+behauptet keinen Mediendownload. Dateiabnahme ist das separate OCI-/Arr-Gate.
+
+CI `50a6ff5`: Produktgates einschließlich PG17 und PG18 terminal grün
+(40262566376). Der erste native Zwischenstand `5a4e6ad` erreichte vier echte
+Sonarr-Importe, scheiterte danach aber am ungeeigneten historischen
+Rollbackleser; das ist kein bestandener OCI-Abschluss. Rückweg nun am
+v1–v4-fähigen Vorgänger `c2ae58d` gebunden, mit positivem v3-Kontrollfall und
+unbekanntem v5. Separater Wartungsleser bewahrt einen vorbereiteten wartenden
+Vertrag samt Quittung. Native Quellenqualifikation läuft vor den unverändert
+erhaltenen Mediathek-Regressionen, damit ein neuer Quellfehler früh sichtbar
+wird. Aktuelle vollständige native Abnahme bleibt bis terminalem Erfolg offen.
+
+Nachtrag zum Renditionowner: Ein echter Fehler wurde vor Abschluss kausal
+reproduziert: Bei belegtem 1080p und 720p bot der erste YouTube-Pfad nur das
+höchste Format an und leerte dadurch die 720p-Auswahl. Ein Detailabruf liefert
+jetzt maximal fünf konkrete Auflösungen derselben Video-/Programm-/Audiospur.
+Der gemeinsame Renditionowner reicht je RSS-/UI-NZB nur die gewählte Referenz
+mit eigener Pixel-/Audiobindung weiter. Kein zusätzlicher Extraktorabruf oder
+Discoveryeintrag pro Auflösung, keine gefälschten Mediathek-URL-Slots und keine
+Alternativenliste im angenommenen Job. Die neuen Regressionen schützen 720p
+neben 1080p, fehlendes 480p ohne Fallback, Providerpräferenz und separate
+Format-/Pixelbindung in RSS und NZB. Jahresfolgen mit fünf Auflösungen passen
+in die eng typisierte Zehn-Ereignisgrenze; der alte MP4-Vertrag bleibt bei sechs,
+Entry-/Byte-/Retention- und RSS-Grenzen unverändert. Eine siebte kausale Mutation
+unterbricht gezielt diese Rendition-Belegübergabe. Der konkrete Produktinput
+invalidiert die vorherige lokale/CI-Abnahme für den Abschluss; passende Gates
+werden für diesen kohärenten Kopf neu ausgeführt.
+
+Realer, begrenzter Metadatenvorlauf getrennt von den synthetischen Gates:
+Eine öffentliche Antwort konnte beim ersten Resolverlauf nicht konsumiert
+werden. Der gehaltene Datensatz bewies als Ursache reguläre `null`-Werte
+für Dimensionen/Bildrate reiner Audiospuren sowie unbestimmte Codecs bei
+unbenutzten Zusatzformaten. Optionale Nullwerte bleiben jetzt unbekannt;
+eine gewählte Video-/Audiospur verlangt weiterhin konkrete passende Codecs,
+Pixel beziehungsweise belegte deutsche Sprache. Storyboards oder unbekannte
+Codecs werden nicht zu Medienbelegen. Generierte synthetische Regressionen
+und der native Metadatenstub enthalten diese Nullformen; reale Antworten
+bleiben ausschließlich privat ignoriert. Der tatsächliche Resolver wurde mit
+derselben gehaltenen Antwort vor/nach der Korrektur geprüft, ohne weitere
+Netzabfrage oder Transfer: explizit deutsche SD-Formate vorhanden, keine
+behauptete 720p-Freigabe oder physische Datei. Eine achte kontrollierte Mutation
+stellt die frühere falsche Nullable-Grenze wieder her und wird abgewiesen.
+Die kürzere Detailfrist ist separat nachgewiesen und meldet keinen irreführenden
+30-Sekunden-Abbruchtext mehr.
+
+Nativer Zwischenstand `6891d3b`: vier echte Sonarr-Importe und ein gezielt
+gewählter 720p-Film bis zur echten Radarr-Datei samt unabhängiger ffprobe-Prüfung
+bestätigt. Der danach fehlende fünfte Historysatz war die im synthetischen
+Radarr-Client geerbte automatische Completed-Bereinigung. Diese wird für den
+beabsichtigten Erhalt-/Rollbackfall ausdrücklich ausgeschaltet; die vorhandenen
+separaten nativen Bereinigungsfälle bleiben unverändert. Keine Abnahmeschranke
+abgeschwächt; der korrigierte Kopf muss die komplette Kette terminal bestehen.
+
+### P17.4/P17.5 – zusammenhängende Quellenabnahme
+
+Geprüfter Produkt-/Harnesskopf: `d644bc28fc83f8af55f8e2b9a933e075fbdf5b05`.
+Die [Produkt-CI](https://github.com/superions/pingufunk/actions/runs/40270459776)
+ist einschließlich PostgreSQL 17 und 18 terminal grün. Lokal: 1.621 bestandene
+Tests mit Coverage, 26 umgebungsgebundene Skips; die entsprechenden echten
+Backendgates laufen separat in CI. Lint, Typecheck, Format, Katalogvalidator
+und Build sind grün. Acht kontrollierte Rückbauten werden durch die jeweiligen
+Verbraucherregressionen abgewiesen; alle veränderten Quelldateien anschließend
+hashgleich wiederhergestellt. Unveränderte Desktop- und Produktbelege werden
+wiederverwendet, nicht wegen reiner Testdiagnose-/Dokumentänderungen wiederholt.
+
+Der native YouTube-Teilschritt in
+[40270459802](https://github.com/superions/pingufunk/actions/runs/40270459802)
+ist terminal grün: vier Kombinationen aus SQLite/PostgreSQL und direkt/Prowlarr,
+jeweils vier tatsächliche Serienimporte und ein gezielt gewählter 720p-Film.
+Unabhängige Datei-/ffprobe-Prüfung, API-/physische Größe und genau gepaarte
+native History bestätigen die Medien. Jede kalte Einmalsuche liefert ihren
+Rest über RSS nach; wiederholtes RSS erzeugt keinen zweiten Grab. Der
+abgelaufene synthetische Alternativstream wird nicht übertragen. Gepacktes
+Node 24, yt-dlp und EJS sind im tatsächlichen Image offline qualifiziert.
+
+Alle fünf abgeschlossenen v5-Jobs sowie ein gesondert vorbereiteter wartender
+v5-Auftrag und seine Quittung bleiben beim getesteten Rückweg erhalten. Der
+v1–v4-fähige Vorgänger liefert die positive v3-Kontrolle und weist neue v5-
+Deklarationen ab; sein Wartungsstart und die Rückkehr verändern weder IDs,
+Payloads noch Status und lösen keinen erneuten Transfer aus. Der vorbereitete
+wartende Fall beweist Erhalt, keine nachträglich behauptete Fertigstellung.
+Die synthetischen Readbacks verwenden den tatsächlichen PostgreSQL-Client
+`@prisma/client` beziehungsweise den separat generierten SQLite-Client. Die
+absichtliche leere Indexerprüfung wird nicht als erfolgreicher Suchfall gewertet;
+eine daraus entstandene native Sperrfrist wird vor der einmaligen Filmsuche
+nur lesend abgewartet, ohne Statuslöschung oder Suchwiederholung.
+
+Abschließender Owner-/Call-/Write-/Feldreview: Registry und vorbereiteter Index
+bleiben getrennt von der serverseitigen kanonischen Bindung. Die beiden
+Quellmodule konsumieren denselben Such-/Transfervertrag; Queue, Lease,
+Staging und Completion behalten genau einen Owner. Nur neue Aufnahme bindet
+die aktuelle Registry atomar mit Job und Quittung über vorhandene Configzeilen.
+Der angenommene Auftrag enthält genau eine eingefrorene Format-/Audiospurwahl,
+keine Alternativenliste oder kurzlebige CDN-Adresse. Worker und Medienbelege
+verwenden denselben frischen Resolver; alte Versions-/ID-/Renditionverträge
+bleiben erhalten. Generierte Clients und Migrationsketten sind unverändert.
+Die gepflegten lokalen Dokumentverweise lösen auf; private Antworten,
+Testkonfigurationen, Datenbanken und Medien sind nicht im Diff enthalten.
+Keine offenen P17-Produktfindings aus diesem Review. Der vollständige native
+Bestandslauf ist ebenfalls terminal grün, sowohl im oben verlinkten PR-Gate
+als auch im [Push-Gate](https://github.com/superions/pingufunk/actions/runs/40270456081).
+Die bisherigen Qualitätsfälle, kalte Mediathek-Nachlieferung direkt und über
+Prowlarr jeweils von 0 initialen Grabs bis zu 80/80 tatsächlichen Importen,
+wiederholtes RSS ohne Doppelgrab, SQLite-Persistenz, TLS-/Migrationsrückwege,
+reale Medienprüfung und explizite Freigabe bis zum realen Worker auf beiden
+Backends bleiben erfolgreich. Damit sind P17.1–P17.5 in der Entwicklung
+abgeschlossen. Die Abschlussdokumentation verändert keinen geprüften
+Produkt-/Harnessinput und verwendet diese grünen Belege weiter.
+
+Die reale öffentliche Inventur bleibt davon getrennt: 97 kanonische Folgen,
+93 sicher zugeordnete Quellen, vier ohne sichere Quellbindung und ein privater
+Zusatz ohne geratenes Episodenziel. Der begrenzte reale Metadatenvorlauf einer
+Referenz bestätigt deutsche 480p-Formate, keine beobachtete 720p-Variante und
+keine übertragene Mediendatei. Das ist keine reale Downloadabnahme. P17.6
+verlangt weiterhin die eigene Freigabe einer konkret benannten isolierten
+Referenzübertragung sowie einen separat freigegebenen Rollout. Keine neue
+Schemaänderung, Produktionsaktivierung oder Bibliotheksänderung. P18 und
+alle anderen unabhängigen offenen Phasen bleiben getrennt.
+
+### Nachprüfung vor Mainintegration: vier neue Reviewbefunde
+
+Der nachträgliche Review vom 26.10.2026 gegen `7984e19` hat vier echte Lücken
+gefunden. Die vorherige Entwicklungsabnahme wird für diese veränderten Inputs
+nicht wiederverwendet: P17.4/P17.5 sind bis zu den frischen terminalen Gates offen.
+Alle Befunde wurden zuerst durch fehlschlagende Verbraucherregressionen
+reproduziert: nicht belegtes H.264-Etikett bei VP9/AV1, fehlende Episodentitel-
+und Feldsuche, Zusammenfall fünf konkreter Auflösungen auf drei GUIwerte und
+zusätzliche synchrone Extraktoraufrufe im normalen Filmconsumer.
+
+Der begrenzte Fix hält den bestehenden H.264-Vertrag durch explizite AVC-Auswahl
+ein. Inhaltsfelder werden nach sicherer Bindung vor Pagination gefiltert;
+32-Programm-/1.000-Inhalte-Grenze bleiben erhalten. Ein gemeinsamer Auswahlowner
+bewahrt alle fünf gemessenen Qualitäten bis zum bestätigten Job und dessen
+Quittung, auch bei identischer Watch-URL; alte MP4-Slots bleiben unverändert.
+Normale Filmsuchen nutzen denselben begrenzten Hintergrundbelegowner wie TV.
+Nur explizite Einzelprüfung darf synchron auflösen. Fehlt ein aktueller Beleg,
+werden auch alte angehängte Auswahl-/Sprach-/Pixelbelege entfernt.
+
+Lokal: 1.625 Tests mit Coverage bestanden, 26 umgebungsgebundene Skips;
+Lint, Typecheck, Format, Datenvalidator, Build und Audit einschließlich
+Entwicklungsabhängigkeiten grün (keine Auditbefunde). Alle zwölf kausalen
+Rückbauten werden durch die zuständigen Verbraucherregressionen abgewiesen;
+Quellen sind anschließend hashgleich wiederhergestellt.
+
+Die [aktuelle Produkt-CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40313723171)
+und [vollständige native Containerkette](https://github.com/superions/pingufunk/actions/runs/40313723104)
+sind terminal erfolgreich, ebenso die zugehörigen Push-Gates. Die vier
+YouTube-Kombinationen bestätigen wiederum je vier tatsächliche Sonarr- und
+einen 720p-Radarr-Import einschließlich Medien-/History-/Rückwegprüfung.
+Das höher angebotene synthetische VP9-Format wird nicht unter H.264
+veröffentlicht oder übertragen. Bisherige Qualitätsfälle, beide kalten
+80/80-Mediathek-Importketten ohne RSS-Doppelgrab, SQLite-Persistenz,
+TLS-/Datenrückwege, reale Medien und explizite Freigabe bis zum Worker auf
+beiden Backends bleiben grün.
+
+Desktopvergleich mit identischen vier synthetischen Episoden, fünf AVC-
+Formaten, 1280×720, System-Light und gleicher Suchroute: `7984e19` bietet
+nur 2160p/720p/576p zur Einzelprüfung und keine normale Qualitätsauswahl.
+`ea00f30` bewahrt alle fünf Optionen; 1080p-Vorschau und Cancel ohne Job,
+480p-Freigabe mit unabhängiger v4-/Quittungsprüfung sowie normale 1080p-
+Aufnahme mit gespeichertem v5-Vertrag sind bestätigt. Beide Browserkonsolen
+bleiben leer. Keine echten Mediendownloads; alle eigenen Testprozesse,
+temporären Datenbanken und die archivierte Vergleichskopie wurden entfernt.
+
+Abschließender Caller-/Write-/Feldreview: Nur explizite Einzelprüfung fordert
+frische synchrone Auflösung an. Die drei normalen Filmassembler behalten
+unabhängige Basistreffer und den vorhandenen Belegworker. Der gemeinsame
+Auswahlowner hält Legacy-MP4-Werte sowie konkrete typisierte Auswahl bis zum
+Jobnamen und zur Quittung auseinander. Keine Schema-/Dependencyänderung durch
+diese Korrekturen, keine offenen P17.4-/P17.5-Findings. Entwicklungsabnahme
+wieder geschlossen; die reine Abschlussdokumentation verwendet die passenden
+grünen Belege weiter. Produktiver Rollout/Katalogaktivierung sind beauftragt,
+die zusätzliche Schemaaktualisierung und echte Referenzübertragung bleiben
+separat freizugeben. Kein Betriebsabschluss und keine Schließung anderer Phasen.

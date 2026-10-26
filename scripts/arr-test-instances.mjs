@@ -7,6 +7,7 @@ import {
   writeFileSync,
   realpathSync,
   lstatSync,
+  existsSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -22,8 +23,16 @@ function docker(args) {
       timeout: 120_000,
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-  } catch {
-    throw new Error("Owned Docker operation failed; raw diagnostics suppressed");
+  } catch (error) {
+    const diagnostic = String(error.stderr ?? "");
+    const codes = [
+      ...new Set(
+        diagnostic.match(/\b(?:P\d{4}|ENOENT|EACCES|ECONNREFUSED|MODULE_NOT_FOUND)\b/g) ?? []
+      ),
+    ];
+    throw new Error(
+      `Owned Docker ${args[0]} failed (exit=${error.status ?? "unknown"}, signal=${error.signal ?? "none"}, codes=${codes.join(",") || "none"}); raw diagnostics suppressed`
+    );
   }
 }
 function save(root, manifest) {
@@ -37,6 +46,20 @@ function load(root) {
   if (!/^\d+-\d+$/.test(manifest.owner) || manifest.network !== `pingufunk-arr-${manifest.owner}`)
     throw new Error("Invalid QA identity");
   const containerIds = [];
+  if (manifest.database) {
+    const owned = manifest.database;
+    if (owned.provider !== "postgresql" || owned.name !== `pingufunk-media-pg-${manifest.owner}`)
+      throw new Error("Invalid owned QA database");
+    const container = JSON.parse(docker(["inspect", owned.name]))[0];
+    if (
+      container.Config.Labels[label] !== manifest.owner ||
+      container.Image !== owned.image ||
+      Object.keys(container.NetworkSettings.Networks).join() !== manifest.network ||
+      Object.keys(container.HostConfig.PortBindings ?? {}).length
+    )
+      throw new Error("QA database owner/network mismatch");
+    containerIds.push(container.Id);
+  }
   for (const [app, item] of Object.entries(manifest.apps)) {
     if (!(app in ports) || item.name !== `pingufunk-arr-${app}-${manifest.owner}`)
       throw new Error("Invalid QA container identity");
@@ -81,6 +104,9 @@ async function api(root, manifest, app, path, body, method, expectedStatus, cred
       method: method ?? (body === undefined ? "GET" : "POST"),
       headers: {
         "Content-Type": "application/json",
+        ...(app === "pingufunk" && path === "/api/youtube/catalogue"
+          ? { "X-Pingufunk-Catalogue": "1" }
+          : {}),
         ...(app === "pingufunk" ? {} : { "X-Api-Key": credentialOverride ?? apiKey(root, app) }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -115,11 +141,21 @@ async function up() {
   const runnerTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE ?? "pingufunk-p10-arr-qa";
   const migratorTag =
     process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
-  const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
+  const movieCorrelation =
+    process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1" ||
+    process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
   const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
   const placeholderEpisode = process.env.PINGUFUNK_ARR_QA_TBA === "1";
   const localizedEpisode = process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1";
   const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
+  const youtube = process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
+  const backend = process.env.PINGUFUNK_ARR_QA_DATABASE ?? "sqlite";
+  if (
+    !["sqlite", "postgresql"].includes(backend) ||
+    (youtube && !tvDelivery) ||
+    (backend === "postgresql" && !youtube)
+  )
+    throw new Error("Owned YouTube backend selection required");
   const runtimeConflict = process.env.PINGUFUNK_ARR_QA_RUNTIME_CONFLICT === "1";
   if (runtimeConflict && !placeholderEpisode)
     throw new Error("Runtime conflict requires the owned TBA fixture");
@@ -157,11 +193,59 @@ async function up() {
     runtimeConflict,
     renditionQuality,
     tvDelivery,
+    youtube,
     apps: {},
   };
   save(root, manifest);
   if (tvDelivery) mkdirSync(join(root, "shared-downloads"), { mode: 0o700 });
   docker(["network", "create", "--internal", "--label", `${label}=${owner}`, manifest.network]);
+  let databaseUrl = "file:/qa/database.sqlite";
+  if (backend === "postgresql") {
+    const image = docker(["image", "inspect", "postgres:18-alpine", "--format", "{{.Id}}"]);
+    const name = `pingufunk-media-pg-${owner}`;
+    docker([
+      "run",
+      "-d",
+      "--name",
+      name,
+      "--network",
+      manifest.network,
+      "--label",
+      `${label}=${owner}`,
+      "-e",
+      "POSTGRES_HOST_AUTH_METHOD=trust",
+      image,
+    ]);
+    manifest.database = { provider: "postgresql", name, image };
+    save(root, manifest);
+    let ready = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try {
+        docker(["exec", name, "pg_isready", "-q", "-h", "127.0.0.1", "-U", "postgres"]);
+        ready = true;
+        break;
+      } catch {
+        await delay(500);
+      }
+    }
+    if (!ready) throw new Error("Owned QA database startup failed");
+    docker([
+      "exec",
+      name,
+      "psql",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-c",
+      "CREATE ROLE pingufunk_media_qa LOGIN",
+      "-c",
+      "CREATE DATABASE pingufunk_media_qa OWNER pingufunk_media_qa",
+    ]);
+    databaseUrl = `postgresql://pingufunk_media_qa@${name}/pingufunk_media_qa`;
+  }
   for (const app of ["sonarr", "radarr", "prowlarr"]) {
     const dir = join(root, app);
     mkdirSync(dir, { mode: 0o700 });
@@ -208,11 +292,13 @@ async function up() {
     "run",
     "--rm",
     "--network",
-    "none",
+    backend === "postgresql" ? manifest.network : "none",
     "--user",
     `${process.getuid()}:${process.getgid()}`,
     "-e",
-    "DATABASE_URL=file:/qa/database.sqlite",
+    `DATABASE_URL=${databaseUrl}`,
+    "-e",
+    `DATABASE_PROVIDER=${backend}`,
     "--mount",
     `type=bind,src=${dir},dst=/qa`,
     "--entrypoint",
@@ -241,7 +327,11 @@ async function up() {
     "-e",
     `PGID=${process.getgid()}`,
     "-e",
-    "DATABASE_URL=file:/qa/database.sqlite",
+    `DATABASE_URL=${databaseUrl}`,
+    "-e",
+    `DATABASE_PROVIDER=${backend}`,
+    "-e",
+    "PINGUFUNK_WRITES_ENABLED=1",
     "-e",
     "PINGUFUNK_PUBLIC_URL=http://pingufunk:6767",
     "-e",
@@ -249,6 +339,7 @@ async function up() {
     "-e",
     "NODE_OPTIONS=--import /qa/provider.mjs",
     ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
+    ...(youtube ? ["-e", "PINGUFUNK_ARR_QA_YOUTUBE=1"] : []),
     ...(placeholderEpisode || localizedEpisode || tvDelivery
       ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"]
       : []),
@@ -280,6 +371,7 @@ async function up() {
     "--mount",
     `type=bind,src=${resolve("scripts/media-container-provider.mjs")},dst=/qa/media-provider.mjs,readonly`,
     image,
+    ...(youtube ? ["sh", "-ec", "export PINGUFUNK_BOOT_QUEUE=0; exec node server.js"] : []),
   ]);
   load(root);
   for (const app of Object.keys(ports)) {
@@ -572,6 +664,8 @@ async function movieFixture(root, manifest) {
       const metadata = db.prepare("SELECT Id FROM MovieMetadata WHERE TmdbId=?").get(id);
       if (manifest.movieCorrelation)
         db.prepare("UPDATE MovieMetadata SET Runtime=10 WHERE Id=?").run(metadata.Id);
+      if (manifest.youtube)
+        db.prepare("UPDATE MovieMetadata SET Runtime=1 WHERE Id=?").run(metadata.Id);
       const profile = db.prepare("SELECT Id FROM QualityProfiles ORDER BY Id LIMIT 1").get();
       if (!profile) throw new Error("Owned Radarr fixture profile missing");
       if (!db.prepare("SELECT Id FROM Movies WHERE MovieMetadataId=?").get(metadata.Id))
@@ -640,13 +734,23 @@ async function seriesFixture(root, manifest) {
           "UPDATE Episodes SET Monitored=1, Runtime=1, AirDateUtc='2019-01-01 20:00:00', AirDate='2019-01-01' WHERE SeriesId=?"
         ).run(series.Id);
         for (let season = 1; season <= 2; season++)
-          for (let episode = 1; episode <= 40; episode++) {
+          for (let episode = 1; episode <= (manifest.youtube ? 2 : 40); episode++) {
             if (season === 1 && episode === 1) continue;
             db.prepare(
               `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
             VALUES (?,?,?,'Synthetic Episode',0,1,'2019-01-01 20:00:00','2019-01-01',0,?,1,'[]')`
             ).run(series.Id, season, episode, 2147483003 + (season - 1) * 40 + episode - 1);
           }
+        if (manifest.youtube) {
+          const episodes = db
+            .prepare("SELECT Id,SeasonNumber,EpisodeNumber FROM Episodes WHERE SeriesId=?")
+            .all(series.Id);
+          for (const episode of episodes)
+            db.prepare("UPDATE Episodes SET Title=? WHERE Id=?").run(
+              `Synthetic Episode ${episode.SeasonNumber}-${episode.EpisodeNumber}`,
+              episode.Id
+            );
+        }
       }
       if (manifest.runtimeConflict)
         db.prepare(
@@ -999,62 +1103,66 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
   if (queueBefore.queue.slots.length)
     throw new Error("Owned empty queue required before media restart");
   const container = manifest.apps.pingufunk.name;
-  docker([
-    "exec",
-    container,
-    "node",
-    "-e",
-    "require('node:fs').mkdirSync('/app/public/pingufunk-media-qa',{recursive:true})",
-  ]);
-  docker([
-    "exec",
-    container,
-    "ffmpeg",
-    "-v",
-    "error",
-    "-y",
-    "-f",
-    "lavfi",
-    "-i",
-    "color=c=black:s=640x360:r=1",
-    "-f",
-    "lavfi",
-    "-i",
-    "sine=frequency=440:sample_rate=44100",
-    "-t",
-    "600",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-c:a",
-    "aac",
-    "-movflags",
-    "+faststart",
-    "/app/public/pingufunk-media-qa/valid.mp4",
-  ]);
-  docker(["restart", container]);
-  let ready = false;
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      await api(root, manifest, "pingufunk", "/api/download?mode=queue");
-      ready = true;
-      break;
-    } catch {
-      await delay(500);
+  if (!manifest.youtube) {
+    docker([
+      "exec",
+      container,
+      "node",
+      "-e",
+      "require('node:fs').mkdirSync('/app/public/pingufunk-media-qa',{recursive:true})",
+    ]);
+    docker([
+      "exec",
+      container,
+      "ffmpeg",
+      "-v",
+      "error",
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      "color=c=black:s=640x360:r=1",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=440:sample_rate=44100",
+      "-t",
+      "600",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-c:a",
+      "aac",
+      "-movflags",
+      "+faststart",
+      "/app/public/pingufunk-media-qa/valid.mp4",
+    ]);
+    docker(["restart", container]);
+    let ready = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try {
+        await api(root, manifest, "pingufunk", "/api/download?mode=queue");
+        ready = true;
+        break;
+      } catch {
+        await delay(500);
+      }
     }
+    if (!ready) throw new Error("Owned media controller readiness failed");
   }
-  if (!ready) throw new Error("Owned media controller readiness failed");
-  await api(root, manifest, "pingufunk", "/api/settings", {
-    "matching.minDuration": "0",
-    "download.quality": "all",
-    "download.convertToMkv": "false",
-  });
+  if (!manifest.youtube)
+    await api(root, manifest, "pingufunk", "/api/settings", {
+      "matching.minDuration": "0",
+      "download.quality": "all",
+      "download.convertToMkv": "false",
+    });
   const models = await api(root, manifest, app, "/api/v3/downloadclient/schema");
   const client = models.find((row) => row.implementation === "Sabnzbd");
   if (!client) throw new Error("Owned SAB schema missing");
   client.name = "Pingufunk isolated SAB QA";
   client.enable = true;
+  if (manifest.youtube) client.removeCompletedDownloads = false;
   delete client.id;
   const values = {
     host: "pingufunk",
@@ -1081,6 +1189,12 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
       "PUT"
     );
   const saved = existing[0] ?? (await api(root, manifest, app, "/api/v3/downloadclient", client));
+  if (
+    manifest.youtube &&
+    (await api(root, manifest, app, `/api/v3/downloadclient/${saved.id}`))
+      .removeCompletedDownloads !== false
+  )
+    throw new Error("Owned preserved-history client readback mismatch");
   const movie = await fixtureTarget(root, manifest, app);
   if (!movie) throw new Error("Owned unmonitored movie fixture required");
   const indexers = await api(root, manifest, app, "/api/v3/indexer");
@@ -1094,6 +1208,15 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
     indexers.some((row) => !owned.includes(row) && row.enableInteractiveSearch)
   )
     throw new Error("Owned isolated download indexer scope required");
+  // The deliberate empty-feed validation can still suppress this first native
+  // search when cold imports finish quickly. Observe its expiry just as the
+  // search-only fixture does; never clear status or repeat a release search.
+  await fixtureIndexersReady(
+    root,
+    manifest,
+    app,
+    owned.map((row) => row.id)
+  );
   const before = (
     await api(root, manifest, "pingufunk", "/api/download?mode=history")
   ).history.slots.map((row) => row.nzo_id);
@@ -1118,7 +1241,22 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
         row.title.includes(app === "radarr" ? "Synthetic.Media" : "Synthetic.Series") &&
         row.indexerId === selected.id
     );
-    if (!candidate) throw new Error("Owned movie download candidate missing");
+    if (!candidate) {
+      if (manifest.youtube) {
+        const path = join(root, "pingufunk", "youtube-newznab.jsonl");
+        console.log(
+          "Owned YouTube search diagnostics: " +
+            JSON.stringify({
+              transport,
+              releases: releases.length,
+              queries: existsSync(path)
+                ? readFileSync(path, "utf8").trim().split("\n").slice(-12).map(JSON.parse)
+                : [],
+            })
+        );
+      }
+      throw new Error("Owned movie download candidate missing");
+    }
     await api(root, manifest, app, "/api/v3/release", {
       ...candidate,
       ...(app === "radarr"
@@ -1148,7 +1286,7 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
   throw new Error("Owned Radarr synthetic download completion timeout");
 }
 
-async function movieImport(root, manifest, app = "radarr") {
+async function movieImport(root, manifest, app = "radarr", keepHistory = false) {
   const movie = await fixtureTarget(root, manifest, app);
   if (!movie) throw new Error("Owned unmonitored movie fixture required");
   const history = (await api(root, manifest, app, "/api/v3/history?page=1&pageSize=100")).records;
@@ -1221,7 +1359,7 @@ async function movieImport(root, manifest, app = "radarr") {
           row.downloadId?.toLowerCase() === job.nzo_id.toLowerCase()
       );
       if (!imported) throw new Error("Owned native import history missing");
-      await consumerRemove(root, manifest, app, job, file);
+      if (!keepHistory) await consumerRemove(root, manifest, app, job, file);
       console.log(
         `${app}: native completed-download handling imported synthetic media; file identity/size/path and matching download history verified`
       );
@@ -1293,6 +1431,9 @@ export {
   seriesFixture,
   fixtureRuntimeReady,
   fixtureIndexersReady,
+  movieFixture,
+  movieDownload,
+  movieImport,
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
@@ -1321,6 +1462,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       else if (command === "episode-import") await movieImport(root, manifest, "sonarr");
       else if (command === "stop") {
         for (const item of Object.values(manifest.apps)) docker(["stop", item.name]);
+        if (manifest.database) docker(["stop", manifest.database.name]);
         console.log("Owned QA instances stopped; configuration retained, no deletion");
       } else throw new Error("Use up or a documented QA command with the exact QA directory");
     }

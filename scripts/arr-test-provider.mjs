@@ -1,7 +1,8 @@
 const nativeFetch = globalThis.fetch;
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { Server } from "node:http";
 await import("/qa/media-provider.mjs");
 const sourceFetch = globalThis.fetch;
 // The base provider validates the exact disposable DB and owner first.
@@ -10,12 +11,62 @@ const ports = { sonarr: "8989", radarr: "7878", prowlarr: "9696", pingufunk: "67
 const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
 const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
 const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
+const youtube = process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
+if (youtube) {
+  const emit = Server.prototype.emit;
+  Server.prototype.emit = function (event, request, response, ...rest) {
+    if (event === "request" && request?.url?.startsWith("/api/newznab")) {
+      const query = new URL(request.url, "http://pingufunk:6767").searchParams;
+      const fields = Object.fromEntries(
+        ["t", "cat", "tmdbid", "imdbid", "q"].flatMap((key) => {
+          const value = query.get(key);
+          return value && (key !== "q" || /^Synthetic\b/.test(value))
+            ? [[key, value.slice(0, 100)]]
+            : [];
+        })
+      );
+      response.once("finish", () =>
+        appendFileSync(
+          "/qa/youtube-newznab.jsonl",
+          JSON.stringify({ ...fields, status: response.statusCode }) + "\n"
+        )
+      );
+    }
+    return emit.call(this, event, request, response, ...rest);
+  };
+}
 const germanUrl = "https://fixture.akamaized.net/german.mp4";
 const frenchUrl = "https://fixture.akamaized.net/french.mp4";
 const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString("base64url");
 const ardUrl = "https://rbb-progressive.ard-mcdn.de/synthetic/film-1080.mp4?edition=standard";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (
+    youtube &&
+    url.hostname === "rr1.synthetic.googlevideo.com" &&
+    url.pathname === "/videoplayback"
+  ) {
+    const id = url.searchParams.get("id"),
+      stream = url.searchParams.get("stream");
+    if (!/^\d{11}$/.test(id ?? "") || !["video", "audio"].includes(stream))
+      throw Error("Owned YouTube selector required");
+    const format = url.searchParams.get("format");
+    if (!(stream === "video" ? ["136", "137"].includes(format) : format === "140"))
+      throw Error("Owned YouTube format required");
+    const file = readFileSync(
+      `/qa/youtube-${stream}${format === "136" ? "-720" : ""}.${stream === "video" ? "mp4" : "m4a"}`
+    );
+    appendFileSync(
+      "/qa/youtube-transfers.jsonl",
+      JSON.stringify({ id, stream, format, sig: url.searchParams.get("sig") }) + "\n"
+    );
+    return new Response(file, {
+      headers: {
+        "Content-Type": stream === "video" ? "video/mp4" : "audio/mp4",
+        "Content-Length": String(file.length),
+      },
+    });
+  }
   if (tvDelivery && url.href === "https://rodlzdf-a.akamaihd.net/synthetic/delivery-expired.mp4") {
     const statsPath = "/qa/delivery-source-stats.json";
     const stats = existsSync(statsPath) ? JSON.parse(readFileSync(statsPath, "utf8")) : {};
@@ -128,6 +179,19 @@ globalThis.fetch = async (input, init) => {
       ],
     });
   if (url.hostname === "mediathekviewweb.de" && url.pathname === "/api/query") {
+    if (youtube)
+      return Response.json({
+        result: {
+          results: [],
+          queryInfo: {
+            totalResults: 0,
+            resultCount: 0,
+            filmlisteTimestamp: 1,
+            searchEngineTime: 0,
+          },
+        },
+        err: null,
+      });
     const response = await sourceFetch(input, init);
     const data = await response.json();
     // The correlation variant deliberately has no source year: native metadata

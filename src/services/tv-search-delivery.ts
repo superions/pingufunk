@@ -6,7 +6,14 @@ import { getSetting, getMinDurationSeconds } from "@/lib/settings";
 import { cacheContextEpoch } from "@/lib/cache";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { isProbeableMp4 } from "@/lib/mp4-audio-language";
-import { sourceMediaFacts, SourceMediaFactsStore } from "./source-media-facts";
+import {
+  sourceMediaFacts,
+  SourceMediaFactsStore,
+  mediaFactsKey,
+  type MediaFactsSource,
+} from "./source-media-facts";
+import { youtubeSourceIdentitySchema, youtubeWatchUrl } from "@/lib/youtube-source";
+import { validateYoutubeEnqueue } from "./youtube-bindings";
 import { openSonarrSession, mergeSonarrShow, SonarrUnavailableError } from "./sonarr-provider";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { getConfiguredLanguagePolicy, RSS_SOURCE_WINDOW_ATTEMPTS } from "./content-search";
@@ -17,7 +24,8 @@ import { generateRssItems } from "./newznab";
 import type { ApiResultItem, MatchedEpisodeInfo, NewznabItem, TvdbData } from "@/types";
 import type { QualityPreference } from "./rendition-quality";
 
-export const TV_DELIVERY_KEY = "internal.tv-delivery.v1";
+export const TV_DELIVERY_KEY = "internal.tv-delivery.v2";
+const LEGACY_TV_DELIVERY_KEY = "internal.tv-delivery.v1";
 const RETENTION_MS = 7_200_000;
 const MAX_ENTRIES = 128;
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -36,6 +44,7 @@ const itemSchema = z
     url_video: text,
     url_video_hd: text,
     url_video_low: text,
+    sourceRef: youtubeSourceIdentitySchema.optional(),
   })
   .strict();
 const entrySchema = z
@@ -60,14 +69,32 @@ const entrySchema = z
           })
           .strict()
       )
-      .max(6)
+      .max(10)
       .default([]),
   })
   .strict();
+function itemSources(
+  item: Pick<ApiResultItem, "sourceRef" | "url_video" | "url_video_hd" | "url_video_low">
+): MediaFactsSource[] {
+  return item.sourceRef
+    ? [youtubeSourceIdentitySchema.strip().parse(item.sourceRef)]
+    : fields.map((field) => item[field]).filter(Boolean);
+}
+const blockKey = (source: MediaFactsSource) =>
+  typeof source === "string" ? source : mediaFactsKey(source);
+const sameSource = (first: MediaFactsSource, second: MediaFactsSource) =>
+  mediaFactsKey(first) === mediaFactsKey(second);
 type Entry = z.infer<typeof entrySchema>;
 const journalSchema = z
-  .object({ version: z.literal(1), entries: z.array(entrySchema).max(MAX_ENTRIES) })
-  .strict();
+  .object({
+    version: z.union([z.literal(1), z.literal(2)]),
+    entries: z.array(entrySchema).max(MAX_ENTRIES),
+  })
+  .strict()
+  .refine(
+    (value) => value.version !== 1 || value.entries.every((entry) => !entry.item.sourceRef),
+    "Typed discovery requires journal v2"
+  );
 interface Repository {
   read(): Promise<string | null>;
   write(value: string): Promise<void>;
@@ -90,7 +117,10 @@ export class TvSearchDeliveryJournal {
     private facts: SourceMediaFactsStore
   ) {
     this.unsubscribe = facts.onChecked((url, result) => {
-      if (!writesEnabled() || !this.entries?.some((e) => fields.some((f) => e.item[f] === url)))
+      if (
+        !writesEnabled() ||
+        !this.entries?.some((e) => itemSources(e.item).some((source) => sameSource(source, url)))
+      )
         return;
       void this.lock(async () => {
         const complete = !!(
@@ -101,13 +131,13 @@ export class TvSearchDeliveryJournal {
         let changed = false;
         for (const entry of this.entries ?? []) {
           if (entry.expiresAt <= Date.now()) continue;
-          if (!fields.some((f) => entry.item[f] === url)) continue;
+          if (!itemSources(entry.item).some((source) => sameSource(source, url))) continue;
           if (complete && entry.readyAt === null) {
             entry.readyAt = Date.now();
             changed = true;
           }
-          if (!complete && !entry.blockedUrls.includes(url)) {
-            entry.blockedUrls.push(url);
+          if (!complete && !entry.blockedUrls.includes(blockKey(url))) {
+            entry.blockedUrls.push(blockKey(url));
             changed = true;
           }
         }
@@ -140,7 +170,11 @@ export class TvSearchDeliveryJournal {
             e.announcements.some((event) => event.at < e.createdAt || event.at >= e.expiresAt) ||
             new Set(e.announcements.map((event) => event.release)).size !==
               e.announcements.length ||
-            fields.some((f) => e.item[f] && !isProbeableMp4(e.item[f]))
+            (!e.item.sourceRef && e.announcements.length > 6) ||
+            fields.some((f) => e.item[f] && !isProbeableMp4(e.item[f])) ||
+            (!!e.item.sourceRef &&
+              (fields.some((field) => !!e.item[field]) ||
+                e.item.url_website !== youtubeWatchUrl(e.item.sourceRef)))
         )
       )
         throw new SonarrUnavailableError();
@@ -150,7 +184,7 @@ export class TvSearchDeliveryJournal {
   }
 
   private async save(): Promise<void> {
-    const value = JSON.stringify({ version: 1, entries: this.entries });
+    const value = JSON.stringify({ version: 2, entries: this.entries });
     if (Buffer.byteLength(value) > MAX_BYTES) throw new SonarrUnavailableError();
     try {
       await this.repository.write(value);
@@ -161,14 +195,28 @@ export class TvSearchDeliveryJournal {
   }
 
   private arm(entries: Entry[]): void {
-    // Restore failures before ordinary RSS warming can enqueue the same URL
-    // after a process restart. Quarantine is discovery state, not media proof.
-    for (const entry of entries) this.facts.retain(entry.blockedUrls, entry.expiresAt, true);
-    // Breadth-first HD before alternatives, using the existing single/rate-bound worker.
-    for (const field of fields) {
-      const eligible = entries.filter((e) => !e.blockedUrls.includes(e.item[field]));
-      for (const entry of eligible) this.facts.retain([entry.item[field]], entry.expiresAt);
+    // Restore each exact typed source's quarantine before arming refresh work.
+    for (const entry of entries) {
+      const sources = itemSources(entry.item);
+      this.facts.retain(
+        sources.filter((source) => entry.blockedUrls.includes(blockKey(source))),
+        entry.expiresAt,
+        true
+      );
     }
+    // Legacy HD first, then typed sources and alternatives in the same fair worker.
+    for (const field of fields)
+      for (const entry of entries) {
+        const sources = entry.item.sourceRef
+          ? field === fields[0]
+            ? itemSources(entry.item)
+            : []
+          : [entry.item[field]].filter(Boolean);
+        this.facts.retain(
+          sources.filter((source) => !entry.blockedUrls.includes(blockKey(source))),
+          entry.expiresAt
+        );
+      }
     this.armedGeneration = this.facts.generation;
   }
 
@@ -194,11 +242,13 @@ export class TvSearchDeliveryJournal {
               fields.includes(k as (typeof fields)[number]) &&
               !isProbeableMp4(match.item[k as (typeof fields)[number]])
                 ? ""
-                : match.item[k as keyof ApiResultItem],
+                : k === "sourceRef" && match.item.sourceRef
+                  ? youtubeSourceIdentitySchema.strip().parse(match.item.sourceRef)
+                  : match.item[k as keyof ApiResultItem],
             ])
           )
         );
-        if (!fields.some((f) => item[f])) continue;
+        if (!itemSources(item).length) continue;
         const id = createHash("sha256")
           .update(
             // Catalogue timestamps/descriptions are mutable, not release identity.
@@ -213,6 +263,7 @@ export class TvSearchDeliveryJournal {
               item.duration,
               item.url_website,
               ...fields.map((f) => item[f]),
+              ...(item.sourceRef ? [item.sourceRef] : []),
             ])
           )
           .digest("hex");
@@ -221,7 +272,9 @@ export class TvSearchDeliveryJournal {
         if (
           [...next.values()].some(
             (e) =>
-              fields.some((f) => item[f] && fields.some((g) => e.item[g] === item[f])) &&
+              itemSources(item).some((source) =>
+                itemSources(e.item).some((other) => sameSource(source, other))
+              ) &&
               (e.tvdbId !== show.id ||
                 e.season !== episode.seasonNumber ||
                 e.episode !== episode.episodeNumber)
@@ -237,11 +290,11 @@ export class TvSearchDeliveryJournal {
           item,
           createdAt: now,
           expiresAt: now + RETENTION_MS,
-          readyAt: fields.some(
-            (f) =>
-              this.facts.get(item[f])?.facts.videoDimensions &&
-              this.facts.get(item[f])?.facts.audioLanguage &&
-              this.facts.get(item[f])?.fingerprint
+          readyAt: itemSources(item).some(
+            (source) =>
+              this.facts.get(source)?.facts.videoDimensions &&
+              this.facts.get(source)?.facts.audioLanguage &&
+              this.facts.get(source)?.fingerprint
           )
             ? now
             : null,
@@ -252,7 +305,7 @@ export class TvSearchDeliveryJournal {
       }
       if (next.size > MAX_ENTRIES) throw new SonarrUnavailableError();
       const proposed = [...next.values()];
-      if (Buffer.byteLength(JSON.stringify({ version: 1, entries: proposed })) > MAX_BYTES)
+      if (Buffer.byteLength(JSON.stringify({ version: 2, entries: proposed })) > MAX_BYTES)
         throw new SonarrUnavailableError();
       this.releaseRemoved(this.entries!, proposed);
       this.entries = proposed;
@@ -295,7 +348,8 @@ export class TvSearchDeliveryJournal {
         const release = createHash("sha256").update(guid).digest("hex");
         let event = entry.announcements.find((e) => e.release === release);
         if (!event) {
-          if (entry.announcements.length >= 6) throw new SonarrUnavailableError();
+          if (entry.announcements.length >= (entry.item.sourceRef ? 10 : 6))
+            throw new SonarrUnavailableError();
           event = { release, at: now };
           entry.announcements.push(event);
           changed = true;
@@ -312,9 +366,11 @@ export class TvSearchDeliveryJournal {
   }
 
   private releaseRemoved(previous: Entry[], next: Entry[]): void {
-    const retained = new Set(next.flatMap((e) => fields.map((f) => e.item[f])));
+    const retained = new Set(next.flatMap((e) => itemSources(e.item).map(mediaFactsKey)));
     this.facts.release(
-      previous.flatMap((e) => fields.map((f) => e.item[f])).filter((url) => !retained.has(url))
+      previous
+        .flatMap((e) => itemSources(e.item))
+        .filter((source) => !retained.has(mediaFactsKey(source)))
     );
   }
 
@@ -333,7 +389,9 @@ const owner = Symbol.for("pingufunk.tv-search-delivery.v1");
 export const tvSearchDelivery = (globals[owner] ??= new TvSearchDeliveryJournal(
   {
     read: async () =>
-      (await prisma.config.findUnique({ where: { key: TV_DELIVERY_KEY } }))?.value ?? null,
+      (await prisma.config.findUnique({ where: { key: TV_DELIVERY_KEY } }))?.value ??
+      (await prisma.config.findUnique({ where: { key: LEGACY_TV_DELIVERY_KEY } }))?.value ??
+      null,
     write: async (value) => {
       await prisma.config.upsert({
         where: { key: TV_DELIVERY_KEY },
@@ -377,6 +435,7 @@ export async function getTvSearchDeliveryItems(
   const policy = await getConfiguredLanguagePolicy(),
     minimum = await getMinDurationSeconds();
   const tolerance = Number((await getSetting("matching.sonarr.tolerancePercent")) ?? "10");
+  const { youtubeSearchContext } = await import("@/providers/youtube/search");
   const key = JSON.stringify([
     session.cacheIdentity,
     epoch,
@@ -386,6 +445,7 @@ export async function getTvSearchDeliveryItems(
     tolerance,
     quality,
     hlsEnabled,
+    await youtubeSearchContext(),
   ]);
   if (snapshot?.key === key && snapshot.expiresAt > Date.now())
     return structuredClone(snapshot.items);
@@ -424,6 +484,20 @@ export async function getTvSearchDeliveryItems(
     );
     for (const entry of candidates) {
       const item: ApiResultItem = { ...entry.item };
+      if (item.sourceRef) {
+        const proof = sourceMediaFacts.get(item.sourceRef, 75000);
+        if (
+          !proof?.sourceRef ||
+          !proof.fingerprint ||
+          entry.blockedUrls.includes(blockKey(item.sourceRef))
+        )
+          continue;
+        try {
+          await validateYoutubeEnqueue(item.url_website, proof.sourceRef, budget);
+        } catch {
+          continue;
+        }
+      }
       for (const field of fields) {
         // Also cover rendering's remaining request deadline before a 60s page snapshot.
         const proof = sourceMediaFacts.get(item[field], 75_000);
@@ -435,7 +509,7 @@ export async function getTvSearchDeliveryItems(
         )
           item[field] = "";
       }
-      if (!fields.some((f) => item[f])) continue;
+      if (!itemSources(item).length) continue;
       const matches = matchSonarrEpisodes(
         show,
         [item],
