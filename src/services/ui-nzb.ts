@@ -56,7 +56,8 @@ export function createUiNzbDownloads(
       mediaExpectations: releaseMediaExpectations(
         // A proof for one rendition must not become an expectation for another.
         item.sourceAudioEvidence &&
-          item.sourceAudioEvidence.mediaIdentity !== mediaSourceIdentity(url)
+          item.sourceAudioEvidence.mediaIdentity !==
+            mediaSourceIdentity(url, "sourceRef" in rendition ? rendition.sourceRef : undefined)
           ? { ...item, sourceAudioEvidence: undefined, audioLanguage: undefined }
           : item,
         episode?.runtime ?? null,

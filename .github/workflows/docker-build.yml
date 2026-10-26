@@ -90,6 +90,20 @@ jobs:
           done
           docker run --rm --entrypoint node pingufunk-p11-migrator-qa /app/node_modules/prisma/build/index.js --version
 
+      - name: Verify YouTube cold delivery and rollback through native Arr on both backends
+        env:
+          PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+        run: |
+          docker pull postgres:18-alpine
+          for provider in sqlite postgresql; do
+            node scripts/youtube-arr-smoke.mjs direct "$provider"
+            node scripts/youtube-arr-smoke.mjs forwarded "$provider"
+          done
+
       - name: Rehearse disposable TLS migration and post-write rollback
         run: |
           export PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-pg-maintenance-rollback-qa --format '{{.Id}}')"

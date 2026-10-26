@@ -79,11 +79,18 @@ export async function matchMovieItems(
     movieData.runtime !== null && movieData.runtime > 0 ? movieData.runtime * 60 : null;
   const results: MovieMatchResult[] = [];
   for (const item of items) {
+    if (
+      item.sourceRef &&
+      (item.sourceRef.programme.kind !== "movie" ||
+        item.sourceRef.programme.targetId !== movieData.tmdbId)
+    )
+      continue;
     if (!Number.isFinite(item.duration) || item.duration <= 0) {
       recordDecision("runtime", "runtime_invalid", "missing");
       continue;
     }
     if (
+      !item.sourceRef &&
       ![item.url_video, item.url_video_low, item.url_video_hd].some((url) =>
         isRenditionAllowed(url, hlsEnabled)
       )

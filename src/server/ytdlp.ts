@@ -38,7 +38,8 @@ export async function readYoutubeMetadata(
   input: YoutubeInput,
   offset: number,
   signal: AbortSignal,
-  confirmUnavailable = false
+  confirmUnavailable = false,
+  detail = false
 ): Promise<unknown> {
   const canonical = youtubeInput(input.url);
   if (
@@ -65,7 +66,7 @@ export async function readYoutubeMetadata(
     "--no-cache-dir",
     "--simulate",
     "--skip-download",
-    "--flat-playlist",
+    ...(detail ? ["--no-playlist"] : ["--flat-playlist"]),
     "--dump-single-json",
     "--extractor-args",
     "youtube:lang=de",
@@ -106,7 +107,7 @@ export async function readYoutubeMetadata(
       failure ??= new YoutubeMetadataError(reason);
       owned.terminate();
     };
-    const timer = setTimeout(() => fail("timeout"), 30_000);
+    const timer = setTimeout(() => fail("timeout"), detail ? 15_000 : 30_000);
     child.stdout.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > 8 * 1024 * 1024 || chunks.length >= 8192) fail("overflow");
@@ -157,6 +158,11 @@ export async function readYoutubeMetadata(
       }
     });
   });
+}
+
+/** Detail evidence uses the same owned, bounded primitive without a playlist scan. */
+export function readYoutubeMediaMetadata(videoId: string, signal: AbortSignal): Promise<unknown> {
+  return readYoutubeMetadata(youtubeInput(videoId), 0, signal, false, true);
 }
 
 function releaseAsset(): keyof typeof release.sha256 {

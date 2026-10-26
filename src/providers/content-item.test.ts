@@ -87,3 +87,30 @@ it("keeps validated optional catalogue fields in both adapter directions without
   expect(provider.id).toBe("Synthetic-Example-Episode-1");
   expect(providerItemToApiResult(provider)).toMatchObject(item);
 });
+it("retains typed source identity and selected audio through both adapters while leaving all legacy byte slots empty", async () => {
+  const { syntheticYoutubeSource, syntheticYoutubeExpectations } =
+    await import("@/lib/__fixtures__/youtube");
+  const source = syntheticYoutubeSource();
+  const item: ApiResultItem = {
+    channel: "Synthetic",
+    topic: "Synthetic series",
+    title: "Synthetic title",
+    description: "",
+    filmlisteTimestamp: 1,
+    duration: 120,
+    size: 0,
+    url_website: "https://www.youtube.com/watch?v=abcdefghijk",
+    url_video: "",
+    url_video_hd: "",
+    url_video_low: "",
+    sourceProviderId: "youtube",
+    sourceRef: source,
+    sourceAudioEvidence: syntheticYoutubeExpectations().sourceAudio,
+  };
+  const provider = apiResultToProviderItem(item, "youtube");
+  const restored = providerItemToApiResult(provider);
+  expect(restored.sourceRef).toEqual(source);
+  expect(restored.sourceAudioEvidence).toEqual(item.sourceAudioEvidence);
+  expect(restored.sourceProviderId).toBe("youtube");
+  expect([restored.url_video, restored.url_video_hd, restored.url_video_low]).toEqual(["", "", ""]);
+});

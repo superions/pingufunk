@@ -137,8 +137,9 @@ function ReportPage({
               {report.indexAt
                 ? `Index vom ${new Date(report.indexAt).toLocaleString("de-DE")}. `
                 : ""}
-              Noch kein Sprach-, Format- oder Mediennachweis. Eine Titelzuordnung startet keinen
-              Download.
+              Sprach- und Formatbelege stehen getrennt an der jeweiligen Quelle. Eine Titelzuordnung
+              startet keinen Download; die tatsächliche Datei wird erst nach einem ausdrücklich
+              beauftragten Transfer geprüft.
             </p>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">{report.totals.mapped} zugeordnet</Badge>
@@ -175,9 +176,11 @@ function ReportPage({
                         {source.sourceCoordinates
                           ? `Quelle S${String(source.sourceCoordinates.season).padStart(2, "0")}E${String(source.sourceCoordinates.episode).padStart(2, "0")}. `
                           : ""}
-                        {source.availability === "unavailable"
-                          ? "Früherer Titel; aktuell nicht verfügbar."
-                          : "Im Index gelistet; Medien ungeprüft."}
+                        {source.media
+                          ? `Medienbeleg: ${source.media.language.toUpperCase()}, ${source.media.width}×${source.media.height}, ${source.media.duration} s. Noch keine Dateiübertragung.`
+                          : source.availability === "unavailable"
+                            ? "Früherer Titel; aktuell nicht verfügbar."
+                            : "Im Index gelistet; Medien ungeprüft."}
                       </p>
                     </div>
                   ))}

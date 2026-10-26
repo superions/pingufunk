@@ -30,6 +30,7 @@ function streamFailure(value: string | undefined): string {
 /** Mediathek-specific URL/URN resolution stays outside the queue and completion owners. */
 export const mediathekDownloadAdapter: SourceDownloadAdapter = {
   async transfer(source, context) {
+    if (source.family !== "mediathek") throw new SourceDownloadError("Wrong download source");
     context.signal.throwIfAborted();
     if (isStreamingUrl(source.url)) {
       const urn = srfUrnFromUrl(source.url);

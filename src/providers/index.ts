@@ -9,6 +9,7 @@ export { providerRegistry, registerProvider, initializeProviders } from "./regis
 export { MediathekViewProvider, mediathekViewProvider } from "./mediathekview";
 export { SrfProvider, srfProvider } from "./srf";
 export { OrfProvider, orfProvider } from "./orf";
+export { YoutubeProvider, youtubeProvider } from "./youtube";
 
 // Re-export types
 export type {
@@ -28,8 +29,10 @@ import { registerProvider } from "./registry";
 import { mediathekViewProvider } from "./mediathekview";
 import { srfProvider } from "./srf";
 import { orfProvider } from "./orf";
+import { youtubeProvider } from "./youtube";
 
 // Auto-register providers on module load
 registerProvider(mediathekViewProvider);
 registerProvider(srfProvider);
 registerProvider(orfProvider);
+registerProvider(youtubeProvider);

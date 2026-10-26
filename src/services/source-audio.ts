@@ -25,6 +25,7 @@ import {
   stableUrlIdentity,
 } from "./language-editions";
 import { sourceMediaFacts } from "./source-media-facts";
+import { youtubeRenditionIdentity, type YoutubeSourceReference } from "@/lib/youtube-source";
 
 const streamsSchema = z.object({
   videoStreams: z
@@ -41,7 +42,8 @@ const streamsSchema = z.object({
 });
 type ArteStreams = z.infer<typeof streamsSchema>["videoStreams"];
 
-export function mediaSourceIdentity(url: string): string {
+export function mediaSourceIdentity(url: string, source?: YoutubeSourceReference): string {
+  if (source) return createHash("sha256").update(youtubeRenditionIdentity(source)).digest("hex");
   return createHash("sha256").update(stableUrlIdentity(url)).digest("hex");
 }
 
@@ -122,6 +124,10 @@ export async function verifySourceAudio(
   signal?: AbortSignal
 ): Promise<SourceAudioEvidence> {
   signal?.throwIfAborted();
+  if (expected.provider === "youtube") {
+    const { verifyYoutubeAudio } = await import("@/providers/youtube/audio");
+    return verifyYoutubeAudio(expected, url, signal);
+  }
   if (expected.provider === "arte_hbbtv")
     return verifyArteSourceAudio(expected, url, budget, signal);
   if (!isArdProgressiveMp4(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
@@ -179,6 +185,51 @@ export async function enrichSourceAudio(
     if (output.has(item)) continue;
     const renditions: ApiResultItem[] = [];
     output.set(item, renditions);
+    if (item.sourceRef) {
+      let proof = reuseSearchFacts ? sourceMediaFacts.get(item.sourceRef) : undefined;
+      if (!reuseSearchFacts) {
+        const { resolveYoutubeMedia } = await import("@/providers/youtube/resolve");
+        const resolved = await resolveYoutubeMedia(
+          item.sourceRef,
+          AbortSignal.timeout(Math.max(1, Math.min(15000, budget.deadlineAt - Date.now()))),
+          "selection" in item.sourceRef ? item.sourceRef.selection : undefined
+        );
+        const sourceRef = { ...item.sourceRef, selection: resolved.selection };
+        proof = {
+          sourceRef,
+          facts: {
+            audioLanguage: resolved.selection.language,
+            videoDimensions: { width: resolved.selection.width, height: resolved.selection.height },
+          },
+          fingerprint: mediaSourceIdentity(item.url_website, sourceRef),
+        };
+      }
+      if (proof?.sourceRef && proof.fingerprint) {
+        const ref = proof.sourceRef;
+        renditions.push({
+          ...item,
+          sourceRef: ref,
+          duration: ref.selection.duration,
+          audioLanguage: ref.selection.language,
+          sourceAssetFingerprint: proof.fingerprint,
+          sourceVideoDimensions: [
+            { url: item.url_website, width: ref.selection.width, height: ref.selection.height },
+          ],
+          sourceAudioEvidence: {
+            provider: "youtube",
+            videoId: ref.videoId,
+            channelId: ref.channelId,
+            language: "de",
+            mediaIdentity: proof.fingerprint,
+            selection: ref.selection,
+          },
+        });
+      } else {
+        sourceMediaFacts.enqueue([item.sourceRef]);
+        renditions.push(item);
+      }
+      continue;
+    }
     if (classifyLanguageEdition(item).audioLanguage) {
       recordDecision("language", "language_verified", "proven");
       // Earlier verified adapters already bound their audio to these renditions.

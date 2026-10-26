@@ -246,6 +246,8 @@ export async function saveYoutubeCatalogue(input: YoutubeSave): Promise<YoutubeS
   }
   runtime.controller?.abort();
   clearSettingsCache();
+  const { sourceMediaFacts } = await import("./source-media-facts");
+  sourceMediaFacts.invalidateYoutube();
   // Independent database readback; a lost acknowledgement is never retried automatically.
   const confirmed = await youtubeCatalogueSnapshot();
   if (
@@ -625,7 +627,7 @@ export async function stopYoutubeCatalogueRefresh(): Promise<void> {
 /** Bounded read-only setup snapshot, never an implicit metadata scan or media proof. */
 export async function readYoutubeCatalogueIndex() {
   const loaded = await loadRegistry();
-  let { value } = await loadManifest();
+  let { value, raw: manifestRaw } = await loadManifest();
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       let rows: IndexRow[] = [];
@@ -651,6 +653,14 @@ export async function readYoutubeCatalogueIndex() {
         revision: loaded.revision,
         registry: loaded.registry,
         enabled: loaded.enabled,
+        guardValues:
+          loaded.raw && manifestRaw
+            ? [
+                { key: YOUTUBE_REGISTRY_KEY, value: loaded.raw },
+                { key: YOUTUBE_ENABLED_KEY, value: String(loaded.enabled) },
+                { key: YOUTUBE_INDEX_KEY, value: manifestRaw },
+              ]
+            : [],
         rows,
         indexed: value?.completeAt !== null && value?.completeAt !== undefined,
         current: value?.indexRevision === loaded.revision,
@@ -658,9 +668,11 @@ export async function readYoutubeCatalogueIndex() {
       };
     } catch (error) {
       if (attempt !== 0) throw error;
-      const fresh = (await loadManifest()).value;
+      const latest = await loadManifest();
+      const fresh = latest.value;
       if (!fresh || JSON.stringify(fresh.pages) === JSON.stringify(value?.pages)) throw error;
       value = fresh;
+      manifestRaw = latest.raw;
     }
   }
   throw invalid();

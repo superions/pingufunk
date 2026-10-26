@@ -8,6 +8,7 @@ import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-ide
 import { arteVideoId } from "./arte-editions";
 import { verifiedDurationCheck as sonarrDurationCheck } from "@/lib/verified-duration";
 import { recordDecision } from "@/server/decision-diagnostics";
+import { matchBoundSourceEpisode } from "./source-programme";
 
 function normalized(value: string): string {
   return value
@@ -67,6 +68,22 @@ export function matchSonarrEpisodes(
   );
   const matches: MatchedEpisodeInfo[] = [];
   for (const candidate of candidates) {
+    if (candidate.sourceRef) {
+      if (
+        !deferLanguageSelection &&
+        !isLanguageEditionVisible(classifyLanguageEdition(candidate), languagePolicy)
+      )
+        continue;
+      const match = matchBoundSourceEpisode(
+        candidate,
+        { ...show, episodes },
+        minimumSeconds,
+        tolerancePercent,
+        includeRuntimeConflicts
+      );
+      if (match) matches.push(match);
+      continue;
+    }
     if (
       !(
         names.includes(normalized(candidate.topic)) ||

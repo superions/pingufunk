@@ -580,3 +580,76 @@ vier global fehlende Videos noch 97/97-Verfügbarkeit. Alle 97 kanonischen
 Zeilen wurden über den tatsächlichen Produktbericht ausgegeben. Kein Downloadjob,
 keine Tonspur-/Formatprüfung, kein Mediendownload. Reale Antworten und Werkzeuge
 bleiben privat ignoriert; Tests verwenden generierte synthetische Videozeilen.
+
+## P17.4: typisierte Quellen- und Mediengrenze
+
+Der neue Quelleinstieg besteht aus `providers/youtube/search.ts`, `resolve.ts`
+und `download.ts`; die Registryfassade `providers/youtube/index.ts` delegiert
+nur Suche/Status. Sie startet beim Modulimport oder bei deaktivierter Quelle
+keinen Extraktor. Beide Quellenmodule bedienen denselben Suchfenster- und
+Transfervertrag. Queue, Lease, Pfade und Completion bleiben beim vorhandenen
+Worker; kein YouTube-Downloadzweig in der GUI und kein zweiter Worker.
+
+| Feld/Owner                 | Konsumierter Vertrag                                                                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sourceProviderId=youtube` | Expliziter Quellenowner; alte drei Provider-IDs bleiben unverändert.                                                                                                                                                |
+| `sourceRef` v1             | Video-/Kanal-/Playlistidentität, kanonische Programmkoordinaten, Originaltitel und Mappingrevision. Nach Beleg zusätzlich exakte Video-/Audioformat- und Trackidentität, Sprache, Pixel und Laufzeit.               |
+| `url_website`              | Watch-URL der Video-ID. Alle drei Mediathek-Byte-Slots bleiben leer. Unversionierte YouTube-URLs gelangen nicht zum alten Dateiadapter.                                                                             |
+| Medienvertrag v5           | Neue NZB-/SAB-/Jobdeklaration mit derselben typisierten Auswahl, unabhängigen Laufzeitreferenzen und Quellen-Audiobeleg. Kein Downgrade zu v1–v3 bei beschädigten Feldern.                                          |
+| Interne v4-Freigabe        | Bleibt ausschließlich die bestehende einmalige Laufzeitausnahme. Optionale typisierte Bindung muss exakt zu Freigabe, Pixeln, Dauer und Audiobeleg passen; automatische NZB-Aufnahme akzeptiert v4 weiterhin nicht. |
+| `internal.tv-delivery.v2`  | Derselbe begrenzte Discoveryowner mit typisierten Quellen. Ein unveränderter alter v1-MP4-Bestand kann übernommen werden; v1 wird nicht nachträglich als YouTube-Vertrag interpretiert oder überschrieben.          |
+| Aufnahmebedingungen        | Private gelesene Register-/Enabled-/Indexwerte werden durch bedingte No-op-Updates bis zum Jobcommit gesperrt. Keine zusätzlichen öffentlichen Payloads oder DDL.                                                   |
+
+Der Resolver ist für Belege und Transfer identisch. V1 wählt eine konkret
+belegte deutsche Standard-Audiospur und eine unterstützte getrennte Videospur;
+fehlende/unklare Sprache wird nicht Deutsch. Tatsächliche Format-IDs und Track
+bleiben erhalten. Ein angenommener Job darf später nur exakt diese Auswahl
+frisch auflösen; geänderte Signaturen sind zulässig, fremder Uploader, andere
+Formate/Tracks, Sprache, Pixel oder widersprechende Laufzeit nicht. Medien-URLs
+müssen öffentliche HTTPS-`googlevideo.com`-CDN-Selektoren mit ausreichender
+Restgültigkeit sein. Keine Weiterleitung, Cookies, Remote-Plugins, Toolupdates
+oder automatische Installation. Der Transfer lädt die zwei frisch gebundenen
+Adressen über die bestehende Transferprimitive und muxiert genau Video 0 und
+Audio 0 mit dem vorhandenen FFmpeg. Der gemeinsame ffprobe-/Completiongate
+bleibt zwingend; zusätzliche/foreign Audiotracks und falsche Pixel/Dauer
+werden abgewiesen. Fehlende Container-Sprachtags werden nicht umgestempelt;
+ein unabhängiger frischer Quellenbeleg wird getrennt protokolliert.
+
+Der bestehende Belegworker verarbeitet beide Quelltypen seriell und fair.
+YouTube hat eine eigene Grenze von zwölf Detailprozessen pro gleitender Minute,
+15 Sekunden und 8 MiB pro Child ohne Extraktorretry. Das sind ausdrücklich
+Prozessaufrufe, keine Behauptung über interne yt-dlp-HTTP-Requests. Erschöpfte
+YouTube-Rate blockiert keine neu ankommenden Mediathek-Belege. Direkt vor einem
+Hintergrundabruf wird die aktuelle Discoverybindung nochmals geprüft.
+Deaktivierung/ID-Korrektur verwirft nur unangenommene YouTube-Vorarbeit;
+angenommene Jobs behalten ihre eingefrorene Bindung. Ein fehlgeschlagener
+frischer Beleg macht einen älteren positiven Hinweis nicht wieder gültig.
+Stabile typisierte Formatbelege gelten 15 Minuten; CDN-Adressen werden dabei
+nicht gespeichert. Der gehaltene Discoverybestand erneuert sie zwei Minuten
+vor Ablauf, innerhalb derselben Prozessrate. Wartende gehaltene Quellen behalten
+ihre begrenzte Discoveryfrist, damit auch 97 Ziele seriell vollständig werden.
+Die bisherigen MP4-Fristen bleiben unverändert; jeder Transfer löst frisch auf.
+
+Die Suchquelle liest ausschließlich den vorbereiteten vollständigen Index;
+keine Playlist-Scans im Suchrequest. Höchstens 1.000 YouTube-Kandidaten pro
+Fenster, keine neuen globalen RSS-Budgets. Eine erfolgreiche erforderliche
+Basis einschließlich echtem Leerfenster bleibt bei optionalem YouTube-Fehler
+nutzbar. Gesamtcoverage und Basis-Erfolg sind getrennt; ein Fehlerepoch verhindert
+leeres Cachen des ausgefallenen Zusatzpfads. Expliziter YouTube-only-Ausfall
+bleibt unbestätigt. Neue reine YouTube-GUIDs enthalten einen eigenen Namespace
+und stabile Format-/Audioidentität statt kurzlebiger CDN-Signaturen.
+
+Neue Aufnahme prüft die aktuelle Bindung; dieselbe bestätigte Intentquittung
+quittiert dagegen den bereits angenommenen Auftrag auch nach Deaktivierung.
+Ein Registrywechsel zwischen Prüfung und atomarem Insert erzeugt keinen Job.
+Neuauflösung im Worker prüft die externe Quelle gegen den eingefrorenen Job,
+nicht gegen eine inzwischen andere Programmzuordnung. Retry behält denselben
+Quellenvertrag. Alte Images dürfen unbekannte v5-Deklarationen nicht als
+Legacy behandeln; ein getesteter Rückweg muss vorhandene Payloads und
+Quittungen unverändert bewahren.
+
+Der Zuordnungsbericht zeigt frische bereits vorhandene Sprach-/Pixel-/Dauer-
+belege direkt an der jeweiligen Quelle, ohne selbst einen Belegabruf auszulösen.
+Auch ein vorbereiteter Medienbeleg ist keine physische Datei- oder Importabnahme.
+Die synthetischen nativen und Desktopgates bleiben Voraussetzung für P17.4/5;
+Produktivaktivierung und echte YouTube-Mediendownloads bleiben P17.6.

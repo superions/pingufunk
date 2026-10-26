@@ -47,6 +47,7 @@ export interface ProviderContentItem {
   /** Trusted adapter facts remain bound to their exact rendition, never a slot label. */
   sourceAudioEvidence?: import("@/types").ApiResultItem["sourceAudioEvidence"];
   sourceVideoDimensions?: import("@/types").ApiResultItem["sourceVideoDimensions"];
+  sourceRef?: import("@/types").ApiResultItem["sourceRef"];
   /** URL to the website page for this content */
   websiteUrl: string;
   /** Available video URLs by quality */
@@ -83,8 +84,9 @@ export interface ProviderSearchQuery {
  * Download information for a content item
  */
 export interface ProviderDownloadInfo {
-  /** URL to download */
+  /** Legacy byte URL; empty when an explicit typed source reference is required. */
   url: string;
+  sourceRef?: SourceDownloadReference;
   /** Whether this is an HLS stream */
   isHls: boolean;
   /** Suggested filename */
@@ -190,6 +192,7 @@ export interface ContentQueryField {
 }
 
 export interface ContentSearchOptions {
+  mediaType?: "all" | "movie" | "series";
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   future?: boolean;
@@ -206,13 +209,15 @@ export interface ContentSearchOptions {
   maxCandidatePages?: number;
 }
 
-export type SearchProviderId = "mediathekview" | "orf" | "srf";
+export type SearchProviderId = "mediathekview" | "orf" | "srf" | "youtube";
 
 export interface ContentSearchWindow {
   items: import("@/types").ApiResultItem[];
   /** Successful bounded retrieval is not a claim that the complete catalogue was searched. */
   coverage: {
     complete: boolean;
+    /** Optional-source failure never erases a successfully retrieved required base. */
+    baseComplete?: boolean;
     candidateWindowLimited: boolean;
     sources: Array<{
       providerId: SearchProviderId;
@@ -238,10 +243,9 @@ export interface ContentSearchAdapter {
 }
 
 /** Existing persisted jobs have a Mediathek URL, not an inferred YouTube extractor target. */
-export interface SourceDownloadReference {
-  family: "mediathek";
-  url: string;
-}
+export type SourceDownloadReference =
+  | { family: "mediathek"; url: string }
+  | import("@/lib/youtube-source").YoutubeSourceReference;
 
 /** The worker owns directories, policy and persistence; source modules only transfer bytes. */
 export interface SourceDownloadContext {

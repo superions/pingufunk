@@ -31,7 +31,7 @@ Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad struktu
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
 P17.1/P17.1a/P17.2 sind einschließlich Reviewnacharbeit abgenommen und mit
-Branding über PR #9 in Main integriert (`0e1d5b4`). Aktuell folgt P17.3.
+Branding über PR #9 in Main integriert (`0e1d5b4`). P17.3 ist auf dem Topicbranch abgenommen; aktuell folgt P17.4.
 Die bestehenden offenen Phasen werden weder umgedeutet noch pauschale
 Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
@@ -3301,7 +3301,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Befunde; verlorener Publish-Rückkanal, fehlendes Manifest und Fristablauf
       zusätzlich kausal/visuell geprüft. PR #9 geschlossen/gemergt nach Main
       `0e1d5b4`; Dateibaum exakt gleich dem geprüften Kopf. Kein Rollout.
-- [ ] **P17.3 — IDs automatisch auflösen und Der Kommissar vollständig abgleichen (M).**
+- [x] **P17.3 — IDs automatisch auflösen und Der Kommissar vollständig abgleichen (M).**
       Abhängigkeit P17.2. Owner: neuer enger Mappingowner bei
       `youtube-catalogue.ts`, vorhandene `shows.ts`, `sonarr-provider.ts`,
       `tvdb.ts`/`tmdb.ts`, Radarr-Metadatenowner und TV-/Filmmatcher.
@@ -3333,6 +3333,12 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Aktuell beobachtete 94 Playlistvideos/ein Verfügbarkeitshinweis ersetzen
       keine nachgewiesene 97/97-Abdeckung. Bericht in derselben GUI erreichbar;
       Programmbindung, Scanabdeckung und Medienbereitschaft getrennt anzeigen.
+      Abschluss 26.10.2026: `c2ae58d`, [CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40254793646)
+      und [vollständige native Containerkette](https://github.com/superions/pingufunk/actions/runs/40254793648)
+      terminal grün. Desktopbericht und fünf kausale Gegenproben grün.
+      Öffentlicher Produktabgleich getrennt: 93/97 sicher zugeordnet,
+      vier ohne sichere Quellenbindung, ein privater unbekannter Extraeintrag;
+      keine behauptete 97/97-Verfügbarkeit und kein Mediendownload.
 - [ ] **P17.4 — Neue Quelle bis zum vorhandenen Downloadconsumer gemeinsam integrieren (M).**
       Abhängigkeit P17.1a und P17.3. Owner: neue
       `src/providers/youtube/search.ts`/`download.ts`, gemeinsamer Suchvertrag

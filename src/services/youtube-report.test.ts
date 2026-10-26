@@ -252,3 +252,36 @@ it("fails closed when the register changes before report confirmation and reject
       .status
   ).toBe(400);
 });
+it("shows only fresh cached media facts beside their exact mapped source, without starting a media probe", async () => {
+  const { sourceMediaFacts } = await import("./source-media-facts");
+  const { syntheticYoutubeSource } = await import("@/lib/__fixtures__/youtube");
+  const get = vi.spyOn(sourceMediaFacts, "get").mockImplementation((source) =>
+    typeof source === "string"
+      ? undefined
+      : {
+          sourceRef: { ...source, selection: syntheticYoutubeSource().selection },
+          facts: { audioLanguage: "de", videoDimensions: { width: 1280, height: 720 } },
+          fingerprint: "b".repeat(64),
+        }
+  );
+  const enqueue = vi.spyOn(sourceMediaFacts, "enqueue");
+  try {
+    state.show.mockResolvedValue({ ...show, episodes: [show.episodes[0]] });
+    const report = await youtubeMappingReport(key, 0);
+    expect(report.mediaReady).toBe(true);
+    expect(report.rows[0].sources[0].media).toEqual({
+      language: "de",
+      width: 1280,
+      height: 720,
+      duration: 120,
+    });
+    expect(enqueue).not.toHaveBeenCalled();
+    get.mockClear();
+    state.read.mockResolvedValue({ ...index(), current: false });
+    expect((await youtubeMappingReport(key, 0)).mediaReady).toBe(false);
+    expect(get).not.toHaveBeenCalled();
+  } finally {
+    get.mockRestore();
+    enqueue.mockRestore();
+  }
+});

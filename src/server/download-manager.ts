@@ -7,7 +7,7 @@ import { readPersistedMediaExpectations } from "@/lib/media-expectations";
 import { MediaProbeError } from "./media-probe";
 import { recordDecision } from "./decision-diagnostics";
 import { parseDecisionEvent } from "@/lib/decision-diagnostics";
-import { transferSource } from "./source-download";
+import { transferSource, downloadSource } from "./source-download";
 import {
   assertNewOutputPath,
   categoryDirectory,
@@ -262,27 +262,23 @@ async function processOwnedDownload(downloadId: string, lease: WorkerLease): Pro
       (selectedContainer ??= isMkvConversionEnabled().then((enabled) =>
         enabled ? ("mkv" as const) : ("mp4" as const)
       ));
-    // All shipped job versions use the explicit legacy Mediathek adapter. A future
-    // source reference requires its own validated payload version, never URL guessing.
-    const artifact = await transferSource(
-      { family: "mediathek", url: download.url },
-      {
-        stagingDirectory: tempJobDir,
-        filename,
-        getContainer,
-        expectations,
-        signal: lease.signal,
-        onProgress: async (progress, downloadedBytes, totalBytes, speed) => {
-          lease.checkTransfer();
-          await lease.mutate((tx) =>
-            tx.download.update({
-              where: { id: downloadId },
-              data: { progress, downloadedBytes, totalSize: totalBytes, speed },
-            })
-          );
-        },
-      }
-    );
+    // The validated durable payload selects its source; the worker stays source-agnostic.
+    const artifact = await transferSource(downloadSource(download.url, expectations), {
+      stagingDirectory: tempJobDir,
+      filename,
+      getContainer,
+      expectations,
+      signal: lease.signal,
+      onProgress: async (progress, downloadedBytes, totalBytes, speed) => {
+        lease.checkTransfer();
+        await lease.mutate((tx) =>
+          tx.download.update({
+            where: { id: downloadId },
+            data: { progress, downloadedBytes, totalSize: totalBytes, speed },
+          })
+        );
+      },
+    });
     lease.checkTransfer();
     let stagedPath = artifact.path;
     let extension = artifact.extension;

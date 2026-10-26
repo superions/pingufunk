@@ -155,6 +155,7 @@ async function handleSearchRequest(request: NextRequest) {
             const returnedCount = Math.min(limit, 100, bound.length);
             const coverage: UiSearchCoverage = {
               complete: windows.every((window) => window.complete),
+              baseComplete: windows.every((window) => window.baseComplete ?? window.complete),
               candidateWindowLimited:
                 windows.length > 1 || windows.some((window) => window.candidateWindowLimited),
               resultLimitReached: bound.length > returnedCount,

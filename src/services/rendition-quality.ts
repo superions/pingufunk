@@ -2,6 +2,11 @@ import type { ApiResultItem } from "@/types";
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { recordDecision } from "@/server/decision-diagnostics";
 import { sourceAvailabilityState } from "@/lib/content-dates";
+import {
+  youtubeSourceReferenceSchema,
+  youtubeWatchUrl,
+  youtubeRenditionIdentity,
+} from "@/lib/youtube-source";
 
 export type QualityPreference = "all" | "best" | "1080p" | "720p" | "480p";
 
@@ -76,6 +81,25 @@ export function selectRenditions(
   preference: QualityPreference,
   hlsEnabled: boolean
 ) {
+  if (item.sourceRef) {
+    const parsed = youtubeSourceReferenceSchema.safeParse(item.sourceRef);
+    if (!parsed.success || item.url_website !== youtubeWatchUrl(parsed.data)) return [];
+    const sourceRef = parsed.data,
+      { width, height } = sourceRef.selection;
+    const quality = `${height}p`;
+    if (!["all", "best", quality].includes(preference)) return [];
+    return [
+      {
+        field: "url_video" as const,
+        identity: youtubeRenditionIdentity(sourceRef),
+        multiplier: 1,
+        url: youtubeWatchUrl(sourceRef),
+        dimensions: { width, height },
+        quality,
+        sourceRef,
+      },
+    ];
+  }
   const slots = [
     { field: "url_video_hd", identity: "1080p", multiplier: 1.6 },
     { field: "url_video", identity: "720p", multiplier: 1 },
@@ -119,4 +143,14 @@ export function selectRenditions(
     seen.add(rendition.url);
     return true;
   });
+}
+
+/** Shared UI/review slot selector; source references never populate legacy video URL slots. */
+export function renditionUrl(
+  item: ApiResultItem,
+  field: "url_video" | "url_video_hd" | "url_video_low"
+): string {
+  return item.sourceRef
+    ? (selectRenditions(item, "all", false).find((row) => row.field === field)?.url ?? "")
+    : item[field];
 }

@@ -1,4 +1,6 @@
-import { createHash } from "node:crypto";
+import { youtubeMappingRevision } from "./youtube-bindings";
+import { sourceMediaFacts } from "./source-media-facts";
+import { youtubeSourceIdentitySchema } from "@/lib/youtube-source";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { youtubeMappingKey } from "@/lib/youtube-catalogue";
 import {
@@ -56,9 +58,7 @@ export async function youtubeMappingReport(key: string, page: number): Promise<Y
       if (!show || !show.episodes.length) report.state = "metadata_unavailable";
       else if (show.id !== mapping.targetId) report.state = "metadata_conflict";
       else {
-        const revision = createHash("sha256")
-          .update(JSON.stringify([index.revision, mapping, show]))
-          .digest("hex");
+        const revision = youtubeMappingRevision(index.revision, mapping, show);
         const result = mapYoutubeEpisodes(mapping, show, inventory, revision, conflicts);
         rows = result.rows;
         extras = result.extras;
@@ -76,9 +76,7 @@ export async function youtubeMappingReport(key: string, page: number): Promise<Y
       else if (movie.tmdbId !== mapping.targetId) report.state = "metadata_conflict";
       else {
         report.name = movie.germanTitle || movie.title;
-        const revision = createHash("sha256")
-          .update(JSON.stringify([index.revision, mapping, movie]))
-          .digest("hex");
+        const revision = youtubeMappingRevision(index.revision, mapping, movie);
         const sources: YoutubeReport["rows"][number]["sources"] = [];
         if (inventory.length > 1) throw new YoutubeMappingError("source");
         let state: YoutubeReport["rows"][number]["state"] = "missing";
@@ -138,6 +136,42 @@ export async function youtubeMappingReport(key: string, page: number): Promise<Y
     extras = [];
   }
   report.rowCount = rows.length;
+  if (index.current)
+    for (const row of rows)
+      for (const source of row.sources) {
+        if (source.availability !== "listed") continue;
+        const identity = youtubeSourceIdentitySchema.parse({
+          version: 1,
+          family: "youtube",
+          videoId: source.videoId,
+          channelId: mapping.channelId,
+          ...(mapping.kind === "series" ? { playlistId: mapping.sourceId } : {}),
+          mappingRevision: source.mappingRevision,
+          originalTitle: source.originalTitle,
+          programme:
+            mapping.kind === "series"
+              ? {
+                  kind: "series",
+                  targetId: mapping.targetId,
+                  season: row.season,
+                  episode: row.episode,
+                }
+              : { kind: "movie", targetId: mapping.targetId },
+        });
+        const proof = sourceMediaFacts.get(identity);
+        if (proof?.sourceRef && proof.fingerprint) {
+          const selected = proof.sourceRef.selection;
+          source.media = {
+            language: "de",
+            width: selected.width,
+            height: selected.height,
+            duration: selected.duration,
+          };
+        }
+      }
+  report.mediaReady =
+    rows.length > 0 &&
+    rows.every((row) => row.state === "mapped" && row.sources.some((source) => !!source.media));
   report.extraCount = extras.length;
   for (const row of rows) report.totals[row.state]++;
   report.rows = rows.slice(page * 100, page * 100 + 100);

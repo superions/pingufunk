@@ -3,16 +3,39 @@ import { LRUCache } from "lru-cache";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { isProbeableMp4, probeMp4MediaFacts, type Mp4MediaFacts } from "@/lib/mp4-audio-language";
 
-interface CheckedFacts {
+import {
+  youtubeSourceIdentitySchema,
+  youtubeSourceReferenceSchema,
+  type YoutubeSourceIdentity,
+  type YoutubeSourceReference,
+} from "@/lib/youtube-source";
+import { resolveYoutubeMedia } from "@/providers/youtube/resolve";
+import { youtubeMediaIdentity } from "@/providers/youtube/audio";
+export type MediaFactsSource = string | YoutubeSourceIdentity;
+function validSource(source: MediaFactsSource): boolean {
+  return typeof source === "string"
+    ? isProbeableMp4(source)
+    : youtubeSourceIdentitySchema.strip().safeParse(source).success;
+}
+export interface CheckedFacts {
+  sourceRef?: YoutubeSourceReference;
   facts: Mp4MediaFacts;
   fingerprint?: string;
 }
 interface PendingSource {
-  url: string;
+  url: MediaFactsSource;
   expiresAt: number;
   refresh?: boolean;
 }
-const key = (url: string) => createHash("sha256").update(url).digest("hex");
+export const mediaFactsKey = (source: MediaFactsSource) =>
+  createHash("sha256")
+    .update(
+      typeof source === "string"
+        ? source
+        : JSON.stringify(youtubeSourceIdentitySchema.strip().parse(source))
+    )
+    .digest("hex");
+const key = mediaFactsKey;
 
 /**
  * Search-only hints bound to the exact public URL, including every selector.
@@ -26,13 +49,15 @@ export class SourceMediaFactsStore {
   private epoch = 0;
   private revision = 0;
   private worker?: Promise<void>;
-  private active?: { key: string; controller: AbortController };
+  private active?: { key: string; controller: AbortController; source: MediaFactsSource };
   private pause?: { timer: ReturnType<typeof setTimeout>; resume: () => void };
   private startTimer?: ReturnType<typeof setTimeout>;
   private batch?: HttpRequestBudget;
-  private retained = new Map<string, { url: string; until: number; blocked: boolean }>();
+  private youtubeCalls: number[] = [];
+  private lastFamily: "youtube" | "mediathek" = "youtube";
+  private retained = new Map<string, { url: MediaFactsSource; until: number; blocked: boolean }>();
   private retentionTimer?: ReturnType<typeof setTimeout>;
-  private listeners = new Set<(url: string, result?: CheckedFacts) => void>();
+  private listeners = new Set<(url: MediaFactsSource, result?: CheckedFacts) => void>();
 
   get generation(): number {
     return this.epoch;
@@ -43,8 +68,9 @@ export class SourceMediaFactsStore {
     return `${this.epoch}:${this.revision}:${Math.floor(Date.now() / 30_000)}`;
   }
 
-  get(url: string, minimumFreshMs = 0): CheckedFacts | undefined {
-    if (!isProbeableMp4(url)) return undefined;
+  get(url: MediaFactsSource, minimumFreshMs = 0): CheckedFacts | undefined {
+    if (!validSource(url)) return undefined;
+    if (this.retained.get(key(url))?.blocked) return undefined;
     const result = this.facts.get(key(url));
     if (!result) return undefined;
     if (result.expiresAt <= Date.now()) {
@@ -52,21 +78,41 @@ export class SourceMediaFactsStore {
       return undefined;
     }
     if (result.expiresAt <= Date.now() + minimumFreshMs) return undefined;
-    return structuredClone({ facts: result.facts, fingerprint: result.fingerprint });
+    return structuredClone({
+      facts: result.facts,
+      fingerprint: result.fingerprint,
+      ...(result.sourceRef ? { sourceRef: result.sourceRef } : {}),
+    });
   }
 
-  remember(url: string, result: CheckedFacts, generation = this.epoch): void {
-    if (generation !== this.epoch || !isProbeableMp4(url)) return;
+  remember(url: MediaFactsSource, result: CheckedFacts, generation = this.epoch): void {
+    if (generation !== this.epoch || !validSource(url)) return;
+    if (typeof url !== "string") {
+      const source = youtubeSourceReferenceSchema.safeParse(result.sourceRef);
+      if (
+        !source.success ||
+        key(source.data) !== key(url) ||
+        result.fingerprint !== youtubeMediaIdentity(source.data) ||
+        result.facts.audioLanguage !== source.data.selection.language ||
+        result.facts.videoDimensions?.width !== source.data.selection.width ||
+        result.facts.videoDimensions?.height !== source.data.selection.height
+      )
+        return;
+    }
     if (this.retained.get(key(url))?.blocked) return;
     // An unsupported/unproven asset has a short negative lifetime, never a
     // fabricated language or resolution. Transport failures are not facts.
+    // Typed hints hold stable format facts for 15 minutes so a 97-item cold
+    // catalogue fits the 12/minute budget; transfer URLs are never cached here.
     this.facts.set(key(url), {
       ...structuredClone(result),
       expiresAt:
         Date.now() +
-        (result.fingerprint && (result.facts.audioLanguage || result.facts.videoDimensions)
-          ? 300_000
-          : 30_000),
+        (result.sourceRef
+          ? 900_000
+          : result.fingerprint && (result.facts.audioLanguage || result.facts.videoDimensions)
+            ? 300_000
+            : 30_000),
     });
     this.revision++;
     const held = this.retained.get(key(url));
@@ -76,22 +122,27 @@ export class SourceMediaFactsStore {
         result.facts.audioLanguage &&
         result.facts.videoDimensions
       );
-    for (const listener of this.listeners) listener(url, structuredClone(result));
+    for (const listener of this.listeners) listener(structuredClone(url), structuredClone(result));
   }
 
   /** Retain discovery or restore a durable quarantine, never extend proof TTL. */
-  retain(urls: readonly string[], until: number, blocked = false): void {
+  retain(urls: readonly MediaFactsSource[], until: number, blocked = false): void {
     const now = Date.now();
     for (const [id, held] of this.retained) if (held.until <= now) this.retained.delete(id);
     for (const url of urls) {
-      if (!isProbeableMp4(url) || until <= now) continue;
+      if (!validSource(url) || until <= now) continue;
       const id = key(url);
       if (!this.retained.has(id) && this.retained.size >= 512) break;
       this.retained.set(id, {
-        url,
+        url: structuredClone(url),
         until: Math.min(until, now + 7_200_000),
         blocked: blocked || (this.retained.get(id)?.blocked ?? false),
       });
+      const pending = this.pending.get(id);
+      if (pending) {
+        pending.expiresAt = this.retained.get(id)!.until;
+        pending.refresh = true;
+      }
       if (this.retained.get(id)?.blocked) {
         this.pending.delete(id);
         if (this.active?.key === id) this.active.controller.abort();
@@ -100,13 +151,13 @@ export class SourceMediaFactsStore {
     this.maintainRetained();
   }
 
-  onChecked(listener: (url: string, result?: CheckedFacts) => void): () => void {
+  onChecked(listener: (url: MediaFactsSource, result?: CheckedFacts) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
   /** Release only delivery-owned refresh work; keep ordinary short-lived hints. */
-  release(urls: readonly string[]): void {
+  release(urls: readonly MediaFactsSource[]): void {
     for (const url of urls) {
       const id = key(url);
       this.retained.delete(id);
@@ -120,10 +171,14 @@ export class SourceMediaFactsStore {
 
   private maintainRetained(): void {
     const now = Date.now();
-    const refresh: string[] = [];
+    const refresh: MediaFactsSource[] = [];
     for (const [id, held] of this.retained) {
       if (held.until <= now) this.retained.delete(id);
-      else if (!held.blocked && !this.get(held.url, 90_000)) refresh.push(held.url);
+      else if (
+        !held.blocked &&
+        !this.get(held.url, typeof held.url === "string" ? 90_000 : 120_000)
+      )
+        refresh.push(held.url);
     }
     this.enqueue(refresh, true);
     if (this.retained.size && !this.retentionTimer) {
@@ -135,15 +190,16 @@ export class SourceMediaFactsStore {
     }
   }
 
-  isActive(url: string): boolean {
+  isActive(url: MediaFactsSource): boolean {
     return this.active?.key === key(url);
   }
 
-  enqueue(urls: readonly string[], refresh = false): void {
+  enqueue(urls: readonly MediaFactsSource[], refresh = false): void {
+    const previousSize = this.pending.size;
     const now = Date.now();
     for (const [id, source] of this.pending) if (source.expiresAt <= now) this.pending.delete(id);
     for (const url of urls) {
-      if (!isProbeableMp4(url)) continue;
+      if (!validSource(url)) continue;
       const id = key(url);
       if (
         (!refresh && this.get(url)) ||
@@ -154,7 +210,17 @@ export class SourceMediaFactsStore {
       )
         continue;
       if (this.pending.size >= 128) break;
-      this.pending.set(id, { url, expiresAt: now + 300_000, refresh });
+      this.pending.set(id, {
+        url: structuredClone(url),
+        expiresAt:
+          this.retained.get(id)?.until ?? now + (typeof url === "string" ? 300_000 : 900_000),
+        refresh,
+      });
+    }
+    if (this.pending.size > previousSize && this.pause) {
+      clearTimeout(this.pause.timer);
+      this.pause.resume();
+      this.pause = undefined;
     }
     if (!this.pending.size || this.worker || this.startTimer) return;
     const epoch = this.epoch;
@@ -182,35 +248,74 @@ export class SourceMediaFactsStore {
 
   private async run(epoch: number): Promise<void> {
     while (epoch === this.epoch && this.pending.size) {
-      // Reserve all four possible windows before starting one atomic source.
-      // The rate window must not become that source's almost-expired deadline:
-      // a healthy response at the batch boundary is not a failed asset.
-      if (!this.batch || this.batch.remainingAttempts < 4 || Date.now() >= this.batch.deadlineAt) {
-        if (this.batch && Date.now() < this.batch.deadlineAt)
-          await this.wait(this.batch.deadlineAt - Date.now());
-        if (epoch !== this.epoch) break;
-        this.batch = new HttpRequestBudget(32);
+      const now = Date.now();
+      this.youtubeCalls = this.youtubeCalls.filter((at) => at + 60000 > now);
+      if (!this.batch || now >= this.batch.deadlineAt) this.batch = new HttpRequestBudget(32);
+      const available = [...this.pending.entries()].filter(([, source]) =>
+        typeof source.url === "string"
+          ? this.batch!.remainingAttempts >= 4
+          : this.youtubeCalls.length < 12
+      );
+      const next =
+        available.find(
+          ([, source]) =>
+            (typeof source.url === "string" ? "mediathek" : "youtube") !== this.lastFamily
+        ) ?? available[0];
+      if (!next) {
+        const deadlines = [...this.pending.values()].map((source) =>
+          typeof source.url === "string"
+            ? this.batch!.deadlineAt
+            : (this.youtubeCalls[0] ?? now) + 60000
+        );
+        await this.wait(Math.max(1, Math.min(...deadlines) - now));
+        continue;
       }
-      for (let window = 0; window < 4; window++) this.batch.takeAttempt();
-      const next = this.pending.entries().next().value;
-      if (!next) break;
       const [id, source] = next;
       this.pending.delete(id);
-      if (source.expiresAt <= Date.now() || (!source.refresh && this.get(source.url))) continue;
+      if (source.expiresAt <= now || (!source.refresh && this.get(source.url))) continue;
+      this.lastFamily = typeof source.url === "string" ? "mediathek" : "youtube";
+      if (typeof source.url === "string")
+        for (let window = 0; window < 4; window++) this.batch.takeAttempt();
+      else this.youtubeCalls.push(now);
       const controller = new AbortController();
-      this.active = { key: id, controller };
+      this.active = { key: id, controller, source: source.url };
       try {
-        let fingerprint: string | undefined;
-        const facts = await probeMp4MediaFacts(
-          source.url,
-          new HttpRequestBudget(4),
-          true,
-          (value) => {
-            fingerprint = value;
-          },
-          controller.signal
-        );
-        if (epoch === this.epoch) this.remember(source.url, { facts, fingerprint });
+        let result: CheckedFacts;
+        if (typeof source.url === "string") {
+          let fingerprint: string | undefined;
+          const facts = await probeMp4MediaFacts(
+            source.url,
+            new HttpRequestBudget(4),
+            true,
+            (value) => {
+              fingerprint = value;
+            },
+            controller.signal
+          );
+          result = { facts, fingerprint };
+        } else {
+          const { assertCurrentYoutubeDiscovery } = await import("./youtube-bindings");
+          await assertCurrentYoutubeDiscovery(source.url);
+          controller.signal.throwIfAborted();
+          const resolved = await resolveYoutubeMedia(source.url, controller.signal);
+          const sourceRef: YoutubeSourceReference = {
+            ...source.url,
+            selection: resolved.selection,
+          };
+          result = {
+            facts: {
+              audioLanguage: resolved.selection.language,
+              videoDimensions: {
+                width: resolved.selection.width,
+                height: resolved.selection.height,
+              },
+            },
+            fingerprint: youtubeMediaIdentity(sourceRef),
+            sourceRef,
+          };
+        }
+        controller.signal.throwIfAborted();
+        if (epoch === this.epoch) this.remember(source.url, result);
       } catch {
         // No raw exception, URL or credential enters logs or a cached proof.
         // An unavailable source is not retried automatically by this worker.
@@ -218,11 +323,35 @@ export class SourceMediaFactsStore {
           this.cooldown.set(id, Date.now() + 30_000);
           const held = this.retained.get(id);
           if (held) held.blocked = true;
-          for (const listener of this.listeners) listener(source.url);
+          for (const listener of this.listeners) listener(structuredClone(source.url));
         }
       } finally {
         this.active = undefined;
       }
+    }
+  }
+
+  /** Source-policy edits stop unaccepted discovery only, preserving Mediathek work and accepted jobs. */
+  invalidateYoutube(): void {
+    this.revision++;
+    for (const [id, value] of this.facts) if (value.sourceRef) this.facts.delete(id);
+    for (const [id, value] of this.pending)
+      if (typeof value.url !== "string") this.pending.delete(id);
+    for (const [id, value] of this.retained)
+      if (typeof value.url !== "string") this.retained.delete(id);
+    if (this.active && typeof this.active.source !== "string") this.active.controller.abort();
+    if (!this.retained.size && this.retentionTimer) {
+      clearTimeout(this.retentionTimer);
+      this.retentionTimer = undefined;
+    }
+    if (!this.pending.size && this.startTimer) {
+      clearTimeout(this.startTimer);
+      this.startTimer = undefined;
+    }
+    if (this.pause) {
+      clearTimeout(this.pause.timer);
+      this.pause.resume();
+      this.pause = undefined;
     }
   }
 

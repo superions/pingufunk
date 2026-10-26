@@ -1,6 +1,7 @@
 import type { ApiResultItem } from "@/types";
 import type { ProviderContentItem } from "@/types/provider";
 import { catalogueMetadata } from "@/lib/catalogue-metadata";
+import { parseYoutubeSource } from "@/lib/youtube-source";
 
 /** Internal adapter only: the raw catalogue boundary never accepts these proof fields. */
 export function providerItemToApiResult(item: ProviderContentItem): ApiResultItem {
@@ -21,11 +22,13 @@ export function providerItemToApiResult(item: ProviderContentItem): ApiResultIte
     url_video_low: item.videoUrls.low || "",
     ...(item.providerId === "mediathekview" ||
     item.providerId === "orf" ||
-    item.providerId === "srf"
+    item.providerId === "srf" ||
+    item.providerId === "youtube"
       ? { sourceProviderId: item.providerId }
       : {}),
     ...(item.sourceAudioEvidence ? { sourceAudioEvidence: item.sourceAudioEvidence } : {}),
     ...(item.sourceVideoDimensions ? { sourceVideoDimensions: item.sourceVideoDimensions } : {}),
+    ...(item.sourceRef ? { sourceRef: parseYoutubeSource(item.sourceRef) } : {}),
   };
 }
 
@@ -56,5 +59,6 @@ export function apiResultToProviderItem(
     },
     ...(item.sourceAudioEvidence ? { sourceAudioEvidence: item.sourceAudioEvidence } : {}),
     ...(item.sourceVideoDimensions ? { sourceVideoDimensions: item.sourceVideoDimensions } : {}),
+    ...(item.sourceRef ? { sourceRef: parseYoutubeSource(item.sourceRef) } : {}),
   };
 }

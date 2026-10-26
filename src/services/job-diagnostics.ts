@@ -15,7 +15,7 @@ import { diagnoseArrImport } from "./arr-import-diagnostics";
 
 const checkSchema = jobDiagnosisSchema.shape.checks;
 const factsSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
   durationSeconds: z.number().finite().positive(),
   video: z
     .array(z.object({ width: z.number().int().positive(), height: z.number().int().positive() }))

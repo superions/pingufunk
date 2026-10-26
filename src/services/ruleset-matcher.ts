@@ -14,6 +14,7 @@ import {
 } from "./rulesets";
 import { shouldSkipItem } from "./mediathek-release";
 import { recordDecision } from "@/server/decision-diagnostics";
+import { matchBoundSourceEpisode } from "./source-programme";
 import type {
   ApiResultItem,
   TvdbData,
@@ -422,6 +423,7 @@ export async function applyRulesetFilters(
     }
     if (
       !foundRulesetForTvdbId &&
+      results.some((item) => !item.sourceRef) &&
       !tvdbData.episodes.some((episode) => episode.metadataSource === "sonarr")
     ) {
       console.log(
@@ -443,6 +445,32 @@ export async function applyRulesetFilters(
 
   let checkedCount = 0;
   for (const item of results) {
+    if (item.sourceRef) {
+      const binding = item.sourceRef.programme;
+      const target =
+        tvdbData ??
+        (binding.kind === "series"
+          ? await getBaseShowInfoByTvdbId(binding.targetId, budget)
+          : null);
+      const match = target
+        ? matchBoundSourceEpisode(
+            item,
+            target,
+            minDuration,
+            Number(
+              configuredSetting(
+                "matching.sonarr.tolerancePercent",
+                await getSetting("matching.sonarr.tolerancePercent")
+              )
+            ),
+            true
+          )
+        : null;
+      if (match && (tvdbId === null || match.tvdbId === tvdbId)) matchedEpisodes.push(match);
+      const index = unmatchedItems.indexOf(item);
+      if (index >= 0) unmatchedItems.splice(index, 1);
+      continue;
+    }
     if (shouldSkipItem(item, minDuration, hlsEnabled)) {
       const idx = unmatchedItems.indexOf(item);
       if (idx > -1) unmatchedItems.splice(idx, 1);

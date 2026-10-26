@@ -52,13 +52,16 @@ it("requires real regular owned file and exact persisted size, returns no privat
   row.size = BigInt(10);
   expect((await getJobDiagnosis(String(row.id)))?.file).toBe("unsafe");
 });
-it.each([1, 2, 3])("reads completed media facts v%s without rewriting the job", async (version) => {
-  row.mediaValidation = JSON.stringify({ ...JSON.parse(String(row.mediaValidation)), version });
-  expect((await getJobDiagnosis(String(row.id)))?.file).toBe("verified_present");
-  expect(JSON.parse(String(row.mediaValidation)).version).toBe(version);
-});
+it.each([1, 2, 3, 4, 5])(
+  "reads completed media facts v%s without rewriting the job",
+  async (version) => {
+    row.mediaValidation = JSON.stringify({ ...JSON.parse(String(row.mediaValidation)), version });
+    expect((await getJobDiagnosis(String(row.id)))?.file).toBe("verified_present");
+    expect(JSON.parse(String(row.mediaValidation)).version).toBe(version);
+  }
+);
 it("unknown future media fact versions cannot become a verified file", async () => {
-  row.mediaValidation = JSON.stringify({ ...JSON.parse(String(row.mediaValidation)), version: 4 });
+  row.mediaValidation = JSON.stringify({ ...JSON.parse(String(row.mediaValidation)), version: 99 });
   expect((await getJobDiagnosis(String(row.id)))?.file).toBe("unverified");
 });
 it("missing after a native move is independent from an associated API import", async () => {

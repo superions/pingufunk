@@ -303,6 +303,8 @@ export function buildReleaseGuid(
     releaseIdentity,
   ]);
   const fingerprint = createHash("sha256").update(identity).digest("hex").slice(0, 20);
+  if (item.sourceRef)
+    return `pingufunk:youtube:${item.sourceRef.videoId}:${quality}:${fingerprint}`;
   const permalink = stableUrlIdentity(item.url_website || item.url_video);
   return `${permalink}#${quality}-${fingerprint}`;
 }

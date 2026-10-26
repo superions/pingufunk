@@ -136,8 +136,14 @@ export function validateMediaProbe(
     }
     const references = durationExpectations(contract, tolerancePercent);
     if (
+      (contract?.version === 5 || (contract?.version === 4 && contract.sourceRef)) &&
+      (video.length !== 1 || audio.length !== 1)
+    )
+      throw new MediaProbeError("media_invalid", "conflicting");
+    if (
       (contract?.version !== 3 &&
         contract?.version !== 4 &&
+        contract?.version !== 5 &&
         !verifiedDurationCheck(durationSeconds, null, 0, tolerancePercent).accepted) ||
       references.some(
         (reference) =>
@@ -189,7 +195,7 @@ export function validateMediaProbe(
       video,
       audioLanguages,
       ...(providerExpectation ? { sourceAudioEvidence } : {}),
-      ...(contract?.version === 3
+      ...(contract?.version === 3 || contract?.version === 5
         ? {
             durationChecks: references.map((reference) => ({
               ...reference,

@@ -3525,3 +3525,44 @@ Regel her. Browserkonsole ohne Warnung/Fehler, unabhängiger DB-Readback null Jo
 Screenshots bleiben unter dem ignorierten Testverzeichnis, keine echten
 YouTube-Antworten oder Medien. Dieses synthetische 97/97 ist ausdrücklich vom
 öffentlichen Abgleich 93/97 getrennt. Terminale PG-/CI-Abnahme bleibt ausstehend.
+
+P17.3-Abschluss: `c2ae58d`, CI 40254793646 einschließlich PG17/18 und native
+Containerkette 40254793648 terminal erfolgreich. Die zuvor offenen CI-Gates
+sind damit erfüllt; P17.3 abgenommen. Keine Mainintegration von P17.3 behauptet.
+
+## P17.4 — gemeinsamer Such-/Transferconsumer, Zwischenstand (26.10.2026)
+
+Quellenadapter, striktes v5-Protokoll und bestehende interne v4-Ausnahme sind
+verbunden. Mediathek-Slots bleiben für YouTube leer; die GUI bekommt weiter
+servererzeugte NZBs. Es gibt einen Belegworker mit fairer Aufnahme beider
+Quellen und zwölf YouTube-Detailprozessen je Minute. Getrennte Video-/Audio-
+auswahl wird vor Transfer frisch geprüft und durch gemeinsame Transfer-/Mux-/
+ffprobe-Owner geführt. Kein Schema, zweiter Worker, Runtimeinstaller oder
+Produktivwrite. P17.4/P17.5 sind noch nicht abgenommen.
+
+Reviewfunde und Korrekturen: FFmpeg-Eagerimport auf den tatsächlichen Transfer
+verschoben; Altpfad behält seine Lazy-Invariante. Verfügbarkeit der optionalen
+Zusatzquelle vom Erfolg der erforderlichen Basis getrennt; echte leere
+Basis bleibt gültig, fehlgeschlagene YouTube-Ergebnisse werden nicht leer
+gecacht. Kanonischer Bindinghash ignoriert veränderliche Sonarr-Datei- und
+Monitoringzustände, bewahrt echte Metadatenkonflikte. Disable prüft Discovery
+unmittelbar vor Childstart und stoppt unangenommene Vorarbeit. Frisch gescheiterte
+Quellen verwenden keinen früheren positiven Beleg. Typisierte Quellen werden
+beim Speichern kopiert und können keine fremde Audio-/Pixelquelle als Beleg
+spenden. V1-Discovery bleibt MP4-only, typisierter Bestand hat eigenes v2.
+
+Neue Aufnahme prüft aktuelle private Configwerte und sperrt sie bedingt im
+Jobcommit. Die bestehende Intentquittung wird vor erneuter Admission gelesen:
+identischer akzeptierter Auftrag bleibt auch nach Policyänderung quittierbar.
+SQLite-Insertion nutzt dafür die bestehende Serialisierung statt BUSY-Retries.
+Reale disposable SQLite-Barriereprobe: Policyänderung vor Insert erzeugt weder
+Job noch Quittung; angenommener Payload bleibt nach Disable, Neustart und
+bewusstem synthetischem Retry unverändert. PG17/18 ist in denselben Gate geroutet.
+
+Vor diesen letzten Guard-/Registry-/Berichtsnachträgen waren 1.603 Tests grün,
+26 bedingt übersprungen; vorherige vier breite Befunde wurden korrigiert
+(Lazyimport, neue bekannte Receiptversionen, additive Coverage). Letzte
+fokussierte Transfer-/Resolver-/Beleg-/Registry-/Berichtstests grün. Für den
+kohärenten neuen Kopf folgen erneut passende Gates, Desktopjourney und die
+neuen nativen SQLite-/PG-Arr-Ketten direkt sowie über Prowlarr. Keine Wieder-
+verwendung der alten grünen Matrix als Nachweis geänderter Runtimeinputs.

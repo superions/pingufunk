@@ -8,6 +8,15 @@ const sourceSchema = z
     sourceCoordinates: z.object({ season: coordinate, episode: coordinate }).strict().optional(),
     mappingRevision: z.string().regex(/^[a-f0-9]{64}$/),
     availability: z.enum(["listed", "unavailable"]),
+    media: z
+      .object({
+        language: z.literal("de"),
+        width: coordinate.max(65536),
+        height: coordinate.max(65536),
+        duration: z.number().finite().positive().max(86400),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export const youtubeReportSchema = z
@@ -28,7 +37,7 @@ export const youtubeReportSchema = z
     indexAt: z.number().int().positive().nullable(),
     indexCurrent: z.boolean(),
     order: z.literal("aired").nullable(),
-    mediaReady: z.literal(false),
+    mediaReady: z.boolean(),
     page: z.number().int().min(0).max(999),
     rowCount: z.number().int().min(0).max(100000),
     extraCount: z.number().int().min(0).max(1000),

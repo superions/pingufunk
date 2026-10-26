@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { verifiedDurationCheck } from "./verified-duration";
+import {
+  youtubeSelectionSchema,
+  youtubeSourceReferenceSchema,
+  youtubeRenditionFingerprint,
+} from "./youtube-source";
 
 const durationSchema = z
   .object({
@@ -48,13 +53,25 @@ const ardAudioSchema = arteAudioSchema
     videoId: z.string().regex(/^[A-Za-z0-9_-]{16,2048}$/),
   })
   .strict();
+const youtubeAudioSchema = z
+  .object({
+    provider: z.literal("youtube"),
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+    channelId: z.string().regex(/^UC[A-Za-z0-9_-]{22}$/),
+    mediaIdentity: z.string().regex(/^[a-f0-9]{64}$/),
+    language: z.literal("de"),
+    selection: youtubeSelectionSchema,
+  })
+  .strict();
 export const sourceAudioSchema = z.discriminatedUnion("provider", [
   arteAudioSchema,
   ardAudioSchema,
+  youtubeAudioSchema,
 ]);
 const v2Schema = v1Schema
   .extend({ version: z.literal(2), audio: z.null(), sourceAudio: sourceAudioSchema })
-  .strict();
+  .strict()
+  .refine((value) => value.sourceAudio.provider !== "youtube");
 const toleranceSchema = z.number().int().min(0).max(25);
 const v3Schema = z
   .object({
@@ -85,13 +102,42 @@ const v3Schema = z
       });
     if (value.audio && value.sourceAudio)
       context.addIssue({ code: "custom", message: "Provider evidence is not a container tag" });
+    if (value.sourceAudio?.provider === "youtube")
+      context.addIssue({ code: "custom", message: "Typed source requires its versioned contract" });
   });
-export type NewMediaExpectations = z.infer<typeof v3Schema>;
+const v5Schema = z
+  .object({
+    ...v3Schema.shape,
+    version: z.literal(5),
+    sourceRef: youtubeSourceReferenceSchema,
+    audio: z.null(),
+    sourceAudio: youtubeAudioSchema,
+    resolution: resolutionSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const source = value.sourceRef;
+    if (
+      value.mediaKind !== source.programme.kind ||
+      !value.durations.source ||
+      Math.abs(value.durations.source.seconds - source.selection.duration) > 5 ||
+      value.resolution.width !== source.selection.width ||
+      value.resolution.height !== source.selection.height ||
+      value.sourceAudio.videoId !== source.videoId ||
+      value.sourceAudio.channelId !== source.channelId ||
+      JSON.stringify(value.sourceAudio.selection) !== JSON.stringify(source.selection) ||
+      value.sourceAudio.language !== source.selection.language ||
+      value.sourceAudio.mediaIdentity !== youtubeRenditionFingerprint(source)
+    )
+      context.addIssue({ code: "custom", message: "Conflicting typed source expectations" });
+  });
+export type NewMediaExpectations = z.infer<typeof v3Schema> | z.infer<typeof v5Schema>;
 /** Internal-only job decision. It is never accepted from an NZB or SAB upload. */
 const v4Schema = z
   .object({
     ...v3Schema.shape,
     version: z.literal(4),
+    sourceRef: youtubeSourceReferenceSchema.optional(),
     approval: z
       .object({
         kind: z.literal("episode_runtime_once"),
@@ -109,6 +155,7 @@ const v4Schema = z
   .strict()
   .refine(
     (value) =>
+      !!value.sourceRef === (value.sourceAudio?.provider === "youtube") &&
       value.mediaKind === "series" &&
       !!value.durations.source &&
       !!value.durations.metadata &&
@@ -121,12 +168,36 @@ const v4Schema = z
         value.durations.metadata.tolerancePercent
       ).accepted,
     "Approval requires verified conflicting source facts"
-  );
+  )
+  .superRefine((value, context) => {
+    const source = value.sourceRef;
+    if (!source) return;
+    const audio = value.sourceAudio;
+    if (
+      source.programme.kind !== "series" ||
+      source.programme.targetId !== value.approval.tvdbId ||
+      source.programme.season !== value.approval.season ||
+      source.programme.episode !== value.approval.episode ||
+      audio?.provider !== "youtube" ||
+      audio.videoId !== source.videoId ||
+      audio.channelId !== source.channelId ||
+      audio.language !== source.selection.language ||
+      audio.mediaIdentity !== youtubeRenditionFingerprint(source) ||
+      JSON.stringify(audio.selection) !== JSON.stringify(source.selection) ||
+      value.audio !== null ||
+      value.resolution?.width !== source.selection.width ||
+      value.resolution?.height !== source.selection.height ||
+      !value.durations.source ||
+      Math.abs(value.durations.source.seconds - source.selection.duration) > 5
+    )
+      context.addIssue({ code: "custom", message: "Approval source binding conflicts" });
+  });
 export const mediaExpectationsSchema = z.discriminatedUnion("version", [
   v1Schema,
   v2Schema,
   v3Schema,
   v4Schema,
+  v5Schema,
 ]);
 export type SourceAudioEvidence = z.infer<typeof sourceAudioSchema>;
 export type MediaExpectations = z.infer<typeof mediaExpectationsSchema>;
@@ -135,7 +206,10 @@ export type LegacyMediaExpectations = Extract<MediaExpectations, { version: 1 | 
 export function sourceAudioExpectation(
   value: MediaExpectations | null
 ): SourceAudioEvidence | null {
-  return value?.version === 2 || value?.version === 3 || value?.version === 4
+  return value?.version === 2 ||
+    value?.version === 3 ||
+    value?.version === 4 ||
+    value?.version === 5
     ? value.sourceAudio
     : null;
 }
@@ -146,14 +220,14 @@ export function durationExpectations(value: MediaExpectations | null, legacyTole
   // exempted for this one job. Source duration is still enforced by the worker.
   return value?.version === 4
     ? [value.durations.source].filter((reference) => reference !== null)
-    : value?.version === 3
+    : value?.version === 3 || value?.version === 5
       ? [value.durations.source, value.durations.metadata].filter((reference) => reference !== null)
       : value?.duration
         ? [{ ...value.duration, tolerancePercent: legacyTolerance }]
         : [];
 }
 
-export function unknownJobMediaExpectations(): NewMediaExpectations {
+export function unknownJobMediaExpectations(): z.infer<typeof v3Schema> {
   return {
     version: 3,
     mediaKind: "unknown",
@@ -178,7 +252,7 @@ export class MediaRuntimeConflictError extends Error {
 
 /** A visible review candidate must not turn into a download through NZB/SAB. */
 export function hasMediaRuntimeConflict(value: MediaExpectations | null | undefined): boolean {
-  if (value?.version !== 3) return false;
+  if (value?.version !== 3 && value?.version !== 5) return false;
   const { source, metadata } = value.durations;
   return !!(
     source &&

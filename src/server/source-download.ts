@@ -1,6 +1,9 @@
 import path from "node:path";
 import * as fs from "node:fs/promises";
 import { mediathekDownloadAdapter } from "@/providers/mediathek/download";
+import { youtubeDownloadAdapter } from "@/providers/youtube/download";
+import { youtubeWatchUrl, rejectUntypedYoutubeUrl } from "@/lib/youtube-source";
+import type { MediaExpectations } from "@/lib/media-expectations";
 import { safeFileExtension } from "@/lib/download-paths";
 import { SourceDownloadError } from "./download-failure";
 import type {
@@ -13,7 +16,22 @@ import type {
 // Fixed composition, no runtime plugins or URL-based fallback to another source.
 const adapters: ReadonlyMap<string, SourceDownloadAdapter> = new Map([
   ["mediathek", mediathekDownloadAdapter],
+  ["youtube", youtubeDownloadAdapter],
 ]);
+
+/** Legacy jobs keep their exact source; typed jobs never infer a backend from a URL. */
+export function downloadSource(
+  url: string,
+  expectations: MediaExpectations | null
+): SourceDownloadReference {
+  const source = expectations && "sourceRef" in expectations ? expectations.sourceRef : undefined;
+  if (!source) {
+    rejectUntypedYoutubeUrl(url);
+    return { family: "mediathek", url };
+  }
+  if (url !== youtubeWatchUrl(source)) throw new SourceDownloadError("Source reference mismatch");
+  return source;
+}
 
 /** Dispatch by explicit source family and verify the returned staging ownership before postprocessing. */
 export async function transferSource(
