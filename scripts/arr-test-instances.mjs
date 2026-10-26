@@ -1142,11 +1142,12 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
     }
     if (!ready) throw new Error("Owned media controller readiness failed");
   }
-  await api(root, manifest, "pingufunk", "/api/settings", {
-    "matching.minDuration": "0",
-    "download.quality": "all",
-    "download.convertToMkv": "false",
-  });
+  if (!manifest.youtube)
+    await api(root, manifest, "pingufunk", "/api/settings", {
+      "matching.minDuration": "0",
+      "download.quality": "all",
+      "download.convertToMkv": "false",
+    });
   const models = await api(root, manifest, app, "/api/v3/downloadclient/schema");
   const client = models.find((row) => row.implementation === "Sabnzbd");
   if (!client) throw new Error("Owned SAB schema missing");

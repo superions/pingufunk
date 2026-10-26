@@ -19,6 +19,7 @@ function validSource(source: MediaFactsSource): boolean {
 }
 export interface CheckedFacts {
   sourceRef?: YoutubeSourceReference;
+  renditions?: YoutubeSourceReference[];
   facts: Mp4MediaFacts;
   fingerprint?: string;
 }
@@ -82,6 +83,7 @@ export class SourceMediaFactsStore {
       facts: result.facts,
       fingerprint: result.fingerprint,
       ...(result.sourceRef ? { sourceRef: result.sourceRef } : {}),
+      ...(result.renditions ? { renditions: result.renditions } : {}),
     });
   }
 
@@ -96,6 +98,22 @@ export class SourceMediaFactsStore {
         result.facts.audioLanguage !== source.data.selection.language ||
         result.facts.videoDimensions?.width !== source.data.selection.width ||
         result.facts.videoDimensions?.height !== source.data.selection.height
+      )
+        return;
+      if (
+        result.renditions &&
+        (result.renditions.length > 5 ||
+          result.renditions.some((value) => {
+            const parsed = youtubeSourceReferenceSchema.safeParse(value);
+            return (
+              !parsed.success ||
+              key(parsed.data) !== key(url) ||
+              parsed.data.selection.audioFormat !== source.data.selection.audioFormat ||
+              parsed.data.selection.audioTrack !== source.data.selection.audioTrack ||
+              parsed.data.selection.language !== source.data.selection.language ||
+              Math.abs(parsed.data.selection.duration - source.data.selection.duration) > 5
+            );
+          }))
       )
         return;
     }
@@ -312,6 +330,14 @@ export class SourceMediaFactsStore {
             },
             fingerprint: youtubeMediaIdentity(sourceRef),
             sourceRef,
+            ...(resolved.selections
+              ? {
+                  renditions: resolved.selections.map((selection) => ({
+                    ...(source.url as YoutubeSourceIdentity),
+                    selection,
+                  })),
+                }
+              : {}),
           };
         }
         controller.signal.throwIfAborted();

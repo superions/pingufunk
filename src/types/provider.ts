@@ -48,6 +48,7 @@ export interface ProviderContentItem {
   sourceAudioEvidence?: import("@/types").ApiResultItem["sourceAudioEvidence"];
   sourceVideoDimensions?: import("@/types").ApiResultItem["sourceVideoDimensions"];
   sourceRef?: import("@/types").ApiResultItem["sourceRef"];
+  sourceRenditions?: import("@/types").ApiResultItem["sourceRenditions"];
   /** URL to the website page for this content */
   websiteUrl: string;
   /** Available video URLs by quality */

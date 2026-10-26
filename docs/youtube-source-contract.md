@@ -595,13 +595,19 @@ Worker; kein YouTube-Downloadzweig in der GUI und kein zweiter Worker.
 | `sourceProviderId=youtube` | Expliziter Quellenowner; alte drei Provider-IDs bleiben unverändert.                                                                                                                                                |
 | `sourceRef` v1             | Video-/Kanal-/Playlistidentität, kanonische Programmkoordinaten, Originaltitel und Mappingrevision. Nach Beleg zusätzlich exakte Video-/Audioformat- und Trackidentität, Sprache, Pixel und Laufzeit.               |
 | `url_website`              | Watch-URL der Video-ID. Alle drei Mediathek-Byte-Slots bleiben leer. Unversionierte YouTube-URLs gelangen nicht zum alten Dateiadapter.                                                                             |
+| `sourceRenditions` intern  | Höchstens fünf belegte Auflösungen derselben Video-/Programm-/Audioidentität aus genau einem Extraktorabruf; ohne CDN-Adressen und nie als Variantenliste im persistierten Job.                                     |
 | Medienvertrag v5           | Neue NZB-/SAB-/Jobdeklaration mit derselben typisierten Auswahl, unabhängigen Laufzeitreferenzen und Quellen-Audiobeleg. Kein Downgrade zu v1–v3 bei beschädigten Feldern.                                          |
 | Interne v4-Freigabe        | Bleibt ausschließlich die bestehende einmalige Laufzeitausnahme. Optionale typisierte Bindung muss exakt zu Freigabe, Pixeln, Dauer und Audiobeleg passen; automatische NZB-Aufnahme akzeptiert v4 weiterhin nicht. |
 | `internal.tv-delivery.v2`  | Derselbe begrenzte Discoveryowner mit typisierten Quellen. Ein unveränderter alter v1-MP4-Bestand kann übernommen werden; v1 wird nicht nachträglich als YouTube-Vertrag interpretiert oder überschrieben.          |
 | Aufnahmebedingungen        | Private gelesene Register-/Enabled-/Indexwerte werden durch bedingte No-op-Updates bis zum Jobcommit gesperrt. Keine zusätzlichen öffentlichen Payloads oder DDL.                                                   |
 
 Der Resolver ist für Belege und Transfer identisch. V1 wählt eine konkret
-belegte deutsche Standard-Audiospur und eine unterstützte getrennte Videospur;
+belegte deutsche Standard-Audiospur und belegt je unterstützter gemessener
+Auflösung genau ein Videoformat. Derselbe begrenzte Abruf liefert beispielsweise
+1080p und 720p; eine Einstellung „nur 720p“ darf nicht am höchsten Format
+scheitern. Der gemeinsame Renditionowner bindet jede RSS-/UI-NZB an ihre
+eigene Auswahl, Pixel und Audioidentität. Der Job enthält genau diese eine
+Version, keine Alternativenliste. Fehlende Qualitäten werden nicht ersetzt;
 fehlende/unklare Sprache wird nicht Deutsch. Tatsächliche Format-IDs und Track
 bleiben erhalten. Ein angenommener Job darf später nur exakt diese Auswahl
 frisch auflösen; geänderte Signaturen sind zulässig, fremder Uploader, andere
@@ -670,3 +676,9 @@ Das tatsächliche OCI-Image wird zusätzlich offline auf gepinntes yt-dlp,
 gebündeltes EJS und ausdrücklich ausgewähltes Node 24 geprüft. Ein absichtlich
 nicht unterstützter Input ohne verwendbaren Extraktor prüft die Toolfähigkeit,
 keine öffentliche Quelle. Der separate reale Downloadnachweis bleibt P17.6.
+
+Der typisierte Journalvertrag erlaubt höchstens zehn Veröffentlichungsidentitäten
+pro YouTube-Eintrag (fünf gemessene Auflösungen, jeweils reguläre/Jahresform).
+Der alte MP4-Vertrag bleibt bei sechs. Ein Video erzeugt weiterhin genau einen
+Discoveryeintrag und einen Detailprozess; 128 Einträge, 2 MiB, zwei Stunden
+Retention und alle globalen RSS-Fenster-/Versuchsgrenzen bleiben unverändert.

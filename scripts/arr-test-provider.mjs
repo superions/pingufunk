@@ -26,10 +26,15 @@ globalThis.fetch = async (input, init) => {
       stream = url.searchParams.get("stream");
     if (!/^\d{11}$/.test(id ?? "") || !["video", "audio"].includes(stream))
       throw Error("Owned YouTube selector required");
-    const file = readFileSync(`/qa/youtube-${stream}.${stream === "video" ? "mp4" : "m4a"}`);
+    const format = url.searchParams.get("format");
+    if (!(stream === "video" ? ["136", "137"].includes(format) : format === "140"))
+      throw Error("Owned YouTube format required");
+    const file = readFileSync(
+      `/qa/youtube-${stream}${format === "136" ? "-720" : ""}.${stream === "video" ? "mp4" : "m4a"}`
+    );
     appendFileSync(
       "/qa/youtube-transfers.jsonl",
-      JSON.stringify({ id, stream, sig: url.searchParams.get("sig") }) + "\n"
+      JSON.stringify({ id, stream, format, sig: url.searchParams.get("sig") }) + "\n"
     );
     return new Response(file, {
       headers: {

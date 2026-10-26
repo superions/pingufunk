@@ -1,5 +1,5 @@
 import type { ApiResultItem, UiNzbDownloads, TvdbEpisode } from "@/types";
-import { selectRenditions } from "./rendition-quality";
+import { selectRenditions, itemForRendition } from "./rendition-quality";
 import { mediaSourceIdentity } from "./source-audio";
 import { generateFakeNzb } from "./nzb-release";
 import { releaseMediaExpectations } from "./release-media-expectations";
@@ -50,16 +50,18 @@ export function createUiNzbDownloads(
     const { url } = rendition;
     const key =
       rendition.field === "url_video_hd" ? "hd" : rendition.field === "url_video" ? "sd" : "low";
+    if (downloads[key]) continue;
+    const selected = itemForRendition(item, rendition);
     downloads[key] = generateFakeNzb({
       title,
       url,
       mediaExpectations: releaseMediaExpectations(
         // A proof for one rendition must not become an expectation for another.
-        item.sourceAudioEvidence &&
-          item.sourceAudioEvidence.mediaIdentity !==
+        selected.sourceAudioEvidence &&
+          selected.sourceAudioEvidence.mediaIdentity !==
             mediaSourceIdentity(url, "sourceRef" in rendition ? rendition.sourceRef : undefined)
-          ? { ...item, sourceAudioEvidence: undefined, audioLanguage: undefined }
-          : item,
+          ? { ...selected, sourceAudioEvidence: undefined, audioLanguage: undefined }
+          : selected,
         episode?.runtime ?? null,
         url,
         episode ? "series" : "unknown"

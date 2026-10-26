@@ -105,11 +105,19 @@ it("retains typed source identity and selected audio through both adapters while
     url_video_low: "",
     sourceProviderId: "youtube",
     sourceRef: source,
+    sourceRenditions: [source],
     sourceAudioEvidence: syntheticYoutubeExpectations().sourceAudio,
   };
   const provider = apiResultToProviderItem(item, "youtube");
   const restored = providerItemToApiResult(provider);
   expect(restored.sourceRef).toEqual(source);
+  expect(restored.sourceRenditions).toEqual([source]);
+  expect(() =>
+    apiResultToProviderItem({ ...item, sourceRenditions: Array(6).fill(source) }, "youtube")
+  ).toThrow();
+  expect(() =>
+    providerItemToApiResult({ ...provider, sourceRenditions: Array(6).fill(source) })
+  ).toThrow();
   expect(restored.sourceAudioEvidence).toEqual(item.sourceAudioEvidence);
   expect(restored.sourceProviderId).toBe("youtube");
   expect([restored.url_video, restored.url_video_hd, restored.url_video_low]).toEqual(["", "", ""]);

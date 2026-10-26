@@ -122,3 +122,32 @@ it("finishes and keeps all 97 retained canonical targets warm across a regular R
   const calls = state.resolve.mock.calls.map((call) => call[1] as AbortSignal);
   expect(calls.every((signal) => !signal.aborted)).toBe(true);
 });
+
+it("owns every cached rendition and rejects a foreign programme or audio-track donor", async () => {
+  const { youtubeRenditionFingerprint } = await import("@/lib/youtube-source");
+  const ref = { ...source(), selection };
+  const lower = {
+    ...ref,
+    selection: { ...selection, videoFormat: "136", width: 1280, height: 720 },
+  };
+  const result = {
+    sourceRef: ref,
+    fingerprint: youtubeRenditionFingerprint(ref),
+    facts: { audioLanguage: "de", videoDimensions: { width: 1920, height: 1080 } },
+    renditions: [ref, lower],
+  };
+  store.remember(source(), {
+    ...result,
+    renditions: [{ ...lower, programme: { kind: "series", targetId: 43, season: 1, episode: 1 } }],
+  });
+  expect(store.get(source())).toBeUndefined();
+  store.remember(source(), {
+    ...result,
+    renditions: [{ ...lower, selection: { ...lower.selection, audioTrack: "foreign" } }],
+  });
+  expect(store.get(source())).toBeUndefined();
+  store.remember(source(), result);
+  const copy = store.get(source())!;
+  copy.renditions![1].selection.height = 480;
+  expect(store.get(source())?.renditions?.[1].selection.height).toBe(720);
+});

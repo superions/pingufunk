@@ -2,7 +2,7 @@ import { PRODUCT_NAME } from "@/lib/brand";
 import { createHash } from "node:crypto";
 import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { Builder } from "xml2js";
-import { selectRenditions, type QualityPreference } from "./rendition-quality";
+import { selectRenditions, itemForRendition, type QualityPreference } from "./rendition-quality";
 export type { QualityPreference } from "./rendition-quality";
 import type {
   NewznabRss,
@@ -456,7 +456,7 @@ export function generateRssItems(
     const movieCategory = qualityCategory(rendition.quality, true, []);
     items.push(
       ...createRssItems(
-        info,
+        { ...info, item: itemForRendition(info.item, rendition) },
         rendition.quality,
         rendition.multiplier,
         category.category,
@@ -562,7 +562,7 @@ export function generateMovieRssItems(
     const category = qualityCategory(rendition.quality, true, baseCategories);
     items.push(
       createMovieRssItem(
-        item,
+        itemForRendition(item, rendition),
         movieData,
         rendition.quality,
         rendition.multiplier,
@@ -607,7 +607,7 @@ export function generateGenericRssItems(
     const category = qualityCategory(rendition.quality, movie, baseCategories);
     items.push(
       createGenericRssItem(
-        item,
+        itemForRendition(item, rendition),
         rendition.quality,
         rendition.multiplier,
         category.category,

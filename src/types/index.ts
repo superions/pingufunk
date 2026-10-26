@@ -78,6 +78,8 @@ export interface ApiResultItem {
   sourceRef?:
     | import("@/lib/youtube-source").YoutubeSourceIdentity
     | import("@/lib/youtube-source").YoutubeSourceReference;
+  /** At most five server-proven resolutions; a job transports one sourceRef only. */
+  sourceRenditions?: import("@/lib/youtube-source").YoutubeSourceReference[];
 }
 
 // TVDB Types

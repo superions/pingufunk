@@ -209,6 +209,7 @@ export async function enrichSourceAudio(
         renditions.push({
           ...item,
           sourceRef: ref,
+          ...(proof.renditions ? { sourceRenditions: proof.renditions } : {}),
           duration: ref.selection.duration,
           audioLanguage: ref.selection.language,
           sourceAssetFingerprint: proof.fingerprint,

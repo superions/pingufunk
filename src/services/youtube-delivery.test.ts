@@ -310,3 +310,98 @@ it("carries an explicitly mapped film through the same search, strict movie matc
   );
   await expect(validateReleaseSource(nzb.url, nzb.mediaExpectations)).rejects.toThrow();
 });
+
+it("keeps declared 720p selectable beside 1080p from one detail call and binds every RSS/UI NZB to its own exact format", async () => {
+  const lower = { ...selection, videoFormat: "136", width: 1280, height: 720 };
+  state.resolve.mockResolvedValue({
+    selection,
+    selections: [selection, lower],
+    videoUrl: "private",
+    audioUrl: "private",
+    size: 0,
+  });
+  await queryContentWindow(query, 100, { arteSeries: state.show!, deferLanguageSelection: true });
+  await vi.advanceTimersByTimeAsync(30);
+  await sourceMediaFacts.idle();
+  const [item] = (
+    await queryContentWindow(query, 100, { arteSeries: state.show!, deferLanguageSelection: true })
+  ).items;
+  const match = matchBoundSourceEpisode(item, state.show!, 0, 10)!;
+  expect(generateRssItems(match, "all", false)).toHaveLength(2);
+  const release = generateRssItems(match, "720p", false);
+  expect(release).toHaveLength(1);
+  expect(release[0].title).toContain(".720p.");
+  expect(generateRssItems(match, "480p", false)).toEqual([]);
+  const downloads = createUiNzbDownloads(item, false, match.episode);
+  const hd = parseNzbContent(downloads.hd!)!,
+    sd = parseNzbContent(downloads.sd!)!;
+  expect(hd.mediaExpectations).toMatchObject({
+    version: 5,
+    resolution: { width: 1920, height: 1080 },
+    sourceRef: { selection: { videoFormat: "137" } },
+  });
+  expect(sd.mediaExpectations).toMatchObject({
+    version: 5,
+    resolution: { width: 1280, height: 720 },
+    sourceRef: { selection: { videoFormat: "136" } },
+    sourceAudio: { selection: { videoFormat: "136" } },
+  });
+  await expect(validateReleaseSource(sd.url, sd.mediaExpectations)).resolves.toBeUndefined();
+  const rssUrl = new URL(release[0].enclosure.url, "http://localhost");
+  expect(
+    JSON.parse(Buffer.from(rssUrl.searchParams.get("encodedExpectations")!, "base64").toString())
+  ).toEqual(sd.mediaExpectations);
+  expect(downloadSource(sd.url, sd.mediaExpectations!)).toMatchObject({
+    selection: { videoFormat: "136", height: 720 },
+  });
+  expect(state.resolve).toHaveBeenCalledTimes(1);
+});
+
+it("journals five measured resolutions with both yearly release forms within the typed entry bound, without adding discovery entries or extractor calls", async () => {
+  state.show!.episodes[0].seasonNumber = 2024;
+  state.show!.episodes[0].aired = new Date("2024-01-01");
+  state.show!.sonarrMonitoredCoordinates = ["2024:13"];
+  const selections = [2160, 1080, 720, 576, 480].map((height) => ({
+    ...selection,
+    height,
+    width: height === 2160 ? 3840 : height === 1080 ? 1920 : height === 720 ? 1280 : 854,
+    videoFormat: "video-" + height,
+  }));
+  state.resolve.mockResolvedValue({
+    selection: selections[0],
+    selections,
+    videoUrl: "private",
+    audioUrl: "private",
+    size: 0,
+  });
+  await queryContentWindow(query, 100, { arteSeries: state.show!, deferLanguageSelection: true });
+  await vi.advanceTimersByTimeAsync(30);
+  await sourceMediaFacts.idle();
+  const [item] = (
+    await queryContentWindow(query, 100, { arteSeries: state.show!, deferLanguageSelection: true })
+  ).items;
+  const match = matchBoundSourceEpisode(item, state.show!, 0, 10)!;
+  const releases = generateRssItems(match, "all", false);
+  expect(releases).toHaveLength(10);
+  let persisted: string | null = null;
+  journal = new TvSearchDeliveryJournal(
+    {
+      read: async () => persisted,
+      write: async (value) => {
+        persisted = value;
+      },
+    },
+    sourceMediaFacts
+  );
+  const scope = "b".repeat(64);
+  await journal.register(scope, state.show!, [match]);
+  const entries = await journal.current(scope);
+  expect(entries).toHaveLength(1);
+  const announcements = releases.map((row) => ({ entryId: entries[0].id, guid: row.guid.value }));
+  expect((await journal.announce(scope, announcements)).size).toBe(10);
+  expect((await journal.announce(scope, announcements)).size).toBe(10);
+  await expect(
+    journal.announce(scope, [{ entryId: entries[0].id, guid: "another-format" }])
+  ).rejects.toThrow();
+  expect(state.resolve).toHaveBeenCalledTimes(1);
+});

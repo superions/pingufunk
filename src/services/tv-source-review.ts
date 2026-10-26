@@ -24,7 +24,7 @@ import { generateTitle, formatTitle } from "./newznab";
 import { validateReleaseTitle } from "@/lib/download-paths";
 import { triggerDownloadProcessing } from "./download";
 import { EpisodeType, type ApiResultItem, type MatchedEpisodeInfo } from "@/types";
-import { selectRenditions, renditionUrl } from "./rendition-quality";
+import { selectRenditions, renditionUrl, itemForRendition } from "./rendition-quality";
 import { sourceMediaFacts, type MediaFactsSource } from "./source-media-facts";
 import { applySourceAdmission } from "@/lib/source-admission";
 
@@ -151,20 +151,22 @@ function summary(
       (key) => !!renditionUrl(info.item, fields[key])
     ),
     renditionLabels: Object.fromEntries(
-      selectRenditions(info.item, "all", false).flatMap((candidate) =>
-        candidate.quality === "UNKNOWN"
-          ? []
-          : [
-              [
-                candidate.field === "url_video_hd"
-                  ? "hd"
-                  : candidate.field === "url_video"
-                    ? "sd"
-                    : "low",
-                candidate.quality,
-              ],
-            ]
-      )
+      selectRenditions(info.item, "all", false)
+        .reverse()
+        .flatMap((candidate) =>
+          candidate.quality === "UNKNOWN"
+            ? []
+            : [
+                [
+                  candidate.field === "url_video_hd"
+                    ? "hd"
+                    : candidate.field === "url_video"
+                      ? "sd"
+                      : "low",
+                  candidate.quality,
+                ],
+              ]
+        )
     ),
   };
 }
@@ -226,7 +228,12 @@ async function prepare(selector: TvReviewSelector): Promise<PreparedSource> {
   if (!url) throw new TvSourceReviewError();
   // Probe only the selected rendition. Another slot cannot donate its proof.
   const selected = {
-    ...info.item,
+    ...itemForRendition(
+      info.item,
+      selectRenditions(info.item, "all", false).find(
+        (candidate) => candidate.field === fields[selector.rendition]
+      ) ?? { url }
+    ),
     url_video: "",
     url_video_hd: "",
     url_video_low: "",

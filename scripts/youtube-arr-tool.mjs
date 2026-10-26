@@ -47,8 +47,8 @@ if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
   writeFileSync(stats, JSON.stringify({ count: count + 1 }));
   await delay(1000);
   const expires = id === "00000000004" ? 1 : Math.floor(Date.now() / 1000) + 600;
-  const address = (stream) =>
-    `https://rr1.synthetic.googlevideo.com/videoplayback?expire=${expires}&id=${id}&stream=${stream}&sig=${count}`;
+  const address = (stream, format) =>
+    `https://rr1.synthetic.googlevideo.com/videoplayback?expire=${expires}&id=${id}&stream=${stream}&format=${format}&sig=${count}`;
   process.stdout.write(
     JSON.stringify({
       id,
@@ -60,7 +60,7 @@ if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
       formats: [
         {
           format_id: "137",
-          url: address("video"),
+          url: address("video", "137"),
           protocol: "https",
           vcodec: "avc1",
           acodec: "none",
@@ -68,8 +68,17 @@ if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
           height: 1080,
         },
         {
+          format_id: "136",
+          url: address("video", "136"),
+          protocol: "https",
+          vcodec: "avc1",
+          acodec: "none",
+          width: 1280,
+          height: 720,
+        },
+        {
           format_id: "140",
-          url: address("audio"),
+          url: address("audio", "140"),
           protocol: "https",
           vcodec: "none",
           acodec: "mp4a",

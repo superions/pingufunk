@@ -132,3 +132,16 @@ it.each([
   "https://rr1.googlevideo.com/redirect?expire=9999999999",
   "https://user:pass@rr1.googlevideo.com/videoplayback?expire=9999999999",
 ])("rejects noncanonical CDN selector %s", (url) => expect(() => youtubeCdnUrl(url)).toThrow());
+
+it("returns all measured resolutions from one reply while an accepted 720p job remains exactly 720p", async () => {
+  const result = await resolveYoutubeMedia(identity, signal);
+  expect(result.selections?.map((row) => [row.videoFormat, row.height])).toEqual([
+    ["137", 1080],
+    ["136", 720],
+  ]);
+  const low = result.selections!.find((row) => row.height === 720)!;
+  const transfer = await resolveYoutubeMedia(identity, signal, low);
+  expect(transfer.selection).toEqual(low);
+  expect(transfer.videoUrl).toContain("video-low");
+  expect(transfer).not.toHaveProperty("selections");
+});

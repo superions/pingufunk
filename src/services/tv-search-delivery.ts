@@ -69,7 +69,7 @@ const entrySchema = z
           })
           .strict()
       )
-      .max(6)
+      .max(10)
       .default([]),
   })
   .strict();
@@ -170,6 +170,7 @@ export class TvSearchDeliveryJournal {
             e.announcements.some((event) => event.at < e.createdAt || event.at >= e.expiresAt) ||
             new Set(e.announcements.map((event) => event.release)).size !==
               e.announcements.length ||
+            (!e.item.sourceRef && e.announcements.length > 6) ||
             fields.some((f) => e.item[f] && !isProbeableMp4(e.item[f])) ||
             (!!e.item.sourceRef &&
               (fields.some((field) => !!e.item[field]) ||
@@ -347,7 +348,8 @@ export class TvSearchDeliveryJournal {
         const release = createHash("sha256").update(guid).digest("hex");
         let event = entry.announcements.find((e) => e.release === release);
         if (!event) {
-          if (entry.announcements.length >= 6) throw new SonarrUnavailableError();
+          if (entry.announcements.length >= (entry.item.sourceRef ? 10 : 6))
+            throw new SonarrUnavailableError();
           event = { release, at: now };
           entry.announcements.push(event);
           changed = true;

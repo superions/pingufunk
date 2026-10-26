@@ -3600,3 +3600,19 @@ unbekanntem v5. Separater Wartungsleser bewahrt einen vorbereiteten wartenden
 Vertrag samt Quittung. Native Quellenqualifikation läuft vor den unverändert
 erhaltenen Mediathek-Regressionen, damit ein neuer Quellfehler früh sichtbar
 wird. Aktuelle vollständige native Abnahme bleibt bis terminalem Erfolg offen.
+
+Nachtrag zum Renditionowner: Ein echter Fehler wurde vor Abschluss kausal
+reproduziert: Bei belegtem 1080p und 720p bot der erste YouTube-Pfad nur das
+höchste Format an und leerte dadurch die 720p-Auswahl. Ein Detailabruf liefert
+jetzt maximal fünf konkrete Auflösungen derselben Video-/Programm-/Audiospur.
+Der gemeinsame Renditionowner reicht je RSS-/UI-NZB nur die gewählte Referenz
+mit eigener Pixel-/Audiobindung weiter. Kein zusätzlicher Extraktorabruf oder
+Discoveryeintrag pro Auflösung, keine gefälschten Mediathek-URL-Slots und keine
+Alternativenliste im angenommenen Job. Die neuen Regressionen schützen 720p
+neben 1080p, fehlendes 480p ohne Fallback, Providerpräferenz und separate
+Format-/Pixelbindung in RSS und NZB. Jahresfolgen mit fünf Auflösungen passen
+in die eng typisierte Zehn-Ereignisgrenze; der alte MP4-Vertrag bleibt bei sechs,
+Entry-/Byte-/Retention- und RSS-Grenzen unverändert. Eine siebte kausale Mutation
+unterbricht gezielt diese Rendition-Belegübergabe. Der konkrete Produktinput
+invalidiert die vorherige lokale/CI-Abnahme für den Abschluss; passende Gates
+werden für diesen kohärenten Kopf neu ausgeführt.

@@ -121,6 +121,20 @@ try {
       ],
     ],
     [
+      "youtube-video-720.mp4",
+      [
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=black:s=1280x720:r=1",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+      ],
+    ],
+    [
       "youtube-audio.m4a",
       [
         "-f",
@@ -389,6 +403,7 @@ try {
   }
   // The same source adapter also serves the existing film/NZB/SAB/Radarr owner.
   // Its native interactive fixture is separate from the single cold TV command.
+  await api(root, manifest, "pingufunk", "/api/settings", { "download.quality": "720p" });
   let filmReady = false;
   for (let attempt = 0; attempt < 30; attempt++) {
     const result = await api(
@@ -435,11 +450,11 @@ try {
     ])
   );
   if (
-    filmFile.quality.quality.name !== "WEBDL-1080p" ||
+    filmFile.quality.quality.name !== "WEBDL-720p" ||
     filmProbe.streams.filter((row) => row.codec_type === "video").length !== 1 ||
     filmProbe.streams.filter((row) => row.codec_type === "audio").length !== 1 ||
     filmProbe.streams.filter(
-      (row) => row.codec_type === "video" && row.width === 1920 && row.height === 1080
+      (row) => row.codec_type === "video" && row.width === 1280 && row.height === 720
     ).length !== 1 ||
     filmProbe.streams.filter(
       (row) => row.codec_type === "audio" && ["deu", "ger", "de"].includes(row.tags?.language)
@@ -454,7 +469,10 @@ try {
     .map((line) => JSON.parse(line));
   if (
     finalTransfers.length !== 10 ||
-    new Set(finalTransfers.map((row) => row.id + ":" + row.stream)).size !== 10
+    new Set(finalTransfers.map((row) => row.id + ":" + row.stream)).size !== 10 ||
+    !finalTransfers.some(
+      (row) => row.id === "00000000005" && row.stream === "video" && row.format === "136"
+    )
   )
     fail("film transfer duplicated a source or bypassed the common adapter");
   const readJobs = (container) =>

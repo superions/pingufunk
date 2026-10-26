@@ -1,6 +1,6 @@
 import { BaseProvider } from "../base";
 import { youtubeSearchAdapter } from "./search";
-import { apiResultToProviderItem } from "../content-item";
+import { apiResultToProviderItem, providerItemToApiResult } from "../content-item";
 import { readYoutubeCatalogueIndex } from "@/services/youtube-catalogue";
 import { getSetting, getMinDurationSeconds } from "@/lib/settings";
 import { readLanguagePolicy, LANGUAGE_POLICY_SETTING_KEY } from "@/lib/language-policy";
@@ -56,8 +56,23 @@ export class YoutubeProvider extends BaseProvider {
       return { available: false, lastCheck: Date.now(), error: "YouTube index unavailable" };
     }
   }
-  async getDownloadInfo(item: ProviderContentItem): Promise<ProviderDownloadInfo> {
-    const sourceRef = youtubeSourceReferenceSchema.parse(item.sourceRef);
+  async getDownloadInfo(
+    item: ProviderContentItem,
+    preferredQuality: "low" | "standard" | "high" = "high"
+  ): Promise<ProviderDownloadInfo> {
+    youtubeSourceReferenceSchema.parse(item.sourceRef);
+    const choices = selectRenditions(providerItemToApiResult(item), "all", false);
+    const field =
+      preferredQuality === "high"
+        ? "url_video_hd"
+        : preferredQuality === "standard"
+          ? "url_video"
+          : "url_video_low";
+    const selected =
+      choices.find((row) => row.field === field) ??
+      (preferredQuality === "high" ? choices[0] : undefined);
+    if (!selected || !("sourceRef" in selected)) throw Error("Requested rendition unavailable");
+    const sourceRef = selected.sourceRef;
     // An information helper never returns a Watch URL as if it were media bytes.
     return {
       url: "",

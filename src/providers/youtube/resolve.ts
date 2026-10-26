@@ -68,7 +68,13 @@ export async function resolveYoutubeMedia(
   identity: { videoId: string; channelId: string },
   signal: AbortSignal,
   expected?: YoutubeSelection
-): Promise<{ selection: YoutubeSelection; videoUrl: string; audioUrl: string; size: number }> {
+): Promise<{
+  selection: YoutubeSelection;
+  selections?: YoutubeSelection[];
+  videoUrl: string;
+  audioUrl: string;
+  size: number;
+}> {
   try {
     signal.throwIfAborted();
     const raw = metadata.parse(
@@ -152,8 +158,37 @@ export async function resolveYoutubeMedia(
       throw Error();
     const videoUrl = youtubeCdnUrl(video.url),
       audioUrl = youtubeCdnUrl(audio.url);
+    const selections: YoutubeSelection[] = [selection];
+    if (!expected) {
+      // One bounded extractor reply supplies each measured resolution. Accepted
+      // transfers still resolve one exact frozen format and never fall back.
+      const heights = new Set([selection.height]);
+      for (const alternative of videos) {
+        if (heights.has(alternative.height!)) continue;
+        try {
+          youtubeCdnUrl(alternative.url);
+        } catch {
+          continue;
+        }
+        selections.push(
+          youtubeSelectionSchema.parse({
+            ...selection,
+            videoFormat: alternative.format_id,
+            width: alternative.width,
+            height: alternative.height,
+          })
+        );
+        heights.add(alternative.height!);
+      }
+    }
     signal.throwIfAborted();
-    return { selection, videoUrl, audioUrl, size: (video.filesize ?? 0) + (audio.filesize ?? 0) };
+    return {
+      selection,
+      ...(expected ? {} : { selections }),
+      videoUrl,
+      audioUrl,
+      size: (video.filesize ?? 0) + (audio.filesize ?? 0),
+    };
   } catch {
     throw new YoutubeResolutionError();
   }

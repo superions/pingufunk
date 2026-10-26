@@ -64,3 +64,37 @@ it("delegates retrieval to its source owner and exposes only typed transfer info
   state.search.mockResolvedValue({ items: [], coverage: { complete: false } });
   await expect(provider.search({ query: "Synthetic" })).rejects.toThrow("unavailable");
 });
+
+it("uses the shared concrete rendition choice for provider download preferences", async () => {
+  const source = syntheticYoutubeSource(),
+    high = {
+      ...source,
+      selection: { ...source.selection, videoFormat: "137-high", width: 1920, height: 1080 },
+    };
+  const item = {
+    id: "synthetic",
+    providerId: "youtube",
+    channel: "Synthetic",
+    topic: "Synthetic",
+    title: "Synthetic",
+    description: "",
+    timestamp: 1,
+    duration: 120,
+    size: 0,
+    websiteUrl: "https://www.youtube.com/watch?v=abcdefghijk",
+    videoUrls: { standard: "" },
+    sourceRef: high,
+    sourceRenditions: [high, source],
+  };
+  expect(await provider.getDownloadInfo(item, "high")).toMatchObject({
+    quality: "1080p",
+    sourceRef: high,
+    url: "",
+  });
+  expect(await provider.getDownloadInfo(item, "standard")).toMatchObject({
+    quality: "720p",
+    sourceRef: source,
+    url: "",
+  });
+  await expect(provider.getDownloadInfo(item, "low")).rejects.toThrow("unavailable");
+});
