@@ -27,7 +27,10 @@ globalThis.fetch = async (input, init) => {
     if (!/^\d{11}$/.test(id ?? "") || !["video", "audio"].includes(stream))
       throw Error("Owned YouTube selector required");
     const file = readFileSync(`/qa/youtube-${stream}.${stream === "video" ? "mp4" : "m4a"}`);
-    appendFileSync("/qa/youtube-transfers.jsonl", JSON.stringify({ id, stream }) + "\n");
+    appendFileSync(
+      "/qa/youtube-transfers.jsonl",
+      JSON.stringify({ id, stream, sig: url.searchParams.get("sig") }) + "\n"
+    );
     return new Response(file, {
       headers: {
         "Content-Type": stream === "video" ? "video/mp4" : "audio/mp4",

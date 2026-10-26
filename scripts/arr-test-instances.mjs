@@ -132,7 +132,9 @@ async function up() {
   const runnerTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE ?? "pingufunk-p10-arr-qa";
   const migratorTag =
     process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
-  const movieCorrelation = process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1";
+  const movieCorrelation =
+    process.env.PINGUFUNK_ARR_QA_MOVIE_CORRELATION === "1" ||
+    process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
   const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
   const placeholderEpisode = process.env.PINGUFUNK_ARR_QA_TBA === "1";
   const localizedEpisode = process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1";
@@ -652,6 +654,8 @@ async function movieFixture(root, manifest) {
       const metadata = db.prepare("SELECT Id FROM MovieMetadata WHERE TmdbId=?").get(id);
       if (manifest.movieCorrelation)
         db.prepare("UPDATE MovieMetadata SET Runtime=10 WHERE Id=?").run(metadata.Id);
+      if (manifest.youtube)
+        db.prepare("UPDATE MovieMetadata SET Runtime=1 WHERE Id=?").run(metadata.Id);
       const profile = db.prepare("SELECT Id FROM QualityProfiles ORDER BY Id LIMIT 1").get();
       if (!profile) throw new Error("Owned Radarr fixture profile missing");
       if (!db.prepare("SELECT Id FROM Movies WHERE MovieMetadataId=?").get(metadata.Id))
@@ -1089,52 +1093,54 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
   if (queueBefore.queue.slots.length)
     throw new Error("Owned empty queue required before media restart");
   const container = manifest.apps.pingufunk.name;
-  docker([
-    "exec",
-    container,
-    "node",
-    "-e",
-    "require('node:fs').mkdirSync('/app/public/pingufunk-media-qa',{recursive:true})",
-  ]);
-  docker([
-    "exec",
-    container,
-    "ffmpeg",
-    "-v",
-    "error",
-    "-y",
-    "-f",
-    "lavfi",
-    "-i",
-    "color=c=black:s=640x360:r=1",
-    "-f",
-    "lavfi",
-    "-i",
-    "sine=frequency=440:sample_rate=44100",
-    "-t",
-    "600",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-c:a",
-    "aac",
-    "-movflags",
-    "+faststart",
-    "/app/public/pingufunk-media-qa/valid.mp4",
-  ]);
-  docker(["restart", container]);
-  let ready = false;
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      await api(root, manifest, "pingufunk", "/api/download?mode=queue");
-      ready = true;
-      break;
-    } catch {
-      await delay(500);
+  if (!manifest.youtube) {
+    docker([
+      "exec",
+      container,
+      "node",
+      "-e",
+      "require('node:fs').mkdirSync('/app/public/pingufunk-media-qa',{recursive:true})",
+    ]);
+    docker([
+      "exec",
+      container,
+      "ffmpeg",
+      "-v",
+      "error",
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      "color=c=black:s=640x360:r=1",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=440:sample_rate=44100",
+      "-t",
+      "600",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-c:a",
+      "aac",
+      "-movflags",
+      "+faststart",
+      "/app/public/pingufunk-media-qa/valid.mp4",
+    ]);
+    docker(["restart", container]);
+    let ready = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try {
+        await api(root, manifest, "pingufunk", "/api/download?mode=queue");
+        ready = true;
+        break;
+      } catch {
+        await delay(500);
+      }
     }
+    if (!ready) throw new Error("Owned media controller readiness failed");
   }
-  if (!ready) throw new Error("Owned media controller readiness failed");
   await api(root, manifest, "pingufunk", "/api/settings", {
     "matching.minDuration": "0",
     "download.quality": "all",
@@ -1238,7 +1244,7 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
   throw new Error("Owned Radarr synthetic download completion timeout");
 }
 
-async function movieImport(root, manifest, app = "radarr") {
+async function movieImport(root, manifest, app = "radarr", keepHistory = false) {
   const movie = await fixtureTarget(root, manifest, app);
   if (!movie) throw new Error("Owned unmonitored movie fixture required");
   const history = (await api(root, manifest, app, "/api/v3/history?page=1&pageSize=100")).records;
@@ -1311,7 +1317,7 @@ async function movieImport(root, manifest, app = "radarr") {
           row.downloadId?.toLowerCase() === job.nzo_id.toLowerCase()
       );
       if (!imported) throw new Error("Owned native import history missing");
-      await consumerRemove(root, manifest, app, job, file);
+      if (!keepHistory) await consumerRemove(root, manifest, app, job, file);
       console.log(
         `${app}: native completed-download handling imported synthetic media; file identity/size/path and matching download history verified`
       );
@@ -1383,6 +1389,9 @@ export {
   seriesFixture,
   fixtureRuntimeReady,
   fixtureIndexersReady,
+  movieFixture,
+  movieDownload,
+  movieImport,
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)

@@ -77,6 +77,7 @@ jobs:
         run: |
           git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker build --target runner -t pingufunk-sqlite-source-rollback-qa -
           git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | docker build --target runner -t pingufunk-pg-maintenance-rollback-qa -
+          git archive c2ae58d8f1741b2657638ff4500f5eea19023e23 | docker build --target runner -t pingufunk-youtube-source-rollback-qa -
 
       - name: Verify runtime tooling without global package manager
         run: |

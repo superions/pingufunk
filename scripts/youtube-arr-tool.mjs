@@ -41,7 +41,7 @@ if (args.includes("--flat-playlist")) {
   );
 } else {
   const id = url.searchParams.get("v");
-  if (!/^0000000000[0-4]$/.test(id ?? "")) throw Error("Owned video required");
+  if (!/^0000000000[0-5]$/.test(id ?? "")) throw Error("Owned video required");
   const stats = `/qa/youtube-metadata-${id}.json`;
   const count = existsSync(stats) ? JSON.parse(readFileSync(stats, "utf8")).count : 0;
   writeFileSync(stats, JSON.stringify({ count: count + 1 }));
@@ -52,6 +52,7 @@ if (args.includes("--flat-playlist")) {
   process.stdout.write(
     JSON.stringify({
       id,
+      title: id === "00000000005" ? "Synthetic Media (2024)" : entries[Number(id)].title,
       channel_id: channel,
       duration: 60,
       is_live: false,

@@ -346,7 +346,8 @@ export default function SearchPage() {
                     >
                       {result.tvReview.availableRenditions.map((key) => (
                         <option key={key} value={key}>
-                          {key.toUpperCase()}-Quelle prüfen
+                          {result.tvReview?.renditionLabels?.[key] ?? key.toUpperCase()}-Quelle
+                          prüfen
                         </option>
                       ))}
                     </select>
@@ -359,6 +360,8 @@ export default function SearchPage() {
                     }}
                     disabled={
                       downloadingIds.has(result.id) ||
+                      (result.tvReview?.runtimeConflict &&
+                        result.tvReview.availableRenditions.length === 0) ||
                       (!result.tvReview?.runtimeConflict &&
                         Object.keys(result.nzbDownloads).length === 0)
                     }
@@ -367,7 +370,9 @@ export default function SearchPage() {
                     {downloadingIds.has(result.id)
                       ? "Prüfe…"
                       : result.tvReview?.runtimeConflict
-                        ? "Quelle prüfen"
+                        ? result.tvReview.availableRenditions.length
+                          ? "Quelle prüfen"
+                          : "Medienbeleg noch offen – erneut suchen"
                         : "Download"}
                   </Button>
                 </div>

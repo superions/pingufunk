@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { TvdbData } from "@/types";
+import type { TvdbData, TmdbMovieData } from "@/types";
 import type { YoutubeRegistry, YoutubeIndexRow } from "@/lib/youtube-catalogue";
 const state = vi.hoisted(() => ({
   settings: new Map<string, string>(),
@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   resolve: vi.fn(),
   base: vi.fn(),
   show: null as TvdbData | null,
+  movie: null as TmdbMovieData | null,
 }));
 vi.mock("@/lib/settings", () => ({
   getSetting: async (key: string) => state.settings.get(key) ?? null,
@@ -22,6 +23,8 @@ vi.mock("./shows", () => ({
   getShowInfoByTvdbId: async () => state.show,
   getBaseShowInfoByTvdbId: async () => state.show,
 }));
+vi.mock("./radarr-provider", () => ({ getRadarrMovie: async () => state.movie }));
+vi.mock("./tmdb", () => ({ getMovieInfoByTmdbId: async () => state.movie }));
 vi.mock("@/providers/youtube/resolve", () => ({ resolveYoutubeMedia: state.resolve }));
 vi.mock("@/lib/mediathek-client", () => ({
   MEDIATHEK_VIEW_MAX_PAGE_SIZE: 1000,
@@ -41,6 +44,8 @@ import { validateReleaseSource } from "./source-enqueue";
 import { downloadSource } from "@/server/source-download";
 import { createUiNzbDownloads } from "./ui-nzb";
 import { youtubeMappingKey } from "@/lib/youtube-catalogue";
+import { matchMovieItems } from "./movie-matcher";
+import { generateMatchedMovieRssItems } from "./newznab";
 const channel = "UCaaaaaaaaaaaaaaaaaaaaaa",
   playlist = "PLsynthetic123456",
   video = "abcdefghijk";
@@ -56,6 +61,7 @@ const selection = {
 let journal: TvSearchDeliveryJournal | undefined;
 const query = [{ fields: ["topic", "title"], query: "Synthetic series" }];
 beforeEach(() => {
+  state.movie = null;
   vi.useFakeTimers();
   state.settings.clear();
   state.settings.set("provider.youtube.enabled", "true");
@@ -159,6 +165,18 @@ it("carries one cold canonical discovery through the shared worker hints and dur
   const match = matchBoundSourceEpisode(item, state.show!, 0, 10)!;
   expect(match.episode.seasonNumber).toBe(1);
   expect(match.episode.episodeNumber).toBe(13);
+  expect(matchBoundSourceEpisode(item, { ...state.show!, id: 43 }, 0, 10)).toBeNull();
+  expect(
+    matchBoundSourceEpisode(item, { ...state.show!, sonarrBlockedCoordinates: ["1:13"] }, 0, 10)
+  ).toBeNull();
+  expect(
+    matchBoundSourceEpisode(
+      item,
+      { ...state.show!, episodes: [...state.show!.episodes, ...state.show!.episodes] },
+      0,
+      10
+    )
+  ).toBeNull();
   let persisted: string | null = null;
   journal = new TvSearchDeliveryJournal(
     {
@@ -238,4 +256,57 @@ it("performs no source read for disabled YouTube and prevents title/count/positi
     ).items
   ).toEqual([]);
   expect(state.resolve).not.toHaveBeenCalled();
+});
+
+it("carries an explicitly mapped film through the same search, strict movie matcher, RSS and enqueue boundary while rejecting another film ID or year", async () => {
+  state.movie = {
+    tmdbId: 101,
+    imdbId: "tt1234567",
+    title: "Synthetic film",
+    germanTitle: "Synthetic film",
+    runtime: 10,
+    productionYear: 2001,
+    releaseDate: null,
+  };
+  const index = state.index as { registry: YoutubeRegistry; rows: YoutubeIndexRow[] };
+  const mapping = {
+    kind: "movie" as const,
+    channelId: channel,
+    sourceId: video,
+    targetId: 101,
+    name: "Synthetic film",
+    enabled: true,
+  };
+  index.registry.programMappings = [mapping];
+  const row = index.rows[0];
+  row.mappingKey = youtubeMappingKey(mapping);
+  row.content!.topic = "Synthetic film";
+  row.content!.title = "Synthetic film (2001)";
+  const query = [{ fields: ["topic", "title"], query: "Synthetic film" }];
+  await queryContentWindow(query, 100, { mediaType: "movie" }, "youtube");
+  await vi.advanceTimersByTimeAsync(30);
+  await sourceMediaFacts.idle();
+  const warm = await queryContentWindow(query, 100, { mediaType: "movie" }, "youtube");
+  expect(warm.items).toHaveLength(1);
+  expect(warm.items[0].sourceRef?.programme).toEqual({ kind: "movie", targetId: 101 });
+  expect(warm.items[0].sourceRef).not.toHaveProperty("playlistId");
+  const [match] = await matchMovieItems(warm.items, state.movie, 0, false);
+  expect(match.identityVerified).toBe(true);
+  expect(await matchMovieItems(warm.items, { ...state.movie, tmdbId: 102 }, 0, false)).toEqual([]);
+  const releases = generateMatchedMovieRssItems(match, state.movie, "all", false);
+  expect(releases).toHaveLength(1);
+  expect(releases[0].title).toContain("Synthetic.film.2001");
+  expect(releases[0].guid.value).toMatch(/^pingufunk:youtube:/);
+  const nzb = parseNzbContent(Object.values(createUiNzbDownloads(warm.items[0], false))[0]!)!;
+  expect(nzb.mediaExpectations).toMatchObject({
+    version: 5,
+    mediaKind: "movie",
+    durations: { metadata: null },
+  });
+  await expect(validateReleaseSource(nzb.url, nzb.mediaExpectations)).resolves.toBeUndefined();
+  row.content!.title = "Synthetic film (2002)";
+  expect((await queryContentWindow(query, 100, { mediaType: "movie" }, "youtube")).items).toEqual(
+    []
+  );
+  await expect(validateReleaseSource(nzb.url, nzb.mediaExpectations)).rejects.toThrow();
 });

@@ -121,3 +121,16 @@ it.each(["foreign", "extra-unknown", "extra-video", "duration", "dimensions"])(
     ).toThrow();
   }
 );
+
+it("accepts a typed movie without inventing episode metadata and rejects a borrowed episode-duration reference", () => {
+  const facts = syntheticYoutubeExpectations();
+  const { playlistId: _, ...identity } = facts.sourceRef;
+  const movie = {
+    ...facts,
+    mediaKind: "movie",
+    sourceRef: { ...identity, programme: { kind: "movie", targetId: 42 } },
+    durations: { ...facts.durations, metadata: null },
+  };
+  expect(parseMediaExpectations(movie)).toMatchObject({ mediaKind: "movie", version: 5 });
+  expect(() => parseMediaExpectations({ ...movie, durations: facts.durations })).toThrow();
+});

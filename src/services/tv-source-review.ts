@@ -47,6 +47,7 @@ export interface TvReviewSummary {
   tolerancePercent: number;
   runtimeConflict: boolean;
   availableRenditions: TvReviewSelector["rendition"][];
+  renditionLabels?: Partial<Record<TvReviewSelector["rendition"], string>>;
 }
 export interface TvReviewPreview extends TvReviewSummary {
   fingerprint: string;
@@ -148,6 +149,22 @@ function summary(
     runtimeConflict: !!info.runtimeConflict,
     availableRenditions: (Object.keys(fields) as TvReviewSelector["rendition"][]).filter(
       (key) => !!renditionUrl(info.item, fields[key])
+    ),
+    renditionLabels: Object.fromEntries(
+      selectRenditions(info.item, "all", false).flatMap((candidate) =>
+        candidate.quality === "UNKNOWN"
+          ? []
+          : [
+              [
+                candidate.field === "url_video_hd"
+                  ? "hd"
+                  : candidate.field === "url_video"
+                    ? "sd"
+                    : "low",
+                candidate.quality,
+              ],
+            ]
+      )
     ),
   };
 }

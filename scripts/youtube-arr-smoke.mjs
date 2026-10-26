@@ -7,6 +7,9 @@ import {
   bootstrap,
   seriesFixture,
   fixtureIndexersReady,
+  movieFixture,
+  movieDownload,
+  movieImport,
 } from "./arr-test-instances.mjs";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,6 +58,7 @@ try {
   manifest = load(root);
   await bootstrap(root, manifest);
   await seriesFixture(root, manifest);
+  await movieFixture(root, manifest);
   const controller = manifest.apps.pingufunk.name;
   docker([
     "exec",
@@ -131,6 +135,14 @@ try {
     sourceNumbering: "publisher",
     targetOrder: "aired",
   });
+  registry.programMappings.push({
+    kind: "movie",
+    channelId: "UCaaaaaaaaaaaaaaaaaaaaaa",
+    sourceId: "00000000005",
+    name: "Synthetic Media",
+    targetId: 2147483001,
+    enabled: true,
+  });
   await api(root, manifest, "pingufunk", "/api/youtube/catalogue", {
     action: "save",
     revision: initialCatalogue.revision,
@@ -148,7 +160,7 @@ try {
     if (catalogue.scan.state !== "running") break;
     await delay(250);
   }
-  if (catalogue?.scan.state !== "complete" || catalogue.scan.entries !== 6)
+  if (catalogue?.scan.state !== "complete" || catalogue.scan.entries !== 7)
     fail("complete warm metadata index required");
   const definitions = await api(root, manifest, "sonarr", "/api/v3/qualitydefinition");
   await api(
@@ -282,6 +294,34 @@ try {
       fail("physical size mismatch");
     docker(["exec", manifest.apps.sonarr.name, "test", "-f", file.path]);
     docker(["exec", manifest.apps.sonarr.name, "test", "!", "-L", file.path]);
+    const copy = `verified-episode-${episode.id}.mp4`;
+    docker(["cp", `${manifest.apps.sonarr.name}:${file.path}`, join(root, "pingufunk", copy)]);
+    const probe = JSON.parse(
+      docker([
+        "exec",
+        controller,
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_streams",
+        "-show_format",
+        "-of",
+        "json",
+        `/qa/${copy}`,
+      ])
+    );
+    const video = probe.streams.filter((row) => row.codec_type === "video");
+    const audio = probe.streams.filter((row) => row.codec_type === "audio");
+    if (
+      video.length !== 1 ||
+      video[0].width !== 1920 ||
+      video[0].height !== 1080 ||
+      audio.length !== 1 ||
+      !["deu", "ger", "de"].includes(audio[0].tags?.language) ||
+      !Number.isFinite(Number(probe.format.duration)) ||
+      Math.abs(Number(probe.format.duration) - 60) > 1
+    )
+      fail("independent imported-file audio/pixel/duration mismatch");
   }
   await command({ name: "RssSync" });
   if ((await histories()).filter((row) => row.eventType === "grabbed").length !== 4)
@@ -296,6 +336,89 @@ try {
     transfers.some((row) => row.id === "00000000004")
   )
     fail("exact video/audio transfer ownership mismatch");
+  for (let i = 0; i < 4; i++) {
+    const id = String(i).padStart(11, "0");
+    const detail = JSON.parse(
+      readFileSync(join(root, "pingufunk", `youtube-metadata-${id}.json`), "utf8")
+    );
+    if (
+      detail.count < 3 ||
+      transfers.some(
+        (row) => row.id === id && (!/^\d+$/.test(row.sig ?? "") || Number(row.sig) < 1)
+      )
+    )
+      fail("transfer did not independently resolve rotated signed selectors and audio proof");
+  }
+  // The same source adapter also serves the existing film/NZB/SAB/Radarr owner.
+  // Its native interactive fixture is separate from the single cold TV command.
+  let filmReady = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const result = await api(
+      root,
+      manifest,
+      "pingufunk",
+      "/api/search?q=Synthetic%20Media&type=movie"
+    );
+    if (
+      result.results?.some(
+        (row) => row.title === "Synthetic Media (2024)" && Object.keys(row.nzbDownloads).length
+      )
+    ) {
+      filmReady = true;
+      break;
+    }
+    await delay(500);
+  }
+  if (!filmReady) fail("film did not use the shared bounded media-facts owner");
+  await movieDownload(root, manifest, "radarr", transport);
+  await movieImport(root, manifest, "radarr", true);
+  const film = (await api(root, manifest, "radarr", "/api/v3/movie")).find(
+    (row) => row.tmdbId === 2147483001
+  );
+  if (!film?.hasFile) fail("native YouTube film import absent");
+  const filmFile = await api(root, manifest, "radarr", `/api/v3/moviefile/${film.movieFile.id}`);
+  docker([
+    "cp",
+    `${manifest.apps.radarr.name}:${filmFile.path}`,
+    join(root, "pingufunk", "verified-film.mp4"),
+  ]);
+  const filmProbe = JSON.parse(
+    docker([
+      "exec",
+      controller,
+      "ffprobe",
+      "-v",
+      "error",
+      "-show_streams",
+      "-show_format",
+      "-of",
+      "json",
+      "/qa/verified-film.mp4",
+    ])
+  );
+  if (
+    filmFile.quality.quality.name !== "WEBDL-1080p" ||
+    filmProbe.streams.filter((row) => row.codec_type === "video").length !== 1 ||
+    filmProbe.streams.filter((row) => row.codec_type === "audio").length !== 1 ||
+    filmProbe.streams.filter(
+      (row) => row.codec_type === "video" && row.width === 1920 && row.height === 1080
+    ).length !== 1 ||
+    filmProbe.streams.filter(
+      (row) => row.codec_type === "audio" && ["deu", "ger", "de"].includes(row.tags?.language)
+    ).length !== 1 ||
+    !Number.isFinite(Number(filmProbe.format.duration)) ||
+    Math.abs(Number(filmProbe.format.duration) - 60) > 1
+  )
+    fail("independent imported film media mismatch");
+  const finalTransfers = readFileSync(join(root, "pingufunk", "youtube-transfers.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  if (
+    finalTransfers.length !== 10 ||
+    new Set(finalTransfers.map((row) => row.id + ":" + row.stream)).size !== 10
+  )
+    fail("film transfer duplicated a source or bypassed the common adapter");
   const readJobs = (container) =>
     JSON.parse(
       docker([
@@ -307,13 +430,16 @@ try {
       ])
     );
   const before = readJobs(controller);
-  if (before.length !== 4 || before.some((job) => JSON.parse(job.mediaExpectations).version !== 5))
-    fail("four frozen v5 jobs required");
+  if (
+    before.length !== 5 ||
+    before.some((job) => JSON.parse(job.mediaExpectations).version !== 5) ||
+    before.filter((job) => JSON.parse(job.mediaExpectations).mediaKind === "movie").length !== 1
+  )
+    fail("five frozen series/film v5 jobs required");
   docker(["stop", controller]);
-  const rollbackTag =
-    backend === "postgresql"
-      ? "pingufunk-pg-maintenance-rollback-qa"
-      : "pingufunk-sqlite-source-rollback-qa";
+  // Roll back this source extension to its immediately preceding, v1-v4-aware
+  // checkpoint; unrelated pre-protocol DB-cutover images cannot reject v5.
+  const rollbackTag = "pingufunk-youtube-source-rollback-qa";
   const rollbackImage = docker(["image", "inspect", rollbackTag, "--format", "{{.Id}}"]);
   rollbackContainer = `pingufunk-arr-youtube-rollback-${manifest.owner}`;
   const databaseUrl =
@@ -370,6 +496,36 @@ try {
   }
   if (!ready) fail("rollback reader not ready");
   const job = before[0];
+  const legacy = {
+    version: 3,
+    mediaKind: "unknown",
+    durations: { source: null, metadata: null },
+    audio: null,
+    sourceAudio: null,
+    resolution: null,
+  };
+  const controls = execFileSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      rollbackContainer,
+      "node",
+      "-e",
+      'let body="";process.stdin.on("data",part=>body+=part);process.stdin.on("end",async()=>{const values=JSON.parse(body),statuses=[];for(const expected of [values.legacy,values.current]){const query=new URLSearchParams({encodedTitle:Buffer.from(values.title).toString("base64"),encodedUrl:Buffer.from(values.url).toString("base64"),encodedExpectations:Buffer.from(JSON.stringify(expected)).toString("base64")});const result=await fetch("http://127.0.0.1:6767/api/newznab/fake_nzb_download?"+query);statuses.push(result.status);}console.log(JSON.stringify(statuses));});',
+    ],
+    {
+      input: JSON.stringify({
+        title: job.title,
+        url: job.url,
+        legacy,
+        current: JSON.parse(job.mediaExpectations),
+      }),
+      encoding: "utf8",
+      timeout: 25000,
+    }
+  ).trim();
+  if (controls !== "[200,400]") fail("rollback protocol positive/unknown-version controls failed");
   const nzb = `<?xml version="1.0"?><!-- ${Buffer.from(job.title).toString("base64")} --><!-- ${Buffer.from(job.url).toString("base64")} --><nzb><head><meta type="pingufunk-media-expectations">${Buffer.from(job.mediaExpectations).toString("base64")}</meta></head></nzb>`;
   const status = execFileSync(
     "docker",

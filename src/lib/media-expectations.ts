@@ -119,6 +119,7 @@ const v5Schema = z
     const source = value.sourceRef;
     if (
       value.mediaKind !== source.programme.kind ||
+      (!!value.durations.metadata && value.mediaKind !== "series") ||
       !value.durations.source ||
       Math.abs(value.durations.source.seconds - source.selection.duration) > 5 ||
       value.resolution.width !== source.selection.width ||
