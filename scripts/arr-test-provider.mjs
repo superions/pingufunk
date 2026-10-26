@@ -2,6 +2,7 @@ const nativeFetch = globalThis.fetch;
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { Server } from "node:http";
 await import("/qa/media-provider.mjs");
 const sourceFetch = globalThis.fetch;
 // The base provider validates the exact disposable DB and owner first.
@@ -11,6 +12,29 @@ const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
 const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
 const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
 const youtube = process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
+if (youtube) {
+  const emit = Server.prototype.emit;
+  Server.prototype.emit = function (event, request, response, ...rest) {
+    if (event === "request" && request?.url?.startsWith("/api/newznab")) {
+      const query = new URL(request.url, "http://pingufunk:6767").searchParams;
+      const fields = Object.fromEntries(
+        ["t", "cat", "tmdbid", "imdbid", "q"].flatMap((key) => {
+          const value = query.get(key);
+          return value && (key !== "q" || /^Synthetic\b/.test(value))
+            ? [[key, value.slice(0, 100)]]
+            : [];
+        })
+      );
+      response.once("finish", () =>
+        appendFileSync(
+          "/qa/youtube-newznab.jsonl",
+          JSON.stringify({ ...fields, status: response.statusCode }) + "\n"
+        )
+      );
+    }
+    return emit.call(this, event, request, response, ...rest);
+  };
+}
 const germanUrl = "https://fixture.akamaized.net/german.mp4";
 const frenchUrl = "https://fixture.akamaized.net/french.mp4";
 const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString("base64url");

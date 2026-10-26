@@ -1223,7 +1223,22 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
         row.title.includes(app === "radarr" ? "Synthetic.Media" : "Synthetic.Series") &&
         row.indexerId === selected.id
     );
-    if (!candidate) throw new Error("Owned movie download candidate missing");
+    if (!candidate) {
+      if (manifest.youtube) {
+        const path = join(root, "pingufunk", "youtube-newznab.jsonl");
+        console.log(
+          "Owned YouTube search diagnostics: " +
+            JSON.stringify({
+              transport,
+              releases: releases.length,
+              queries: existsSync(path)
+                ? readFileSync(path, "utf8").trim().split("\n").slice(-12).map(JSON.parse)
+                : [],
+            })
+        );
+      }
+      throw new Error("Owned movie download candidate missing");
+    }
     await api(root, manifest, app, "/api/v3/release", {
       ...candidate,
       ...(app === "radarr"
