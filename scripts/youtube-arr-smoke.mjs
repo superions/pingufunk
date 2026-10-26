@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   up,
   load,
@@ -68,7 +68,43 @@ try {
     'if(Number(process.versions.node.split(".")[0])!==24)process.exit(1)',
   ]);
   // Real packaged tools; all subsequent media and extractor inputs are synthetic.
-  docker(["exec", controller, "/app/ytdlp/yt-dlp", "--version"]);
+  const toolVersion = JSON.parse(readFileSync("src/server/ytdlp-release.json", "utf8")).version;
+  if (docker(["exec", controller, "/app/ytdlp/yt-dlp", "--version"]) !== toolVersion)
+    fail("packaged extractor revision mismatch");
+  // No usable extractor or network URL: qualify bundled EJS and selected Node
+  // inside the actual image without requesting any public YouTube metadata.
+  const offline = spawnSync(
+    "docker",
+    [
+      "exec",
+      controller,
+      "/app/ytdlp/yt-dlp",
+      "--ignore-config",
+      "--no-plugin-dirs",
+      "--no-remote-components",
+      "--no-js-runtimes",
+      "--js-runtimes",
+      "node:/usr/local/bin/node",
+      "--verbose",
+      "--simulate",
+      "--skip-download",
+      "--use-extractors",
+      "end",
+      "--",
+      "invalid:",
+    ],
+    { encoding: "utf8", timeout: 15000 }
+  );
+  const diagnostic = offline.stdout + offline.stderr;
+  if (
+    offline.error ||
+    offline.status !== 1 ||
+    !/Optional libraries:.*yt_dlp_ejs/.test(diagnostic) ||
+    !/JS runtimes:.*node-24\./.test(diagnostic) ||
+    !/Unsupported URL|No suitable extractor/.test(diagnostic)
+  )
+    fail("offline packaged Node/EJS capability missing");
+  console.log("Owned YouTube tooling: pinned extractor, bundled EJS and Node 24 qualified offline");
   for (const [file, args] of [
     [
       "youtube-video.mp4",

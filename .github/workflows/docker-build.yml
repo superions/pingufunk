@@ -49,6 +49,31 @@ jobs:
           load: true
           tags: pingufunk-p11-migrator-qa
 
+      - name: Prepare pinned source-contract rollback and Arr fixtures
+        env:
+          SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
+          RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
+          PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+        run: |
+          docker pull "$SONARR_IMAGE"
+          docker pull "$RADARR_IMAGE"
+          docker pull "$PROWLARR_IMAGE"
+          git archive c2ae58d8f1741b2657638ff4500f5eea19023e23 | docker build --target runner -t pingufunk-youtube-source-rollback-qa -
+
+      - name: Verify YouTube cold delivery and rollback through native Arr on both backends
+        env:
+          PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+        run: |
+          docker pull postgres:18-alpine
+          for provider in sqlite postgresql; do
+            node scripts/youtube-arr-smoke.mjs direct "$provider"
+            node scripts/youtube-arr-smoke.mjs forwarded "$provider"
+          done
+
       - name: Verify native rendition quality directly and through Prowlarr
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
@@ -57,9 +82,6 @@ jobs:
           PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
           PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
-          docker pull "$PINGUFUNK_ARR_QA_SONARR_IMAGE"
-          docker pull "$PINGUFUNK_ARR_QA_RADARR_IMAGE"
-          docker pull "$PINGUFUNK_ARR_QA_PROWLARR_IMAGE"
           bash scripts/rendition-quality-arr-smoke.sh
 
       - name: Verify cold search to deferred RSS and real Sonarr imports
@@ -77,7 +99,6 @@ jobs:
         run: |
           git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker build --target runner -t pingufunk-sqlite-source-rollback-qa -
           git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | docker build --target runner -t pingufunk-pg-maintenance-rollback-qa -
-          git archive c2ae58d8f1741b2657638ff4500f5eea19023e23 | docker build --target runner -t pingufunk-youtube-source-rollback-qa -
 
       - name: Verify runtime tooling without global package manager
         run: |
@@ -90,20 +111,6 @@ jobs:
             '
           done
           docker run --rm --entrypoint node pingufunk-p11-migrator-qa /app/node_modules/prisma/build/index.js --version
-
-      - name: Verify YouTube cold delivery and rollback through native Arr on both backends
-        env:
-          PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
-          PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
-        run: |
-          docker pull postgres:18-alpine
-          for provider in sqlite postgresql; do
-            node scripts/youtube-arr-smoke.mjs direct "$provider"
-            node scripts/youtube-arr-smoke.mjs forwarded "$provider"
-          done
 
       - name: Rehearse disposable TLS migration and post-write rollback
         run: |
