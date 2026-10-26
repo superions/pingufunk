@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/brand";
 import { promises as fs } from "fs";
 import path from "path";
 import { getSetting } from "@/lib/settings";
@@ -69,7 +70,7 @@ async function fetchShowsFromGitHub(budget?: HttpRequestBudget): Promise<LocalSh
     const response = await fetchWithRetry(
       GITHUB_SHOWS_URL,
       {
-        headers: { "User-Agent": "RundfunkArr" },
+        headers: { "User-Agent": PRODUCT_NAME },
       },
       { requestBudget: budget }
     );

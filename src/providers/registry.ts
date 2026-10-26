@@ -1,17 +1,11 @@
-import type {
-  ContentProvider,
-  ProviderContentItem,
-  ProviderSearchQuery,
-  ProviderStatus,
-  AggregatedSearchResult,
-  ProviderCountry,
-} from "@/types/provider";
+import type { ContentProvider, ProviderStatus, ProviderCountry } from "@/types/provider";
 
 /**
  * Provider Registry
  *
  * Central registry for managing content providers.
- * Handles provider registration, initialization, and aggregated searches.
+ * Handles provider registration, initialization and status. Search consumers use
+ * the shared content-search coordinator and its source adapters.
  */
 class ProviderRegistry {
   private providers: Map<string, ContentProvider> = new Map();
@@ -92,82 +86,6 @@ class ProviderRegistry {
    */
   getProvidersByCountry(country: ProviderCountry): ContentProvider[] {
     return this.getAllProviders().filter((p) => p.country === country);
-  }
-
-  /**
-   * Search across all enabled providers
-   * @param query Search parameters
-   * @returns Aggregated search results from all providers
-   */
-  async searchAll(query: ProviderSearchQuery): Promise<AggregatedSearchResult> {
-    await this.ensureInitialized();
-
-    const enabledProviders = await this.getEnabledProviders();
-    const results: ProviderContentItem[] = [];
-    const providerCounts: Record<string, number> = {};
-    const errors: Array<{ providerId: string; error: string }> = [];
-
-    console.log(`[ProviderRegistry] Searching ${enabledProviders.length} providers`);
-
-    const searchPromises = enabledProviders.map(async (provider) => {
-      try {
-        const items = await provider.search(query);
-        providerCounts[provider.id] = items.length;
-        return items;
-      } catch {
-        console.error(`[ProviderRegistry] Search failed for ${provider.id}`);
-        errors.push({ providerId: provider.id, error: "Provider search failed" });
-        providerCounts[provider.id] = 0;
-        return [];
-      }
-    });
-
-    const allResults = await Promise.all(searchPromises);
-    for (const items of allResults) {
-      results.push(...items);
-    }
-
-    // Sort by timestamp (newest first)
-    results.sort((a, b) => b.timestamp - a.timestamp);
-
-    // Apply limit if specified
-    const limitedResults = query.limit ? results.slice(0, query.limit) : results;
-
-    console.log(
-      `[ProviderRegistry] Search complete: ${limitedResults.length} results from ${enabledProviders.length} providers`
-    );
-
-    return {
-      items: limitedResults,
-      providerCounts,
-      errors,
-    };
-  }
-
-  /**
-   * Search a specific provider
-   * @param providerId Provider ID
-   * @param query Search parameters
-   * @returns Search results from the specified provider
-   */
-  async searchProvider(
-    providerId: string,
-    query: ProviderSearchQuery
-  ): Promise<ProviderContentItem[]> {
-    await this.ensureInitialized();
-
-    const provider = this.providers.get(providerId);
-    if (!provider) {
-      throw new Error(`Provider not found: ${providerId}`);
-    }
-
-    const enabled = await provider.isEnabled();
-    if (!enabled) {
-      console.warn(`[ProviderRegistry] Provider ${providerId} is disabled`);
-      return [];
-    }
-
-    return provider.search(query);
   }
 
   /**

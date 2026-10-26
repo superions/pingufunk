@@ -178,9 +178,9 @@ export default function SetupPage() {
               <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Tv className="w-8 h-8 text-primary" />
               </div>
-              <h2 className="text-2xl font-bold mb-2">Willkommen bei RundfunkArr</h2>
+              <h2 className="text-2xl font-bold mb-2">Willkommen bei Pingufunk</h2>
               <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                RundfunkArr indiziert Inhalte aus deutschen Mediatheken und macht sie für Sonarr und
+                Pingufunk indiziert Inhalte aus deutschen Mediatheken und macht sie für Sonarr und
                 Radarr verfügbar. Dieser Assistent hilft dir bei der Einrichtung.
               </p>
               <Button onClick={() => setCurrentStep(1)} size="lg">
@@ -412,7 +412,7 @@ export default function SetupPage() {
               <div>
                 <h2 className="text-xl font-bold mb-2">*arr Integration</h2>
                 <p className="text-sm text-muted-foreground">
-                  Füge RundfunkArr als Indexer zu deinen *arr Apps hinzu
+                  Füge Pingufunk als Indexer zu deinen *arr Apps hinzu
                 </p>
               </div>
 
@@ -443,7 +443,7 @@ export default function SetupPage() {
                     <div className="bg-muted p-3 rounded-lg space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Name:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">RundfunkArr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">Pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">URL:</span>
@@ -462,7 +462,7 @@ export default function SetupPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">API Key:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">rundfunkarr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">pingufunk</code>
                       </div>
                     </div>
 
@@ -484,7 +484,7 @@ export default function SetupPage() {
                     <div className="bg-muted p-3 rounded-lg space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Name:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">RundfunkArr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">Pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between flex-wrap gap-1">
                         <span className="text-sm">Host:</span>
@@ -515,7 +515,7 @@ export default function SetupPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">API Key:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">rundfunkarr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Category:</span>
@@ -524,7 +524,7 @@ export default function SetupPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Docker: Verwende den Container-Namen (z.B.{" "}
-                      <code className="bg-muted px-1 rounded">rundfunkarr</code>) statt localhost.
+                      <code className="bg-muted px-1 rounded">pingufunk</code>) statt localhost.
                     </p>
 
                     <p className="font-medium">
@@ -547,7 +547,7 @@ export default function SetupPage() {
                     <div className="bg-muted p-3 rounded-lg space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Name:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">RundfunkArr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">Pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">URL:</span>
@@ -566,7 +566,7 @@ export default function SetupPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">API Key:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">rundfunkarr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">pingufunk</code>
                       </div>
                     </div>
 
@@ -588,7 +588,7 @@ export default function SetupPage() {
                     <div className="bg-muted p-3 rounded-lg space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Name:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">RundfunkArr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">Pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Host:</span>
@@ -619,7 +619,7 @@ export default function SetupPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">API Key:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">rundfunkarr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Category:</span>
@@ -628,7 +628,7 @@ export default function SetupPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Docker: Verwende den Container-Namen (z.B.{" "}
-                      <code className="bg-muted px-1 rounded">rundfunkarr</code>) statt localhost.
+                      <code className="bg-muted px-1 rounded">pingufunk</code>) statt localhost.
                     </p>
 
                     <p className="font-medium">
@@ -651,7 +651,7 @@ export default function SetupPage() {
                     <div className="bg-muted p-3 rounded-lg space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Name:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">RundfunkArr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">Pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">URL:</span>
@@ -670,7 +670,7 @@ export default function SetupPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">API Key:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">rundfunkarr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">pingufunk</code>
                       </div>
                     </div>
 
@@ -692,7 +692,7 @@ export default function SetupPage() {
                     <div className="bg-muted p-3 rounded-lg space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Name:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">RundfunkArr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">Pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Host:</span>
@@ -723,7 +723,7 @@ export default function SetupPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">API Key:</span>
-                        <code className="bg-background px-2 py-1 rounded text-sm">rundfunkarr</code>
+                        <code className="bg-background px-2 py-1 rounded text-sm">pingufunk</code>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm">Default Category:</span>
@@ -732,7 +732,7 @@ export default function SetupPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Docker: Verwende den Container-Namen (z.B.{" "}
-                      <code className="bg-muted px-1 rounded">rundfunkarr</code>) statt localhost.
+                      <code className="bg-muted px-1 rounded">pingufunk</code>) statt localhost.
                     </p>
 
                     <p className="font-medium">
@@ -740,7 +740,7 @@ export default function SetupPage() {
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Prowlarr synchronisiert den Indexer automatisch zu deinen anderen *arr Apps.
-                      Den Download-Client synchronisiert Prowlarr nicht. Richte RundfunkArr dafür
+                      Den Download-Client synchronisiert Prowlarr nicht. Richte Pingufunk dafür
                       zusätzlich direkt in Sonarr und Radarr ein. Der Download-Client hier ist nur
                       für manuelle Downloads aus Prowlarr gedacht.
                     </p>
@@ -769,7 +769,7 @@ export default function SetupPage() {
               </div>
               <h2 className="text-2xl font-bold mb-2">Setup abgeschlossen!</h2>
               <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                RundfunkArr ist jetzt eingerichtet. Du kannst die Einstellungen jederzeit unter
+                Pingufunk ist jetzt eingerichtet. Du kannst die Einstellungen jederzeit unter
                 &quot;Settings&quot; anpassen.
               </p>
 

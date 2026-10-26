@@ -2870,3 +2870,588 @@ Next-Produktionsbuild sind grün. Bekannte Vite-Configloader-/Node- und
 Next-Dateitracingwarnungen bleiben sichtbar. Fork-CI einschließlich ihrer
 separaten PostgreSQL- und nativen Containergates ist ein eigener Nachweis;
 lokales Grün ersetzt dessen Abschluss nicht.
+
+## Planreview P17 — YouTube und vollständiger deklarierter Katalogvertrag (25.10.2026)
+
+Nutzerbeauftragte Planung auf Main `1c9d4f9`, Upstream `345f5ed` erneut gelesen:
+kein vorhandener YouTube-Provider in dessen Provider-/Service-/Typowner.
+Einziger ausführbarer Vertrag bleibt P17 in `todo/proxy-retirement.md`;
+der [YouTube-Katalogvertrag](youtube-source-contract.md) enthält Datenmodell,
+Feldvergleich, Quellbelege und Grenzen. Keine Produktimplementierung oder
+Betriebsabnahme, alle sechs neuen Checkboxen offen. Andere Checkboxen und
+historische Abnahmen bleiben unverändert.
+
+Nachfolgender Modularisierungsauftrag: P17.1a ergänzt eine siebte offene
+Checkbox; vorhandene IDs und deren Status bleiben erhalten. Die sechs Punkte
+und Dokumentationszählungen der ersten Planabnahme beziehen sich auf `bc9663a`.
+
+### Kritische Befunde und im Entwurf behobene Lücken
+
+1. **„Wir bekommen nur die Kernfelder“ wäre ungenau.** Der gepinnte
+   MediathekViewWeb-Parser liefert zusätzlich `url_subtitle`; Pingufunk verwirft
+   es tatsächlich. `timestamp` wird dagegen normalisiert und nicht einfach
+   verloren. Transportstatistik ist von Inhaltsfeldern zu trennen. P17.1
+   schließt echte Feld-/Adapterverluste, bewahrt aber die Rohbeleg-Whitelist.
+2. **Ein eigenes YouTube-Katalogformat würde bestehende Regeln umgehen.**
+   Der Entwurf benutzt `ApiResultItem` und den vorhandenen Provideradapter;
+   getrennt sind nur administratives Register, kanonische Bindung und kleine
+   typisierte Quellenreferenz. Watch-HTML ist keine MP4-URL. Taggenauer Upload,
+   Erstfund, Indexupdate, Airdate und Filmjahr bleiben getrennte Fakten.
+3. **ID-Vorbelegung allein löst die Episoden nicht.** TVDB 133771 ist geprüft,
+   KultKrimis S02E01 „Auf dem Stundenplan: Mord“ ist jedoch kanonisch S01E13.
+   Das bisherige Nummerierungsmatching würde hier systematisch abweisen oder
+   falsch stempeln. P17.3 übersetzt nur ausdrücklich deklarierte
+   Anbieternummerierung über eindeutige konkrete Titel; Doppelpunkte im
+   Episodentitel bleiben erhalten. Globale Konfliktguards bleiben unverändert.
+   97 kanonische Berichtzeilen sind Pflicht; beobachtete 94 Playlistvideos
+   und ein Verfügbarkeitshinweis beweisen keine vollständige Abrufbarkeit.
+4. **GUI-Konfiguration kann Bestand indirekt stören.** Ein ungültiger großer
+   Registryblob im globalen Settingssnapshot könnte jede normale Suche stoppen;
+   zwei GUI-Schreibende könnten einander überschreiben. P17.2 hält Registry/
+   Index in geschützten internen Configkeys, verwendet revisionsgebundene
+   atomare Saves und begrenzte eigene Reads. Kein neuer DB-Service oder Schema-
+   cutover, keine Überschreibung lokaler Anpassungen durch Seedupdates.
+5. **Ein bloß eingehängter Provider wäre noch kein funktionierender Download.**
+   Der bestehende Worker verzweigt nach direkten/HLS-/SRF-Referenzen, der
+   Nachlieferjournalparser akzeptiert progressive MP4s. P17.4 bewegt deshalb
+   Suchproducer, Format-/Sprachbeleg, NZBparser, gespeicherten Job, Resolver,
+   Worker und Nachlieferung gemeinsam. Neue öffentliche Quelldeklarationen
+   verleihen keine interne v4-Freigabe. CDN-Rotation und Sourcewechsel werden
+   nicht als neue oder still herabgestufte Medienidentität angenommen.
+6. **Ausfallisolation darf den Basisvertrag nicht heimlich lockern.** Die
+   erforderliche bisherige Basis muss insgesamt erfolgreich sein, damit deren
+   Antwort bei ausgefallenem optionalem YT nutzbar bleibt. GUI-Teilcoverage und
+   der strenge erforderliche Indexerscope sind verschiedene Grenzen. YT wird
+   dabei nicht erfolgreich leer oder negativ gecacht; nur davon abhängige
+   ausgefallene Scopes bleiben unavailable. Kalter Medienbeleg braucht echte
+   Nachlieferung, keine zweite manuelle Suche als vermeintlichen Abschluss.
+7. **Ein externer Erfolgsbeleg fehlt weiterhin.** Vorhandenes yt-dlp und ein
+   JSON-/Mocktest beweisen keinen YouTube-Transfer aus dem Zielimage. Node 24 /
+   gebündeltes EJS zuerst nutzen, ohne Token-Daemon oder Runtimeinstaller.
+   P17.5 fordert native synthetische Consumer auf SQLite/PG einschließlich
+   Restart/Receipt/Datei-/Arr-Readback; wirkliche YouTube-Medien und Produktion
+   bleiben die eigenen Freigabestopps des optionalen P17.6.
+8. **Nachträgliche Änderungen dürfen angenommene Jobs nicht umdeuten.** Im
+   Nachreview Enqueueprüfung gegen aktuelle Registry und Transferprüfung gegen
+   den eingefrorenen Job getrennt. Disable oder ID-Korrektur storniert oder
+   rebindet keinen angenommenen Auftrag. Außerdem ist ein yt-dlp-Aufruf kein
+   gezählter einzelner HTTP-Versuch: zwölf begrenzte Detailaufrufe/Minute mit
+   eigener Prozessgrenze sind von bestehenden HTTP-Budgets getrennt. Die
+   Mediathek-Pipeline behält ihre Zähler und wird nicht von YT-Arbeit verdrängt.
+9. **Ein nicht verfügbares Video ist kein kaputter JSON-Datensatz.** Ein
+   expliziter privater/gelöschter Platzhalter bleibt als Verfügbarkeitszustand
+   erhalten; ohne frühere oder unabhängige Identität wird ihm keine kanonische
+   Folge zugewiesen. Normale Videozeilen ohne Pflichtdaten bleiben Scanfehler.
+   So führen weder stilles Überspringen noch ein unnötiger Gesamtabbruch zu
+   einer falschen Vollständigkeitsbehauptung.
+
+### Vollständigkeit und KISS
+
+| Nutzeranforderung                                   | Verbleibender Owner / Abnahme                                                                |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Separat pflegbare Kanäle, GUI statt JSON-Pflicht    | P17.2, `/settings`, persistenter revisionsgeprüfter Readback                                 |
+| Automatische Serien-/Film-ID und Vorbelegungen      | P17.3, Seed/Metadaten/gezielte Ausnahme, keine First-result-Heuristik                        |
+| Mediathek-nahes JSON und Erklärung der Auslassungen | P17.1 plus Feldmatrix/Adapter-/Routennachweis, P17.4 Quellenreferenz                         |
+| Der Kommissar als vollständiges Beispiel            | P17.3 gesamter 97-Episodenbericht, P17.5 kanonische Consumerregression                       |
+| Zügige, begrenzte Umsetzung                         | Früher Nutzen aus P17.1–P17.3; getrennte Quellenadapter, Configspeicher, bestehende Pipeline |
+| Modulare Suche und Downloads mit gleicher Bedienung | P17.1a echte Mediathekintegration, P17.4 YouTube-Module, P17.5 gemeinsame Consumer           |
+| Bestand nicht stören, keine Grabs aus Planung       | P17.2 null Jobs, P17.4 Bestandsgates, P17.6 eigene explizite Freigaben                       |
+
+Keine Framework-/Microservicephase, Webstreamingoberfläche, vollständige
+Senderinventur, parallele Pythonpipeline, neue Metadatenkonten oder pauschale
+Vollmatrix pro Mikroschritt. Das Transport-/Consumerpaket P17.4 bleibt trotz
+Wiederverwendung ein echtes M-Paket; es wird nicht als bloßer Konfigschalter
+oder durch die frühere PoC-Testzahl als bereits erledigt dargestellt.
+Review durch den Implementierer in getrennten Entwurfs-/Nachreviewdurchgängen,
+kein behaupteter unabhängiger Peerreview. Reine Markdownplanung löst keine
+Produkttests, Entwicklungsruntime oder Produktionsoperation aus.
+
+Dokumentationsabnahme: fünf neue/ergänzte Markdownbereiche mit dem vorhandenen
+Formatter geprüft, fünf relative Ressourcenlinks und zwölf bestehende bzw.
+ausdrücklich neu geplante Dateianchors abgeglichen, `git diff --check` sauber.
+Alle 63 bisherigen Checkboxen und die historischen Inhalte der drei ergänzten
+Dokumente sind unverändert; genau sechs neue offene P17-Punkte. Keine Produkt-
+oder Containertests für diese reine Planänderung ausgeführt.
+
+### Nachreview der Modularisierung
+
+Der erste Entwurf verlangte gemeinsame Integration, aber noch keine hinreichend
+verbindliche Trennung der aktiven Such-/Downloadimplementierungen. Dies war eine
+Architekturlücke im Plan. Der frische Callpfadabgleich zeigt:
+
+- `content-search.ts::queryContentWindow` benutzt eigene MVW-/SRF-Aufrufe;
+  die bestehende Registry allein kapselt diesen Konsumenten nicht.
+- `download-manager.ts::processOwnedDownload` erkennt Stream-/SRF-Referenzen
+  und transferiert selbst. `ContentProvider.getDownloadInfo` ist kein konsumierter
+  Transfervertrag. Eine weitere Providerklasse würde daran nichts ändern.
+- Ein Quellenbackend ist nicht sein Werkzeug: yt-dlp wird bereits für Mediathek-
+  HLS benutzt. Die Trennung nach „HTTP gegen yt-dlp“ wäre fachlich falsch.
+- Zwei vollständige Worker würden Lease, Queue, Fortschritt, Abbruch, Konvertierung
+  und Medienabschluss duplizieren. Diese Owner bleiben zentral; Module übernehmen
+  nur Quellenabruf/-auflösung und Transfer in das zugewiesene Staging.
+- Eine naive Aufteilung von MVW und ORF könnte denselben Kandidatenblock doppelt
+  abrufen. Der Mediathekadapter bewahrt geteilten Abruf, Budget, öffentliche
+  Provider-IDs, ARTE-Editionsauflösung und bisherigen Fehlervertrag.
+
+P17.1a kapselt deshalb zuerst den echten Mediathekpfad hinter Suchfenster- und
+Transfervertrag. P17.4 ergänzt die beiden YouTube-Module. Bestehende Provider-
+Typen/-registry und Transportprimitive werden verwendet, kein Pluginframework,
+Microservice oder zweiter Katalog eingeführt. Ein gemeinsamer Revisions-/Policy-
+Cachekontext verhindert veraltete Bindungen; alte Jobs erhalten nur das exakt
+bisherige Legacyrouting. Unbekannte neue Referenzen bleiben geschlossen.
+Quellkonfiguration verhindert neue Suche/Discovery, storniert aber keinen schon
+angenommenen Auftrag. Im Nachreview diese beiden Zeitpunkte ausdrücklich getrennt.
+
+Die Abnahme fordert austauschbare Adapter im tatsächlich konsumierten Pfad,
+getrennte Modultests und gemeinsame Consumer-/Datei-/Statusfälle für beide Quellen.
+Ordner-/Interface- oder Source-String-Prüfungen allein genügen nicht. Upstream
+bleibt Vergleichsquelle; eigene Verträge tragen den neuen Funktionsumfang.
+Die Reihenfolge liefert zunächst Bestandsschutz und lässt unabhängige GUI-/
+Mappingarbeiten weiter zu. Der optionale reale Download-/Rolloutstopp bleibt.
+
+Erneute Dokumentationsabnahme: sieben offene P17-Punkte, alle 69 zuvor
+vorhandenen Checkboxen mit unverändertem Status. Historische Inhalte vor P17
+in drei Dokumenten unverändert; fünf formatierte Bereiche, fünf relative Links
+und 19 bestehende bzw. ausdrücklich geplante Dateianchors geprüft, Diff sauber.
+Vier getrennte Quellenmodule sind ausdrücklich auch bei gemeinsamem Werkzeug
+verbindlich. Nur Markdown geändert; keine Produkt-/Runtimegates ausgeführt.
+
+## Planreview P18 — Eigenständige Produktvisitenkarte in Deutsch und Englisch (25.10.2026)
+
+Nutzerauftrag: RundfunkArr ausschließlich als Ursprung und Vergleichsquelle,
+Pingufunk eigenständig darstellen; die README hochwertig gestalten und einen
+klaren Überblick über bessere bzw. andere Eigenschaften anbieten. Einziger
+ausführbarer Punkt ist P18.1 im bestehenden Phasen-TODO. Das ist eine neue
+offene Dokumentationsaufgabe, keine bereits umgesetzte README oder Produktabnahme.
+
+### Befunde und nachgeschärfte Abnahme
+
+- Die vollständig gelesene heutige `README.md` führt RundfunkArr in Titel,
+  Logo-Alttext, Badges und Docker-/Releasezielen. Ein zusätzlicher Forkhinweis
+  löst diese widersprüchliche Produktdarstellung nicht; P18.1 verlangt einen
+  vollständigen eigenen Einstieg mit klarer visueller Hierarchie.
+- README-Installations- und Konfigurationstexte mischen Upstreambeispiele und
+  einen älteren PG-Entwicklungsstand. Fremde Images/Releasezusagen dürfen nicht
+  als Pingufunk-Artefakte erscheinen; SQLite und optionales PostgreSQL, echte
+  Start-/Auth-/Migrationsverträge werden gegen ihre heutigen Owner abgeglichen.
+- Die bisherige Upstream-Kompatibilitätsvorgabe in `AGENTS.md` widersprach dem
+  neuen Nutzerentscheid. Sie ist jetzt durch Schutz eigener ausgelieferter
+  Verträge ersetzt; Herkunft, Lizenz und historische Analysen bleiben erhalten.
+  Auch der neue Quellenentwurf enthält keine Upstreamparität mehr als Ziel.
+- Zwei Sprachen sind zwei gleichwertige Produktzugänge, nicht eine Kurzfassung
+  und ein vollständiges Original. `README.md`/`README.en.md` bekommen dieselben
+  Aussagen, Befehle, Grenzen und gut sichtbare wechselseitige Links.
+- Der Vergleich ist Produktkommunikation ohne sichtbaren Belegapparat.
+  Aussagen werden vor Veröffentlichung intern auf sachliche Richtigkeit geprüft;
+  öffentlich keine Belegspalten, Quellenfußnoten, Commit-/Testnummern oder
+  Vergleichsrevisionen/-prüfnachweise aufnehmen. Kein zusätzlicher Belegreport.
+  Funktionen in einem TODO sind keine Verbesserung des ausgelieferten Produkts;
+  unbekanntes Upstreamverhalten bedeutet nicht fehlende Funktion. Vorteile,
+  Gleichstand, andere Entscheidungen und Grenzen werden fair getrennt.
+- Gestaltung ist eine Abnahme: tatsächlich gerenderte GitHub-Darstellung beider
+  Sprachen auf Desktop, helle/dunkle Darstellung, lesbare Tabelle/Bilder,
+  Navigation/Alttexte und geprüfte Links. Screenshots müssen zum eigenen
+  belegten Teststand passen; keine erfundene Fertigstellung durch Mockups.
+
+KISS: ein zusammenhängender README-Auftrag mit bestehender Dokumentation und
+kleinen versionierten Assets; keine Website, neue Plattform oder zweite
+Roadmap. Er kann vor P17 fertig werden und nennt YouTube dann ausdrücklich
+geplant. P17.5 aktualisiert bereits vorhandene neue READMEs erst mit eigener
+Abnahme. Produkt-/Betriebsarbeit und Main-/Releasefreigaben bleiben unabhängig.
+Jetzt ausschließlich Planung und geltende Projektpositionierung angepasst;
+README, Produktcode, Images und Laufzeit bleiben durch diesen Plancommit unberührt.
+
+Planabnahme: acht betroffene Markdownbereiche formatiert, fünf relative Links
+und Diff geprüft; alle 70 vorherigen Checkboxen unverändert. Genau P18.1 ist
+neu offen. Historische Analyse-/Reviewinhalte und Sicherheitsregeln bleiben
+erhalten, `README.md` und `LICENSE` sind unverändert. Keine Produktgates für
+diese Plan-/Anweisungsänderung gestartet.
+
+Nutzerpräzisierung: sichtbare Belege schaden der gewünschten Vergleichsdarstellung.
+P18.1 trennt deshalb interne redaktionelle Prüfung von der öffentlichen, gut
+lesbaren Gegenüberstellung. Die vorherige Pflicht zu öffentlichen Beleg-/
+Revisionsangaben ist entfernt; sachliche Richtigkeit bleibt erforderlich.
+
+## P17.1 — Vollständiger deklarierter Katalogvertrag (25.10.2026)
+
+Client, interne Provideradapter und generischer wie gebundener GUI-Antwortpfad
+erhalten validierte optionale Untertiteladresse, Audio-/Untertitelsprache,
+OV-/AD-/Gebärden-/Klarspracheflags, explizites Produktionsjahr und getrennte
+Datumsfakten. Der enge `catalogue-metadata.ts`-Projektor enthält keine internen
+Quell-/Pixel-/Assetbelege. Der rohe MVW-Client reicht ihm nur dokumentierte
+Untertitel-/Timestampfelder; frei eingeschleuste Adapterfakten bleiben verworfen.
+
+Im Review URLschemata/Userinfo/Whitespace, exaktes Erhalten signierter Adressen,
+explizites `false`, Unknown/Null, Kalender-/Schaltjahre und unabhängige Uhrzeiten
+geprüft. Legacytimestamp und Identitäts-/NZB-Erzeugung bleiben unverändert.
+Keine Datumsableitung aus Filmjahr, keine Mitternacht aus einem Uploadtag,
+kein Untertiteldownload und keine neue sichtbare UI-Funktion. Die einzige
+neue Typform ist eine explizite Metadatenprojektion des vorhandenen Inhaltstyps.
+
+Kausaler Gegencheck vor Implementierung: genau zwei neue Regressionen scheitern
+am verlorenen Untertitelfeld/Adaptermetadaten und fehlendem unabhängigen
+Katalogzeitpunkt. Nach Umsetzung alle fokussierten Consumer grün. Der erste
+Gesamtlauf fand zwei alte Vollobjekt-Erwartungen ohne den nun erhaltenen
+Katalogzeitpunkt; diese explizit erweitert, keine Assertions abgeschwächt.
+Final `npm run test:coverage`: 131 Testdateien/1.460 Tests bestanden,
+6 Dateien/23 Tests wie bisher bedingt übersprungen. Statements 88,41 %,
+Branches 85,89 %, Funktionen 91,84 %, Lines 90,85 %. `npm ci` mit beiden
+generierten Prisma-Clients und Audit ohne bekannte Findings; Lint, Typecheck,
+Formatcheck und Produktionsbuild erfolgreich. Die 14 bekannten Build-
+Tracingwarnungen sind unverändert. Keine Produkt-/Betriebsfreigabe daraus.
+
+SQLite-/PG-Persistenz und Worker werden hier nicht geändert; deren tatsächliche
+Backend-/Dateigates gehören zur folgenden Modulabnahme P17.1a. Lokaler Docker-
+Daemon ist nicht gestartet; keine Infrastruktur dafür verändert. Die bestehenden
+isolierten CI-Gates bleiben für die betroffenen Backend-/Workerpfade vorgesehen.
+
+## P17.1a — Konsumierte Such- und Downloadmodule (25.10.2026)
+
+Der gemeinsame Suchkoordinator konsumiert `ContentSearchAdapter`; das
+Mediathekmodul besitzt MVW-/ORF-Pagination, SRF-Zugriff, ARTE-Auflösung,
+Quellklassifikation und Quellkonfiguration. Query-/Optionsform, Budgets,
+Coverage und flüchtige Cacheinvalidierung bleiben erhalten. Exportierte
+MVW-/ORF-Helper benutzen denselben Quellenowner bei unverändertem
+Einzel-Seitenvertrag. Die Registry hat keine aktiven Suchconsumer mehr;
+ihre ungenutzten Aggregationsmethoden samt Ergebnistyp wurden nach vollständiger
+Aufrufsuche entfernt. Keine zweite Suchpipeline oder zyklische Rückdelegation.
+
+Der Worker konsumiert `SourceDownloadAdapter` über einen festen begrenzten
+Dispatch. Direkter Transfer, HLS und SRF-Referenzauflösung liegen im
+Mediathekmodul. Queue, Lease, v4-Revalidierung, eingefrorene Erwartungen,
+Fortschritt, Abbruch, optionale Konvertierung und physische Completion bleiben
+zentral. Der Dispatch akzeptiert nur positive reguläre Stagingdateien ohne
+Symlink und mit begrenztem Suffix. Das Suffix behauptet keine Containerfakten;
+die bestehende gemeinsame ffprobe-Prüfung bleibt der physische Owner.
+Alle Artefakte benutzen genau einen Move-/Completion-Aufruf. Kein anderes
+Backend als Fehlerfallback, keine Änderung persistierter Jobversionen/IDs,
+URLs, Profile, Datenbankschemata oder bestehenden Verzeichnisnamen.
+
+Review von Abruf, Adapter, GUI, Worker und Completion: gemeinsame MVW-/ORF-
+Abfrage nicht verdoppelt; deaktivierte Quellen und Import haben kein
+Quellen-I/O; Quelle erhält keine DB-/Completed-Verantwortung. SRF-URN und
+Höhenwahl, direkte Bytezählung, Await der Progresspersistenz und Abbruch bleiben
+erhalten. Containerpräferenz wird einmal bei Bedarf gelesen; HLS-MKV hat keine
+zweite Konvertierung. Konvertierter Input wird erst nach erfolgreichem Move
+entfernt. Rohe Toolfehler werden nicht als dauerhafte Fehlermeldung übernommen.
+
+Drei kontrollierte Gegenprüfungen erzeugten die erwarteten Consumerfehler:
+entfernte Staginggrenze, unerlaubter Quellenfallback und umgangener Suchadapter.
+Produktivcode jeweils vollständig wiederhergestellt. Ein zusätzlicher
+Nachreviewfall bewies einen unerwünschten Settingsread bei Nicht-MP4; vor
+Korrektur fehlte Completed, danach durchläuft das reale Artefakt die zentrale
+Medienprüfung auch bei nicht verfügbarer, hierfür irrelevanter MKV-Einstellung.
+
+Final lokal: 134 Testdateien/1.477 Tests bestanden, 6 Dateien/23 Tests wie zuvor
+bedingt übersprungen. Statements 88,32 %, Branches 85,62 %, Funktionen 91,76 %,
+Lines 90,77 %. Lint, Typecheck und Produktionsbuild grün; zehn Tracingwarnungen
+derselben bereits bekannten Art. Zwei durch die neuen gemeinsamen Exporte
+unvollständige Testmocks wurden auf den tatsächlichen Modulvertrag umgestellt;
+keine Produktassertions oder Laufzeitgates abgeschwächt. Keine neue sichtbare
+UI, Abhängigkeit, Runtime oder Datenbankmigration. Keine Live-Systeme berührt.
+
+Terminale Forkabnahme für Codecheckpoint
+`a1c27b256403ddef9a23a4d30a3e210c80b40564`:
+[CI mit PostgreSQL 17 und 18](https://github.com/superions/pingufunk/actions/runs/40228976091)
+und [native Container-CI](https://github.com/superions/pingufunk/actions/runs/40228976128)
+erfolgreich. Sechs native Rendition-/Sprach-/Konfliktfälle direkt und über
+Prowlarr; beide kalten Ketten von 0 initialen Grabs bis jeweils 80/80 realen
+Imports, wiederholtes RSS ohne Doppelgrab. SQLite-Bootstrap/Persistenz/Restart,
+TLS-/Post-write-Rollback, echte progressive/HLS-/Mux-Dateien, negative Medien,
+SAB-History, SIGTERM-Drain, PG-Ausfall-/Quittierungsgrenzen und TV-Review→Worker→
+Datei/Audit/Receipt auf beiden Backends erfolgreich. Keine Publikation dieser
+Testimages. P17.1a ohne offene Findings abgenommen; YouTube-Implementierung
+P17.2–P17.5 bleibt offen.
+
+Auch P17.1s eigener Checkpoint `78c87a2` hat
+[CI](https://github.com/superions/pingufunk/actions/runs/40226935480) und
+[native Container-CI](https://github.com/superions/pingufunk/actions/runs/40226935528)
+erfolgreich abgeschlossen. Der abschließende Abnahmecommit ändert ausschließlich
+Dokumentation/TODO; Produkt-, Test-, Workflow-, Dependency- und Runtimeinputs
+bleiben exakt am getesteten Codecheckpoint. Diese gültigen Gates werden
+wiederverwendet, keine erneute vollständige Matrix für die Statusfortschreibung.
+
+## P17.2 — GUI-Register und begrenzter Metadatenindex (25.10.2026)
+
+`/settings` hat einen eigenen YouTube-Tab mit getrennten Kanälen,
+Programmzuordnungen und Inventar. Fünf öffentlich direkt geprüfte, deaktivierte
+Kanalvorgaben; nur die ausdrücklich geprüfte Kommissar-Playlist hat eine
+ausgelieferte TVDB-Zuordnung. Die gemeinsame reine Zod-/Normalisierungsdefinition
+liegt in `lib/youtube-catalogue.ts`, I/O/Transaktionen im Service, der begrenzte
+Child-Owner im vorhandenen `server/ytdlp.ts`. Keine neue Dependency, DDL,
+Contentklasse, Workerqueue oder Laufzeitinstallation. Automatische neue ID-/
+Episodenbindung und Medienintegration bleiben P17.3/P17.4.
+
+Review von Producer, API, Speicher, CLI und GUI ohne offene Findings:
+Compare-and-swap schützt dasselbe Register und Enableflag atomar; Unknown-
+Commit wird nicht wiederholt und über tatsächlichen Readback aufgelöst.
+Allgemeine Settings filtern interne Indexseiten bereits im Datenbankquery,
+behalten Fremdkeys und historisches unverändertes Bulk-Readback. Der neue
+API-Owner hat Same-origin-/Writer-Gate, 1-MiB-Bodygrenze vor JSON-Parsing und
+begrenzte Inventarseiten. Schema und Prozess-I/O sind getrennt. Die benannten
+Metadatenargumente wurden auch gegen die Dokumentation des gepinnten
+yt-dlp-Releases 2026.08.19 geprüft; kein Toolupdate.
+
+Ein vollständiger Index wird als kleines Manifest und atomar ersetzte
+100-Zeilen-Seiten im vorhandenen Configmodell gehalten. Gesamtbudget 8 MiB,
+keine indexgroßen allgemeinen DB-/Browserreads. Erstfund bleibt über Refresh
+stabil; Uploadtag bleibt ein Tag. Kein Produktionsjahr, Mediennachweis,
+Audio-/Pixelbeleg oder Episodenstempel aus rohen Toolfeldern. Private/gelöschte
+Platzhalter bleiben ausdrücklich unverfügbar. Fehler bei normalen IDs,
+Uploader, Folgeseite, Kapazität oder Prozess werden nicht zu leeren Erfolgen.
+Nur ein Metadatenchild je App, feste 30 Sekunden/8 MiB, zehn 100er-Batches,
+sechs Stunden Abstand, kein Requestinstaller/Plugin-/Config-/Shellfallback.
+Abbruch wartet auf die eigene Prozessgruppe; Generationenwechsel verhindern
+späte Indexpublikation. Startup/Health starten keinen Scan.
+
+Die echte isolierte SQLite-Probe umfasst Configwrites/Restart, erhaltene
+Fremdkeys, konkurrierende Writes, Fehler der zweiten nativen Statementgrenze,
+tatsächlich committed aber verlorene Rückmeldung, vollständige und fehlerhafte
+Scans über einen echten synthetischen Childprozess, 100+2 Zeilen einschließlich
+ID-losem Privatplatzhalter, Limits, stabilen Erstfund, Atomizität des Indexwrites,
+Abbruch inklusive Kindprozessbaum und null Medienjobs. Derselbe ausführbare
+Gate ist in der bestehenden PG17-/PG18-CI auf beiden Versionen erfolgreich
+ausgeführt; keine lokale PostgreSQL-Ausführung oder abschließende
+Containerabnahme daraus abgeleitet.
+
+Drei kontrollierte Mutationen erzeugten die erwarteten Assertionfehler:
+fehlender CAS-Valueguard, vorzeitig veröffentlichter Complete-Status und
+ignorierter Fremduploader. Produktcode vollständig wiederhergestellt. Das
+angehaltene Indexcommit bleibt vor Commit in `running`; DB-Schreibfehler
+erhalten den vorherigen vollständigen Index. Ein alter Bulk-Settings-Readback
+wurde im ersten fokussierten Lauf zunächst abgewiesen; der neue Schalter ist
+jetzt dabei nur ein unveränderter No-op, keine getrennte Schreibmöglichkeit.
+
+Desktop auf der isolierten SQLite-Instanz `127.0.0.1:3187/settings`, tatsächlich
+servierter Entwicklungsstand: Vorgaben sehen, URL per Keyboard prüfen,
+fremde URL/fehlende Ziel-ID erklären, Kanal und Playlist ergänzen, Ziel-ID
+erfassen, speichern/DB-Readback, 103 Inventarzeilen auf 100+3 Seiten, Scan
+abbrechen, 409 nach echter konkurrierender Generation, korrigieren und
+deaktivieren sowie Neuladen nach Seitenneustart erfolgreich. Fokus beim
+URLabruf und nach Speichern bleibt erhalten. Vorher/Nachher der allgemeinen
+Settings bei 1280×720/System-Dark geprüft, zusätzlich Register und Programm-
+felder visuell geprüft; keine horizontalen Überläufe oder Anwendungs-/Pagefehler.
+Nur die erwartete Next-Dev-Fast-Refresh-Warnung nach Sourceänderung. Private
+JPEGs im ignorierten `downloads/p172-ui/`; keine Bilder/Antwortdumps im Git.
+Der eigene Devserver und Browsertab sind beendet; UI-Datenbank hatte null Jobs.
+
+Lokaler Coverage-Lauf vor den beiden Nachreviewfixes: 137 Dateien/1.510 Tests grün, 6 Dateien/24 Tests
+bedingt übersprungen (einschließlich des neuen separaten PG-Gates). Statements
+88,31 %, Branches 85,55 %, Funktionen 91,85 %, Lines 90,76 %. Lint, Typecheck,
+Formatcheck, Datenvalidierung, Shellsyntax und Produktionsbuild grün; elf
+Tracingwarnungen derselben bekannten Art. Nach abschließender Testisolation
+gegen vorhandene Credential-/Proxyenvs und gezielter API-Textkorrektur nochmals
+129 betroffene Tests grün. Kein Produktinput für andere Tests geändert;
+umfangreiche unveränderte Gates wiederverwendet. Der exakte Codecheckpoint
+`d611b9d5fe05c0c7865c68c7bb995faff44e6393` hat die
+[CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40236317252)
+terminal erfolgreich abgeschlossen: erneut 1.510 Tests, Statements 88,31 %,
+Branches 85,53 %, Funktionen 91,85 %, Lines 90,76 %. Die letzte ergänzte
+Kapazitätsmeldung wurde davor gezielt mit 26 Tests/Typecheck/Lint geprüft;
+der CI-Lauf umfasst den gesamten Stand. Auch seine
+[native Container-CI](https://github.com/superions/pingufunk/actions/runs/40236317277)
+ist terminal erfolgreich abgeschlossen.
+Keine produktiven Grabs, Bibliotheks-, Produktions-, Main- oder Publikationsänderungen.
+
+Der letzte Nachreview reproduzierte noch einen Zeitstempelrandfall mit zwei
+überlappenden Programmplaylists: Erstfunde derselben Video-ID konnten im
+ersten Scan voneinander abweichen und danach durch den späteren Wert ersetzt
+werden. Die erweiterte echte SQLite-Probe scheitert ohne Fix kausal an diesen
+unterschiedlichen Zeitstempeln. Der Scan nimmt jetzt den frühesten vorhandenen
+Erstfund und hält ihn bereits während desselben Scans playlistübergreifend
+fest. Beide Kopien und der nächste Refresh behalten denselben Wert; keine
+automatische Episodenfreigabe oder Deduplikation unterschiedlicher Programme
+daraus abgeleitet. 33 betroffene Tests, Lint/Typecheck/Format grün. Diese
+gezielte Änderung am Scanowner erhält einen eigenen CI-Checkpoint, einschließlich
+PG17/18 und Containerbuild; GUI und bisherige übrige Owner sind unverändert.
+
+Folgecheckpoint `b8fa19143635ca6285afb2f402e81b4dc2a7b9cf` hat
+[CI mit PG17/18](https://github.com/superions/pingufunk/actions/runs/40238451181)
+terminal grün: erneut 137 Dateien/1.510 Tests, 6 Dateien/24 Tests bedingt
+übersprungen; der separate echte PG-Gate läuft auf beiden Versionen vollständig.
+Statements 88,31 %, Branches 85,55 %, Funktionen 91,85 %, Lines 90,76 %.
+Audit einschließlich Dev-Dependencies ohne Befunde, Lint/Format/Typecheck/Build
+ebenfalls grün. Die ursprünglichen drei Mutationsgegenchecks und die unveränderte
+Desktop-Evidenz bleiben gültig. Auch seine
+[native Container-CI](https://github.com/superions/pingufunk/actions/runs/40238451177)
+ist terminal erfolgreich abgeschlossen.
+
+Die abschließende Kapazitätsprobe mit langen Unicodebeschreibungen deckte
+zusätzlich eine asymmetrische Grenze auf: Ein Index unter 8 MiB konnte eine
+einzelne 100er-Seite oberhalb ihres 1-MiB-Lesebudgets enthalten. Die native
+SQLite-Regression scheitert ohne Fix an fälschlichem `complete` statt `limited`.
+Der Producer serialisiert die Seiten nun einmal und prüft dieselbe UTF-8-
+Bytegrenze wie der Reader vor jeder Indextransaktion. Der alte vollständige
+Index bleibt bei Überschreitung exakt erhalten. Die Probe unterscheidet die
+1-MiB-Seiten- und 8-MiB-Gesamtgrenze über ihre tatsächlichen Fehlermeldungen;
+33 betroffene Tests, Lint, Typecheck und Format grün. Auch dieser enge
+Scanowner-Fix wurde als eigener finaler CI-Checkpoint auf SQLite/PG und im
+Container geprüft; keine Änderung an GUI, Medien-/Downloadownern oder Schema.
+
+Finale Entwicklungsabnahme 25.10.2026 für Codecheckpoint
+`944ea78cd920c52c329811cd404507ff0dced1e0`:
+[CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40240281926)
+und [vollständige native Container-CI](https://github.com/superions/pingufunk/actions/runs/40240281946)
+terminal erfolgreich, jeweils gegen exakt diesen SHA gelesen. Erneut
+137 Dateien/1.510 Tests grün, 6 Dateien/24 Tests bedingt übersprungen;
+separate echte Config-/Scanproben auf PostgreSQL 17 und 18 vollständig grün.
+Statements 88,32 %, Branches 85,56 %, Funktionen 91,86 %, Lines 90,77 %.
+Dev-inklusive Audit ohne Befunde, Lint/Format/Typecheck/Build grün.
+Die unveränderte Desktop-Evidenz wird wiederverwendet.
+
+Native Containerbelege: Qualitäts-/Sprach-/Konfliktfälle direkt und über
+Prowlarr bestanden; beide kalten Ketten von 0 initialen Grabs bis jeweils
+80/80 realen synthetischen Imports, wiederholtes RSS ohne Doppelgrab.
+SQLite-Bootstrap/Persistenz/Restart, TLS-/Post-write-Rollback, echte
+progressive/HLS-/Mux-Dateien, negative Medien, SAB-History, SIGTERM-Drain,
+PG-Ausfall-/Quittierungsgrenzen sowie TV-Review→Worker→Datei/Audit/Receipt
+auf beiden Backends erfolgreich. Keine Imagepublikation dieser Testläufe.
+
+P17.2 ist ohne offene Findings abgenommen. Die drei Mutationsgegenchecks und
+beide zusätzlich reproduzierten Nachreviewbefunde sind geschützt. Automatische
+ID-/Episodenbindung, 97-Folgen-Abgleich und YouTube-Medienintegration bleiben
+P17.3/P17.4; keine vorgezogene Quellen- oder Medienfreigabe. Keine Produktion,
+reale Bibliothek, Main oder Publikation verändert. Der Abschlusscheckpoint
+ändert nur Review/TODO; Produkt-, Test-, Workflow-, Dependency- und Runtimeinputs
+bleiben exakt am getesteten Codecheckpoint. Dafür werden die gültigen Gates
+wiederverwendet statt die Matrix für eine Statusfortschreibung zu wiederholen.
+
+## Vorgezogene Pingufunk-Marke und Artwork (26.10.2026)
+
+Der Nutzer hat den Pinguinkopf mit Funkwellen als Richtung bestätigt und eine
+saubere SVG-Vorlage in einem Artworkverzeichnis verlangt. `artwork/` enthält
+den mit integriertem Imagegen erzeugten Originalentwurf und eine bereinigte,
+von Hand gezeichnete Vektorfassung: echte Pfade/Gradienten, transparent,
+ohne eingebettete Rasterdaten, Fonts, Skripte oder externe Ressourcen.
+Die beiden öffentlichen SVG-Adressen sind bytegleich zur Vorlage; PNG- und
+Browserexporte stammen daraus. Bild-/Wortmarke wird über eine gemeinsame
+Komponente eingebunden, der Produktname ist für HTTP-/XML-Metadaten zentral.
+
+Bereinigt sind Navigation, Dashboard, Setup, Settings/System, Browsermetadaten,
+Feed-/Capabilitiesnamen, NZB-Absender, HTTP-User-Agents und Paketname.
+Lockfileänderung betrifft ausschließlich den Rootnamen, keine Version/Kante.
+Die Compose-Beispiele heißen in Basis und PG-Override konsistent `pingufunk`;
+beide Konfigurationen mit `docker compose config --format json` geprüft.
+Der Bestandsübergang des Dienstnamens ist im Artwork-README beschrieben.
+SQLite-Datei, URL-Qualitätsfragmente, gespeicherte Releasekennungen, historische
+Migrationen und bestehende Katalog-Quelladresse bleiben erhalten. Branding
+wechselt keine Datenbank und löst keinen Auftrag aus.
+
+README-Titel/Logo, eigene Badgeziele, Produktnamen und ein echtes eigenes
+Entwicklungsbild ersetzt. Fremde Image-/Nightlyzusagen und der unsichere
+`migrate dev`-Einstieg werden nicht als Pingufunk-Anleitung fortgeschrieben;
+bestehende Backend-/Bestandsrunbooks sind verlinkt. Herkunft/Copyright erhalten.
+Dies schließt P18.1s umfassende DE-/EN-Neugestaltung und Vergleich nicht vorzeitig.
+
+Desktop auf der isolierten SQLite-Instanz: Settings vor/nach bei 1280×720 und
+System-Dark verglichen, Dashboard/Setup/System und Titel/Favicons/Bildladung
+geprüft, Markennavigation mit Pointer und Return bedient. Kein sichtbares
+RundfunkArr, kein horizontaler Overflow, keine Konsolenfehler; eine erwartete
+Next-Fast-Refresh-Warnung während der Quelländerung. Eine helle Appdarstellung
+wurde nicht als geprüft behauptet. Null Download- und Configzeilen vor Cleanup;
+eigene Browser-/Server-/DB-Fixture geschlossen/entfernt. Privates Vergleichsbild
+unter `downloads/branding-ui/`, öffentlich nur der bereinigte eigene UI-Stand.
+
+118 betroffene Tests und anschließend 1.510 Tests in 137 Dateien grün,
+6 Dateien/24 Tests bedingt übersprungen. Lint, Typecheck, Formatcheck und
+Produktionsbuild grün. Bestehende GUID-/URL-/NZB-Roundtripassertions bleiben
+aktiv; zusätzlicher tatsächlicher NZB-Consumer prüft den neuen Absender.
+Keine neue Dependency, Schemaänderung, produktive Suche, Grab, Bibliotheks-
+oder Dienständerung, Publikation oder Mainintegration. Die Fork-CI wird mit dem
+Codecheckpoint gestartet; daraus wird ohne terminales Ergebnis keine zusätzliche
+CI-/Containerabnahme behauptet.
+
+## CI-Nachbefund vor Branding-Mainintegration (26.10.2026)
+
+Brandingcheckpoint `e9a394a` bestand beide PG-Gates, scheiterte jedoch unter
+Coverage im echten SQLite-Katalogconsumer: erwartet `limited`, geliefert
+`interrupted`. Ein Manifestread kann `running` erfassen und erst zurückkehren,
+nachdem der eigene Scan seine Fehlermeldung persistiert und den Work-Promise
+freigegeben hat. Der alte Snapshot kombinierte den alten Read mit dem neuen
+Prozesszustand. Dies ist kein Branding-/Datenverlustfehler, aber ein belegter
+Statusfehler und deshalb ein Mergeblocker.
+
+Die neue Regression hält exakt diesen echten Manifestread bis nach dem
+beendeten Größenfehler zurück. Ohne Produktfix entsteht deterministisch
+derselbe Assertionfehler; mit Fix bleibt `limited` erhalten. Ein anderer
+Versuchstoken mit derselben Registryrevision wird weiterhin als fremd/
+unterbrochen erkannt statt durch den letzten lokalen Terminalstatus überdeckt.
+Der Snapshot erfasst eine lokale Versuchsgeneration synchron und liest deren
+veraltetes Runningmanifest nach Abschluss einmal erneut, damit auch Indexzeit
+und Status zusammenpassen. Kein neuer Write, Schemawechsel, Retry oder Scan.
+
+33 betroffene Tests, Lint/Typecheck und Build grün; vollständiger Coverage-Lauf
+mit 1.510 Tests, 24 bedingten Skips, Statements 88,34 %, Branches 85,59 %,
+Funktionen 91,86 %, Lines 90,78 % grün. Nach ergänzter Fremdversuchsassertion
+derselbe reale SQLite-Consumer erneut grün. P17.2 für die erneute terminale
+CI-/PG-Abnahme vor Mainintegration geöffnet; die unveränderte Branding-
+Desktopprüfung wird wiederverwendet. Kein Merge bei laufenden/roten Gates.
+
+## PR-Reviewnacharbeit vor Mainintegration (26.10.2026)
+
+Acht nachvollziehbare Reviewbefunde in PR #9 werden vor dem Merge geschlossen:
+Statuspolling darf einen alten GUI-Entwurf nicht auf eine fremde Revision
+umbasieren; ein fehlgeschlagener Inventarread muss ausdrücklich erneut ladbar
+sein; getrimmte Namen werden bereits vor Submit kanonisiert; erneutes Übernehmen
+einer Vorgabe erhält die Reihenfolge neben lokalen Zuordnungen. Ein identifiziertes
+Video speichert seinen Erstfund unabhängig von abspielbaren Metadaten. Der
+optionale Indexwert liest alte Seiten weiterhin über deren bisherigen Timestamp;
+bei alten unbekannten Platzhaltern wird kein verlorenes Datum erfunden.
+
+Abbruch wird nach dem letzten wartenden Insert innerhalb der Veröffentlichung
+geprüft, damit die echte Transaktion zurückrollt. Shutdown prüft seinen Stopstand
+auch nach den initialen Reads und wartet Claim sowie Scanübergabe ab. Bei einem
+zwischen Manifest und Seitenread veröffentlichten Indexwechsel wird genau einmal
+die neue Seitengeneration gelesen; unveränderte fehlende oder korrupte Seiten
+bleiben Fehler. Weder externe Abrufe noch Writes werden dabei blind wiederholt.
+
+Der reale SQLite-/PG-Consumer hält den letzten Insert, Claimvorbereitung und
+initialen Registryread gezielt an. Er prüft Rollback, keine späten Kindprozesse,
+Erstfund über verfügbar → nicht verfügbar → verfügbar, atomaren Seitenwechsel
+und weiterhin fehlschlagenden Read einer wirklich fehlenden aktuellen Seite.
+Die SQLite-Ausführung ist grün; PostgreSQL muss für diesen neuen Input erneut
+in der Fork-CI terminal bestätigen.
+
+Desktopprüfung auf isoliertem synthetischem SQLite-Runtime, 1280×720/System-Dark:
+zwei Tabs mit gleichzeitigem Statuspolling, erhaltenem veraltetem Entwurf und
+Speichersperre; getrimmter Kanalname mit erfolgreichem Save/Readback; erneute
+Vorgabenzuordnung neben lokalem Programm; Inventarfehler und erneutes Laden bei
+identischem Abschlussdatum und identischer Seitennummer. Null Downloadjobs,
+externe Providerzugriffe gesperrt. Console ohne Fehler/Warnungen, auch der
+synthetische 503 wird als bedienbarer Fehler angezeigt. Private Vergleichsbilder
+bleiben ignoriert unter `downloads/branding-review-ui/`.
+
+Vollständiger lokaler Coverage-Lauf: 1.510 bestanden, 24 bedingte Skips;
+Statements 88,46 %, Branches 85,67 %, Funktionen 91,97 %, Lines 90,90 %.
+Lint, Typecheck, Formatcheck und Produktionsbuild grün. Neue Fork-CI,
+Container-/PG-Abnahme und abschließender Review bleiben Mergevoraussetzung;
+P17.2 bleibt bis dahin offen. Kein Produktrollout, Grab oder Bibliothekswrite.
+
+Vier gezielte Mutationen (finaler Abbruchcheck, Shutdowncheck nach Reads,
+Erstfundübernahme aus nicht verfügbarem Eintrag, einmaliger Seitengenerationsread)
+werden jeweils vom realen Consumer abgewiesen. Danach identischen geprüften
+Produktcode wiederhergestellt; eigene UI-Prozesse, Tabs und disposable DB entfernt.
+
+Der erneute automatische Review bestätigt alle acht Korrekturen, nennt aber
+zwei zuvor übersehene Randfälle im Übersichtstext. Der Scanbutton erhält jetzt
+am gespeicherten Fristende einen eigenen Renderimpuls, ohne Scan oder Polling
+anzustoßen. Auf dem frisch gebauten isolierten Desktopbundle wurde der Button
+bei unveränderter Seite und ohne Nutzeraktion vom gesperrten zum nutzbaren
+Zustand übernommen; passende sichtbare Vorher-/Nachherbilder, keine Browser-
+Consolefehler oder Warnungen. Ein unruhiger lokaler Dev-Hot-Reload wurde für
+diese zeitabhängige Probe durch das gebaute Testbundle ersetzt; daraus wird
+keine Behebung einer allgemeinen Dev-Runtimeursache abgeleitet.
+
+Ein lokal als fehlgeschlagen gewerteter verlorener Publish-Rückkanal darf einen
+unabhängig bestätigten vollständigen DB-Stand nicht überdecken. Die Regression
+lässt den echten Publish committen, verliert dessen Rückmeldung und hält den
+nachfolgenden konditionalen Fehlerwrite zurück: der Snapshot bleibt `complete`.
+Zusätzlich darf ein zwischen zwei Reads verschwundenes Manifest nicht als
+veröffentlichter leerer Index gelten. Beide Rückbauten schlagen mit genau den
+geschützten Assertions fehl (`failed` statt `complete`, 200 statt 503).
+
+Erneuter kohärenter lokaler Abschluss nach diesen drei relevanten Änderungen:
+1.510 Tests/24 bedingte Skips, Coverage unverändert 88,46/85,67/91,97/90,90 %,
+Lint, Typecheck, Format und Build grün. Die übrigen Desktopflüsse werden bei
+unveränderten Inputs wiederverwendet. Neue terminale CI-/PG-/Containerbelege
+und finaler PR-Review stehen vor Mainintegration noch aus.

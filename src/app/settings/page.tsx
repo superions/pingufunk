@@ -29,6 +29,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useSettingsForm } from "./use-settings-form";
+import { YoutubeSettings } from "./youtube-settings";
 import {
   ToleranceSettingsCard,
   SonarrMetadataCard,
@@ -183,7 +184,7 @@ export default function SettingsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground text-sm">Konfiguriere RundfunkArr</p>
+        <p className="text-muted-foreground text-sm">Konfiguriere Pingufunk</p>
       </div>
 
       {invalidKeys.length > 0 && (
@@ -223,7 +224,7 @@ export default function SettingsPage() {
             defaultValue="general"
             onValueChange={(value) => value === "system" && fetchSystemInfo()}
           >
-            <TabsList className="grid w-full grid-cols-5 mb-6">
+            <TabsList className="grid w-full grid-cols-6 mb-6">
               <TabsTrigger value="general" className="flex items-center gap-2">
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Allgemein</span>
@@ -236,6 +237,7 @@ export default function SettingsPage() {
                 <Sliders className="w-4 h-4" />
                 <span className="hidden sm:inline">Matching</span>
               </TabsTrigger>
+              <TabsTrigger value="youtube">YouTube</TabsTrigger>
               <TabsTrigger value="cache" className="flex items-center gap-2">
                 <Database className="w-4 h-4" />
                 <span className="hidden sm:inline">Cache</span>
@@ -245,6 +247,10 @@ export default function SettingsPage() {
                 <span className="hidden sm:inline">System</span>
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="youtube">
+              <YoutubeSettings />
+            </TabsContent>
 
             {/* General Tab */}
             <TabsContent value="general" className="space-y-4">
@@ -708,7 +714,7 @@ export default function SettingsPage() {
                     <h4 className="text-sm font-medium mb-3">Versionen</h4>
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                       <div>
-                        <p className="text-xs text-muted-foreground">RundfunkArr</p>
+                        <p className="text-xs text-muted-foreground">Pingufunk</p>
                         <p className="font-medium">{packageJson.version}</p>
                       </div>
                       <div>

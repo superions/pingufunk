@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { Brand } from "@/components/brand";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
@@ -18,8 +18,7 @@ export function MobileNav() {
     <div className="md:hidden flex items-center justify-between p-4 border-b border-border bg-card">
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2">
-        <Image src="/logo.svg" alt="RundfunkArr" width={32} height={32} />
-        <span className="font-bold text-lg">RundfunkArr</span>
+        <Brand />
       </Link>
 
       {/* Hamburger */}
@@ -33,8 +32,7 @@ export function MobileNav() {
         <SheetContent side="left" className="w-64 p-0">
           <SheetHeader className="p-4 border-b border-border">
             <SheetTitle className="flex items-center gap-2">
-              <Image src="/logo.svg" alt="RundfunkArr" width={32} height={32} />
-              RundfunkArr
+              <Brand />
             </SheetTitle>
           </SheetHeader>
           <nav className="p-2 space-y-4">

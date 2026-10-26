@@ -1,3 +1,4 @@
+import { queryProviderCatalogue } from "./mediathek/search";
 import { BaseProvider } from "./base";
 import { apiResultToProviderItem } from "./content-item";
 import { getMinDurationSeconds, getSetting } from "@/lib/settings";
@@ -116,16 +117,7 @@ export class OrfProvider extends BaseProvider {
     console.log(`[${this.id}] Searching bounded catalogue`);
 
     try {
-      const results = await queryMediathekView(
-        [
-          { fields: ["topic", "title"], query: searchQuery },
-          { fields: ["channel"], query: "ORF" },
-        ],
-        limit * 3,
-        { requestBudget: query.requestBudget, deadlineAt: query.deadlineAt }
-      );
-
-      if (results === null) throw new Error("MediathekView search failed");
+      const results = await queryProviderCatalogue("orf", query);
       const items = this.filterResults(results, query.type);
 
       console.log(`[${this.id}] Found ${items.length} items after filtering`);

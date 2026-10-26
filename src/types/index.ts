@@ -47,6 +47,10 @@ export interface ApiResultItem {
   duration: number;
   size: number;
   url_website: string;
+  /** Optional provider subtitle URL; not audio-language evidence or a download instruction. */
+  url_subtitle?: string;
+  /** Explicit production-year metadata only, never derived from catalogue timestamps. */
+  productionYear?: number;
   url_video: string;
   url_video_low: string;
   url_video_hd: string;

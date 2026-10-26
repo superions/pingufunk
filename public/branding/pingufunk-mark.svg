@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <title>Pingufunk</title>
+  <desc>Ein Pinguinkopf pickt mit seinem Schnabel in drei umlaufende Funkwellen.</desc>
+  <defs>
+    <linearGradient id="ink" x1="113" y1="108" x2="335" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0C1D34"/>
+      <stop offset="1" stop-color="#071529"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="305" y1="100" x2="418" y2="344" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF6B22"/>
+      <stop offset="1" stop-color="#FF551C"/>
+    </linearGradient>
+    <linearGradient id="beak" x1="249" y1="181" x2="328" y2="207" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF9749"/>
+      <stop offset="1" stop-color="#FF6825"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#signal)" d="M145 437c89 40 188 10 257-56-50 75-155 107-257 56Z"/>
+  <path fill="url(#ink)" d="M193 99c-80-3-138 58-145 139-9 105 43 187 131 210 94 25 189-23 247-108-32 40-68 50-105 45 13-43-8-78-42-111-25-24-35-46-14-69l23-18c-18-49-48-86-95-88Z"/>
+  <path fill="#FFFFFF" d="M139 166c16-21 40-27 69-24 28 2 48 13 62 34l-29 30c12 1 21 6 29 16-25 21-12 44 9 65 29 29 53 62 42 98-41-2-71-16-94-47-22-28-49-48-89-52l74-1c-38-17-65-36-75-60-8-20-7-42 2-59Z"/>
+  <path fill="url(#signal)" d="M348 67c-10-2-20 4-22 14-2 9 4 17 14 21 74 30 108 95 86 160-14 44-47 83-93 112 66-18 113-58 129-109 24-79-15-160-99-194-5-2-10-3-15-4Z"/>
+  <path d="M313 121c70 27 99 106 57 170" stroke="url(#signal)" stroke-width="32" stroke-linecap="round"/>
+  <path fill="url(#signal)" d="M337 162c-7-5-15-1-17 6-1 5 2 9 7 14 18 18 20 39 10 58-5 8-2 16 5 19 7 3 15-1 18-8 15-29 6-65-23-89Z"/>
+  <path fill="url(#beak)" d="M241 206c18-24 38-36 57-35 15 0 29 7 42 20-37 1-61 11-99 15Z"/>
+  <path fill="#C63D1A" d="M241 206c37-4 62-14 99-15-28 13-48 28-70 31-7-8-16-13-29-16Z"/>
+  <ellipse cx="218" cy="178" rx="17" ry="18" transform="rotate(-25 218 178)" fill="url(#ink)"/>
+  <circle cx="222" cy="170" r="4.5" fill="#FFFFFF"/>
+</svg>

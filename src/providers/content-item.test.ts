@@ -50,3 +50,40 @@ it("preserves exact rendition facts and the shipped IDs across the provider adap
     apiResultToProviderItem({ ...item, url_video_hd: "" }, "mediathekview").videoUrls.high
   ).toBeUndefined();
 });
+
+it("keeps validated optional catalogue fields in both adapter directions without changing IDs", () => {
+  const item = {
+    channel: "Synthetic",
+    topic: "Example",
+    title: "Episode",
+    description: "",
+    filmlisteTimestamp: 1,
+    duration: 120,
+    size: 0,
+    url_website: "",
+    url_video: "https://example.invalid/video.mp4",
+    url_video_hd: "",
+    url_video_low: "",
+    url_subtitle: "https://example.invalid/subtitles.ttml",
+    productionYear: 2001,
+    audioLanguage: "de",
+    subtitleLanguage: "en",
+    originalVersion: false,
+    audioDescription: true,
+    signLanguage: false,
+    clearSpeech: true,
+    contentDates: { providerDay: "2024-02-29" },
+  };
+  const provider = apiResultToProviderItem(item, "mediathekview");
+  expect(provider).toMatchObject({
+    subtitleUrl: item.url_subtitle,
+    productionYear: 2001,
+    subtitleLanguage: "en",
+    originalVersion: false,
+    audioDescription: true,
+    signLanguage: false,
+    clearSpeech: true,
+  });
+  expect(provider.id).toBe("Synthetic-Example-Episode-1");
+  expect(providerItemToApiResult(provider)).toMatchObject(item);
+});

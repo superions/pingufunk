@@ -1,15 +1,19 @@
-# Pingufunk (RundfunkArr fork) development
+# Pingufunk development
 
 ## Purpose
 
-This fork aims to replace an external Sonarr/Radarr compatibility proxy with
-native, tested RundfunkArr fixes and optional integrations. **SQLite and PostgreSQL
-are equally supported; without PostgreSQL configuration use SQLite. Neither is
-a preferred product backend.** Read
+Pingufunk originated from RundfunkArr and is developed as an independent product.
+RundfunkArr is a historical origin and comparison source only; it does not define
+Pingufunk's architecture, feature scope or acceptance. Preserve attribution and
+selectively review useful changes without requiring upstream compatibility.
+The historical proxy-retirement work and new integrations use Pingufunk's own
+tested contracts. **SQLite and PostgreSQL are equally supported; without
+PostgreSQL configuration use SQLite. Neither is a preferred product backend.** Read
 `todo/proxy-retirement.md` (the sole executable phased contract),
 `docs/proxy-retirement-plan.md`, its review and `docs/postgresql-migration-plan.md`
-before changing the relevant behavior. Re-check upstream before implementing a
-workaround: some historical defects are already fixed.
+before changing the relevant behavior. When comparing upstream behavior or
+considering a particular fix, verify the referenced revision rather than assuming
+that a historical defect or feature difference still exists.
 
 This guide contains Pingufunk-specific adaptations of useful Myoxus working
 practices, not Myoxus's deployment or product architecture. The active user
@@ -48,10 +52,12 @@ request determines scope; a plan or skill never supplies deployment permission.
 ## Repository workflow
 
 - `origin`: `superions/pingufunk`; `upstream`: `rundfunkarr/rundfunkarr`.
-- Keep `main` compatible with upstream. Work on focused `codex/<topic>` branches.
-- Prefer small, upstreamable commits and regression tests over a permanent fork.
+- Protect Pingufunk's shipped contracts on `main`; upstream parity is not a gate.
+  Work on focused `codex/<topic>` branches.
+- Prefer small, coherent commits and causal regression tests.
 - Follow `CONTRIBUTING.md`: German documentation, English code/comments and
-  Conventional Commit messages.
+  Conventional Commit messages. The user-facing README is explicitly maintained
+  in both German and English under P18.
 - Do not push to upstream or open upstream issues/PRs without user direction.
 - Preserve unrelated dirty work. Do not reset, clean, force-push or rewrite
   published history to simplify a task. Inspect branch, remotes and changes first.

@@ -1,6 +1,6 @@
-# Beitragen zu RundfunkArr
+# Beitragen zu Pingufunk
 
-Vielen Dank für dein Interesse an RundfunkArr! Wir freuen uns über jede Art von Beitrag.
+Vielen Dank für dein Interesse an Pingufunk! Wir freuen uns über jede Art von Beitrag.
 
 ## Sprache
 
@@ -22,14 +22,15 @@ Vielen Dank für dein Interesse an RundfunkArr! Wir freuen uns über jede Art vo
 
 ```bash
 # Repository klonen
-git clone https://github.com/your-username/rundfunkarr.git
-cd rundfunkarr
+git clone https://github.com/your-username/pingufunk.git
+cd pingufunk
 
 # Dependencies installieren
 npm ci
 
-# Datenbank initialisieren
-npx prisma migrate dev
+# Nur neue disposable SQLite-Entwicklungsinstallation initialisieren
+mkdir -p prisma/data
+npm run db:migrate
 
 # Development Server starten
 npm run dev
@@ -37,16 +38,16 @@ npm run dev
 
 ### Verfügbare Scripts
 
-| Script | Beschreibung |
-|--------|--------------|
-| `npm run dev` | Startet den Development Server mit Hot Reload |
-| `npm run build` | Erstellt einen Production Build |
-| `npm run lint` | Führt ESLint aus |
-| `npm run lint:fix` | Führt ESLint mit Auto-Fix aus |
-| `npm run format` | Formatiert Code mit Prettier |
-| `npm run format:check` | Prüft Formatierung mit Prettier |
-| `npm run typecheck` | Führt TypeScript Type-Checking aus |
-| `npm run test:coverage` | Führt die Tests mit dem V8-Coverage-Provider aus |
+| Script                       | Beschreibung                                                           |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `npm run dev`                | Startet den Development Server mit Hot Reload                          |
+| `npm run build`              | Erstellt einen Production Build                                        |
+| `npm run lint`               | Führt ESLint aus                                                       |
+| `npm run lint:fix`           | Führt ESLint mit Auto-Fix aus                                          |
+| `npm run format`             | Formatiert Code mit Prettier                                           |
+| `npm run format:check`       | Prüft Formatierung mit Prettier                                        |
+| `npm run typecheck`          | Führt TypeScript Type-Checking aus                                     |
+| `npm run test:coverage`      | Führt die Tests mit dem V8-Coverage-Provider aus                       |
 | `npm run audit:dependencies` | Prüft Laufzeit- und Dev-Abhängigkeiten auf bekannte Sicherheitsbefunde |
 
 Der Dependency-Audit gehört zur normalen CI und bricht bereits bei LOW-Befunden
@@ -93,16 +94,16 @@ Wir verwenden [Conventional Commits](https://www.conventionalcommits.org/) für 
 
 **Types:**
 
-| Type | Beschreibung |
-|------|--------------|
-| `feat` | Neues Feature |
-| `fix` | Bugfix |
-| `docs` | Dokumentation |
-| `style` | Formatierung (kein Code-Change) |
-| `refactor` | Code-Refactoring |
-| `perf` | Performance-Verbesserung |
-| `test` | Tests hinzufügen/ändern |
-| `chore` | Build-Prozess, Dependencies |
+| Type       | Beschreibung                    |
+| ---------- | ------------------------------- |
+| `feat`     | Neues Feature                   |
+| `fix`      | Bugfix                          |
+| `docs`     | Dokumentation                   |
+| `style`    | Formatierung (kein Code-Change) |
+| `refactor` | Code-Refactoring                |
+| `perf`     | Performance-Verbesserung        |
+| `test`     | Tests hinzufügen/ändern         |
+| `chore`    | Build-Prozess, Dependencies     |
 
 **Beispiele:**
 

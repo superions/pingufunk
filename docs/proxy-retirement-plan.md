@@ -12,6 +12,31 @@ optionale Datenvertrag steht in der [PostgreSQL-Fachreferenz](postgresql-migrati
 Einziger ausführbarer Arbeitsvertrag: [Phasen-TODOs](../todo/proxy-retirement.md).
 Dieses Dokument bleibt Analyse, Inventar und Priorisierungsgrundlage.
 
+Ergänzender Nutzerauftrag 25.10.2026: YouTube als optionale zusätzliche Quelle,
+mit separat gepflegtem Kanalregister, automatischer Programm-ID-Zuordnung und
+Mediathek-nahem Inhaltsvertrag. Der aktuelle
+[YouTube-Entwurf mit Feldvergleich](youtube-source-contract.md) gehört zum
+unabhängigen P17-Pfad im bestehenden Phasen-TODO. Er erweitert nicht die
+historische Proxy-Paritätsdefinition und ist keine Implementierungs- oder
+Betriebsabnahme.
+
+Nachgeschärfter Modulentscheid vom selben Tag: getrennte Mediathek-/YouTube-
+Such- und Downloadmodule hinter gemeinsamen Verträgen, zentrale Matching-,
+Queue- und Medienabschlussowner. Die Grundlage P17.1a wird zunächst mit dem
+bestehenden Mediathekpfad konsumiert; Upstream ist Vergleichsquelle, keine
+Voraussetzung für diese eigene Erweiterung.
+
+Eigenständige Positionierung laut weiterem Nutzerentscheid vom 25.10.2026:
+RundfunkArr ist ausschließlich Ursprung und Vergleichsquelle; Upstreamparität
+ist kein Architektur-, Start- oder Abnahmekriterium. Der unabhängige P18-Pfad
+in den [Phasen-TODOs](../todo/proxy-retirement.md) gestaltet die deutsche und
+englische README als Produktvisitenkarte samt klarem, nutzenorientiertem
+Vergleich grundlegend neu. Vorhandene Funktions-/Betriebsgrenzen bleiben sichtbar, geplante Merkmale
+werden nicht als ausgeliefert beworben. Historische Upstreamanalysen unten
+bleiben historische Evidenz.
+Die Vergleichsaussagen werden intern geprüft; die öffentliche Gegenüberstellung
+enthält keine Belegspalten, Quellenfußnoten oder Revisions-/Prüfnachweise.
+
 ## Ergebnis und Reihenfolge
 
 Die Funktionen des Proxys lassen sich überwiegend in bestehende Pingufunk-

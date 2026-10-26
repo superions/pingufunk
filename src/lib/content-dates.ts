@@ -4,6 +4,8 @@ export interface ContentDates {
   broadcastAt?: number;
   /** An otherwise unspecified provider date; never a production year or rights start. */
   providerDate?: number;
+  /** An explicitly day-precise provider date; never promoted to midnight, broadcast or rights. */
+  providerDay?: string;
 }
 
 export type SourceAvailability =
@@ -32,6 +34,21 @@ export function sourceEpoch(value: unknown): number | undefined {
     value > 0 &&
     value <= 253402300799 &&
     Number.isFinite(new Date(value * 1000).getTime())
+    ? value
+    : undefined;
+}
+
+/** A real ISO calendar day without inventing a time or timezone. */
+export function sourceDay(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!parts) return undefined;
+  const [, year, month, day] = parts.map(Number);
+  return year >= 1000 &&
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= new Date(Date.UTC(year, month, 0)).getUTCDate()
     ? value
     : undefined;
 }

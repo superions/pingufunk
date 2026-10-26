@@ -6,6 +6,7 @@ import release from "./ytdlp-release.json";
 import { getSetting } from "@/lib/settings";
 import { writesEnabled } from "@/lib/write-gate";
 import { bindOwnedProcessAbort } from "./owned-process";
+import { youtubeInput, type YoutubeInput } from "@/lib/youtube-catalogue";
 
 const isWindows = process.platform === "win32";
 const APP_DIR = process.cwd();
@@ -14,6 +15,120 @@ const YTDLP_PATH = path.join(YTDLP_DIR, isWindows ? "yt-dlp.exe" : "yt-dlp");
 // Activity resets this deadline, so long downloads can continue. Allow enough
 // silence for retries and FFmpeg remuxing without blocking the queue forever.
 const DOWNLOAD_STALL_TIMEOUT_MS = 10 * 60_000;
+
+export class YoutubeMetadataError extends Error {
+  constructor(
+    readonly reason: "runtime" | "timeout" | "overflow" | "process" | "invalid" | "cancelled"
+  ) {
+    super(
+      {
+        runtime: "yt-dlp ist nicht vorhanden oder der konfigurierte Pfad ist nicht erreichbar.",
+        timeout: "YouTube-Metadatenabruf nach 30 Sekunden beendet.",
+        overflow: "YouTube-Metadatenantwort überschreitet 8 MiB.",
+        process: "YouTube-Metadatenprozess fehlgeschlagen.",
+        invalid: "YouTube-Metadaten sind unvollständig, ungültig oder widersprüchlich.",
+        cancelled: "YouTube-Metadatenabruf abgebrochen.",
+      }[reason]
+    );
+  }
+}
+
+/** Metadata only. No runtime installation, config/plugins, retries or media output. */
+export async function readYoutubeMetadata(
+  input: YoutubeInput,
+  offset: number,
+  signal: AbortSignal
+): Promise<unknown> {
+  const canonical = youtubeInput(input.url);
+  if (
+    canonical.kind !== input.kind ||
+    canonical.id !== input.id ||
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset >= 1000 ||
+    offset % 100 !== 0
+  )
+    throw new YoutubeMetadataError("invalid");
+  signal.throwIfAborted();
+  const executable = await getConfiguredYtdlpPath();
+  try {
+    await fs.access(executable);
+  } catch {
+    throw new YoutubeMetadataError("runtime");
+  }
+  const args = [
+    "--ignore-config",
+    "--no-plugin-dirs",
+    "--no-remote-components",
+    "--no-update",
+    "--no-cache-dir",
+    "--simulate",
+    "--skip-download",
+    "--flat-playlist",
+    "--dump-single-json",
+    "--no-warnings",
+    "--abort-on-error",
+    "--retries",
+    "0",
+    "--extractor-retries",
+    "0",
+    "--socket-timeout",
+    "10",
+    "--use-extractors",
+    "youtube.*,end",
+    "--no-js-runtimes",
+    "--js-runtimes",
+    `node:${process.execPath}`,
+    "--playlist-start",
+    String(offset + 1),
+    "--playlist-end",
+    String(offset + 100),
+  ];
+  const proxy = await getProxyUrl();
+  if (proxy) args.push("--proxy", proxy);
+  args.push("--", input.url);
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const owned = bindOwnedProcessAbort(child, signal);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let failure: YoutubeMetadataError | undefined;
+    const fail = (reason: YoutubeMetadataError["reason"]) => {
+      failure ??= new YoutubeMetadataError(reason);
+      owned.terminate();
+    };
+    const timer = setTimeout(() => fail("timeout"), 30_000);
+    child.stdout.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 8 * 1024 * 1024 || chunks.length >= 8192) fail("overflow");
+      else if (!failure) chunks.push(chunk);
+    });
+    child.stderr.resume();
+    child.once("error", () => {
+      clearTimeout(timer);
+      owned.dispose();
+      reject(new YoutubeMetadataError("process"));
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      owned.dispose();
+      if (signal.aborted) return reject(new YoutubeMetadataError("cancelled"));
+      if (failure) return reject(failure);
+      if (code !== 0) return reject(new YoutubeMetadataError("process"));
+      try {
+        resolve(
+          JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)))
+        );
+      } catch {
+        reject(new YoutubeMetadataError("invalid"));
+      }
+    });
+  });
+}
 
 function releaseAsset(): keyof typeof release.sha256 {
   if (process.platform === "win32" && process.arch === "x64") return "yt-dlp.exe";

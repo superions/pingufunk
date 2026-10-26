@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/brand";
 import { promises as fs } from "fs";
 import path from "path";
 import { createHash } from "node:crypto";
@@ -77,7 +78,7 @@ async function fetchFromGitHub(budget?: HttpRequestBudget): Promise<Ruleset[] | 
     const response = await fetchWithRetry(
       url.href,
       {
-        headers: { "User-Agent": "RundfunkArr" },
+        headers: { "User-Agent": PRODUCT_NAME },
       },
       { deadlineAt, requestBudget: budget }
     );

@@ -42,6 +42,7 @@ export const SETTING_DEFINITIONS = {
   // Historically SRF is eligible without this row only when credentials and
   // HLS are configured. Its provider still enforces both gates independently.
   "provider.srf.enabled": bool(true),
+  "provider.youtube.enabled": bool(false),
   "matching.strategy": { kind: "enum", defaultValue: "fuzzy", choices: ["fuzzy", "strict"] },
   "matching.threshold": { kind: "decimal", defaultValue: "0.7", min: 0, max: 1 },
   "matching.minDuration": integer(300, 0, Number.MAX_SAFE_INTEGER, "seconds"),

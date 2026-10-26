@@ -15,7 +15,10 @@ export async function register() {
       try {
         const { startDownloadProcessing, installWorkerShutdownHandlers } =
           await import("@/server/download-manager");
-        installWorkerShutdownHandlers();
+        const { startYoutubeCatalogueRefresh, stopYoutubeCatalogueRefresh } =
+          await import("@/services/youtube-catalogue");
+        installWorkerShutdownHandlers(stopYoutubeCatalogueRefresh);
+        startYoutubeCatalogueRefresh();
         // Recovery happens inside the exclusive lease, never before acquisition.
         void startDownloadProcessing().catch(() => {
           console.error("[Download] Queue startup failed; a later enqueue can retry it");

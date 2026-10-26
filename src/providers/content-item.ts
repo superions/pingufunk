@@ -1,5 +1,6 @@
 import type { ApiResultItem } from "@/types";
 import type { ProviderContentItem } from "@/types/provider";
+import { catalogueMetadata } from "@/lib/catalogue-metadata";
 
 /** Internal adapter only: the raw catalogue boundary never accepts these proof fields. */
 export function providerItemToApiResult(item: ProviderContentItem): ApiResultItem {
@@ -10,7 +11,7 @@ export function providerItemToApiResult(item: ProviderContentItem): ApiResultIte
     title: item.title,
     description: item.description,
     filmlisteTimestamp: item.timestamp,
-    ...(item.contentDates ? { contentDates: item.contentDates } : {}),
+    ...catalogueMetadata({ ...item, url_subtitle: item.subtitleUrl }),
     ...(item.sourceAvailability ? { sourceAvailability: item.sourceAvailability } : {}),
     duration: item.duration,
     size: item.size,
@@ -23,7 +24,6 @@ export function providerItemToApiResult(item: ProviderContentItem): ApiResultIte
     item.providerId === "srf"
       ? { sourceProviderId: item.providerId }
       : {}),
-    ...(item.audioLanguage !== undefined ? { audioLanguage: item.audioLanguage } : {}),
     ...(item.sourceAudioEvidence ? { sourceAudioEvidence: item.sourceAudioEvidence } : {}),
     ...(item.sourceVideoDimensions ? { sourceVideoDimensions: item.sourceVideoDimensions } : {}),
   };
@@ -34,6 +34,7 @@ export function apiResultToProviderItem(
   item: ApiResultItem,
   providerId: string
 ): ProviderContentItem {
+  const { url_subtitle, ...metadata } = catalogueMetadata(item);
   return {
     id: `${item.channel}-${item.topic}-${item.title}-${item.filmlisteTimestamp}`,
     providerId,
@@ -42,7 +43,8 @@ export function apiResultToProviderItem(
     title: item.title,
     description: item.description,
     timestamp: item.filmlisteTimestamp,
-    ...(item.contentDates ? { contentDates: item.contentDates } : {}),
+    ...metadata,
+    ...(url_subtitle ? { subtitleUrl: url_subtitle } : {}),
     ...(item.sourceAvailability ? { sourceAvailability: item.sourceAvailability } : {}),
     duration: item.duration,
     size: item.size,
@@ -52,7 +54,6 @@ export function apiResultToProviderItem(
       high: item.url_video_hd || undefined,
       low: item.url_video_low || undefined,
     },
-    ...(item.audioLanguage !== undefined ? { audioLanguage: item.audioLanguage } : {}),
     ...(item.sourceAudioEvidence ? { sourceAudioEvidence: item.sourceAudioEvidence } : {}),
     ...(item.sourceVideoDimensions ? { sourceVideoDimensions: item.sourceVideoDimensions } : {}),
   };

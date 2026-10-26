@@ -10,7 +10,8 @@ import { mediaSourceIdentity } from "@/services/source-audio";
 
 vi.mock("@/server/download-manager", () => ({ startDownloadProcessing: vi.fn(async () => {}) }));
 const { queryContentWindow } = vi.hoisted(() => ({ queryContentWindow: vi.fn() }));
-vi.mock("@/services/content-search", () => ({
+vi.mock("@/services/content-search", async (original) => ({
+  ...(await original<typeof import("@/services/content-search")>()),
   queryContentWindow,
   getConfiguredLanguagePolicy: vi.fn(
     async () => (await import("@/lib/language-policy")).DEFAULT_LANGUAGE_POLICY

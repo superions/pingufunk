@@ -18,7 +18,9 @@ it("round-trips versioned facts through the actual link, NZB route and queue par
     new NextRequest(new URL(createFakeNzbDownloadUrl(expected), "http://localhost"))
   );
   expect(response.status).toBe(200);
-  expect(parseNzbContent(await response.text())).toEqual(expected);
+  const nzb = await response.text();
+  expect(nzb).toContain('poster="Pingufunk"');
+  expect(parseNzbContent(nzb)).toEqual(expected);
 });
 
 it("distinguishes explicit unknown facts from saved legacy NZBs", () => {

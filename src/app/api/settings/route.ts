@@ -109,7 +109,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all settings
-    const configs = await prisma.config.findMany();
+    // Internal paged catalogues never belong to the general settings read.
+    const configs = await prisma.config.findMany({
+      where: {
+        NOT: {
+          OR: [
+            { key: { startsWith: "internal." } },
+            { key: { in: ["tvdb_token", "tvdb_token_expiry"] } },
+          ],
+        },
+      },
+    });
     const settings: Record<string, string> = { ...DEFAULT_SETTINGS };
 
     for (const config of configs) {
@@ -173,6 +183,16 @@ export async function POST(request: NextRequest) {
   const submitted = single ? [[input.key as string, input.value] as const] : Object.entries(input);
   const entries: [string, string][] = [];
   for (const [key, value] of submitted) {
+    if (key === "provider.youtube.enabled") {
+      // Preserve legacy bulk readback as a no-op; this route cannot change the
+      // generation-bound switch independently of its registry.
+      const stored = await prisma.config.findUnique({ where: { key }, select: { value: true } });
+      if (!single && value === (stored?.value ?? "false")) continue;
+      return NextResponse.json(
+        { error: "Use the YouTube catalogue to save registry and enable atomically" },
+        { status: 400 }
+      );
+    }
     if (isHiddenSettingKey(key)) {
       return NextResponse.json({ error: "Setting is not available" }, { status: 404 });
     }
@@ -242,8 +262,20 @@ export async function DELETE(request: NextRequest) {
   if (!key) {
     return NextResponse.json({ error: "Key parameter required" }, { status: 400 });
   }
-  if (isCredentialSettingKey(key) || isHiddenSettingKey(key)) {
-    return NextResponse.json({ error: "Configure credentials outside the UI" }, { status: 400 });
+  if (
+    isCredentialSettingKey(key) ||
+    isHiddenSettingKey(key) ||
+    key === "provider.youtube.enabled"
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          key === "provider.youtube.enabled"
+            ? "Use the YouTube catalogue to save registry and enable atomically"
+            : "Configure credentials outside the UI",
+      },
+      { status: 400 }
+    );
   }
 
   if (!isWritableSettingKey(key)) {

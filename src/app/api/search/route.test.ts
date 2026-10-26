@@ -24,6 +24,7 @@ import { generateGenericRssItems } from "@/services/newznab";
 import { GET as getFakeNzb } from "@/app/api/newznab/fake_nzb_download/route";
 import { parseNzbContent } from "@/services/download";
 import { readDecisionReport } from "@/server/decision-diagnostics";
+import { searchTvSourceReviews } from "@/services/tv-source-review";
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 function apiItem(title: string, duration: number) {
@@ -42,6 +43,44 @@ function apiItem(title: string, duration: number) {
   };
 }
 
+it.each(["", "&providers=true", "&provider=mediathekview"])(
+  "preserves optional catalogue content through the raw client and GUI without changing NZBs (%s)",
+  async (form) => {
+    const raw = apiItem("Catalogue fields", 120);
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ result: { results: [raw] } }));
+    const request = () => GET(new NextRequest(`http://localhost/api/search?q=Documentary${form}`));
+    const baseline = (await (await request()).json()).results[0];
+    fetch.mockResolvedValue(
+      Response.json({
+        result: {
+          results: [
+            {
+              ...raw,
+              url_subtitle: "https://example.invalid/subtitles.ttml?version=one",
+              productionYear: 2020,
+              originalVersion: true,
+              sourceVideoDimensions: [{ width: 1920, height: 1080, url: raw.url_video }],
+            },
+          ],
+        },
+      })
+    );
+    const result = (await (await request()).json()).results[0];
+    expect(result).toMatchObject({
+      url_subtitle: "https://example.invalid/subtitles.ttml?version=one",
+      contentDates: { catalogueUpdatedAt: raw.filmlisteTimestamp },
+    });
+    expect(result.id).toBe(baseline.id);
+    expect(result.nzbDownloads).toEqual(baseline.nzbDownloads);
+    expect(result.nzbFingerprints).toEqual(baseline.nzbFingerprints);
+    expect(result).not.toHaveProperty("productionYear");
+    expect(result).not.toHaveProperty("originalVersion");
+    expect(result).not.toHaveProperty("sourceVideoDimensions");
+  }
+);
+
 beforeEach(() => {
   vi.restoreAllMocks();
   getMinDurationSeconds.mockReset();
@@ -49,6 +88,60 @@ beforeEach(() => {
   getCategoriesForTopics.mockResolvedValue(new Map());
   getSetting.mockReset();
   getSetting.mockResolvedValue(null);
+  vi.mocked(searchTvSourceReviews).mockReset().mockResolvedValue(null);
+});
+
+it("retains optional metadata in the bound TV review response without exposing internal proofs", async () => {
+  const selector = {
+    tvdbId: 123,
+    season: 1,
+    episode: 1,
+    sourceId: "e".repeat(64),
+    rendition: "sd" as const,
+  };
+  vi.mocked(searchTvSourceReviews).mockImplementation(async (_query, report) => {
+    report?.({
+      complete: true,
+      candidateWindowLimited: false,
+      sources: [{ providerId: "mediathekview", state: "complete", candidateCount: 1 }],
+    });
+    return [
+      {
+        info: {
+          item: {
+            ...apiItem("Episode", 120),
+            url_subtitle: "https://example.invalid/subtitles.ttml",
+            contentDates: { providerDay: "2024-02-29" },
+            sourceAssetFingerprint: "internal-only",
+          },
+          episode: { name: "Episode", seasonNumber: 1, episodeNumber: 1, runtime: 2, aired: null },
+          showName: "Example",
+          matchedTitle: "Episode",
+          tvdbId: 123,
+        },
+        review: {
+          selector,
+          title: "Example - Episode",
+          sourceSeconds: 120,
+          metadataSeconds: 200,
+          tolerancePercent: 10,
+          runtimeConflict: true,
+          availableRenditions: ["sd"],
+        },
+      },
+    ];
+  });
+  const response = await GET(new NextRequest("http://localhost/api/search?q=Example"));
+  expect(response.status).toBe(200);
+  const [result] = (await response.json()).results;
+  expect(result).toMatchObject({
+    id: selector.sourceId,
+    url_subtitle: "https://example.invalid/subtitles.ttml",
+    contentDates: { providerDay: "2024-02-29" },
+    nzbDownloads: {},
+    nzbFingerprints: {},
+  });
+  expect(result).not.toHaveProperty("sourceAssetFingerprint");
 });
 
 describe("movie search API minimum duration", () => {
@@ -141,6 +234,14 @@ it("preserves explicit provider audio in server-authored UI releases", async () 
       duration: 120,
       size: 0,
       audioLanguage: "de",
+      subtitleUrl: "https://example.invalid/subtitles.ttml",
+      subtitleLanguage: "en",
+      originalVersion: false,
+      audioDescription: false,
+      signLanguage: false,
+      clearSpeech: true,
+      productionYear: 2001,
+      contentDates: { providerDay: "2024-02-29" },
       websiteUrl: "https://example.invalid/page",
       videoUrls: {
         standard: "https://example.invalid/sd.mp4",
@@ -151,6 +252,17 @@ it("preserves explicit provider audio in server-authored UI releases", async () 
   const response = await GET(new NextRequest("http://localhost/api/search?q=Example&provider=srf"));
   expect(response.status).toBe(200);
   const result = (await response.json()).results[0];
+  expect(result).toMatchObject({
+    url_subtitle: "https://example.invalid/subtitles.ttml",
+    audioLanguage: "de",
+    subtitleLanguage: "en",
+    originalVersion: false,
+    audioDescription: false,
+    signLanguage: false,
+    clearSpeech: true,
+    productionYear: 2001,
+    contentDates: { providerDay: "2024-02-29" },
+  });
   expect(parseNzbContent(result.nzbDownloads.hd)).toEqual({
     title: "Example - Episode",
     url: "https://example.invalid/hd.mp4",

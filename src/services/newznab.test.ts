@@ -86,7 +86,7 @@ describe("getEmptyRssResult", () => {
   it("should return empty RSS structure", () => {
     const result = getEmptyRssResult();
 
-    expect(result.channel.title).toBe("RundfunkArr");
+    expect(result.channel.title).toBe("Pingufunk");
     expect(result.channel.response.offset).toBe(0);
     expect(result.channel.response.total).toBe(0);
     expect(result.channel.items).toEqual([]);
@@ -102,7 +102,7 @@ describe("serializeRss", () => {
     expect(xml).toContain("<rss");
     expect(xml).toContain("xmlns:newznab");
     expect(xml).toContain("<channel>");
-    expect(xml).toContain("<title>RundfunkArr</title>");
+    expect(xml).toContain("<title>Pingufunk</title>");
   });
 
   it("should include newznab:response with offset and total", () => {
@@ -253,7 +253,7 @@ describe("getCapabilitiesXml", () => {
   it("should include server info", () => {
     const xml = getCapabilitiesXml();
 
-    expect(xml).toContain('title="RundfunkArr"');
+    expect(xml).toContain('title="Pingufunk"');
     expect(xml).toContain("German Public TV Indexer");
   });
 

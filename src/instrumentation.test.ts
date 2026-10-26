@@ -12,6 +12,11 @@ const {
   installWorkerShutdownHandlers: vi.fn(),
 }));
 vi.mock("@/lib/cache", () => ({ initCacheTTL }));
+const catalogue = vi.hoisted(() => ({
+  startYoutubeCatalogueRefresh: vi.fn(),
+  stopYoutubeCatalogueRefresh: vi.fn(),
+}));
+vi.mock("@/services/youtube-catalogue", () => catalogue);
 vi.mock("@/server/download-manager", () => ({
   recoverInterruptedDownloads,
   startDownloadProcessing,
@@ -45,6 +50,8 @@ it("boots the worker once and leaves recovery behind its exclusive acquisition",
   await register();
   expect(recoverInterruptedDownloads).not.toHaveBeenCalled();
   expect(startDownloadProcessing).toHaveBeenCalledTimes(1);
+  expect(catalogue.startYoutubeCatalogueRefresh).toHaveBeenCalledOnce();
+  expect(installWorkerShutdownHandlers).toHaveBeenCalledWith(catalogue.stopYoutubeCatalogueRefresh);
   expect(installWorkerShutdownHandlers.mock.invocationCallOrder[0]).toBeLessThan(
     startDownloadProcessing.mock.invocationCallOrder[0]
   );

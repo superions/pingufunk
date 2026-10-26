@@ -20,7 +20,6 @@ export type {
   ProviderSearchQuery,
   ProviderStatus,
   ProviderConfig,
-  AggregatedSearchResult,
   ProviderVideoUrls,
 } from "@/types/provider";
 

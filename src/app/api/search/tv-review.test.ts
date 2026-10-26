@@ -3,17 +3,17 @@ import { NextRequest } from "next/server";
 import { parseUiSearchCoverage } from "@/lib/ui-search-coverage";
 const mocks = vi.hoisted(() => ({
   bound: vi.fn(),
-  provider: vi.fn(),
+  window: vi.fn(),
   query: vi.fn(),
   nzb: vi.fn(),
   fingerprints: vi.fn(),
 }));
 vi.mock("@/services/tv-source-review", () => ({ searchTvSourceReviews: mocks.bound }));
-vi.mock("@/providers", () => ({
-  initializeProviders: vi.fn(),
-  providerRegistry: { searchProvider: mocks.provider, searchAll: mocks.provider },
+vi.mock("@/services/content-search", async (original) => ({
+  ...(await original<typeof import("@/services/content-search")>()),
+  queryContent: mocks.query,
+  queryContentWindow: mocks.window,
 }));
-vi.mock("@/services/content-search", () => ({ queryContent: mocks.query }));
 vi.mock("@/services/ui-nzb", () => ({
   createUiNzbDownloads: mocks.nzb,
   uiNzbFingerprints: mocks.fingerprints,
@@ -46,6 +46,10 @@ const bound = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.window.mockResolvedValue({
+    items: [],
+    coverage: { complete: true, candidateWindowLimited: false, sources: [] },
+  });
   mocks.bound.mockImplementation(async (_query, reportCoverage) => {
     reportCoverage({
       complete: true,
@@ -69,7 +73,7 @@ it.each(["", "&providers=true", "&type=all", "&providers=true&type=all"])(
       nzbDownloads: {},
     });
     expect(mocks.nzb).not.toHaveBeenCalled();
-    expect(mocks.provider).not.toHaveBeenCalled();
+    expect(mocks.window).not.toHaveBeenCalled();
   }
 );
 it("a provider selector cannot route a bound conflict around review", async () => {
@@ -80,7 +84,7 @@ it("a provider selector cannot route a bound conflict around review", async () =
       )
     ).status
   ).toBe(409);
-  expect(mocks.provider).not.toHaveBeenCalled();
+  expect(mocks.window).not.toHaveBeenCalled();
 });
 it("provider outage does not silently degrade to a generic unbound download", async () => {
   mocks.bound.mockRejectedValue(new Error("private secret"));

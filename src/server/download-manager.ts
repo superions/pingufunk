@@ -7,8 +7,7 @@ import { readPersistedMediaExpectations } from "@/lib/media-expectations";
 import { MediaProbeError } from "./media-probe";
 import { recordDecision } from "./decision-diagnostics";
 import { parseDecisionEvent } from "@/lib/decision-diagnostics";
-import { downloadHlsStream } from "./ytdlp";
-import { getStreamHeight, isStreamingUrl, srfUrnFromUrl } from "@/lib/stream-url";
+import { transferSource } from "./source-download";
 import {
   assertNewOutputPath,
   categoryDirectory,
@@ -16,15 +15,13 @@ import {
   getDownloadBasePath,
   jobDirectoryName,
   publicDownloadCategory,
-  safeFileExtension,
   safeReleaseName,
 } from "@/lib/download-paths";
 import * as fs from "fs/promises";
 import { createHash } from "node:crypto";
 import * as path from "path";
-import { transferFailureMessage } from "./download-failure";
+import { SourceDownloadError } from "./download-failure";
 import { completeValidatedDownload, moveIntoJobDir } from "./download-completion";
-import { downloadFile } from "./download-transfer";
 
 async function getDownloadTempPath(): Promise<string> {
   const basePath = await getDownloadBasePath();
@@ -155,7 +152,8 @@ export async function shutdownDownloadProcessing(): Promise<void> {
   await Promise.all(runtime.directWork);
 }
 
-export function installWorkerShutdownHandlers(): void {
+/** The app composes background cleanup; the queue never needs source-specific shutdown branches. */
+export function installWorkerShutdownHandlers(stopBackground?: () => Promise<void>): void {
   if (runtime.shutdownHandlersInstalled) return;
   runtime.shutdownHandlersInstalled = true;
   for (const signal of ["SIGINT", "SIGTERM"] as const)
@@ -163,7 +161,7 @@ export function installWorkerShutdownHandlers(): void {
       // This exact process owns the worker and tools. If persistence is unavailable,
       // leave expiry/recovery to the next owner instead of pretending a release.
       const limit = setTimeout(() => process.exit(1), 12_000);
-      void shutdownDownloadProcessing()
+      void Promise.all([shutdownDownloadProcessing(), stopBackground?.()])
         .then(async () => {
           await prisma.$disconnect();
           clearTimeout(limit);
@@ -259,220 +257,92 @@ async function processOwnedDownload(downloadId: string, lease: WorkerLease): Pro
     await ensureOwnedDirectory(downloadBasePath, categoryDir);
     await ensureOwnedDirectory(categoryDir, completeJobDir);
 
-    // Check if this is an HLS stream
-    const isHls = isStreamingUrl(download.url);
-
-    if (isHls) {
-      // HLS download path - use yt-dlp
-      console.log(`[Download] Detected HLS stream, using yt-dlp`);
-
-      // Resolve stable SRF references at download time. The SRGSSR extractor
-      // also obtains Akamai tokens and uses the configured proxy for metadata.
-      const urn = srfUrnFromUrl(download.url);
-      const maxHeight = getStreamHeight(download.url);
-      const streamUrl = urn
-        ? urn.replace(/^urn:/, "srgssr:")
-        : maxHeight
-          ? download.url.split("#")[0]
-          : download.url;
-      const container = (await isMkvConversionEnabled()) ? "mkv" : "mp4";
-      const tempMkvPath = path.join(tempJobDir, `${filename}.${container}`);
-      const finalMkvPath = path.join(completeJobDir, `${filename}.${container}`);
-      await assertNewOutputPath(tempMkvPath);
-
-      const hlsResult = await downloadHlsStream(
-        streamUrl,
-        tempMkvPath,
-        async (progress, downloadedBytes, totalBytes, speed) => {
+    let selectedContainer: Promise<"mkv" | "mp4"> | undefined;
+    const getContainer = () =>
+      (selectedContainer ??= isMkvConversionEnabled().then((enabled) =>
+        enabled ? ("mkv" as const) : ("mp4" as const)
+      ));
+    // All shipped job versions use the explicit legacy Mediathek adapter. A future
+    // source reference requires its own validated payload version, never URL guessing.
+    const artifact = await transferSource(
+      { family: "mediathek", url: download.url },
+      {
+        stagingDirectory: tempJobDir,
+        filename,
+        getContainer,
+        expectations,
+        signal: lease.signal,
+        onProgress: async (progress, downloadedBytes, totalBytes, speed) => {
           lease.checkTransfer();
           await lease.mutate((tx) =>
             tx.download.update({
               where: { id: downloadId },
-              data: {
-                progress,
-                downloadedBytes,
-                totalSize: totalBytes,
-                speed,
-              },
+              data: { progress, downloadedBytes, totalSize: totalBytes, speed },
             })
           );
         },
-        container,
-        maxHeight,
-        lease.signal
-      );
-
-      if (!hlsResult.success) {
-        await markAsFailed(downloadId, hlsResult.error || "HLS download failed", lease);
-        return;
       }
-
-      // Move to final location
-      const outputPath = hlsResult.outputPath || tempMkvPath;
-      lease.checkTransfer();
-      console.log(`[Download] Moving HLS result to final location: ${finalMkvPath}`);
-      await moveIntoJobDir(
-        outputPath,
-        finalMkvPath,
-        tempJobDir,
-        downloadBasePath,
-        categoryDir,
-        completeJobDir
-      );
-
-      // Get file size
-      const stats = await fs.stat(finalMkvPath);
-
-      // Persist completion only after the local media gate.
-      const downloadTime = Math.floor((Date.now() - startTime) / 1000);
-
-      await completeValidatedDownload(
-        downloadId,
-        finalMkvPath,
-        completeJobDir,
-        expectations,
-        download.url,
-        lease
-      );
-
-      console.log(
-        `[Download] HLS completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
-      );
-      return;
-    }
-
-    // Standard direct download path
-    // Determine file extension from URL
-    const urlPath = new URL(download.url).pathname;
-    const fileExtension = safeFileExtension(urlPath);
-    // Download to temp folder first
-    const tempMp4Path = path.join(tempJobDir, `${filename}${fileExtension}`);
-    const mp4Path = tempMp4Path;
-
-    // Download the file
-    const downloadFailure = await downloadFile(
-      download.url,
-      mp4Path,
-      async (progress, downloadedBytes, totalBytes, speed) => {
-        lease.checkTransfer();
-        await lease.mutate((tx) =>
-          tx.download.update({
-            where: { id: downloadId },
-            data: {
-              progress,
-              downloadedBytes,
-              totalSize: totalBytes,
-              speed,
-            },
-          })
-        );
-      },
-      lease.signal
     );
-
-    if (downloadFailure) {
-      recordDecision("transfer", "transfer_failed", "unavailable");
-      console.error("[Download] Transfer failure", {
-        jobRef: createHash("sha256").update(downloadId).digest("hex").slice(0, 16),
-        ...downloadFailure,
-      });
-      failureMessage = transferFailureMessage(downloadFailure);
-      await markAsFailed(downloadId, failureMessage, lease);
-      return;
-    }
-
-    console.log(`[Download] File downloaded to temp: ${mp4Path}`);
-
-    // Convert MP4 files to MKV unless the user disabled this step.
-    if (fileExtension.toLowerCase() === ".mp4" && (await isMkvConversionEnabled())) {
-      // Convert in temp folder first
-      const tempMkvPath = path.join(tempJobDir, `${filename}.mkv`);
-      const finalMkvPath = path.join(completeJobDir, `${filename}.mkv`);
-      await assertNewOutputPath(tempMkvPath);
-
-      console.log(`[Download] Converting to MKV: ${tempMkvPath}`);
-
+    lease.checkTransfer();
+    let stagedPath = artifact.path;
+    let extension = artifact.extension;
+    let convertedInput: string | undefined;
+    if (extension.toLowerCase() === ".mp4" && (await getContainer()) === "mkv") {
+      const convertedPath = path.join(tempJobDir, `${filename}.mkv`);
+      await assertNewOutputPath(convertedPath);
       lease.checkTransfer();
       await lease.mutate((tx) =>
-        tx.download.update({
-          where: { id: downloadId },
-          data: { status: "converting" },
-        })
+        tx.download.update({ where: { id: downloadId }, data: { status: "converting" } })
       );
-
       const { convertMp4ToMkv } = await import("./ffmpeg");
-      const conversionResult = await convertMp4ToMkv(mp4Path, tempMkvPath, undefined, lease.signal);
-
-      if (!conversionResult.success) {
-        // Clean up temp file on failure
-        await fs.unlink(mp4Path).catch(() => {});
-        await markAsFailed(downloadId, conversionResult.error || "Conversion failed", lease);
+      const conversion = await convertMp4ToMkv(stagedPath, convertedPath, undefined, lease.signal);
+      if (!conversion.success) {
+        await fs.unlink(stagedPath).catch(() => {});
+        await markAsFailed(downloadId, conversion.error || "Conversion failed", lease);
         return;
       }
-
-      // Move completed MKV to final location; see moveIntoJobDir for why
-      // the category directory is re-created here.
-      console.log(`[Download] Moving to final location: ${finalMkvPath}`);
-      lease.checkTransfer();
-      await moveIntoJobDir(
-        tempMkvPath,
-        finalMkvPath,
-        tempJobDir,
-        downloadBasePath,
-        categoryDir,
-        completeJobDir
-      );
-
-      // Clean up temp MP4 file
-      await fs.unlink(mp4Path).catch(() => {});
-
-      // Get file size
-      const stats = await fs.stat(finalMkvPath);
-
-      // Persist completion only after the local media gate.
-      const downloadTime = Math.floor((Date.now() - startTime) / 1000);
-
-      await completeValidatedDownload(
-        downloadId,
-        finalMkvPath,
-        completeJobDir,
-        expectations,
-        download.url,
-        lease
-      );
-
-      console.log(
-        `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
-      );
-    } else {
-      // Keep non-MP4 files and MP4 files with disabled conversion unchanged.
-      const finalPath = path.join(completeJobDir, `${filename}${fileExtension}`);
-      lease.checkTransfer();
-      await moveIntoJobDir(
-        mp4Path,
-        finalPath,
-        tempJobDir,
-        downloadBasePath,
-        categoryDir,
-        completeJobDir
-      );
-
-      const stats = await fs.stat(finalPath);
-
-      await completeValidatedDownload(
-        downloadId,
-        finalPath,
-        completeJobDir,
-        expectations,
-        download.url,
-        lease
-      );
-
-      console.log(
-        `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB)`
-      );
+      convertedInput = stagedPath;
+      stagedPath = convertedPath;
+      extension = ".mkv";
     }
+
+    // Every backend converges on the same owned move and physical media gate.
+    const finalPath = path.join(completeJobDir, filename + extension);
+    lease.checkTransfer();
+    await moveIntoJobDir(
+      stagedPath,
+      finalPath,
+      tempJobDir,
+      downloadBasePath,
+      categoryDir,
+      completeJobDir
+    );
+    // Retain the original until moving its converted output actually succeeds.
+    if (convertedInput) await fs.unlink(convertedInput).catch(() => {});
+    const stats = await fs.stat(finalPath);
+    await completeValidatedDownload(
+      downloadId,
+      finalPath,
+      completeJobDir,
+      expectations,
+      download.url,
+      lease
+    );
+    const downloadTime = Math.floor((Date.now() - startTime) / 1000);
+    console.log(
+      `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
+    );
   } catch (error) {
+    if (error instanceof SourceDownloadError) {
+      failureMessage = error.message;
+      if (error.transferFailure) {
+        recordDecision("transfer", "transfer_failed", "unavailable");
+        console.error("[Download] Transfer failure", {
+          jobRef: createHash("sha256").update(downloadId).digest("hex").slice(0, 16),
+          ...error.transferFailure,
+        });
+      }
+    }
     if (error instanceof MediaProbeError) {
       // Closed probe facts survive persistence; never copy arbitrary exception messages.
       const event = parseDecisionEvent({

@@ -4,13 +4,21 @@ import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { SettingsProvider } from "@/contexts/settings-context";
+import { PRODUCT_NAME, PRODUCT_DESCRIPTION } from "@/lib/brand";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "RundfunkArr",
-  description: "Rundfunk indexer for Sonarr/Radarr",
-  icons: { icon: "/logo.svg" },
+  title: PRODUCT_NAME,
+  description: PRODUCT_DESCRIPTION,
+  applicationName: PRODUCT_NAME,
+  icons: {
+    icon: [
+      { url: "/branding/pingufunk-mark.svg", type: "image/svg+xml" },
+      { url: "/branding/pingufunk-icon.png", type: "image/png", sizes: "64x64" },
+    ],
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
