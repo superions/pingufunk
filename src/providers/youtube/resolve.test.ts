@@ -191,3 +191,14 @@ it("never interprets null or missing codecs as a proven audio/video stream", asy
   });
   await expect(resolveYoutubeMedia(identity, signal)).rejects.toThrow("unconfirmed");
 });
+
+it.each(["vp9", "av01.0.08M.08"])(
+  "never advertises a %s stream under the existing H.264 release contract",
+  async (codec) => {
+    const data = payload();
+    data.formats = data.formats.filter((row) => row.vcodec === "none");
+    data.formats.push({ ...formats()[0], vcodec: codec });
+    state.read.mockResolvedValue(data);
+    await expect(resolveYoutubeMedia(identity, signal)).rejects.toThrow("unconfirmed");
+  }
+);

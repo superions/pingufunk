@@ -59,6 +59,15 @@ if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
       availability: "public",
       formats: [
         {
+          format_id: "313",
+          url: address("video", "313"),
+          protocol: "https",
+          vcodec: "vp9",
+          acodec: "none",
+          width: 3840,
+          height: 2160,
+        },
+        {
           format_id: "137",
           url: address("video", "137"),
           protocol: "https",

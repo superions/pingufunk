@@ -118,7 +118,12 @@ export default function SearchPage() {
       }
       return;
     }
-    const quality = result.nzbDownloads.hd ? "hd" : result.nzbDownloads.sd ? "sd" : "low";
+    const keys = Object.keys(result.nzbDownloads) as TvReviewSelector["rendition"][];
+    const quality =
+      renditions[result.id] && keys.includes(renditions[result.id])
+        ? renditions[result.id]
+        : keys[0];
+    if (!quality) return;
     const nzb = result.nzbDownloads[quality];
     if (!nzb) return;
     const category =
@@ -332,11 +337,17 @@ export default function SearchPage() {
                       </p>
                     )}
                   </div>
-                  {result.tvReview?.runtimeConflict && (
+                  {(result.tvReview?.runtimeConflict ||
+                    Object.keys(result.nzbDownloads).length > 1) && (
                     <select
                       aria-label={`Rendition für ${result.title}`}
                       className="border rounded bg-background text-sm p-1"
-                      value={renditions[result.id] ?? result.tvReview.selector.rendition}
+                      value={
+                        renditions[result.id] ??
+                        (result.tvReview?.runtimeConflict
+                          ? result.tvReview.selector.rendition
+                          : Object.keys(result.nzbDownloads)[0])
+                      }
                       onChange={(event) =>
                         setRenditions((prev) => ({
                           ...prev,
@@ -344,10 +355,14 @@ export default function SearchPage() {
                         }))
                       }
                     >
-                      {result.tvReview.availableRenditions.map((key) => (
+                      {(result.tvReview?.runtimeConflict
+                        ? result.tvReview.availableRenditions
+                        : (Object.keys(result.nzbDownloads) as TvReviewSelector["rendition"][])
+                      ).map((key) => (
                         <option key={key} value={key}>
-                          {result.tvReview?.renditionLabels?.[key] ?? key.toUpperCase()}-Quelle
-                          prüfen
+                          {result.tvReview?.renditionLabels?.[key] ??
+                            (["hd", "sd", "low"].includes(key) ? key.toUpperCase() : key)}
+                          {result.tvReview?.runtimeConflict ? "-Quelle prüfen" : ""}
                         </option>
                       ))}
                     </select>

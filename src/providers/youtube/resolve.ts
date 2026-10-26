@@ -114,7 +114,9 @@ export async function resolveYoutubeMedia(
     );
     const videos = safe.filter(
       (row) =>
-        row.vcodec !== "none" &&
+        // The shipped release/stream-copy contract is AVC, not a codec guess.
+        // Other codecs remain unavailable until their own naming contract exists.
+        /^(?:avc1(?:\.[a-f0-9]+)?|h264)$/i.test(row.vcodec!) &&
         row.acodec === "none" &&
         row.width &&
         row.height &&

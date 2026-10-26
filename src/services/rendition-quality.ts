@@ -1,3 +1,4 @@
+import { RENDITION_SELECTORS, type RenditionSelector } from "@/lib/rendition-selector";
 import type { ApiResultItem } from "@/types";
 import { isRenditionAllowed } from "@/lib/stream-url";
 import { recordDecision } from "@/server/decision-diagnostics";
@@ -220,4 +221,29 @@ export function renditionUrl(
   return item.sourceRef
     ? (selectRenditions(item, "all", false).find((row) => row.field === field)?.url ?? "")
     : item[field];
+}
+
+/** One selector shared by opaque UI downloads and explicit review; legacy slots stay unchanged. */
+export function renditionSelector(
+  rendition: ReturnType<typeof selectRenditions>[number]
+): RenditionSelector {
+  if ("sourceRef" in rendition) {
+    const key = rendition.quality as RenditionSelector;
+    if (!RENDITION_SELECTORS.includes(key)) throw Error("Unsupported measured rendition");
+    return key;
+  }
+  return rendition.field === "url_video_hd" ? "hd" : rendition.field === "url_video" ? "sd" : "low";
+}
+export function selectedRendition(item: ApiResultItem, selector: RenditionSelector) {
+  const choices = selectRenditions(item, "all", false);
+  return (
+    choices.find((row) => renditionSelector(row) === selector) ??
+    (["hd", "sd", "low"].includes(selector)
+      ? choices.find(
+          (row) =>
+            row.field ===
+            (selector === "hd" ? "url_video_hd" : selector === "sd" ? "url_video" : "url_video_low")
+        )
+      : undefined)
+  );
 }

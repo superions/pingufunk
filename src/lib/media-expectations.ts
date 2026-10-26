@@ -1,3 +1,4 @@
+import { RENDITION_SELECTORS } from "./rendition-selector";
 import { z } from "zod";
 import { verifiedDurationCheck } from "./verified-duration";
 import {
@@ -149,7 +150,7 @@ const v4Schema = z
         season: z.number().int().nonnegative(),
         episode: z.number().int().positive(),
         sourceId: z.string().regex(/^[a-f0-9]{64}$/),
-        rendition: z.enum(["hd", "sd", "low"]),
+        rendition: z.enum(RENDITION_SELECTORS),
       })
       .strict(),
   })
@@ -172,9 +173,15 @@ const v4Schema = z
   )
   .superRefine((value, context) => {
     const source = value.sourceRef;
-    if (!source) return;
+    if (!source) {
+      if (!["hd", "sd", "low"].includes(value.approval.rendition))
+        context.addIssue({ code: "custom", message: "Measured selector requires typed source" });
+      return;
+    }
     const audio = value.sourceAudio;
     if (
+      (!["hd", "sd", "low"].includes(value.approval.rendition) &&
+        value.approval.rendition !== `${source.selection.height}p`) ||
       source.programme.kind !== "series" ||
       source.programme.targetId !== value.approval.tvdbId ||
       source.programme.season !== value.approval.season ||

@@ -4,6 +4,8 @@ import { readYoutubeCatalogueIndex } from "@/services/youtube-catalogue";
 import { boundYoutubeItems } from "@/services/youtube-bindings";
 import type { ContentSearchAdapter, ContentSearchWindow } from "@/types/provider";
 import { sourceMediaFacts } from "@/services/source-media-facts";
+import type { ApiResultItem } from "@/types";
+import { youtubeMappingKey } from "@/lib/youtube-catalogue";
 let failureEpoch = 0;
 export async function youtubeSearchContext(): Promise<unknown> {
   if ((await getSetting("provider.youtube.enabled")) !== "true") return null;
@@ -45,6 +47,15 @@ export const youtubeSearchAdapter: ContentSearchAdapter = {
           32,
           Math.max(1, Math.min(15000, (options.deadlineAt ?? Date.now() + 15000) - Date.now()))
         );
+      const text = (value: string) => value.normalize("NFC").toLocaleLowerCase("de-DE");
+      const fieldValue = (item: Partial<ApiResultItem>, field: string): string =>
+        ["channel", "topic", "title", "description"].includes(field)
+          ? String(item[field as keyof ApiResultItem] ?? "")
+          : "";
+      const matches = (item: Partial<ApiResultItem>) =>
+        queries.every((query) =>
+          query.fields.some((field) => text(fieldValue(item, field)).includes(text(query.query)))
+        );
       const mappings = index.registry.programMappings.filter(
         (mapping) =>
           mapping.enabled &&
@@ -56,14 +67,12 @@ export const youtubeSearchAdapter: ContentSearchAdapter = {
           ) &&
           (options.arteSeries
             ? mapping.kind === "series" && mapping.targetId === options.arteSeries.id
-            : queries.every((query) =>
-                query.fields.some(
-                  (field) =>
-                    ["topic", "title"].includes(field) &&
-                    mapping.name
-                      .toLocaleLowerCase("de-DE")
-                      .includes(query.query.toLocaleLowerCase("de-DE"))
-                )
+            : matches({ topic: mapping.name, title: mapping.name }) ||
+              index.rows.some(
+                (row) =>
+                  row.mappingKey === youtubeMappingKey(mapping) &&
+                  row.content &&
+                  matches(row.content)
               ))
       );
       if (mappings.length > 32) throw Error("YouTube programme window too large");
@@ -71,7 +80,10 @@ export const youtubeSearchAdapter: ContentSearchAdapter = {
       let limited = false;
       for (const mapping of mappings) {
         budget.assertAvailable();
-        items.push(...(await boundYoutubeItems(index, mapping, budget, options.arteSeries)));
+        const bound = await boundYoutubeItems(index, mapping, budget, options.arteSeries);
+        // Shortlisting is not identity or predicate proof. Filter concrete bound
+        // items before pagination/probe admission; canonical ID searches keep their scope.
+        items.push(...(options.arteSeries ? bound : bound.filter(matches)));
         if (items.length >= 1000) {
           limited = true;
           break;

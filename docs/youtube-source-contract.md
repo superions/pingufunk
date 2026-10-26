@@ -603,7 +603,12 @@ Worker; kein YouTube-Downloadzweig in der GUI und kein zweiter Worker.
 
 Der Resolver ist für Belege und Transfer identisch. V1 wählt eine konkret
 belegte deutsche Standard-Audiospur und belegt je unterstützter gemessener
-Auflösung genau ein Videoformat. Derselbe begrenzte Abruf liefert beispielsweise
+Auflösung genau ein AVC/H.264-Videoformat. Der bestehende Releasevertrag heißt
+`h264`; der Transfer kopiert die Videospur ohne Transcodierung. VP9 und AV1
+werden deshalb vor Veröffentlichung ausgeschlossen, auch wenn sie höhere
+Auflösungen anbieten. Fehlt AVC, bleibt diese Quelle ungeprüft; kein falsches
+Codecetikett und kein stiller Formatwechsel eines angenommenen Jobs.
+Derselbe begrenzte Abruf liefert beispielsweise
 1080p und 720p; eine Einstellung „nur 720p“ darf nicht am höchsten Format
 scheitern. Der gemeinsame Renditionowner bindet jede RSS-/UI-NZB an ihre
 eigene Auswahl, Pixel und Audioidentität. Der Job enthält genau diese eine
@@ -638,7 +643,16 @@ Die bisherigen MP4-Fristen bleiben unverändert; jeder Transfer löst frisch auf
 
 Die Suchquelle liest ausschließlich den vorbereiteten vollständigen Index;
 keine Playlist-Scans im Suchrequest. Höchstens 1.000 YouTube-Kandidaten pro
-Fenster, keine neuen globalen RSS-Budgets. Eine erfolgreiche erforderliche
+Fenster und 32 Programme, keine neuen globalen RSS-Budgets. Freitext sucht in
+den ausdrücklich angefragten Titel-/Thema-/Sender-/Beschreibungsfeldern der
+Indexinhalte; die Programmauswahl allein ist kein Trefferbeleg. Die konkreten
+gebundenen Inhalte werden vor Pagination und Belegaufnahme gefiltert. Ein
+kanonischer Serien-ID-Scope behält seine eigene geprüfte Identitätsgrenze.
+Alle gewöhnlichen Film-/Seriensuchen verwenden ausschließlich vorhandene oder
+asynchron eingereihte Medienbelege. Nur die ausdrückliche Prüfung einer
+Einzelquelle darf synchron frisch auflösen. Zurückgezogene Belege können
+nicht aus einem älteren Suchobjekt übernommen werden.
+Eine erfolgreiche erforderliche
 Basis einschließlich echtem Leerfenster bleibt bei optionalem YouTube-Fehler
 nutzbar. Gesamtcoverage und Basis-Erfolg sind getrennt; ein Fehlerepoch verhindert
 leeres Cachen des ausgefallenen Zusatzpfads. Expliziter YouTube-only-Ausfall
@@ -656,6 +670,11 @@ Quittungen unverändert bewahren.
 
 Der Zuordnungsbericht zeigt frische bereits vorhandene Sprach-/Pixel-/Dauer-
 belege direkt an der jeweiligen Quelle, ohne selbst einen Belegabruf auszulösen.
+GUI-NZB und Einzelquellenprüfung führen jede vorhandene konkrete Auflösung
+(`2160p`, `1080p`, `720p`, `576p`, `480p`) mit eigenem Auswahlwert bis zur
+Quittung und zum Auftrag. Eine gemeinsame Watch-URL ist kein Auswahlkriterium.
+Die bisherigen Mediathekwerte `hd`, `sd`, `low` bleiben unverändert gültig;
+die GUI konsumiert denselben serverseitigen Auswahlvertrag für beide Quellen.
 Auch ein vorbereiteter Medienbeleg ist keine physische Datei- oder Importabnahme.
 Die synthetischen nativen und Desktopgates bleiben Voraussetzung für P17.4/5;
 Produktivaktivierung und echte YouTube-Mediendownloads bleiben P17.6.

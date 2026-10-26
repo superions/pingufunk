@@ -25,7 +25,11 @@ import {
   stableUrlIdentity,
 } from "./language-editions";
 import { sourceMediaFacts } from "./source-media-facts";
-import { youtubeRenditionIdentity, type YoutubeSourceReference } from "@/lib/youtube-source";
+import {
+  youtubeRenditionIdentity,
+  youtubeSourceIdentitySchema,
+  type YoutubeSourceReference,
+} from "@/lib/youtube-source";
 
 const streamsSchema = z.object({
   videoStreams: z
@@ -153,7 +157,8 @@ export async function enrichSourceAudio(
   items: ApiResultItem[],
   budget: HttpRequestBudget,
   maxIdentities: 4 | 16 = 4,
-  reuseSearchFacts = false
+  reuseSearchFacts = false,
+  intent: "search" | "approval" = "search"
 ): Promise<Map<ApiResultItem, ApiResultItem[]>> {
   const arte = new Map<string, ArteStreams>();
   const ard = new Map<string, Awaited<ReturnType<typeof getArdSource>>>();
@@ -186,8 +191,10 @@ export async function enrichSourceAudio(
     const renditions: ApiResultItem[] = [];
     output.set(item, renditions);
     if (item.sourceRef) {
-      let proof = reuseSearchFacts ? sourceMediaFacts.get(item.sourceRef) : undefined;
-      if (!reuseSearchFacts) {
+      // Ordinary discovery always uses the one bounded background owner. Only
+      // an explicit single-source approval may demand a foreground revalidation.
+      let proof = intent === "search" ? sourceMediaFacts.get(item.sourceRef) : undefined;
+      if (intent === "approval") {
         const { resolveYoutubeMedia } = await import("@/providers/youtube/resolve");
         const resolved = await resolveYoutubeMedia(
           item.sourceRef,
@@ -227,7 +234,17 @@ export async function enrichSourceAudio(
         });
       } else {
         sourceMediaFacts.enqueue([item.sourceRef]);
-        renditions.push(item);
+        // A detached prior search result cannot donate an expired/quarantined
+        // selection after the bounded evidence owner has withdrawn its proof.
+        renditions.push({
+          ...item,
+          sourceRef: youtubeSourceIdentitySchema.strip().parse(item.sourceRef),
+          sourceRenditions: undefined,
+          sourceAudioEvidence: undefined,
+          audioLanguage: undefined,
+          sourceAssetFingerprint: undefined,
+          sourceVideoDimensions: undefined,
+        });
       }
       continue;
     }

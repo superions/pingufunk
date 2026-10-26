@@ -45,6 +45,12 @@ import { downloadSource } from "@/server/source-download";
 import { createUiNzbDownloads } from "./ui-nzb";
 import { youtubeMappingKey } from "@/lib/youtube-catalogue";
 import { matchMovieItems } from "./movie-matcher";
+import { HttpRequestBudget } from "@/lib/fetch-retry";
+import {
+  assembleMovieReleases,
+  assembleRecentMovieReleases,
+  assembleGenericMovieReleases,
+} from "./mediathek-release";
 import { generateMatchedMovieRssItems } from "./newznab";
 const channel = "UCaaaaaaaaaaaaaaaaaaaaaa",
   playlist = "PLsynthetic123456",
@@ -304,6 +310,46 @@ it("carries an explicitly mapped film through the same search, strict movie matc
     durations: { metadata: null },
   });
   await expect(validateReleaseSource(nzb.url, nzb.mediaExpectations)).resolves.toBeUndefined();
+  const baseItem = {
+    ...warm.items[0],
+    sourceRef: undefined,
+    sourceRenditions: undefined,
+    sourceAudioEvidence: undefined,
+    url_video: "https://fixture.akamaized.net/independent.mp4",
+    title: "Independent synthetic film",
+    audioLanguage: "de",
+  };
+  state.resolve.mockRejectedValue(Error("Extractor unavailable"));
+  const calls = state.resolve.mock.calls.length;
+  const generic = await assembleGenericMovieReleases(
+    [warm.items[0], baseItem],
+    new HttpRequestBudget(),
+    "best",
+    false
+  );
+  expect(generic).toHaveLength(2);
+  expect(
+    await assembleMovieReleases([match], state.movie!, new HttpRequestBudget(), "best", false)
+  ).toHaveLength(1);
+  expect(
+    await assembleRecentMovieReleases(
+      [{ match, movie: state.movie! }],
+      new HttpRequestBudget(),
+      "best",
+      false
+    )
+  ).toHaveLength(1);
+  expect(state.resolve).toHaveBeenCalledTimes(calls);
+  sourceMediaFacts.clear();
+  expect(
+    await assembleGenericMovieReleases(
+      [warm.items[0], baseItem],
+      new HttpRequestBudget(),
+      "best",
+      false
+    )
+  ).toHaveLength(1);
+  expect(state.resolve).toHaveBeenCalledTimes(calls);
   row.content!.title = "Synthetic film (2002)";
   expect((await queryContentWindow(query, 100, { mediaType: "movie" }, "youtube")).items).toEqual(
     []
@@ -333,8 +379,8 @@ it("keeps declared 720p selectable beside 1080p from one detail call and binds e
   expect(release[0].title).toContain(".720p.");
   expect(generateRssItems(match, "480p", false)).toEqual([]);
   const downloads = createUiNzbDownloads(item, false, match.episode);
-  const hd = parseNzbContent(downloads.hd!)!,
-    sd = parseNzbContent(downloads.sd!)!;
+  const hd = parseNzbContent(downloads["1080p"]!)!,
+    sd = parseNzbContent(downloads["720p"]!)!;
   expect(hd.mediaExpectations).toMatchObject({
     version: 5,
     resolution: { width: 1920, height: 1080 },
@@ -383,6 +429,13 @@ it("journals five measured resolutions with both yearly release forms within the
   const match = matchBoundSourceEpisode(item, state.show!, 0, 10)!;
   const releases = generateRssItems(match, "all", false);
   expect(releases).toHaveLength(10);
+  const allUi = createUiNzbDownloads(item, false, match.episode);
+  expect(Object.keys(allUi)).toEqual(["2160p", "1080p", "720p", "576p", "480p"]);
+  expect(
+    Object.values(allUi).map(
+      (body) => parseNzbContent(body!)!.mediaExpectations!.resolution?.height
+    )
+  ).toEqual([2160, 1080, 720, 576, 480]);
   let persisted: string | null = null;
   journal = new TvSearchDeliveryJournal(
     {
@@ -403,5 +456,35 @@ it("journals five measured resolutions with both yearly release forms within the
   await expect(
     journal.announce(scope, [{ entryId: entries[0].id, guid: "another-format" }])
   ).rejects.toThrow();
+  expect(state.resolve).toHaveBeenCalledTimes(1);
+});
+
+it("finds indexed episode titles and applies channel/description predicates to each bound item before pagination", async () => {
+  const index = state.index as { rows: YoutubeIndexRow[] };
+  index.rows[0].content!.description = "Distinctive synthetic description";
+  const predicates = [
+    { fields: ["title"], query: "Episode: concrete title" },
+    { fields: ["channel"], query: "Synthetic channel" },
+    { fields: ["description"], query: "distinctive" },
+  ];
+  const cold = await queryContentWindow(predicates, 1, { mediaType: "series" }, "youtube");
+  expect(cold.items).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(30);
+  await sourceMediaFacts.idle();
+  const warm = await queryContentWindow(predicates, 1, { mediaType: "series" }, "youtube");
+  expect(warm.items).toHaveLength(1);
+  expect(warm.items[0].sourceRef?.programme).toMatchObject({
+    targetId: 42,
+    season: 1,
+    episode: 13,
+  });
+  const wrong = await queryContentWindow(
+    [...predicates, { fields: ["description"], query: "absent" }],
+    1,
+    {},
+    "youtube"
+  );
+  expect(wrong.items).toEqual([]);
+  expect((await queryContentWindow(predicates, 1, { offset: 1 }, "youtube")).items).toEqual([]);
   expect(state.resolve).toHaveBeenCalledTimes(1);
 });

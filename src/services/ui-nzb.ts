@@ -1,5 +1,5 @@
 import type { ApiResultItem, UiNzbDownloads, TvdbEpisode } from "@/types";
-import { selectRenditions, itemForRendition } from "./rendition-quality";
+import { selectRenditions, itemForRendition, renditionSelector } from "./rendition-quality";
 import { mediaSourceIdentity } from "./source-audio";
 import { generateFakeNzb } from "./nzb-release";
 import { releaseMediaExpectations } from "./release-media-expectations";
@@ -48,8 +48,7 @@ export function createUiNzbDownloads(
   const downloads: UiNzbDownloads = {};
   for (const rendition of selectRenditions(item, "all", hlsEnabled)) {
     const { url } = rendition;
-    const key =
-      rendition.field === "url_video_hd" ? "hd" : rendition.field === "url_video" ? "sd" : "low";
+    const key = renditionSelector(rendition);
     if (downloads[key]) continue;
     const selected = itemForRendition(item, rendition);
     downloads[key] = generateFakeNzb({

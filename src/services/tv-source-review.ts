@@ -1,3 +1,4 @@
+import { RENDITION_SELECTORS } from "@/lib/rendition-selector";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -24,7 +25,12 @@ import { generateTitle, formatTitle } from "./newznab";
 import { validateReleaseTitle } from "@/lib/download-paths";
 import { triggerDownloadProcessing } from "./download";
 import { EpisodeType, type ApiResultItem, type MatchedEpisodeInfo } from "@/types";
-import { selectRenditions, renditionUrl, itemForRendition } from "./rendition-quality";
+import {
+  selectRenditions,
+  itemForRendition,
+  renditionSelector,
+  selectedRendition,
+} from "./rendition-quality";
 import { sourceMediaFacts, type MediaFactsSource } from "./source-media-facts";
 import { applySourceAdmission } from "@/lib/source-admission";
 
@@ -35,7 +41,7 @@ export const tvReviewSelectorSchema = z
     season: z.number().int().nonnegative().max(10_000),
     episode: z.number().int().positive().max(100_000),
     sourceId: hex,
-    rendition: z.enum(["hd", "sd", "low"]),
+    rendition: z.enum(RENDITION_SELECTORS),
   })
   .strict();
 export type TvReviewSelector = z.infer<typeof tvReviewSelectorSchema>;
@@ -147,26 +153,11 @@ function summary(
     metadataSeconds: info.episode.runtime! * 60,
     tolerancePercent: tolerance,
     runtimeConflict: !!info.runtimeConflict,
-    availableRenditions: (Object.keys(fields) as TvReviewSelector["rendition"][]).filter(
-      (key) => !!renditionUrl(info.item, fields[key])
-    ),
+    availableRenditions: selectRenditions(info.item, "all", false).map(renditionSelector),
     renditionLabels: Object.fromEntries(
       selectRenditions(info.item, "all", false)
-        .reverse()
-        .flatMap((candidate) =>
-          candidate.quality === "UNKNOWN"
-            ? []
-            : [
-                [
-                  candidate.field === "url_video_hd"
-                    ? "hd"
-                    : candidate.field === "url_video"
-                      ? "sd"
-                      : "low",
-                  candidate.quality,
-                ],
-              ]
-        )
+        .filter((candidate) => candidate.quality !== "UNKNOWN")
+        .map((candidate) => [renditionSelector(candidate), candidate.quality])
     ),
   };
 }
@@ -201,11 +192,7 @@ export async function searchTvSourceReviews(
       review: summary(
         info,
         tolerance,
-        renditionUrl(info.item, "url_video_hd")
-          ? "hd"
-          : renditionUrl(info.item, "url_video")
-            ? "sd"
-            : "low"
+        selectRenditions(info.item, "all", false).map(renditionSelector)[0] ?? "low"
       ),
     }));
 }
@@ -224,24 +211,20 @@ async function prepare(selector: TvReviewSelector): Promise<PreparedSource> {
   const unique = [...new Map(exact.map((info) => [JSON.stringify(info.item), info])).values()];
   if (unique.length !== 1) throw new TvSourceReviewError();
   const info = unique[0];
-  const url = renditionUrl(info.item, fields[selector.rendition]);
-  if (!url) throw new TvSourceReviewError();
-  // Probe only the selected rendition. Another slot cannot donate its proof.
+  const concrete = selectedRendition(info.item, selector.rendition);
+  if (!concrete) throw new TvSourceReviewError();
+  const url = concrete.url;
+  // Bind the exact measured selector, not another rendition sharing its Watch URL.
   const selected = {
-    ...itemForRendition(
-      info.item,
-      selectRenditions(info.item, "all", false).find(
-        (candidate) => candidate.field === fields[selector.rendition]
-      ) ?? { url }
-    ),
+    ...itemForRendition(info.item, concrete),
     url_video: "",
     url_video_hd: "",
     url_video_low: "",
-    ...(!info.item.sourceRef ? { [fields[selector.rendition]]: url } : {}),
+    ...(!info.item.sourceRef ? { [concrete.field]: url } : {}),
   };
-  const enriched = (await enrichSourceAudio([selected], budget))
+  const enriched = (await enrichSourceAudio([selected], budget, 4, false, "approval"))
     .get(selected)
-    ?.filter((item) => renditionUrl(item, fields[selector.rendition]) === url);
+    ?.filter((item) => selectedRendition(item, selector.rendition)?.url === url);
   if (enriched?.length !== 1) throw new TvSourceReviewError();
   const expectations = tvReviewMediaExpectations(
     enriched[0],
@@ -319,9 +302,7 @@ export async function confirmTvSource(
   const { releaseSourceAdmission } = await import("./source-enqueue");
   const admission = await releaseSourceAdmission(prepared.url, expectations)?.();
   const serialized = JSON.stringify(expectations);
-  const rendition = selectRenditions(prepared.info.item, "all", false).find(
-    (candidate) => candidate.url === prepared.url
-  );
+  const rendition = selectedRendition(prepared.info.item, selector.rendition);
   if (!rendition) throw new TvSourceReviewError();
   const title = formatTitle(generateTitle(prepared.info, rendition.quality, EpisodeType.Standard));
   validateReleaseTitle(title);

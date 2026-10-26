@@ -3707,3 +3707,28 @@ verlangt weiterhin die eigene Freigabe einer konkret benannten isolierten
 Referenzübertragung sowie einen separat freigegebenen Rollout. Keine neue
 Schemaänderung, Produktionsaktivierung oder Bibliotheksänderung. P18 und
 alle anderen unabhängigen offenen Phasen bleiben getrennt.
+
+### Nachprüfung vor Mainintegration: vier neue Reviewbefunde
+
+Der nachträgliche Review vom 26.10.2026 gegen `7984e19` hat vier echte Lücken
+gefunden. Die vorherige Entwicklungsabnahme wird für diese veränderten Inputs
+nicht wiederverwendet: P17.4/P17.5 sind bis zu den frischen terminalen Gates offen.
+Alle Befunde wurden zuerst durch fehlschlagende Verbraucherregressionen
+reproduziert: nicht belegtes H.264-Etikett bei VP9/AV1, fehlende Episodentitel-
+und Feldsuche, Zusammenfall fünf konkreter Auflösungen auf drei GUIwerte und
+zusätzliche synchrone Extraktoraufrufe im normalen Filmconsumer.
+
+Der begrenzte Fix hält den bestehenden H.264-Vertrag durch explizite AVC-Auswahl
+ein. Inhaltsfelder werden nach sicherer Bindung vor Pagination gefiltert;
+32-Programm-/1.000-Inhalte-Grenze bleiben erhalten. Ein gemeinsamer Auswahlowner
+bewahrt alle fünf gemessenen Qualitäten bis zum bestätigten Job und dessen
+Quittung, auch bei identischer Watch-URL; alte MP4-Slots bleiben unverändert.
+Normale Filmsuchen nutzen denselben begrenzten Hintergrundbelegowner wie TV.
+Nur explizite Einzelprüfung darf synchron auflösen. Fehlt ein aktueller Beleg,
+werden auch alte angehängte Auswahl-/Sprach-/Pixelbelege entfernt.
+
+Lokal: 1.625 Tests mit Coverage bestanden, 26 umgebungsgebundene Skips;
+Lint, Typecheck, Format, Datenvalidator, Build und Audit einschließlich
+Entwicklungsabhängigkeiten grün (keine Auditbefunde). Die acht bisherigen
+kausalen Rückbauten bleiben erfolgreich. Vier zusätzliche Rückbauten und
+aktuelle Desktop-/CI-/OCI-Evidenz werden vor erneutem Abschluss ergänzt.
