@@ -3566,3 +3566,37 @@ fokussierte Transfer-/Resolver-/Beleg-/Registry-/Berichtstests grün. Für den
 kohärenten neuen Kopf folgen erneut passende Gates, Desktopjourney und die
 neuen nativen SQLite-/PG-Arr-Ketten direkt sowie über Prowlarr. Keine Wieder-
 verwendung der alten grünen Matrix als Nachweis geänderter Runtimeinputs.
+
+P17.5 lokaler Abschlussstand: 1.613 Tests grün, 26 umgebungsabhängig
+übersprungen; Coverage 87,53/84,26/91,50/90,08 Prozent. Lint, Typecheck,
+Format, Validator und Build grün. Sechs gezielte Mutationen wurden durch
+Verhaltensfehler abgewiesen und vollständig zurückgebaut: Feldweitergabe,
+kanonische Ziel-ID, eingefrorene Resolverauswahl, Versionsgrenze,
+typisierte Nachlieferung und atomare Configbarriere. Serien- und Filmconsumer
+schützen jeweils fremde IDs; Filmverträge dürfen keine Episodenreferenz leihen.
+Kein neuer Produktinput durch den anschließenden reinen Harnessnachtrag.
+
+Desktopjourney am frisch gebauten Stand, 1280×720/System-Dark: Bericht trennt
+kanonische 97 Zeilen von synthetischer Teilabdeckung und von Sprach-/Pixel-/
+Dauerbelegen. Gemeinsame Suche liefert servererzeugte NZBs ohne Byte-URLs in
+YouTube-Katalogslots. Separater verifizierter Serienfall: kalte Belege sperren
+den Prüfknopf verständlich; frische Quelle zeigt tatsächliche 720p statt
+historischem Slotnamen SD. Vorhandener Laufzeitausnahmedialog zeigt kanonische
+Koordinate, beide Laufzeiten, unveränderte Toleranz, Sprache und Pixel. Cancel
+→ null Jobs/Quittungen; bewusste synthetische Bestätigung → genau ein wartender
+v4-Auftrag mit gebundener Quittung. Wiederholte Bestätigung quittiert dieselbe
+Entscheidung. Nach GUI-Deaktivierung bleibt dieser Auftrag bitgleich; ein
+separater Prozess validiert seine gespeicherte Quittung ohne aktuelle
+Metadaten-/Registerfreigabe. Browserkonsole ohne Warnung/Fehler. Die Queue war
+durch einen echten gehaltenen Testlease blockiert; dieser Desktopnachweis
+behauptet keinen Mediendownload. Dateiabnahme ist das separate OCI-/Arr-Gate.
+
+CI `50a6ff5`: Produktgates einschließlich PG17 und PG18 terminal grün
+(40262566376). Der erste native Zwischenstand `5a4e6ad` erreichte vier echte
+Sonarr-Importe, scheiterte danach aber am ungeeigneten historischen
+Rollbackleser; das ist kein bestandener OCI-Abschluss. Rückweg nun am
+v1–v4-fähigen Vorgänger `c2ae58d` gebunden, mit positivem v3-Kontrollfall und
+unbekanntem v5. Separater Wartungsleser bewahrt einen vorbereiteten wartenden
+Vertrag samt Quittung. Native Quellenqualifikation läuft vor den unverändert
+erhaltenen Mediathek-Regressionen, damit ein neuer Quellfehler früh sichtbar
+wird. Aktuelle vollständige native Abnahme bleibt bis terminalem Erfolg offen.

@@ -653,3 +653,20 @@ belege direkt an der jeweiligen Quelle, ohne selbst einen Belegabruf auszulösen
 Auch ein vorbereiteter Medienbeleg ist keine physische Datei- oder Importabnahme.
 Die synthetischen nativen und Desktopgates bleiben Voraussetzung für P17.4/5;
 Produktivaktivierung und echte YouTube-Mediendownloads bleiben P17.6.
+
+Der Rückweg dieser Quellenrevision ist der gepinnte v1–v4-fähige P17.3-Stand,
+nicht eines der historischen Datenbank-Cutoverimages vor dem Medienprotokoll.
+Das isolierte Gate trennt die Protokollkontrolle (gültiges v3-NZB lesend
+lieferbar, v5 lesend und bei SAB-Aufnahme abgewiesen) vom Wartungsleser:
+Schreibgate aus und kein Bootprocessing. Ein vorbereiteter wartender v5-Auftrag
+samt Intentquittung und fünf bereits abgeschlossene synthetische Aufträge
+müssen dabei einschließlich IDs, Payloads und Status erhalten bleiben. Der
+Rücksprung startet in dieser Prüfung ebenfalls ohne automatischen Transfer;
+er ist kein Auftrag zum erneuten Download. Ein produktiver Rückweg benötigt
+den getrennten P17.6-Plan und darf keine unbekannten wartenden Verträge durch
+einen älteren Worker ausführen lassen.
+
+Das tatsächliche OCI-Image wird zusätzlich offline auf gepinntes yt-dlp,
+gebündeltes EJS und ausdrücklich ausgewähltes Node 24 geprüft. Ein absichtlich
+nicht unterstützter Input ohne verwendbaren Extraktor prüft die Toolfähigkeit,
+keine öffentliche Quelle. Der separate reale Downloadnachweis bleibt P17.6.

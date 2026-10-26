@@ -197,7 +197,9 @@ try {
     await delay(250);
   }
   if (catalogue?.scan.state !== "complete" || catalogue.scan.entries !== 7)
-    fail("complete warm metadata index required");
+    fail(
+      `complete warm metadata index required (${catalogue?.scan.state}, ${catalogue?.scan.entries} entries)`
+    );
   const definitions = await api(root, manifest, "sonarr", "/api/v3/qualitydefinition");
   await api(
     root,
@@ -518,7 +520,7 @@ try {
     rollbackImage,
     "sh",
     "-ec",
-    "export PINGUFUNK_BOOT_QUEUE=0; exec node server.js",
+    "export PINGUFUNK_BOOT_QUEUE=0; if [ -f /qa/youtube-rollback-maintenance ]; then export PINGUFUNK_WRITES_ENABLED=0; fi; exec node server.js",
   ]);
   let ready = false;
   for (let attempt = 0; attempt < 40; attempt++) {
@@ -577,6 +579,65 @@ try {
   ).trim();
   if (status !== "400" || JSON.stringify(readJobs(rollbackContainer)) !== JSON.stringify(before))
     fail("old image did not reject v5 without changing preserved jobs");
+  // A prepared already-accepted queue row is opaque to the older reader. It
+  // must survive maintenance and return without being interpreted/retransferred.
+  docker([
+    "exec",
+    rollbackContainer,
+    "node",
+    "-e",
+    'if(process.env.PINGUFUNK_ARR_QA_YOUTUBE!=="1"||!/^\\d+-\\d+$/.test(process.env.PINGUFUNK_MEDIA_QA_OWNER??""))throw Error("Owned fixture required");const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite"),{randomUUID,createHash}=require("node:crypto"),db=new PrismaClient({log:[]});(async()=>{const source=await db.download.findFirstOrThrow({where:{category:"sonarr",status:"completed"}}),id=randomUUID(),key=randomUUID()+":"+Date.now(),title="Synthetic.Rollback.Pending",data={id,title,url:source.url,category:"sonarr",status:"queued",progress:0,mediaExpectations:source.mediaExpectations};await db.$transaction(async tx=>{await tx.download.create({data});await tx.enqueueIntent.create({data:{id:createHash("sha256").update("ui-enqueue-v1\\0"+key).digest("hex"),payloadHash:createHash("sha256").update(JSON.stringify([1,data.url,data.title,data.category,data.mediaExpectations])).digest("hex"),downloadId:id,expiresAt:new Date(Date.now()+86400000)}});});await db.$disconnect()})().catch(()=>process.exitCode=1)',
+  ]);
+  const preserved = readJobs(rollbackContainer);
+  if (
+    preserved.length !== 6 ||
+    preserved.filter((row) => row.status === "queued" && row.title === "Synthetic.Rollback.Pending")
+      .length !== 1
+  )
+    fail("prepared queue baseline missing");
+  const readReceipts = (container) =>
+    JSON.parse(
+      docker([
+        "exec",
+        container,
+        "node",
+        "-e",
+        'const {PrismaClient}=require(process.env.DATABASE_PROVIDER==="postgresql"?"./generated/postgresql":"./generated/sqlite"),db=new PrismaClient({log:[]});(async()=>{console.log(JSON.stringify(await db.enqueueIntent.findMany({orderBy:{id:"asc"}})));await db.$disconnect()})().catch(()=>process.exitCode=1)',
+      ])
+    );
+  const receipts = readReceipts(rollbackContainer);
+  if (receipts.length !== 1) fail("prepared enqueue receipt missing");
+  writeFileSync(join(root, "pingufunk", "youtube-rollback-maintenance"), "synthetic-read-only");
+  docker(["restart", rollbackContainer]);
+  ready = false;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try {
+      docker(["exec", rollbackContainer, "curl", "-fsS", "http://127.0.0.1:6767/api?mode=version"]);
+      ready = true;
+      break;
+    } catch {
+      await delay(500);
+    }
+  }
+  if (!ready) fail("read-only rollback not ready");
+  const maintenance = execFileSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      rollbackContainer,
+      "node",
+      "-e",
+      'let body="";process.stdin.on("data",part=>body+=part);process.stdin.on("end",async()=>{const result=await fetch("http://127.0.0.1:6767/api?mode=addfile&cat=sonarr",{method:"POST",headers:{"content-type":"application/x-nzb"},body});console.log(result.status);});',
+    ],
+    { input: nzb, encoding: "utf8", timeout: 25000 }
+  ).trim();
+  if (
+    maintenance !== "503" ||
+    JSON.stringify(readJobs(rollbackContainer)) !== JSON.stringify(preserved) ||
+    JSON.stringify(readReceipts(rollbackContainer)) !== JSON.stringify(receipts)
+  )
+    fail("maintenance changed a preserved job or receipt");
   docker(["stop", rollbackContainer]);
   docker(["rm", rollbackContainer]);
   rollbackContainer = undefined;
@@ -589,8 +650,17 @@ try {
       await delay(500);
     }
   }
-  if (JSON.stringify(readJobs(controller)) !== JSON.stringify(before))
+  if (
+    JSON.stringify(readJobs(controller)) !== JSON.stringify(preserved) ||
+    JSON.stringify(readReceipts(controller)) !== JSON.stringify(receipts)
+  )
     fail("current-image return changed existing jobs or receipts");
+  if (
+    readFileSync(join(root, "pingufunk", "youtube-transfers.jsonl"), "utf8")
+      .trim()
+      .split("\n").length !== 10
+  )
+    fail("rollback or return re-transferred a prepared accepted job");
   console.log(
     `Owned YouTube ${backend}: old image rejected v5; all job payloads, receipts, IDs and statuses unchanged through return`
   );

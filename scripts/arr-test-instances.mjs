@@ -362,6 +362,7 @@ async function up() {
     "--mount",
     `type=bind,src=${resolve("scripts/media-container-provider.mjs")},dst=/qa/media-provider.mjs,readonly`,
     image,
+    ...(youtube ? ["sh", "-ec", "export PINGUFUNK_BOOT_QUEUE=0; exec node server.js"] : []),
   ]);
   load(root);
   for (const app of Object.keys(ports)) {

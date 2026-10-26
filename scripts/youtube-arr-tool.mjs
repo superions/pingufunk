@@ -28,7 +28,7 @@ const entries = Array.from({ length: 4 }, (_, i) => ({
 }));
 entries.push({ ...entries[0], id: "00000000004" });
 entries.push({ id: "private0000", availability: "private" });
-if (args.includes("--flat-playlist")) {
+if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
   if (url.searchParams.get("list") !== playlist) throw Error("Owned playlist required");
   process.stdout.write(
     JSON.stringify({
