@@ -31,7 +31,9 @@ Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad struktu
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
 P17.1/P17.1a/P17.2 sind einschließlich Reviewnacharbeit abgenommen und mit
-Branding über PR #9 in Main integriert (`0e1d5b4`). P17.3 ist auf dem Topicbranch abgenommen; aktuell folgt P17.4.
+Branding über PR #9 in Main integriert (`0e1d5b4`). P17.3–P17.5 sind auf dem
+Topicbranch einschließlich vollständiger nativer Bestandsabnahme abgeschlossen.
+P17.6 bleibt optional und separat freizugeben; keine Produktionsaktivierung.
 Die bestehenden offenen Phasen werden weder umgedeutet noch pauschale
 Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
@@ -3339,7 +3341,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Öffentlicher Produktabgleich getrennt: 93/97 sicher zugeordnet,
       vier ohne sichere Quellenbindung, ein privater unbekannter Extraeintrag;
       keine behauptete 97/97-Verfügbarkeit und kein Mediendownload.
-- [ ] **P17.4 — Neue Quelle bis zum vorhandenen Downloadconsumer gemeinsam integrieren (M).**
+- [x] **P17.4 — Neue Quelle bis zum vorhandenen Downloadconsumer gemeinsam integrieren (M).**
       Abhängigkeit P17.1a und P17.3. Owner: neue
       `src/providers/youtube/search.ts`/`download.ts`, gemeinsamer Suchvertrag
       und Transferdispatch aus P17.1a, `content-search.ts::queryContentWindow`,
@@ -3393,7 +3395,15 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Unknown negativ; Ausschalten verändert keine schon angenommenen Jobs.
       Neue reine YT-Namespace-GUIDs bleiben bei Rotation stabil, alte exakt gleich.
       Source-/Frische-/Erwartungs-/Rollbackreferenzen im betroffenen Vertrag pflegen.
-- [ ] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
+      Entwicklungsabnahme am Kopf `d644bc2`: Produkt-CI einschließlich PG17/18
+      grün; der native YouTube-Teilschritt in
+      [40270459802](https://github.com/superions/pingufunk/actions/runs/40270459802)
+      ist terminal erfolgreich. Alle vier Kombinationen SQLite/PostgreSQL und
+      direkt/Prowlarr bestätigen jeweils vier echte Sonarr- und einen echten
+      720p-Radarr-Import, ffprobe, gepaarte History, Formatrotation, kein
+      RSS-Doppelgrab sowie den Erhalt von Jobs/Quittung beim getesteten Rückweg.
+      Der gesamte native Bestandslauf ist über P17.5 ebenfalls abgeschlossen.
+- [x] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
       Abhängigkeit P17.1–P17.4 einschließlich P17.1a; keine pauschale Schließung
       anderer offener Phasen.
       Owner: vorhandene Produkt-/PG-/OCI-Workflows und native Arr-Testharnesses,
@@ -3425,6 +3435,20 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Downloads oder Produktionsbibliotheksänderungen. Finaler vollständiger
       Owner-/Call-/Write-/Feld-/Linkreview ohne offene P17-Findings und kohärenter
       Commit/Push zum eigenen Topicbranch. P17.6 bleibt davon unabhängig offen.
+      Abgeschlossen am 26.10.2026 für `d644bc2`: 1.621 lokale Tests mit Coverage,
+      acht kausale Gegenproben, Desktopjourney mit Cancel ohne Job und einer
+      bestätigten synthetischen Aufnahme samt unabhängiger Quittungsprüfung.
+      [Produkt-CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40270459776)
+      und die vollständige
+      [native Containerkette](https://github.com/superions/pingufunk/actions/runs/40270459802)
+      terminal grün, ebenso die zugehörigen Push-Gates. Zusätzlich zur neuen
+      Quellenmatrix bleiben die bisherigen Qualitätsfälle, beide kalten
+      80/80-Mediathek-Importketten, SQLite-Persistenz, TLS-/Migrationsrückweg,
+      reale Medien- und Freigabe-/Workerfälle grün. Vollständiger Nachweis und
+      Grenzen im [Review](../docs/proxy-retirement-review.md).
+      Abschlussdokumentation ändert keine geprüften Runtime-/Testinputs;
+      passende grüne Belege werden wiederverwendet. Kein realer YouTube-
+      Mediendownload, Rollout oder pauschaler Abschluss anderer offener Phasen.
 - [ ] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
       Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
       Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach

@@ -3641,3 +3641,69 @@ Radarr-Client geerbte automatische Completed-Bereinigung. Diese wird für den
 beabsichtigten Erhalt-/Rollbackfall ausdrücklich ausgeschaltet; die vorhandenen
 separaten nativen Bereinigungsfälle bleiben unverändert. Keine Abnahmeschranke
 abgeschwächt; der korrigierte Kopf muss die komplette Kette terminal bestehen.
+
+### P17.4/P17.5 – zusammenhängende Quellenabnahme
+
+Geprüfter Produkt-/Harnesskopf: `d644bc28fc83f8af55f8e2b9a933e075fbdf5b05`.
+Die [Produkt-CI](https://github.com/superions/pingufunk/actions/runs/40270459776)
+ist einschließlich PostgreSQL 17 und 18 terminal grün. Lokal: 1.621 bestandene
+Tests mit Coverage, 26 umgebungsgebundene Skips; die entsprechenden echten
+Backendgates laufen separat in CI. Lint, Typecheck, Format, Katalogvalidator
+und Build sind grün. Acht kontrollierte Rückbauten werden durch die jeweiligen
+Verbraucherregressionen abgewiesen; alle veränderten Quelldateien anschließend
+hashgleich wiederhergestellt. Unveränderte Desktop- und Produktbelege werden
+wiederverwendet, nicht wegen reiner Testdiagnose-/Dokumentänderungen wiederholt.
+
+Der native YouTube-Teilschritt in
+[40270459802](https://github.com/superions/pingufunk/actions/runs/40270459802)
+ist terminal grün: vier Kombinationen aus SQLite/PostgreSQL und direkt/Prowlarr,
+jeweils vier tatsächliche Serienimporte und ein gezielt gewählter 720p-Film.
+Unabhängige Datei-/ffprobe-Prüfung, API-/physische Größe und genau gepaarte
+native History bestätigen die Medien. Jede kalte Einmalsuche liefert ihren
+Rest über RSS nach; wiederholtes RSS erzeugt keinen zweiten Grab. Der
+abgelaufene synthetische Alternativstream wird nicht übertragen. Gepacktes
+Node 24, yt-dlp und EJS sind im tatsächlichen Image offline qualifiziert.
+
+Alle fünf abgeschlossenen v5-Jobs sowie ein gesondert vorbereiteter wartender
+v5-Auftrag und seine Quittung bleiben beim getesteten Rückweg erhalten. Der
+v1–v4-fähige Vorgänger liefert die positive v3-Kontrolle und weist neue v5-
+Deklarationen ab; sein Wartungsstart und die Rückkehr verändern weder IDs,
+Payloads noch Status und lösen keinen erneuten Transfer aus. Der vorbereitete
+wartende Fall beweist Erhalt, keine nachträglich behauptete Fertigstellung.
+Die synthetischen Readbacks verwenden den tatsächlichen PostgreSQL-Client
+`@prisma/client` beziehungsweise den separat generierten SQLite-Client. Die
+absichtliche leere Indexerprüfung wird nicht als erfolgreicher Suchfall gewertet;
+eine daraus entstandene native Sperrfrist wird vor der einmaligen Filmsuche
+nur lesend abgewartet, ohne Statuslöschung oder Suchwiederholung.
+
+Abschließender Owner-/Call-/Write-/Feldreview: Registry und vorbereiteter Index
+bleiben getrennt von der serverseitigen kanonischen Bindung. Die beiden
+Quellmodule konsumieren denselben Such-/Transfervertrag; Queue, Lease,
+Staging und Completion behalten genau einen Owner. Nur neue Aufnahme bindet
+die aktuelle Registry atomar mit Job und Quittung über vorhandene Configzeilen.
+Der angenommene Auftrag enthält genau eine eingefrorene Format-/Audiospurwahl,
+keine Alternativenliste oder kurzlebige CDN-Adresse. Worker und Medienbelege
+verwenden denselben frischen Resolver; alte Versions-/ID-/Renditionverträge
+bleiben erhalten. Generierte Clients und Migrationsketten sind unverändert.
+Die gepflegten lokalen Dokumentverweise lösen auf; private Antworten,
+Testkonfigurationen, Datenbanken und Medien sind nicht im Diff enthalten.
+Keine offenen P17-Produktfindings aus diesem Review. Der vollständige native
+Bestandslauf ist ebenfalls terminal grün, sowohl im oben verlinkten PR-Gate
+als auch im [Push-Gate](https://github.com/superions/pingufunk/actions/runs/40270456081).
+Die bisherigen Qualitätsfälle, kalte Mediathek-Nachlieferung direkt und über
+Prowlarr jeweils von 0 initialen Grabs bis zu 80/80 tatsächlichen Importen,
+wiederholtes RSS ohne Doppelgrab, SQLite-Persistenz, TLS-/Migrationsrückwege,
+reale Medienprüfung und explizite Freigabe bis zum realen Worker auf beiden
+Backends bleiben erfolgreich. Damit sind P17.1–P17.5 in der Entwicklung
+abgeschlossen. Die Abschlussdokumentation verändert keinen geprüften
+Produkt-/Harnessinput und verwendet diese grünen Belege weiter.
+
+Die reale öffentliche Inventur bleibt davon getrennt: 97 kanonische Folgen,
+93 sicher zugeordnete Quellen, vier ohne sichere Quellbindung und ein privater
+Zusatz ohne geratenes Episodenziel. Der begrenzte reale Metadatenvorlauf einer
+Referenz bestätigt deutsche 480p-Formate, keine beobachtete 720p-Variante und
+keine übertragene Mediendatei. Das ist keine reale Downloadabnahme. P17.6
+verlangt weiterhin die eigene Freigabe einer konkret benannten isolierten
+Referenzübertragung sowie einen separat freigegebenen Rollout. Keine neue
+Schemaänderung, Produktionsaktivierung oder Bibliotheksänderung. P18 und
+alle anderen unabhängigen offenen Phasen bleiben getrennt.

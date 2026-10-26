@@ -690,3 +690,9 @@ vorhandene vollständige Medienbelege nicht verdecken. Ein ausgewähltes Format
 benötigt weiter konkrete Codecs, passende Pixel oder explizite deutsche
 Audiosprache. Sprache, Audio-/Videoformat und Auflösung werden weder aus
 Originaltitel noch aus einer lokalisierten Metadatenantwort erfunden.
+
+Die Entwicklungsabnahme von P17.1–P17.5 samt nativen Backend-/Arr-/Rückwegbelegen
+steht im [Reviewbericht](proxy-retirement-review.md); der verbindliche Status
+und die gesonderten Freigaben für echte Medien und Betrieb stehen in
+[P17](../todo/proxy-retirement.md). Synthetische echte Dateien und reale
+Metadatenabfragen ersetzen den optionalen echten Referenzdownload nicht.
