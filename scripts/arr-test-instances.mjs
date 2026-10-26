@@ -1200,6 +1200,15 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
     indexers.some((row) => !owned.includes(row) && row.enableInteractiveSearch)
   )
     throw new Error("Owned isolated download indexer scope required");
+  // The deliberate empty-feed validation can still suppress this first native
+  // search when cold imports finish quickly. Observe its expiry just as the
+  // search-only fixture does; never clear status or repeat a release search.
+  await fixtureIndexersReady(
+    root,
+    manifest,
+    app,
+    owned.map((row) => row.id)
+  );
   const before = (
     await api(root, manifest, "pingufunk", "/api/download?mode=history")
   ).history.slots.map((row) => row.nzo_id);
