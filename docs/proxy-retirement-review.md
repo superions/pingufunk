@@ -3763,3 +3763,41 @@ wieder geschlossen; die reine Abschlussdokumentation verwendet die passenden
 grünen Belege weiter. Produktiver Rollout/Katalogaktivierung sind beauftragt,
 die zusätzliche Schemaaktualisierung und echte Referenzübertragung bleiben
 separat freizugeben. Kein Betriebsabschluss und keine Schließung anderer Phasen.
+
+### P17 · Betriebsbefund nach Main-Rollout (26.10.2026)
+
+Der genehmigte Main-Rollout, die zusätzlich ausdrücklich freigegebene
+append-only Schemaergänzung und die begrenzte Katalogaktivierung wurden
+abgeschlossen. Der Bestandsschutz wurde unabhängig geprüft. Keine reale
+Suche, Grabs, Medienübertragung oder Bibliotheksänderung durch diese Arbeiten.
+Private Betriebswerte und Antworten bleiben außerhalb des Repositorys.
+
+Der anschließende echte Consumerabgleich zeigt eine Lücke der bisherigen
+synthetischen Abnahme: `parseSonarrEpisodes` bewahrt korrekt den UTC-Zeitpunkt
+für RSS. `mergeSonarrShow` verwendet dessen UTC-Tag aber auch als vermeintlich
+kalendarischen Ausstrahlungstag. Ein ausdrücklich gleicher Sonarr-`airDate`
+und Katalogtag werden bei einem UTC-Zeitpunkt am Vorabend deshalb fälschlich
+als Identitätskonflikt gesperrt. Zusätzlich gibt es einzelne abweichende
+Episodentitel, die getrennt zu prüfen sind. Das aktuelle Fail-closed-Verhalten
+verhindert eine unbewiesene Freigabe; es ist kein Nachweis einer erfolgreichen
+YouTube-Nachlieferung.
+
+P17.5 ist für diesen Befund wieder offen. Erforderlich ist eine gezielte
+Verbraucherregression mit getrenntem Kalendertag und RSS-Zeitpunkt, identischer
+Identität und einem Zeitzonenwechsel über Mitternacht sowie negativen echten
+Datums-/Titelkonflikten. Der unveränderte RSS-Zeitpunkt darf nicht durch ein
+erfundenes lokales Mitternacht ersetzt werden. Keine pauschale +/-1-Tag-
+Toleranz, keine Sonarr-Titeländerung und keine Abschaltung der Sonarr-Bindung.
+Die bestehenden grünen Produkt-/Containerbelege bleiben dokumentierte Baseline;
+für einen späteren Produktfix müssen dessen betroffene Gates neu erfüllt sein.
+
+Der begrenzte Fix bewahrt Sonarrs validierten `airDate` getrennt als
+`airedDay`. Ausschließlich der Identitätsabgleich verwendet diesen Kalendertag;
+`aired` bleibt der unveränderte UTC-Zeitpunkt für RSS. Fehlt ein gültiger
+Kalendertag, gilt der bisherige UTC-Fallback. Keine Schema-, Quellenregister-,
+Titel-, Sprach-, Toleranz- oder Downloadänderung.
+Vier synthetische Verbraucherfälle schlugen vor der Änderung fehl; nach der
+Korrektur bestehen sie einschließlich echter Kalender-/Titelkonflikte sowie
+unveränderter RSS-Zeitpunkte. 74 fokussierte Tests und alle 1.634 lokalen Tests
+bestanden; Lint, Typecheck und Format grün. Die neue CI-/Containerabnahme steht
+noch aus; der gesunde produktive Main wird bis dahin nicht ersetzt.

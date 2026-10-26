@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sourceDay } from "@/lib/content-dates";
 
 export class SonarrMetadataError extends Error {
   constructor() {
@@ -29,6 +30,7 @@ const episodeSchema = z.object({
   episodeNumber: positiveId,
   title: z.string().trim().min(1),
   airDateUtc: z.string().nullish(),
+  airDate: z.string().nullish(),
   monitored: z.boolean().optional(),
   hasFile: z.boolean().optional(),
   runtime: z.number().int().nonnegative().max(2_147_483_647).nullish(),
@@ -50,6 +52,8 @@ export interface SonarrEpisodeMetadata {
   episodeNumber: number;
   title: string;
   aired: Date | null;
+  /** Explicit broadcast calendar day for identity checks; never an RSS instant. */
+  airedDay?: string;
   /** EpisodeResource.runtime in minutes, converted once; never Series.runtime. */
   expectedRuntimeSeconds: number | null;
   monitored: boolean;
@@ -140,6 +144,7 @@ export function parseSonarrEpisodes(payload: unknown, seriesId: number): SonarrE
       episodeNumber: episode.episodeNumber,
       title: episode.title,
       aired: parseAired(episode.airDateUtc),
+      ...(sourceDay(episode.airDate) ? { airedDay: sourceDay(episode.airDate) } : {}),
       expectedRuntimeSeconds: episode.runtime ? episode.runtime * 60 : null,
       monitored: episode.monitored === true,
       hasFile: episode.hasFile === true,

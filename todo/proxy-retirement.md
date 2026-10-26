@@ -3404,7 +3404,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       720p-Radarr-Import, ffprobe, gepaarte History, Formatrotation, kein
       RSS-Doppelgrab sowie den Erhalt von Jobs/Quittung beim getesteten Rückweg.
       Der gesamte native Bestandslauf ist über P17.5 ebenfalls abgeschlossen.
-- [x] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
+- [ ] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
       Abhängigkeit P17.1–P17.4 einschließlich P17.1a; keine pauschale Schließung
       anderer offener Phasen.
       Owner: vorhandene Produkt-/PG-/OCI-Workflows und native Arr-Testharnesses,
@@ -3459,6 +3459,23 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       am alten Bundle; korrigierte 1080p-/480p-Auswahl bis zu gespeichertem
       Auftrag/Quittung, Cancel ohne Job und leere Fehlerkonsole bestätigt.
       Keine Produktinputs durch die abschließende Dokumentation geändert.
+      Wiedereröffnet am 26.10.2026 nach der tatsächlichen Betriebsprüfung:
+      `mergeSonarrShow` vergleicht den UTC-Tag von `airDateUtc` mit dem
+      kalendarischen Katalogtag. Ein gültiger Sonarr-Zeitpunkt am Vorabend
+      blockiert damit passende Folgen trotz identischem `airDate`.
+      Vor erneuter Schließung genau diesen Consumerfall synthetisch reproduzieren,
+      den expliziten Kalendertag vom unveränderten RSS-Zeitpunkt trennen und
+      echte Datums-/Titelkonflikte weiterhin sperren. Zusätzlich beobachtete
+      Titelabweichungen einzeln prüfen; keine pauschale Normalisierung,
+      Datumsverschiebung oder Schutzlockerung als Betriebsworkaround.
+      Die vorhandenen grünen Gates bleiben als unveränderte Baseline gültig,
+      decken diesen zusätzlichen realen Datenfall aber nicht ab.
+      Gezielter Fix implementiert: validiertes Sonarr-`airDate` als separater
+      Kalendertag nur für die Identitätsprüfung; `airDateUtc` bleibt unverändert
+      der RSS-Zeitpunkt. Vier zuvor fehlschlagende Consumerfälle prüfen echte
+      Datums-/Titelkonflikte und UTC-Wechsel in beide Richtungen; fehlende oder
+      ungültige Kalendertage erfinden keinen Ersatzzeitpunkt. 1.634 lokale
+      Tests, Lint, Typecheck und Format grün; CI-/Containerabnahme noch offen.
 - [ ] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
       Nutzerauftrag 26.10.2026: PR #10 nach frischen grünen Gates in Main
       integrieren, geprüftes Image über den bestehenden Homelab-GitOps-Weg
@@ -3469,8 +3486,12 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Keine Sonarr-Suche, Grabs oder Bibliotheksänderungen. Gegenüber der
       bisherigen Produktionsschemalinie ist die append-only Tabelle
       `EnqueueIntent` zusätzlich erforderlich; diese Schemaaktualisierung
-      gehört nicht stillschweigend zum Imageauftrag und bleibt separat
-      freizugeben. Ein echter Mediendownload bleibt ebenfalls unfreigegeben.
+      wurde separat ausdrücklich freigegeben und einmalig ausgeführt.
+      Geprüfter Main-Rollout und begrenzter Metadatenindex sind abgeschlossen,
+      beide historischen Katalogbindungen entfernt. Die Betriebsprüfung hält
+      die Sonarr-Quellenfreigabe wegen des in P17.5 beschriebenen Kalender-/UTC-
+      Konflikts und zusätzlicher Titelabweichungen weiterhin geschlossen.
+      Ein echter Mediendownload bleibt unfreigegeben.
       Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
       Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach
       P17.5 genau benanntes freigegebenes Referenzvideo in einem isolierten Ziel
