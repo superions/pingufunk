@@ -100,3 +100,54 @@ it("rejects an unknown extractor target before starting a process", async () => 
   expect(spawn).not.toHaveBeenCalled();
   expect(new YoutubeMetadataError("invalid").message).not.toContain("secret");
 });
+
+it.each(["Privates Video", "Private video. Sign in if you have access."])(
+  "confirms explicit unavailability only for the requested video: %s",
+  async (message) => {
+    const result = readYoutubeMetadata(
+      youtubeInput("abcdefghijk"),
+      0,
+      new AbortController().signal,
+      true
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    child.stderr.write(`ERROR: [youtube] abcdefghijk: ${message}\n`);
+    child.emit("close", 1);
+    expect(await result).toEqual({ id: "abcdefghijk", availability: "unavailable" });
+    expect(spawn.mock.calls[0][1]).toEqual(
+      expect.arrayContaining(["--extractor-args", "youtube:lang=de", "--skip-download"])
+    );
+  }
+);
+it("does not reinterpret a foreign diagnostic as a private video", async () => {
+  const result = readYoutubeMetadata(
+    youtubeInput("abcdefghijk"),
+    0,
+    new AbortController().signal,
+    true
+  );
+  const rejection = expect(result).rejects.toMatchObject({ reason: "process" });
+  await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+  child.stderr.write("ERROR: [youtube] zyxwvutsrqp: Privates Video\n");
+  child.emit("close", 1);
+  await rejection;
+});
+it.each(["timeout", "normal inspect"])(
+  "preserves %s failure despite a private diagnostic",
+  async (mode) => {
+    const result = readYoutubeMetadata(
+      youtubeInput("abcdefghijk"),
+      0,
+      new AbortController().signal,
+      mode === "timeout"
+    );
+    const rejection = expect(result).rejects.toMatchObject({
+      reason: mode === "timeout" ? "timeout" : "process",
+    });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    child.stderr.write("ERROR: [youtube] abcdefghijk: Privates Video\n");
+    if (mode === "timeout") await vi.advanceTimersByTimeAsync(30001);
+    else child.emit("close", 1);
+    await rejection;
+  }
+);

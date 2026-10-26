@@ -349,3 +349,69 @@ it("preserves Sonarr supplements and rejects a concrete metadata contradiction",
     matchSonarrEpisodes(merged, sources, 300, 10).map((match) => match.episode.episodeNumber)
   ).toEqual([6]);
 });
+
+it("retains a newly bundled 97-episode identity before the default remote catalogue catches up", async () => {
+  state.settings.set("integration.sonarr.enabled", "false");
+  fetchMock.mockResolvedValueOnce(
+    Response.json(catalogue.filter((show) => show.tvdbId !== 133771))
+  );
+  const show = await getShowInfoByTvdbId(133771);
+  expect(show?.id).toBe(133771);
+  expect(show?.episodes).toHaveLength(97);
+  expect(fetchMock.mock.calls[0][0]).toContain("/superions/pingufunk/");
+  expect(state.forbiddenWrite).not.toHaveBeenCalled();
+});
+it("fills only unknown curated facts from the same concrete provider episode identity", async () => {
+  state.settings.set("integration.sonarr.enabled", "false");
+  state.settings.set("api.tvdb.key", "synthetic");
+  const reference = catalogue.find((show) => show.tvdbId === 133771)!;
+  state.tvdb.mockResolvedValue({
+    id: 133771,
+    name: reference.name,
+    germanName: reference.germanName,
+    aliases: [],
+    episodes: [
+      { ...reference.episodes[0], aired: new Date("1969-01-03"), runtime: 60 },
+      {
+        ...reference.episodes[1],
+        name: "Wrong synthetic order",
+        aired: new Date("1969-01-10"),
+        runtime: 20,
+      },
+    ],
+  });
+  const show = await getShowInfoByTvdbId(133771);
+  expect(show?.episodes).toHaveLength(97);
+  expect(show?.episodes[0].runtime).toBe(60);
+  expect(show?.episodes[1].name).toBe(reference.episodes[1].name);
+  expect(show?.episodes[1].runtime).toBeNull();
+});
+it("honors an explicit remote pin and still uses an independent configured provider with Sonarr off", async () => {
+  vi.stubEnv("SHOWS_URL", "https://example.invalid/pinned-catalogue.json");
+  vi.resetModules();
+  state.settings.set("integration.sonarr.enabled", "false");
+  fetchMock.mockResolvedValueOnce(Response.json([]));
+  const owner = await import("./shows");
+  expect(await owner.getShowInfoByTvdbId(133771)).toBeNull();
+  expect(fetchMock.mock.calls[0][0]).toBe("https://example.invalid/pinned-catalogue.json");
+  state.settings.set("api.tvdb.key", "synthetic");
+  const { clearSettingsCache } = await import("@/lib/settings");
+  clearSettingsCache();
+  state.tvdb.mockResolvedValue({
+    id: 133771,
+    name: "Der Kommissar",
+    germanName: "Der Kommissar",
+    aliases: [],
+    episodes: [
+      {
+        name: "Synthetic provider episode",
+        seasonNumber: 1,
+        episodeNumber: 1,
+        aired: null,
+        runtime: 60,
+      },
+    ],
+  });
+  expect((await owner.getShowInfoByTvdbId(133771))?.episodes).toHaveLength(1);
+  expect(state.forbiddenWrite).not.toHaveBeenCalled();
+});

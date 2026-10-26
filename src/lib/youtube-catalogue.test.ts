@@ -5,12 +5,22 @@ import {
   youtubeRegistrySchema,
   mergeYoutubeRegistry,
   confirmedYoutubeSave,
+  changeYoutubeTarget,
   normalizeYoutubePage,
   normalizeYoutubeInspection,
   type YoutubeSnapshot,
 } from "./youtube-catalogue";
 
 const seed = youtubeRegistrySchema.parse(seedData);
+it("clears source-specific title exceptions when a programme ID changes, preserving same-ID edits", () => {
+  const mapping = seed.programMappings[0];
+  expect(changeYoutubeTarget(mapping, mapping.targetId)).toEqual(mapping);
+  expect(changeYoutubeTarget(mapping, 42)).toMatchObject({
+    targetId: 42,
+    sourceNumbering: "canonical",
+    episodeTitleAliases: [],
+  });
+});
 it("projects only declared catalogue fields and keeps upload day separate from first discovery", () => {
   const channel = seed.channels[0],
     mapping = seed.programMappings[0];
@@ -116,6 +126,11 @@ it("ships five verified inactive channel identities and the explicit Kommissar m
       name: "Der Kommissar",
       targetId: 133771,
       enabled: false,
+      sourceNumbering: "publisher",
+      targetOrder: "aired",
+      episodeTitleAliases: [
+        { source: "Noch zehn Minuten zu leben", canonical: "Noch 10 Minuten zu leben" },
+      ],
     },
   ]);
 });

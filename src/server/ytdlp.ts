@@ -37,7 +37,8 @@ export class YoutubeMetadataError extends Error {
 export async function readYoutubeMetadata(
   input: YoutubeInput,
   offset: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  confirmUnavailable = false
 ): Promise<unknown> {
   const canonical = youtubeInput(input.url);
   if (
@@ -66,6 +67,8 @@ export async function readYoutubeMetadata(
     "--skip-download",
     "--flat-playlist",
     "--dump-single-json",
+    "--extractor-args",
+    "youtube:lang=de",
     "--no-warnings",
     "--abort-on-error",
     "--retries",
@@ -95,6 +98,8 @@ export async function readYoutubeMetadata(
     });
     const owned = bindOwnedProcessAbort(child, signal);
     const chunks: Buffer[] = [];
+    const errors: Buffer[] = [];
+    let errorBytes = 0;
     let size = 0;
     let failure: YoutubeMetadataError | undefined;
     const fail = (reason: YoutubeMetadataError["reason"]) => {
@@ -107,7 +112,14 @@ export async function readYoutubeMetadata(
       if (size > 8 * 1024 * 1024 || chunks.length >= 8192) fail("overflow");
       else if (!failure) chunks.push(chunk);
     });
-    child.stderr.resume();
+    // Keep only a small private diagnostic window for an explicit unavailable
+    // video check. Never expose subprocess stderr or infer availability from a timeout.
+    child.stderr.on("data", (chunk: Buffer) => {
+      if (!confirmUnavailable || errorBytes >= 65536) return;
+      const retained = chunk.subarray(0, 65536 - errorBytes);
+      errors.push(retained);
+      errorBytes += retained.length;
+    });
     child.once("error", () => {
       clearTimeout(timer);
       owned.dispose();
@@ -118,7 +130,24 @@ export async function readYoutubeMetadata(
       owned.dispose();
       if (signal.aborted) return reject(new YoutubeMetadataError("cancelled"));
       if (failure) return reject(failure);
-      if (code !== 0) return reject(new YoutubeMetadataError("process"));
+      if (code !== 0) {
+        if (confirmUnavailable && input.kind === "movie") {
+          const prefix = `ERROR: [youtube] ${input.id}: `;
+          const diagnostic = Buffer.concat(errors)
+            .toString("utf8")
+            .split(/\r?\n/)
+            .find((line) => line.startsWith(prefix))
+            ?.slice(prefix.length);
+          if (
+            diagnostic &&
+            /^(?:Private video(?:\.|$)|Privates Video(?:\.|$)|Video unavailable\b|Video nicht verfügbar\b)/.test(
+              diagnostic
+            )
+          )
+            return resolve({ id: input.id, availability: "unavailable" });
+        }
+        return reject(new YoutubeMetadataError("process"));
+      }
       try {
         resolve(
           JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)))

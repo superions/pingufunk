@@ -3477,3 +3477,51 @@ Main ausschließlich fast-forward aktualisiert. P17.2 ist damit wieder
 abgenommen; die Fortsetzung P17.3 erfolgt auf eigenem Topicbranch. Diese
 reine Abschlussnotiz verwendet die grünen unveränderten Produktinputs wieder.
 Keine Imagepublikation, Produktionsänderung oder echte Medien-/Bibliotheksoperation.
+
+## P17.3 — Programmidentität und vollständiger Zuordnungsbericht (26.10.2026)
+
+Implementiert auf `codex/youtube-binding`: Quellengebundene automatische
+Programm-ID, explizite Anbieternummerierung, vollständiger kanonischer Bericht
+und begrenzter Nichtverfügbarkeitsnachweis. Die vorhandenen Config- und
+Metadatenowner werden erweitert; keine Schema-/Migrationsänderung. Der Bericht
+schreibt keine Jobs und bindet keinen alten Index nach einer ID-Änderung um.
+
+Reviewkorrekturen: Titel mit Doppelpunkt erhalten, historische unbekannte
+Verfügbarkeit nicht als private Quelle erfinden, echte Uploaderdiagnose an
+exakte Video-ID binden, Zusatzabrufe auf zehn begrenzen. Gleiche Programm-ID
+mit widersprüchlichen Jahresangaben bleibt unabhängig von der Reihenfolge
+paralleler Providerantworten unklar. Titelalias-/Nummerierungsregeln werden bei
+ID-Korrektur nicht auf eine andere Serie übertragen. Der Bericht bekommt beim
+Öffnen den Fokus, damit er bei langem Register auch tatsächlich sichtbar ist.
+
+Lokale zusammenhängende Gates vor dem reinen Fokusnachtrag: 1.553 Tests grün,
+25 bedingt übersprungen; Coverage Statements 88,27 %, Branches 85,13 %,
+Functions 91,52 %, Lines 90,85 %. Lint, Typecheck, Datenvalidator und Build grün.
+Eine Formatabweichung in einer neuen Testdatei wurde korrigiert. SQLite prüft
+Scan → Persistenz → tatsächlichen API-Bericht → Neustart und unveränderte
+Altjobs. PG17/18 ist in denselben CI-Owner eingebunden, terminale Evidenz für
+diesen neuen Codeinput noch ausstehend. Native Brandinggates beweisen nicht
+automatisch diese Erweiterung.
+
+Fünf kontrollierte Rückbauten wurden von konkreten Assertions verworfen:
+Anbieternummerierung, Uploaderbindung, bidirektionale Cross-ID, finale
+Registerrevision und Vorrang der lokalen ID. Die Originalquellen wurden nach
+jedem Versuch wiederhergestellt. Öffentlicher lesender Abgleich separat:
+93/97 zugeordnet, vier ohne sichere Quellenbindung und ein unbekannter privater
+Extraeintrag, null Jobs. Kein 97/97-Medien-/Transfernachweis.
+
+P17.3 bleibt bis zum frischen Desktopabschluss und terminalen erforderlichen
+CI-Gates offen. P17.4/P17.5 folgen ohne Vorwegnahme ihrer Abnahme.
+
+Desktopnachweis des frischen gebauten Bundles: `/settings`, System-Dark,
+1280×720, isoliertes SQLite mit synthetischem Metadatenwerkzeug und gesperrtem
+externen Netzwerk. Leerer Index zeigt 97 kanonische Zeilen ohne behauptete
+Verfügbarkeit. Ausdrücklicher synthetischer Scan → 97 zugeordnete Zeilen,
+separate private Extraquelle und sichtbare Originalkoordinaten. Bericht öffnet
+mit Fokus; Reload/Schließen bedient. URL-Prüfung übernimmt bestehende ID ohne
+manuelle Eingabe. Änderung der ID setzt Anbieternummerierung zurück und sperrt
+den Bericht bis zum Speichern; Verwerfen/Readback stellt gespeicherte ID und
+Regel her. Browserkonsole ohne Warnung/Fehler, unabhängiger DB-Readback null Jobs.
+Screenshots bleiben unter dem ignorierten Testverzeichnis, keine echten
+YouTube-Antworten oder Medien. Dieses synthetische 97/97 ist ausdrücklich vom
+öffentlichen Abgleich 93/97 getrennt. Terminale PG-/CI-Abnahme bleibt ausstehend.

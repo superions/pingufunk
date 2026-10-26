@@ -339,15 +339,16 @@ zeigte beim lesenden Browserabruf am 25.10.2026 „94 Videos“ und einen Hinwei
 auf ein nicht verfügbares Video. Das ist kein bewiesener 97/97-Bestand und
 kein Transfer-/Mediennachweis; weitere Kanaluploads sind dadurch nicht ausgeschlossen.
 
-Vorgesehene Programmvorbelegung, noch keine implementierte Konfiguration:
+Implementierte, zunächst deaktivierte Programmvorbelegung in `data/youtube-sources.json`:
 
 ```json
 {
   "channelId": "UCNMj6SRjtvagiUBKYoqsW_w",
-  "playlistId": "PL_H50xx0qoB_bynOI7Esvpfj6EhvxOFS5",
-  "mediaType": "series",
-  "tvdbId": 133771,
-  "episodeMatching": "unique-title",
+  "sourceId": "PL_H50xx0qoB_bynOI7Esvpfj6EhvxOFS5",
+  "kind": "series",
+  "targetId": 133771,
+  "name": "Der Kommissar",
+  "enabled": false,
   "sourceNumbering": "publisher",
   "targetOrder": "aired"
 }
@@ -524,3 +525,58 @@ Ein echter YouTube-Mediendownload und späterer Rollout bleiben das separat
 freizugebende optionale P17.6. Bestehende offene P03.4/P06.4/P09.5/P15.1/P15.4
 und Proxyentfernung werden nicht pauschal geschlossen oder zu Vorbedingungen
 für die unabhängigen Register-/Mappingarbeiten erklärt.
+
+## P17.3: implementierte Bindung und Bericht
+
+`youtube-identities.ts` schlägt ausschließlich Programmidentitäten vor; die
+Prüfung speichert und aktiviert nichts. Lokale ID vor Seed, danach vorhandener
+Katalog, optionale Sonarr-/Radarr-Metadaten und konfiguriertes TMDB. Eindeutige
+TV-Suchergebnisse erfordern TVDB-Cross-ID und Rückbindung zur gleichen TMDB-ID.
+Homonyme, unvollständige Suchfenster, Jahres-/Cross-ID-Widersprüche bleiben
+unklar. Ein Jahreswert im Programmtitel ist vom Uploadtag unabhängig. Eine
+fehlende Integration verhindert weder einen verfügbaren Katalog noch einen
+unabhängigen optionalen Provider. Die ausgewählte Identität wird nochmals
+gegen konkrete kanonische Metadaten geprüft; eine Seed-ID ersetzt diese nicht.
+
+`youtube-mapping.ts` bindet nur passende registrierte Quelle, bestätigten
+Uploader und eindeutige konkrete Episodentitel. Der Standardmodus bewahrt
+Koordinatenkonflikte. Nur `sourceNumbering=publisher` erlaubt die Titelübersetzung
+mit geprüftem Serienpräfix. Eine gezielte Titelaliasliste gehört zur Bindung,
+nicht zum globalen Parser; eine ID-Korrektur entfernt alte Ausnahmen und setzt
+die Nummerierungsregel zurück. Gleiche Titel, fremde Uploader, doppelte
+Video-IDs und gleichzeitig verschiedenen Programmen zugewiesene Videos werden
+nicht automatisch passend gemacht. Alternativuploads bleiben getrennt erhalten.
+
+Der minimale kanonische Bestand in `data/shows.json` enthält alle 97 regulären
+Folgen von TVDB 133771 mit Titel, Koordinaten und Ausstrahlungsdatum. Laufzeit
+bleibt ohne Beleg unbekannt. Die Standard-Katalogadresse gehört dem eigenen
+Fork; neu gebündelte, dort noch fehlende Serienidentitäten ergänzen den
+Standardabruf. Ein explizites `SHOWS_URL` bleibt autoritativ. Providerfolgen
+werden durch einen Teilkatalog nicht verdrängt. Unbekannte Laufzeit-/Datumswerte
+dürfen nur derselbe konkrete Titel und dieselbe eindeutige Koordinate ergänzen.
+
+Der Metadatenadapter verlangt deutsche Metadatentitel (`youtube:lang=de`);
+das ist **kein** Nachweis deutscher Audiospuren. Eine vollständig feldlose
+Flat-Playlistzeile erhält höchstens einen zusätzlichen exakten Videoabruf,
+maximal zehn solche Abfragen je Scan. Nur eine eindeutige Nichtverfügbarkeits-
+Diagnose derselben Video-ID bestätigt deren Verfügbarkeitshinweis. Timeout,
+fremde ID oder Prozessfehler bleiben Fehler. Keine Episode wird aus Position
+oder fehlenden Feldern abgeleitet. Frühere bestätigte Titel/Uploader werden
+nur für jetzt nicht verfügbare Einträge als `lastKnown` erhalten.
+
+`youtube-report.ts` verwendet den vollständigen gespeicherten Index, dieselben
+Metadatenowner und die aktuelle Registerrevision. Ein alter Index wird nicht
+auf neue IDs umgebunden. Der GET-Bericht ist ohne Scan-/Jobwrites in derselben
+Settings-GUI erreichbar, mit 100 kanonischen Zeilen je Seite, Gesamtsummen und
+separaten Extras. Jede Quellenbindung enthält Originaltitel, vorhandene
+Quellkoordinaten und Mappingrevision. `mediaReady=false` ist ausdrücklich;
+P17.4 muss erst tatsächliche Audio-/Format-/Transferbelege integrieren.
+
+Der begrenzte öffentliche Produktabgleich am 26.10.2026 ergab 94 Einträge,
+93 sicher zugeordnete Episoden und vier kanonische Folgen ohne zugeordneten
+Quelleintrag. Ein explizit privater Eintrag hat keine bekannte Episodenidentität
+und bleibt separat. Er könnte zu einer der vier gehören; daraus folgen weder
+vier global fehlende Videos noch 97/97-Verfügbarkeit. Alle 97 kanonischen
+Zeilen wurden über den tatsächlichen Produktbericht ausgegeben. Kein Downloadjob,
+keine Tonspur-/Formatprüfung, kein Mediendownload. Reale Antworten und Werkzeuge
+bleiben privat ignoriert; Tests verwenden generierte synthetische Videozeilen.

@@ -29,6 +29,12 @@ export const youtubeMappingSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("series"),
+      sourceNumbering: z.enum(["canonical", "publisher"]).optional(),
+      targetOrder: z.literal("aired").optional(),
+      episodeTitleAliases: z
+        .array(z.object({ source: label, canonical: label }).strict())
+        .max(64)
+        .optional(),
       channelId: youtubeChannelId,
       sourceId: youtubePlaylistId,
       name: label,
@@ -49,6 +55,13 @@ export const youtubeMappingSchema = z.discriminatedUnion("kind", [
 ]);
 export type YoutubeChannel = z.infer<typeof youtubeChannelSchema>;
 export type YoutubeMapping = z.infer<typeof youtubeMappingSchema>;
+/** A new programme identity does not inherit another programme's publisher exceptions. */
+export function changeYoutubeTarget(mapping: YoutubeMapping, targetId: number): YoutubeMapping {
+  if (mapping.targetId === targetId) return mapping;
+  return mapping.kind === "series"
+    ? { ...mapping, targetId, sourceNumbering: "canonical", episodeTitleAliases: [] }
+    : { ...mapping, targetId };
+}
 export function youtubeMappingKey(
   mapping: Pick<YoutubeMapping, "channelId" | "kind" | "sourceId">
 ): string {
@@ -88,7 +101,13 @@ export function mergeYoutubeRegistry(
     seed.programMappings.map((row) => [youtubeMappingKey(row), { ...row, enabled: false }])
   );
   for (const row of local?.channels ?? []) channels.set(row.id, row);
-  for (const row of local?.programMappings ?? []) mappings.set(youtubeMappingKey(row), row);
+  for (const row of local?.programMappings ?? []) {
+    const preset = mappings.get(youtubeMappingKey(row));
+    mappings.set(
+      youtubeMappingKey(row),
+      preset?.targetId === row.targetId ? { ...preset, ...row } : row
+    );
+  }
   return youtubeRegistrySchema.parse({
     version: 1,
     channels: [...channels.values()],
@@ -170,6 +189,26 @@ export const youtubeSnapshotSchema = z
   })
   .strict();
 export type YoutubeSnapshot = z.infer<typeof youtubeSnapshotSchema>;
+export const youtubeIdentitySchema = z
+  .object({
+    state: z.enum(["bound", "ambiguous", "metadata_unavailable", "not_found"]),
+    origin: z.enum(["local", "preset", "metadata", "none"]),
+    targetId: z.number().int().positive().nullable(),
+    candidates: z
+      .array(
+        z
+          .object({
+            targetId: z.number().int().positive(),
+            name: label,
+            year: z.number().int().min(1800).max(2200).nullable(),
+          })
+          .strict()
+      )
+      .max(20),
+  })
+  .strict()
+  .refine((value) => (value.state === "bound") === (value.targetId !== null));
+export type YoutubeIdentity = z.infer<typeof youtubeIdentitySchema>;
 export const youtubeInspectionSchema = z
   .object({
     kind: z.enum(["channel", "series", "movie"]),
@@ -177,6 +216,7 @@ export const youtubeInspectionSchema = z
     channelId: youtubeChannelId,
     channelName: label,
     name: label,
+    identity: youtubeIdentitySchema.optional(),
   })
   .strict();
 export const youtubeIndexRowSchema = z
@@ -184,6 +224,10 @@ export const youtubeIndexRowSchema = z
     videoId: youtubeVideoId.nullable(),
     // Independent of playable metadata so temporary unavailability preserves RSS age.
     firstSeenAt: z.number().int().positive().optional(),
+    lastKnown: z
+      .object({ title: z.string().min(1).max(500), channelId: youtubeChannelId })
+      .strict()
+      .optional(),
     channelId: youtubeChannelId.nullable(),
     mappingKey: z.string().max(160),
     availability: z.enum(["listed", "unavailable"]),
@@ -216,6 +260,8 @@ export const youtubeIndexRowSchema = z
   })
   .strict()
   .superRefine((row, context) => {
+    if (row.lastKnown && row.availability !== "unavailable")
+      context.addIssue({ code: "custom", message: "Historical metadata requires unavailable row" });
     if (
       row.availability === "listed"
         ? !row.content ||
@@ -230,7 +276,14 @@ export const youtubeIndexRowSchema = z
 export type YoutubeIndexRow = z.infer<typeof youtubeIndexRowSchema>;
 
 export class YoutubeCatalogueDataError extends Error {
-  constructor(readonly reason: "missing_id" | "foreign_uploader" | "invalid_row" | "duplicate_id") {
+  constructor(
+    readonly reason:
+      | "missing_id"
+      | "foreign_uploader"
+      | "invalid_row"
+      | "duplicate_id"
+      | "detail_limit"
+  ) {
     super(
       {
         missing_id: "Stabile Video- oder Kanal-ID fehlt in den Metadaten.",
@@ -239,6 +292,7 @@ export class YoutubeCatalogueDataError extends Error {
         invalid_row:
           "Unvollständige oder ungültige Katalogzeile; kein vollständiger Index bestätigt.",
         duplicate_id: "Eine Video-ID erscheint mehrfach in derselben Playlist.",
+        detail_limit: "Zehn ergänzende Verfügbarkeitsprüfungen erreicht; Katalog unvollständig.",
       }[reason]
     );
   }
@@ -270,10 +324,17 @@ export function normalizeYoutubeInspection(raw: unknown, input: YoutubeInput) {
     sourceId: input.kind === "channel" ? channel.data : input.id,
     channelId: channel.data,
     channelName: metadataText(row.channel, 160),
-    name: metadataText(row.title, 160) || metadataText(row.channel, 160),
+    name: input.kind === "channel" ? metadataText(row.channel, 160) : metadataText(row.title, 160),
   });
 }
 
+function unavailableYoutubeRow(row: Record<string, unknown>): boolean {
+  return (
+    ["private", "unavailable", "needs_auth", "subscriber_only", "premium_only"].includes(
+      String(row.availability)
+    ) || ["[Private video]", "[Deleted video]", "[Unavailable video]"].includes(String(row.title))
+  );
+}
 export function normalizeYoutubePage(
   raw: unknown,
   mapping: YoutubeMapping,
@@ -282,18 +343,18 @@ export function normalizeYoutubePage(
 ): YoutubeIndexRow[] {
   const result = metadataObject(raw);
   if (result.id !== mapping.sourceId) throw new YoutubeCatalogueDataError("invalid_row");
-  if (result.channel_id !== channel.id) throw new YoutubeCatalogueDataError("foreign_uploader");
+  if (
+    result.channel_id !== channel.id &&
+    !(mapping.kind === "movie" && result.channel_id == null && unavailableYoutubeRow(result))
+  )
+    throw new YoutubeCatalogueDataError("foreign_uploader");
   const entries = mapping.kind === "movie" ? [result] : result.entries;
   if (!Array.isArray(entries) || entries.length > YOUTUBE_PAGE_SIZE)
     throw new YoutubeCatalogueDataError("invalid_row");
   return entries.map((value) => {
     const row = metadataObject(value);
     const id = youtubeVideoId.safeParse(row.id);
-    const unavailable =
-      ["private", "unavailable", "needs_auth", "subscriber_only", "premium_only"].includes(
-        String(row.availability)
-      ) ||
-      ["[Private video]", "[Deleted video]", "[Unavailable video]"].includes(String(row.title));
+    const unavailable = unavailableYoutubeRow(row);
     if (row.channel_id !== undefined && row.channel_id !== null && row.channel_id !== channel.id)
       throw new YoutubeCatalogueDataError("foreign_uploader");
     if (unavailable)

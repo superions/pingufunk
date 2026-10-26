@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { SettingsResponseOrder } from "@/lib/settings-response-order";
+import { YoutubeMappingReport } from "./youtube-mapping-report";
 import {
   confirmedYoutubeSave,
   youtubeSnapshotSchema,
@@ -13,10 +14,12 @@ import {
   youtubePageSchema,
   youtubeRegistrySchema,
   youtubeMappingKey,
+  changeYoutubeTarget,
   type YoutubeSnapshot,
   type YoutubeRegistry,
   type YoutubeMapping,
   type YoutubeSave,
+  type YoutubeIdentity,
 } from "@/lib/youtube-catalogue";
 
 class CatalogueRequestError extends Error {
@@ -62,6 +65,8 @@ export function YoutubeSettings() {
   const [feedback, setFeedback] = useState<{ error: boolean; message: string } | null>(null);
   const [url, setUrl] = useState("");
   const [pending, setPending] = useState<YoutubeMapping | null>(null);
+  const [identity, setIdentity] = useState<YoutubeIdentity | null>(null);
+  const [reportKey, setReportKey] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [inventoryReload, setInventoryReload] = useState(0);
   const [now, setNow] = useState(Date.now);
@@ -85,6 +90,8 @@ export function YoutubeSettings() {
         setEnabled(value.enabled);
         setLocked(false);
         setPending(null);
+        setIdentity(null);
+        setReportKey(null);
         setFeedback(null);
       } else if (draftRevision.current !== value.revision) {
         // Poll status without rebasing an unsaved draft onto another writer.
@@ -234,13 +241,17 @@ export function YoutubeSettings() {
           mapping.kind === source.kind &&
           mapping.channelId === source.channelId
       );
+      setIdentity(source.identity ?? null);
       setPending(
         existing ?? {
           kind: source.kind,
           sourceId: source.sourceId,
           channelId: source.channelId,
-          name: source.name,
-          targetId: 0,
+          name:
+            source.identity?.state === "bound"
+              ? (source.identity.candidates[0]?.name ?? source.name)
+              : source.name,
+          targetId: source.identity?.targetId ?? 0,
           enabled: false,
         }
       );
@@ -275,6 +286,7 @@ export function YoutubeSettings() {
     }
     setRegistry(parsed.data);
     setPending(null);
+    setIdentity(null);
     setUrl("");
     sourceInput.current?.focus();
     setFeedback({ error: false, message: "Zuordnung übernommen. Änderungen jetzt speichern." });
@@ -284,7 +296,14 @@ export function YoutubeSettings() {
       setRegistry({
         ...registry,
         programMappings: registry.programMappings.map((mapping, i) =>
-          i === index ? ({ ...mapping, ...change } as YoutubeMapping) : mapping
+          i === index
+            ? ({
+                ...(change.targetId === undefined
+                  ? mapping
+                  : changeYoutubeTarget(mapping, change.targetId)),
+                ...change,
+              } as YoutubeMapping)
+            : mapping
         ),
       });
   };
@@ -398,6 +417,33 @@ export function YoutubeSettings() {
                   <legend className="px-1 text-sm font-medium">
                     {pending.kind === "series" ? "Serie aus Playlist" : "Film aus Video"} zuordnen
                   </legend>
+                  {identity && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      {identity.state === "bound"
+                        ? identity.origin === "preset"
+                          ? "Programm-ID aus geprüfter Vorgabe. Episoden und Medien noch ungeprüft."
+                          : identity.origin === "local"
+                            ? "Gespeicherte Programm-ID beibehalten."
+                            : "Programm-ID aus eindeutigem Metadatentreffer. Zuordnungsbericht nach dem Speichern prüfen."
+                        : identity.state === "ambiguous"
+                          ? "Programm-ID nicht eindeutig. Titel, Jahr und Kandidaten prüfen oder ID gezielt korrigieren."
+                          : identity.state === "metadata_unavailable"
+                            ? "Kanonische Metadaten nicht verfügbar. Keine ID geraten; gezielte Eingabe bleibt möglich."
+                            : "Kein eindeutiger Metadatentreffer. Programm-ID gezielt eingeben."}
+                    </p>
+                  )}
+                  {identity?.state === "ambiguous" &&
+                    identity.candidates.map((candidate) => (
+                      <Button
+                        key={candidate.targetId}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPending(changeYoutubeTarget(pending, candidate.targetId))}
+                      >
+                        {candidate.name}
+                        {candidate.year ? ` (${candidate.year})` : ""} · {candidate.targetId}
+                      </Button>
+                    ))}
                   <label className="block text-sm">
                     Programmname
                     <Input
@@ -413,7 +459,7 @@ export function YoutubeSettings() {
                       step="1"
                       value={pending.targetId || ""}
                       onChange={(event) =>
-                        setPending({ ...pending, targetId: Number(event.target.value) })
+                        setPending(changeYoutubeTarget(pending, Number(event.target.value)))
                       }
                     />
                   </label>
@@ -581,6 +627,37 @@ export function YoutubeSettings() {
                     <p className="break-all text-xs text-muted-foreground">
                       {mapping.kind === "series" ? "Playlist" : "Video"}: {mapping.sourceId}
                     </p>
+                    {mapping.kind === "series" && (
+                      <label className="block text-sm">
+                        Nummerierung der Quelle
+                        <select
+                          className="mt-1 block w-full rounded-md border bg-background p-2"
+                          value={mapping.sourceNumbering ?? "canonical"}
+                          onChange={(event) =>
+                            updateMapping(index, {
+                              sourceNumbering: event.target.value as "canonical" | "publisher",
+                              targetOrder: "aired",
+                            })
+                          }
+                        >
+                          <option value="canonical">Kanonisch: Staffel/Folge beachten</option>
+                          <option value="publisher">
+                            Anbieternummerierung: eindeutige Titel übersetzen
+                          </option>
+                        </select>
+                      </label>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Zuordnungsbericht ${mapping.name}`}
+                      aria-disabled={busy || dirty || locked}
+                      onClick={() => {
+                        if (!busy && !dirty && !locked) setReportKey(youtubeMappingKey(mapping));
+                      }}
+                    >
+                      Zuordnungsbericht
+                    </Button>
                     {!snapshot.presetMappingKeys.includes(youtubeMappingKey(mapping)) && (
                       <Button
                         size="sm"
@@ -619,6 +696,14 @@ export function YoutubeSettings() {
               </div>
             </CardContent>
           </Card>
+          {reportKey && (
+            <YoutubeMappingReport
+              key={`${reportKey}/${snapshot.revision}`}
+              mappingKey={reportKey}
+              revision={snapshot.revision}
+              onClose={() => setReportKey(null)}
+            />
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Metadateninventar</CardTitle>

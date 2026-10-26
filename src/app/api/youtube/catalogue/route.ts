@@ -47,12 +47,18 @@ function failure(error: unknown) {
 }
 export async function GET(request: NextRequest) {
   const page = request.nextUrl.searchParams.get("page");
+  const mapping = request.nextUrl.searchParams.get("mapping");
   if (
-    [...request.nextUrl.searchParams.keys()].some((key) => key !== "page") ||
-    (page !== null && (!/^\d{1,3}$/.test(page) || Number(page) >= 800))
+    [...request.nextUrl.searchParams.keys()].some((key) => !["page", "mapping"].includes(key)) ||
+    (mapping !== null && (!mapping || mapping.length > 160)) ||
+    (page !== null && (!/^\d{1,3}$/.test(page) || Number(page) >= (mapping === null ? 800 : 1000)))
   )
     return NextResponse.json({ error: "Ungültige Inventarseite." }, { status: 400, headers });
   try {
+    if (mapping !== null) {
+      const { youtubeMappingReport } = await import("@/services/youtube-report");
+      return NextResponse.json(await youtubeMappingReport(mapping, Number(page ?? 0)), { headers });
+    }
     return NextResponse.json(
       page === null ? await youtubeCatalogueSnapshot() : await youtubeCataloguePage(Number(page)),
       { headers }
