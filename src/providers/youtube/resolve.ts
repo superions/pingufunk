@@ -13,18 +13,18 @@ const format = z.object({
   format_id: z.string().min(1).max(80),
   url: z.string().max(16384),
   protocol: z.string().max(40),
-  vcodec: z.string().max(100),
-  acodec: z.string().max(100),
-  width: z.number().int().positive().max(65536).optional(),
-  height: z.number().int().positive().max(65536).optional(),
+  vcodec: z.string().min(1).max(100).nullish(),
+  acodec: z.string().min(1).max(100).nullish(),
+  width: z.number().int().positive().max(65536).nullish(),
+  height: z.number().int().positive().max(65536).nullish(),
   language: z.string().max(35).nullish(),
-  language_preference: z.number().finite().optional(),
-  format_note: z.string().max(200).optional(),
-  audio_channels: z.number().int().positive().max(32).optional(),
-  has_drm: z.boolean().optional(),
-  filesize: z.number().int().positive().optional(),
-  abr: z.number().finite().nonnegative().optional(),
-  fps: z.number().finite().nonnegative().optional(),
+  language_preference: z.number().finite().nullish(),
+  format_note: z.string().max(200).nullish(),
+  audio_channels: z.number().int().positive().max(32).nullish(),
+  has_drm: z.boolean().nullish(),
+  filesize: z.number().int().positive().nullish(),
+  abr: z.number().finite().nonnegative().nullish(),
+  fps: z.number().finite().nonnegative().nullish(),
 });
 const metadata = z.object({
   id: youtubeVideoId,
@@ -98,6 +98,8 @@ export async function resolveYoutubeMedia(
       (row) =>
         !row.has_drm &&
         row.protocol === "https" &&
+        typeof row.vcodec === "string" &&
+        typeof row.acodec === "string" &&
         row.vcodec !== "unknown" &&
         row.acodec !== "unknown"
     );

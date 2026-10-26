@@ -23,7 +23,7 @@ export class YoutubeMetadataError extends Error {
     super(
       {
         runtime: "yt-dlp ist nicht vorhanden oder der konfigurierte Pfad ist nicht erreichbar.",
-        timeout: "YouTube-Metadatenabruf nach 30 Sekunden beendet.",
+        timeout: "YouTube-Metadatenabruf wegen Zeitlimit beendet.",
         overflow: "YouTube-Metadatenantwort überschreitet 8 MiB.",
         process: "YouTube-Metadatenprozess fehlgeschlagen.",
         invalid: "YouTube-Metadaten sind unvollständig, ungültig oder widersprüchlich.",

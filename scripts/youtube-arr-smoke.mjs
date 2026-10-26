@@ -491,7 +491,9 @@ try {
     before.some((job) => JSON.parse(job.mediaExpectations).version !== 5) ||
     before.filter((job) => JSON.parse(job.mediaExpectations).mediaKind === "movie").length !== 1
   )
-    fail("five frozen series/film v5 jobs required");
+    fail(
+      `five frozen series/film v5 jobs required (total=${before.length}, typed=${before.filter((job) => JSON.parse(job.mediaExpectations).version === 5).length}, movies=${before.filter((job) => JSON.parse(job.mediaExpectations).mediaKind === "movie").length})`
+    );
   docker(["stop", controller]);
   // Roll back this source extension to its immediately preceding, v1-v4-aware
   // checkpoint; unrelated pre-protocol DB-cutover images cannot reject v5.

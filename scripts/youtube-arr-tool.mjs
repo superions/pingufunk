@@ -66,6 +66,8 @@ if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
           acodec: "none",
           width: 1920,
           height: 1080,
+          audio_channels: null,
+          abr: null,
         },
         {
           format_id: "136",
@@ -75,6 +77,8 @@ if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
           acodec: "none",
           width: 1280,
           height: 720,
+          audio_channels: null,
+          abr: null,
         },
         {
           format_id: "140",
@@ -85,6 +89,19 @@ if (args.includes("--flat-playlist") && url.searchParams.has("list")) {
           language: "deu",
           audio_channels: 2,
           abr: 128,
+          width: null,
+          height: null,
+          fps: null,
+        },
+        {
+          format_id: "sb0",
+          url: "https://example.invalid/storyboard",
+          protocol: "mhtml",
+          vcodec: "images",
+          acodec: null,
+          width: 160,
+          height: 90,
+          audio_channels: null,
         },
       ],
     })

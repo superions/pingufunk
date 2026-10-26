@@ -682,3 +682,11 @@ pro YouTube-Eintrag (fünf gemessene Auflösungen, jeweils reguläre/Jahresform)
 Der alte MP4-Vertrag bleibt bei sechs. Ein Video erzeugt weiterhin genau einen
 Discoveryeintrag und einen Detailprozess; 128 Einträge, 2 MiB, zwei Stunden
 Retention und alle globalen RSS-Fenster-/Versuchsgrenzen bleiben unverändert.
+
+Am yt-dlp-Rand bleiben optionale `null`-Werte ausdrücklich unbekannt, etwa
+Videodimensionen einer reinen Audiospur. Fehlende oder unbestimmte Codecs
+belegen keine Video-/Audiospur; unbenutzte Storyboardformate dürfen gleichzeitig
+vorhandene vollständige Medienbelege nicht verdecken. Ein ausgewähltes Format
+benötigt weiter konkrete Codecs, passende Pixel oder explizite deutsche
+Audiosprache. Sprache, Audio-/Videoformat und Auflösung werden weder aus
+Originaltitel noch aus einer lokalisierten Metadatenantwort erfunden.

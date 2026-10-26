@@ -3616,3 +3616,28 @@ Entry-/Byte-/Retention- und RSS-Grenzen unverändert. Eine siebte kausale Mutati
 unterbricht gezielt diese Rendition-Belegübergabe. Der konkrete Produktinput
 invalidiert die vorherige lokale/CI-Abnahme für den Abschluss; passende Gates
 werden für diesen kohärenten Kopf neu ausgeführt.
+
+Realer, begrenzter Metadatenvorlauf getrennt von den synthetischen Gates:
+Eine öffentliche Antwort konnte beim ersten Resolverlauf nicht konsumiert
+werden. Der gehaltene Datensatz bewies als Ursache reguläre `null`-Werte
+für Dimensionen/Bildrate reiner Audiospuren sowie unbestimmte Codecs bei
+unbenutzten Zusatzformaten. Optionale Nullwerte bleiben jetzt unbekannt;
+eine gewählte Video-/Audiospur verlangt weiterhin konkrete passende Codecs,
+Pixel beziehungsweise belegte deutsche Sprache. Storyboards oder unbekannte
+Codecs werden nicht zu Medienbelegen. Generierte synthetische Regressionen
+und der native Metadatenstub enthalten diese Nullformen; reale Antworten
+bleiben ausschließlich privat ignoriert. Der tatsächliche Resolver wurde mit
+derselben gehaltenen Antwort vor/nach der Korrektur geprüft, ohne weitere
+Netzabfrage oder Transfer: explizit deutsche SD-Formate vorhanden, keine
+behauptete 720p-Freigabe oder physische Datei. Eine achte kontrollierte Mutation
+stellt die frühere falsche Nullable-Grenze wieder her und wird abgewiesen.
+Die kürzere Detailfrist ist separat nachgewiesen und meldet keinen irreführenden
+30-Sekunden-Abbruchtext mehr.
+
+Nativer Zwischenstand `6891d3b`: vier echte Sonarr-Importe und ein gezielt
+gewählter 720p-Film bis zur echten Radarr-Datei samt unabhängiger ffprobe-Prüfung
+bestätigt. Der danach fehlende fünfte Historysatz war die im synthetischen
+Radarr-Client geerbte automatische Completed-Bereinigung. Diese wird für den
+beabsichtigten Erhalt-/Rollbackfall ausdrücklich ausgeschaltet; die vorhandenen
+separaten nativen Bereinigungsfälle bleiben unverändert. Keine Abnahmeschranke
+abgeschwächt; der korrigierte Kopf muss die komplette Kette terminal bestehen.

@@ -1153,6 +1153,7 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
   if (!client) throw new Error("Owned SAB schema missing");
   client.name = "Pingufunk isolated SAB QA";
   client.enable = true;
+  if (manifest.youtube) client.removeCompletedDownloads = false;
   delete client.id;
   const values = {
     host: "pingufunk",
@@ -1179,6 +1180,12 @@ async function movieDownload(root, manifest, app = "radarr", transport = "direct
       "PUT"
     );
   const saved = existing[0] ?? (await api(root, manifest, app, "/api/v3/downloadclient", client));
+  if (
+    manifest.youtube &&
+    (await api(root, manifest, app, `/api/v3/downloadclient/${saved.id}`))
+      .removeCompletedDownloads !== false
+  )
+    throw new Error("Owned preserved-history client readback mismatch");
   const movie = await fixtureTarget(root, manifest, app);
   if (!movie) throw new Error("Owned unmonitored movie fixture required");
   const indexers = await api(root, manifest, app, "/api/v3/indexer");

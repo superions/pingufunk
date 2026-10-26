@@ -145,3 +145,49 @@ it("returns all measured resolutions from one reply while an accepted 720p job r
   expect(transfer.videoUrl).toContain("video-low");
   expect(transfer).not.toHaveProperty("selections");
 });
+
+it("treats provider nulls on audio-only rows as unknown dimensions and ignores unproven storyboard codecs without hiding valid German media", async () => {
+  const raw = payload();
+  state.read.mockResolvedValue({
+    ...raw,
+    formats: [
+      ...raw.formats.map((row) => ({
+        ...row,
+        width: row.vcodec === "none" ? null : row.width,
+        height: row.vcodec === "none" ? null : row.height,
+        fps: row.vcodec === "none" ? null : 25,
+        audio_channels: row.vcodec === "none" ? row.audio_channels : null,
+        abr: row.vcodec === "none" ? row.abr : null,
+        filesize: null,
+      })),
+      {
+        format_id: "sb0",
+        url: "https://example.invalid/storyboard",
+        protocol: "mhtml",
+        vcodec: "images",
+        acodec: null,
+        width: 160,
+        height: 90,
+        audio_channels: null,
+        fps: 0,
+        abr: null,
+      },
+    ],
+  });
+  const result = await resolveYoutubeMedia(identity, signal);
+  expect(result.selection).toMatchObject({
+    videoFormat: "137",
+    audioFormat: "140-1",
+    language: "de",
+    width: 1920,
+    height: 1080,
+  });
+  expect(result.selections?.map((row) => row.height)).toEqual([1080, 720]);
+});
+it("never interprets null or missing codecs as a proven audio/video stream", async () => {
+  state.read.mockResolvedValue({
+    ...payload(),
+    formats: formats().map((row) => ({ ...row, acodec: null, vcodec: undefined })),
+  });
+  await expect(resolveYoutubeMedia(identity, signal)).rejects.toThrow("unconfirmed");
+});
