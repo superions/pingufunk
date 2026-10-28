@@ -106,6 +106,22 @@ describe("Sonarr metadata boundary (not yet connected to lookup/RSS)", () => {
       parseSonarrEpisodes([{ ...episode, airDateUtc, airDate: "2026-09-29" }], 12)[0].aired
     ).toBeNull();
   });
+  it("keeps the calendar day separate when the broadcast instant is unknown", () => {
+    const parsed = parseSonarrEpisodes(
+      [{ ...episode, airDate: "2026-09-29", airDateUtc: null }],
+      12
+    )[0];
+    expect(parsed.airedDay).toBe("2026-09-29");
+    expect(parsed.aired).toBeNull();
+  });
+  it.each(["2026-02-30", "2026-01-01T00:00:00Z", "bad", null])(
+    "does not use malformed calendar day %s",
+    (airDate) => {
+      const parsed = parseSonarrEpisodes([{ ...episode, airDate }], 12)[0];
+      expect(parsed.airedDay).toBeUndefined();
+      expect(parsed.aired).toEqual(new Date(episode.airDateUtc));
+    }
+  );
   it("retains offset timestamps as the same UTC instant", () => {
     expect(
       parseSonarrEpisodes([{ ...episode, airDateUtc: "2026-09-29T14:00:00+02:00" }], 12)[0].aired

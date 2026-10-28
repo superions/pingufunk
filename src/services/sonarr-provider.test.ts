@@ -23,6 +23,9 @@ vi.mock("@/lib/cache", () => ({
 }));
 
 import { openSonarrSession, mergeSonarrShow, SonarrUnavailableError } from "./sonarr-provider";
+import { parseSonarrEpisodes } from "./sonarr-metadata";
+import { mapYoutubeEpisodes } from "@/lib/youtube-mapping";
+import { normalizeYoutubePage, type YoutubeMapping } from "@/lib/youtube-catalogue";
 
 const series = { id: 12, tvdbId: 123, title: "Synthetic series", monitored: true };
 const episode = {
@@ -304,6 +307,58 @@ describe("non-destructive episode supplementation", () => {
     expect(result.episodes).toEqual(base.episodes);
     expect(result.sonarrBlockedCoordinates).toEqual(["1:1"]);
   });
+
+  it.each([
+    ["2026-01-01", "2025-12-31T23:00:00Z", "mapped"],
+    ["2026-01-01", "2026-01-01T00:00:00+01:00", "mapped"],
+    ["2026-01-01", "2026-01-02T02:00:00Z", "mapped"],
+    ["2026-01-02", "2026-01-01T23:00:00Z", "ambiguous"],
+  ])(
+    "binds by explicit broadcast day %s while preserving RSS instant %s",
+    (airDate, airDateUtc, expected) => {
+      const parsed = parseSonarrEpisodes(
+        [{ ...episode, seasonNumber: 1, episodeNumber: 1, title: "Existing", airDate, airDateUtc }],
+        12
+      );
+      const merged = mergeSonarrShow(base, {
+        series: { sonarrId: 12, tvdbId: base.id, title: base.name, monitored: true },
+        episodes: parsed,
+      })!;
+      const mapping: Extract<YoutubeMapping, { kind: "series" }> = {
+        kind: "series",
+        channelId: "UC" + "a".repeat(22),
+        sourceId: "PL" + "b".repeat(12),
+        name: base.name,
+        targetId: base.id,
+        enabled: true,
+      };
+      const channel = { id: mapping.channelId, name: "Synthetic channel", enabled: true };
+      const inventory = normalizeYoutubePage(
+        {
+          id: mapping.sourceId,
+          channel_id: channel.id,
+          entries: [
+            { id: "v".repeat(11), title: "Existing", channel_id: channel.id, duration: 120 },
+          ],
+        },
+        mapping,
+        channel,
+        1700000000
+      );
+      const report = mapYoutubeEpisodes(mapping, merged, inventory, "a".repeat(64));
+      expect(report.rows[0].state).toBe(expected);
+      expect(report.rows[0].sources).toHaveLength(expected === "mapped" ? 1 : 0);
+      expect(parsed[0].aired).toEqual(new Date(airDateUtc));
+      expect(merged.episodes[0]).toBe(base.episodes[0]);
+      const titleConflict = mergeSonarrShow(base, {
+        series: { sonarrId: 12, tvdbId: base.id, title: base.name, monitored: true },
+        episodes: [{ ...parsed[0], title: "Different episode" }],
+      })!;
+      expect(
+        mapYoutubeEpisodes(mapping, titleConflict, inventory, "a".repeat(64)).rows[0].state
+      ).toBe("ambiguous");
+    }
+  );
 
   it("treats a placeholder as missing title evidence without replacing base metadata", async () => {
     const show = (await (await openSonarrSession())!.show(123))!;

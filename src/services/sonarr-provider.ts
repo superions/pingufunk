@@ -206,14 +206,15 @@ export function mergeSonarrShow(
     const key = coordinate(episode);
     const original = existing.get(key);
     if (original) {
+      // A broadcast day can precede/follow the UTC day; retain the UTC instant for RSS.
+      const airedDay = episode.airedDay ?? episode.aired?.toISOString().slice(0, 10);
       if (
         (!isPlaceholderEpisodeTitle(original.name, original.episodeNumber) &&
           !isPlaceholderEpisodeTitle(episode.title, episode.episodeNumber) &&
           original.name.trim().normalize("NFC") !== episode.title.trim().normalize("NFC")) ||
         (original.aired &&
-          episode.aired &&
-          new Date(original.aired).toISOString().slice(0, 10) !==
-            episode.aired.toISOString().slice(0, 10))
+          airedDay &&
+          new Date(original.aired).toISOString().slice(0, 10) !== airedDay)
       )
         blocked.add(key);
       continue;

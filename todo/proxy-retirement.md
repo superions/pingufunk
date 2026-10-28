@@ -3459,6 +3459,28 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       am alten Bundle; korrigierte 1080p-/480p-Auswahl bis zu gespeichertem
       Auftrag/Quittung, Cancel ohne Job und leere Fehlerkonsole bestätigt.
       Keine Produktinputs durch die abschließende Dokumentation geändert.
+      Wiedereröffnet am 26.10.2026 nach der tatsächlichen Betriebsprüfung:
+      `mergeSonarrShow` vergleicht den UTC-Tag von `airDateUtc` mit dem
+      kalendarischen Katalogtag. Ein gültiger Sonarr-Zeitpunkt am Vorabend
+      blockiert damit passende Folgen trotz identischem `airDate`.
+      Vor erneuter Schließung genau diesen Consumerfall synthetisch reproduzieren,
+      den expliziten Kalendertag vom unveränderten RSS-Zeitpunkt trennen und
+      echte Datums-/Titelkonflikte weiterhin sperren. Zusätzlich beobachtete
+      Titelabweichungen einzeln prüfen; keine pauschale Normalisierung,
+      Datumsverschiebung oder Schutzlockerung als Betriebsworkaround.
+      Die vorhandenen grünen Gates bleiben als unveränderte Baseline gültig,
+      decken diesen zusätzlichen realen Datenfall aber nicht ab.
+      Gezielter Fix implementiert: validiertes Sonarr-`airDate` als separater
+      Kalendertag nur für die Identitätsprüfung; `airDateUtc` bleibt unverändert
+      der RSS-Zeitpunkt. Vier zuvor fehlschlagende Consumerfälle prüfen echte
+      Datums-/Titelkonflikte und UTC-Wechsel in beide Richtungen; fehlende oder
+      ungültige Kalendertage erfinden keinen Ersatzzeitpunkt. 1.634 lokale
+      Tests (26 umgebungsgebundene Skips), Lint, Typecheck und Format grün.
+      [Produkt-CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40333544534)
+      und [vollständige native Containerabnahme](https://github.com/superions/pingufunk/actions/runs/40333544600)
+      für `fd35af0` terminal erfolgreich; Code-Review ohne offene Befunde.
+      Entwicklungsabnahme wieder geschlossen. Echte Titelkonflikte bleiben
+      unverändert gesperrt; der produktive Nachweis gehört getrennt zu P17.6.
 - [ ] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
       Nutzerauftrag 26.10.2026: PR #10 nach frischen grünen Gates in Main
       integrieren, geprüftes Image über den bestehenden Homelab-GitOps-Weg
@@ -3469,8 +3491,13 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Keine Sonarr-Suche, Grabs oder Bibliotheksänderungen. Gegenüber der
       bisherigen Produktionsschemalinie ist die append-only Tabelle
       `EnqueueIntent` zusätzlich erforderlich; diese Schemaaktualisierung
-      gehört nicht stillschweigend zum Imageauftrag und bleibt separat
-      freizugeben. Ein echter Mediendownload bleibt ebenfalls unfreigegeben.
+      wurde separat ausdrücklich freigegeben und einmalig ausgeführt.
+      Geprüfter Main-Rollout und begrenzter Metadatenindex sind abgeschlossen,
+      beide historischen Katalogbindungen entfernt. Die Betriebsprüfung hat
+      den in P17.5 beschriebenen Kalender-/UTC-Konflikt aufgedeckt. Dessen
+      grüne Entwicklungsabnahme bleibt vom tatsächlichen produktiven Readback
+      getrennt; echte Titelkonflikte bleiben sicher gesperrt.
+      Ein echter Mediendownload bleibt unfreigegeben.
       Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
       Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach
       P17.5 genau benanntes freigegebenes Referenzvideo in einem isolierten Ziel
