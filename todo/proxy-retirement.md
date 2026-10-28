@@ -3404,7 +3404,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       720p-Radarr-Import, ffprobe, gepaarte History, Formatrotation, kein
       RSS-Doppelgrab sowie den Erhalt von Jobs/Quittung beim getesteten Rückweg.
       Der gesamte native Bestandslauf ist über P17.5 ebenfalls abgeschlossen.
-- [ ] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
+- [x] **P17.5 — Den begrenzten Ausbau kausal und nativ abnehmen (M).**
       Abhängigkeit P17.1–P17.4 einschließlich P17.1a; keine pauschale Schließung
       anderer offener Phasen.
       Owner: vorhandene Produkt-/PG-/OCI-Workflows und native Arr-Testharnesses,
@@ -3475,7 +3475,12 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       der RSS-Zeitpunkt. Vier zuvor fehlschlagende Consumerfälle prüfen echte
       Datums-/Titelkonflikte und UTC-Wechsel in beide Richtungen; fehlende oder
       ungültige Kalendertage erfinden keinen Ersatzzeitpunkt. 1.634 lokale
-      Tests, Lint, Typecheck und Format grün; CI-/Containerabnahme noch offen.
+      Tests (26 umgebungsgebundene Skips), Lint, Typecheck und Format grün.
+      [Produkt-CI einschließlich PG17/18](https://github.com/superions/pingufunk/actions/runs/40333544534)
+      und [vollständige native Containerabnahme](https://github.com/superions/pingufunk/actions/runs/40333544600)
+      für `fd35af0` terminal erfolgreich; Code-Review ohne offene Befunde.
+      Entwicklungsabnahme wieder geschlossen. Echte Titelkonflikte bleiben
+      unverändert gesperrt; der produktive Nachweis gehört getrennt zu P17.6.
 - [ ] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
       Nutzerauftrag 26.10.2026: PR #10 nach frischen grünen Gates in Main
       integrieren, geprüftes Image über den bestehenden Homelab-GitOps-Weg
@@ -3488,9 +3493,10 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       `EnqueueIntent` zusätzlich erforderlich; diese Schemaaktualisierung
       wurde separat ausdrücklich freigegeben und einmalig ausgeführt.
       Geprüfter Main-Rollout und begrenzter Metadatenindex sind abgeschlossen,
-      beide historischen Katalogbindungen entfernt. Die Betriebsprüfung hält
-      die Sonarr-Quellenfreigabe wegen des in P17.5 beschriebenen Kalender-/UTC-
-      Konflikts und zusätzlicher Titelabweichungen weiterhin geschlossen.
+      beide historischen Katalogbindungen entfernt. Die Betriebsprüfung hat
+      den in P17.5 beschriebenen Kalender-/UTC-Konflikt aufgedeckt. Dessen
+      grüne Entwicklungsabnahme bleibt vom tatsächlichen produktiven Readback
+      getrennt; echte Titelkonflikte bleiben sicher gesperrt.
       Ein echter Mediendownload bleibt unfreigegeben.
       Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
       Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach

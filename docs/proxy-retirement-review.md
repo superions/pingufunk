@@ -3801,3 +3801,14 @@ Korrektur bestehen sie einschließlich echter Kalender-/Titelkonflikte sowie
 unveränderter RSS-Zeitpunkte. 74 fokussierte Tests und alle 1.634 lokalen Tests
 bestanden; Lint, Typecheck und Format grün. Die neue CI-/Containerabnahme steht
 noch aus; der gesunde produktive Main wird bis dahin nicht ersetzt.
+
+Die erneute Entwicklungsabnahme ist abgeschlossen: [Produkt-CI mit PG17/18](https://github.com/superions/pingufunk/actions/runs/40333544534)
+und [vollständige native Containerkette](https://github.com/superions/pingufunk/actions/runs/40333544600)
+für `fd35af0` sind terminal erfolgreich. Die native Quellen-, Qualitäts-,
+kalte Mediathek-, Persistenz-, TLS-/Rückweg-, Medien- und Freigabe-/Worker-
+Abnahme blieb erhalten; Code-Review ohne offene Befunde. Lokal wurden
+1.634 Tests bestanden und 26 umgebungsabhängig übersprungen. P17.5 ist wieder
+für die Entwicklung geschlossen. Die abschließende Dokumentation ändert
+keine geprüften Produkt-/Testinputs; dieselben grünen Belege werden
+wiederverwendet. Produktiver Readback und eine weiterhin nicht freigegebene
+echte Medienübertragung bleiben ausdrücklich getrennt.
