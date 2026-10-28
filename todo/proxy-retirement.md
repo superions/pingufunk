@@ -3503,8 +3503,11 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       behobene Kalenderbindung. Genau eine ausdrücklich freigegebene interaktive
       Verbraucherabfrage blieb bei kalten Formatdaten zunächst ohne YouTube-Treffer;
       anschließend wurde ihre Quelle vom bestehenden Hintergrundprüfer bereit
-      gemeldet. Ein erneuter Treffer bei Sonarr ist noch nicht nachgewiesen.
-      Keine zweite Suche, kein Grab und keine Bibliotheksänderung ausgeführt.
+      gemeldet. Nach separater ausdrücklicher Freigabe genau einer weiteren
+      interaktiven Abfrage bestätigt Sonarr jetzt einen korrekt zugeordneten
+      deutschen YouTube-Treffer als WEBDL-480p ohne Ablehnungsgrund. Downloadbestand,
+      Enqueue-Intents und Dateibindung der Folge blieben im Vorher-/Nachherabgleich
+      unverändert. Kein Grab und keine Bibliotheksänderung ausgeführt.
       Ein echter Mediendownload bleibt unfreigegeben.
       Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
       Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach

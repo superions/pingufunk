@@ -3823,7 +3823,11 @@ Pingufunk über Prowlarr, enthielt jedoch noch keine YouTube-Ergebnisse: Die
 Formatbelege waren beim kalten Abruf nicht bereit. Danach bestätigte der
 bestehende Hintergrundprüfer genau diese Quelle ohne Quarantäne; ein begrenzter
 Metadatenabruf bestätigte öffentliche Formate und deutsche Audiospuren.
-Das beweist noch keinen erneuten Treffer beim Verbraucher. Keine zweite
-interaktive Suche, kein Such-/RSS-Befehl, Grab oder Bibliothekseingriff.
+Nach gesonderter ausdrücklicher Freigabe wurde genau eine weitere interaktive
+Sonarr-Abfrage derselben Folge ausgeführt. Sie bestätigt einen korrekt gebundenen
+deutschen YouTube-Treffer als WEBDL-480p, von Sonarr akzeptiert und ohne
+Ablehnungsgrund. Downloadbestand, Enqueue-Intents und
+Dateibindung der Folge blieben vor und nach der Abfrage identisch. Keine weiteren
+Suchen, kein Such-/RSS-Befehl, Grab oder Bibliothekseingriff.
 P17.6 bleibt offen; die grüne Entwicklungsabnahme wird dadurch nicht zu einer
 realen Downloadabnahme.
