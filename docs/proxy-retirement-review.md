@@ -3812,3 +3812,18 @@ für die Entwicklung geschlossen. Die abschließende Dokumentation ändert
 keine geprüften Produkt-/Testinputs; dieselben grünen Belege werden
 wiederverwendet. Produktiver Readback und eine weiterhin nicht freigegebene
 echte Medienübertragung bleiben ausdrücklich getrennt.
+
+Produktiver Nachtrag 29.10.2026: PR #11 ist nach den obigen grünen Gates in
+Main integriert; dessen ausführbarer Baum entspricht dem geprüften `fd35af0`.
+Der normale GitOps-Rollout und unabhängige Image-/Health-/Worker-/Schema-
+Readbacks bestätigen diesen laufenden Stand. Der Kalenderkonflikt ist im
+produktiven Zuordnungsbericht behoben; echte Titelkonflikte bleiben gesperrt.
+Die ausdrücklich freigegebene einzelne interaktive Sonarr-Abfrage erreichte
+Pingufunk über Prowlarr, enthielt jedoch noch keine YouTube-Ergebnisse: Die
+Formatbelege waren beim kalten Abruf nicht bereit. Danach bestätigte der
+bestehende Hintergrundprüfer genau diese Quelle ohne Quarantäne; ein begrenzter
+Metadatenabruf bestätigte öffentliche Formate und deutsche Audiospuren.
+Das beweist noch keinen erneuten Treffer beim Verbraucher. Keine zweite
+interaktive Suche, kein Such-/RSS-Befehl, Grab oder Bibliothekseingriff.
+P17.6 bleibt offen; die grüne Entwicklungsabnahme wird dadurch nicht zu einer
+realen Downloadabnahme.

@@ -3497,6 +3497,14 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       den in P17.5 beschriebenen Kalender-/UTC-Konflikt aufgedeckt. Dessen
       grüne Entwicklungsabnahme bleibt vom tatsächlichen produktiven Readback
       getrennt; echte Titelkonflikte bleiben sicher gesperrt.
+      Nachtrag 29.10.2026: PR #11 nach terminal grünen Gates in Main integriert;
+      derselbe geprüfte ausführbare Stand läuft über den bestehenden GitOps-Weg
+      gesund mit einem Worker. Der produktive Zuordnungsbericht bestätigt die
+      behobene Kalenderbindung. Genau eine ausdrücklich freigegebene interaktive
+      Verbraucherabfrage blieb bei kalten Formatdaten zunächst ohne YouTube-Treffer;
+      anschließend wurde ihre Quelle vom bestehenden Hintergrundprüfer bereit
+      gemeldet. Ein erneuter Treffer bei Sonarr ist noch nicht nachgewiesen.
+      Keine zweite Suche, kein Grab und keine Bibliotheksänderung ausgeführt.
       Ein echter Mediendownload bleibt unfreigegeben.
       Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
       Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach
