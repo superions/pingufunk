@@ -31,10 +31,12 @@ Nutzerauftrag 25.10.2026: **P17** ergänzt als unabhängiger Produktpfad struktu
 GUI-pflegbare YouTube-Quellen mit automatischer ID-/Episodenbindung. Fachentwurf
 und Feldvergleich im [YouTube-Katalogvertrag](../docs/youtube-source-contract.md).
 P17.1/P17.1a/P17.2 sind einschließlich Reviewnacharbeit abgenommen und mit
-Branding über PR #9 in Main integriert (`0e1d5b4`). P17.1–P17.5 sind auf dem Topicbranch abgenommen, einschließlich der vier nachträglichen Reviewkorrekturen und ihrer frischen vollständigen nativen Gates auf `ea00f30`.
-P17.6: Mainintegration, anschließender GitOps-Rollout und gezielte Katalogaktivierung
-sind beauftragt. Eine notwendige Schemaaktualisierung sowie ein echter
-YouTube-Mediendownload sind weiterhin getrennt freizugeben; noch keine Produktionsaktivierung.
+Branding über PR #9 in Main integriert (`0e1d5b4`). P17.1–P17.5 sind einschließlich
+Reviewnacharbeit und Kalenderkorrektur über PR #10/#11 in Main integriert und
+produktiv aktiv. Die getrennt genehmigte Schemaergänzung ist einmalig ausgeführt.
+P17.6 ist mit dem am 29.10.2026 ausdrücklich freigegebenen einzelnen nativen
+YouTube-Download samt physisch geprüftem Sonarr-Import abgenommen. Dies erteilt
+keine allgemeine Freigabe weiterer Grabs, Änderungen oder Rollouts.
 Die bestehenden offenen Phasen werden weder umgedeutet noch pauschale
 Startblocker. P17 erweitert nicht die bisherigen Proxy-Abschlussgates.
 
@@ -42,7 +44,7 @@ Weiterer Nutzerentscheid 25.10.2026: **P18** gestaltet Pingufunks eigenständige
 deutsche/englische README als öffentliche Visitenkarte grundlegend neu, samt
 klarem, nutzenorientiertem Vergleich. RundfunkArr wird ausschließlich als
 Ursprung und Vergleichsquelle geführt, nicht als Produkt-, Architektur- oder Abnahmevorgabe.
-P18 ist unabhängig von der noch offenen YouTube-Implementierung startbar.
+P18 ist unabhängig vom YouTube-Ausbau startbar.
 
 ## Gemeinsame Regeln und Abnahme
 
@@ -3481,7 +3483,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       für `fd35af0` terminal erfolgreich; Code-Review ohne offene Befunde.
       Entwicklungsabnahme wieder geschlossen. Echte Titelkonflikte bleiben
       unverändert gesperrt; der produktive Nachweis gehört getrennt zu P17.6.
-- [ ] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
+- [x] **P17.6 — Optional echte YouTube-Übertragung und Betrieb getrennt freigeben.**
       Nutzerauftrag 26.10.2026: PR #10 nach frischen grünen Gates in Main
       integrieren, geprüftes Image über den bestehenden Homelab-GitOps-Weg
       ausrollen und KultKrimi / Der Kommissar samt Metadatenindex aktivieren.
@@ -3508,7 +3510,28 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       deutschen YouTube-Treffer als WEBDL-480p ohne Ablehnungsgrund. Downloadbestand,
       Enqueue-Intents und Dateibindung der Folge blieben im Vorher-/Nachherabgleich
       unverändert. Kein Grab und keine Bibliotheksänderung ausgeführt.
-      Ein echter Mediendownload bleibt unfreigegeben.
+      Anschließende ausdrückliche Nutzerfreigabe 29.10.2026: genau eine zuvor
+      fehlende Referenzfolge über den normalen Sonarr-Weg herunterladen und
+      importieren. Damit ist für diesen Einzelfall das normale Sonarr-Ziel statt
+      des ursprünglich vorgesehenen isolierten Ziels freigegeben.
+      Ausgeführt: genau ein nativer Release-POST; ein vollständiger Download und
+      genau ein Grab-/Importpaar mit derselben Download-ID. Native Dateibindung,
+      positive identische API-/physische Größe, AVC 640×480 und 58:30 Minuten
+      bestätigt; Quelllaufzeit identisch. Eine AAC-Stereospur, im Container ohne
+      Sprachtag; Deutsch ist über die vor dem Transfer erneut geprüfte konkrete
+      YouTube-Format-/Trackbindung und den erhaltenen Provider-Prüfnachweis
+      belegt. Kein erfundener Container-Sprachtag und keine Dateinachbearbeitung.
+      Sämtliche inventarisierten Altdateien mit unveränderten IDs, Pfaden,
+      Größen und physischen Änderungszeiten erhalten; Profile, Indexer,
+      Downloadclients und geschützte App-Einstellungen unverändert. Die normale
+      Sonarr-Bereinigung entfernte nur den abgeschlossenen Prüfauftrag aus der
+      Client-History; der Abschlussbeleg und das native Importpaar sind gesichert.
+      Parallel aufgetretene weitere native RSS-Aufträge bleiben außerhalb dieser
+      Abnahme; der Nutzer hat ihr Stoppen ausdrücklich abgelehnt. Keine weiteren
+      Grabs durch den Operator, kein Such-/RSS-Befehl, Retry oder manueller Import.
+      Die reale Übertragung war langsam; dies ist keine Performanceabnahme.
+      Bestehende grüne Produkt-/Containergates ohne geänderte ausführbare Inputs
+      wiederverwendet; Statusdokumentation mit Format- und Diffprüfung.
       Kein Startblocker für P17.1–P17.5. **Vor einem echten Mediendownload oder
       Rollout jeweils eigene ausdrückliche Nutzerfreigabe einholen.** Erst nach
       P17.5 genau benanntes freigegebenes Referenzvideo in einem isolierten Ziel

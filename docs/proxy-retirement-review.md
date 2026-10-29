@@ -3831,3 +3831,38 @@ Dateibindung der Folge blieben vor und nach der Abfrage identisch. Keine weitere
 Suchen, kein Such-/RSS-Befehl, Grab oder Bibliothekseingriff.
 P17.6 bleibt offen; die grüne Entwicklungsabnahme wird dadurch nicht zu einer
 realen Downloadabnahme.
+
+Die anschließend ausdrücklich genehmigte einzelne reale Referenzübertragung
+ist am 29.10.2026 über den normalen Sonarr-Weg abgeschlossen. Für diesen Auftrag
+hat der Nutzer das normale Bibliotheksziel statt des zuvor geplanten isolierten
+Ziels gewählt. Genau ein nativer Release-POST führte zu einem vollständigen
+Download und genau einem Grab-/Importpaar mit derselben Download-ID.
+Die tatsächliche reguläre Datei ist ausschließlich an die gewählte Episode
+gebunden; API-/physische Größe sind positiv und identisch. Unabhängiges ffprobe
+bestätigt AVC 640×480, 58:30 Minuten und eine AAC-Stereospur. Die Laufzeit ist
+mit der ausgewählten Quelle identisch.
+
+Der Container enthält keinen Audio-Sprachtag. Deutsch wird deshalb ausdrücklich
+über die konkrete vor dem Transfer erneut geprüfte YouTube-Format-/Trackbindung
+und den erhaltenen versionierten Provider-Prüfnachweis belegt. Auswahl,
+Sprachstatus und Rendition-Fingerprint stimmen unverändert überein; keine
+Sprachbehauptung aus einem Dateinamen und keine nachträgliche Dateiumschreibung.
+Der fehlende Container-Sprachtag bleibt dabei sichtbar; der Abgleich erfüllt
+den bestehenden `passed_provider`-Vertrag.
+
+Alle vorher inventarisierten Bibliotheksdateien sind mit unveränderten nativen
+IDs, Pfaden, Größen und physischen Änderungszeiten erhalten. Die einzige neue
+Bibliotheksdatei ist die freigegebene Referenzfolge. Profile, Indexer,
+Downloadclients, geschützte App-Einstellungen und vorherige Downloadzeilen
+blieben unverändert. Die normale Sonarr-Bereinigung entfernte den abgeschlossenen
+Auftrag aus der Client-History; Abschlussbeleg, nativer Import und Datei sind
+unabhängig gesichert. Parallel erschienen zusätzliche native RSS-Aufträge;
+ihr Stoppen wurde ausdrücklich abgelehnt, sie bleiben außerhalb der Abnahme.
+Vom Operator kam genau der eine freigegebene Grab, kein Such-/RSS-Befehl,
+Retry oder manueller Import. Die Übertragung war langsam; eine Performance-
+oder vollständige Katalogabnahme folgt daraus nicht.
+
+P17.6 ist damit für die freigegebene Referenzübertragung abgenommen. Weitere
+Medienoperationen oder Rollouts erhalten dadurch keine pauschale Freigabe.
+Die unveränderten grünen Produkt-/Containerbelege werden wiederverwendet;
+die Statusdokumentation benötigt ausschließlich Format- und Diffprüfung.
