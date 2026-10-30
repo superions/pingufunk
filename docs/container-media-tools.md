@@ -11,12 +11,16 @@ Medientoolanteil nicht als entfernte oder unbekannte Software behandeln.
 Die App kopiert/remuxt lokale Video-/Audiospuren und prüft Container, Codecs,
 Auflösung, Sprachen und Laufzeit. yt-dlp kann HTTP(S)/HLS verwenden. Diese
 Funktionen sowie die bisherigen eingebauten Codecs, Demuxer, Muxer und Filter
-bleiben vorhanden. Extern benötigt werden OpenSSL und x264; x264 erzeugt auch
-die synthetischen Medien der nativen Verbraucherprüfungen. Nicht benötigt sind
+bleiben vorhanden. Extern benötigt werden OpenSSL, zlib, dav1d für Software-AV1
+und x264; x264 erzeugt auch die synthetischen Medien der nativen
+Verbraucherprüfungen. Nicht benötigt sind
 Geräteaufnahme/-ausgabe, Desktopwiedergabe oder RTSP/RTP/SDP. Automatische
 Erkennung weiterer Bibliotheken ist deaktiviert. Die bisherigen APK-Abhängigkeiten
 für ALSA, PulseAudio/GLib und RIST/cJSON werden dadurch nicht mehr mitgeführt.
 Der Healthcheck verwendet das vorhandene Curl; GNU Wget entfällt.
+Der Paketcheck erzeugt eine synthetische AV1-Datei mit einem reinen
+Buildcheck-Encoder, prüft Codec/Auflösung und dekodiert sie tatsächlich mit
+dav1d. Der Encoder gelangt nicht in die Laufzeitabhängigkeiten.
 
 CVE-2026-107696 betrifft RTSP-Redirects bis einschließlich FFmpeg 9.0.2.
 Die entsprechende Ein-/Ausgabefamilie ist ausdrücklich aus dem Build entfernt.

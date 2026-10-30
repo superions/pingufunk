@@ -6,7 +6,8 @@ pkgdesc="FFmpeg media tools for Pingufunk (no capture devices or RTSP)"
 url="https://ffmpeg.org/"
 arch="x86_64 aarch64"
 license="GPL-3.0-or-later"
-makedepends="build-base pkgconf nasm openssl-dev x264-dev"
+makedepends="build-base pkgconf nasm openssl-dev x264-dev dav1d-dev zlib-dev"
+checkdepends="aom"
 _revision=946fcce07b6dcd0331c8cc609192aeff5e1924f8
 source="ffmpeg-$pkgver.tar.gz::https://github.com/FFmpeg/FFmpeg/archive/$_revision.tar.gz"
 builddir="$srcdir/FFmpeg-$_revision"
@@ -30,6 +31,8 @@ build() {
 		--enable-gpl \
 		--enable-version3 \
 		--enable-libx264 \
+		--enable-libdav1d \
+		--enable-zlib \
 		--enable-openssl
 	make
 }
@@ -37,6 +40,12 @@ build() {
 check() {
 	./ffmpeg -version
 	./ffprobe -version
+	# Preserve software AV1 probing/decoding without shipping the build-only
+	# encoder or assuming that the hardware-only built-in decoder is sufficient.
+	./ffmpeg -v error -f lavfi -i color=size=64x64:rate=1 -frames:v 1 -pix_fmt yuv420p -f yuv4mpegpipe - \
+		| aomenc --codec=av1 --passes=1 --cpu-used=8 --threads=1 --limit=1 --ivf -o av1.ivf -
+	[ "$(./ffprobe -v error -select_streams v -show_entries stream=codec_name,width,height -of csv=p=0 av1.ivf)" = "av1,64,64" ]
+	./ffmpeg -v error -xerror -c:v libdav1d -i av1.ivf -f null -
 	# CVE-2026-107696 affects RTSP redirect handling. That input/output family
 	# must remain absent, independently of a scanner's coarse version range.
 	local demuxers muxers

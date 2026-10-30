@@ -14,7 +14,7 @@ RUN npm ci
 # Build only the media CLI's required external libraries. Keep an actual APK
 # receipt for vulnerability/package coverage; the build key never leaves here.
 FROM node:24-alpine AS media-tools
-RUN apk add --no-cache alpine-sdk openssl-dev x264-dev nasm
+RUN apk add --no-cache alpine-sdk openssl-dev x264-dev dav1d-dev zlib-dev nasm
 COPY docker/media-tools/APKBUILD /build/media-tools/APKBUILD
 WORKDIR /build/media-tools
 RUN abuild-keygen -a -n \
@@ -81,6 +81,8 @@ RUN apk add --no-cache \
     su-exec \
     shadow \
     x264-libs \
+    dav1d \
+    zlib \
     && apk add --no-network --keys-dir /tmp/media-package-keys /tmp/ffmpeg.apk \
     && rm /tmp/ffmpeg.apk \
     && rm -r /tmp/media-package-keys \
