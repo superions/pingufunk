@@ -1,0 +1,78 @@
+# Build a tracked APK so image scanners retain FFmpeg version/package coverage.
+pkgname=ffmpeg
+pkgver=9.0.2
+pkgrel=0
+pkgdesc="FFmpeg media tools for Pingufunk (no capture devices or RTSP)"
+url="https://ffmpeg.org/"
+arch="x86_64 aarch64"
+license="GPL-3.0-or-later"
+makedepends="build-base pkgconf nasm openssl-dev x264-dev dav1d-dev zlib-dev"
+checkdepends="aom"
+_revision=946fcce07b6dcd0331c8cc609192aeff5e1924f8
+source="ffmpeg-$pkgver.tar.gz::https://github.com/FFmpeg/FFmpeg/archive/$_revision.tar.gz"
+builddir="$srcdir/FFmpeg-$_revision"
+
+build() {
+	# Keep built-in codecs, containers, filters and HTTP(S)/HLS. Device capture,
+	# playback integrations and RTSP are not Pingufunk sources. Explicitly disable
+	# autodetection so an incidental build dependency cannot add them back.
+	# musl's default thread stack overflows in the MPEG-TS demuxer. Request
+	# 2 MiB in GNU_STACK; keep the stack non-executable and the source unchanged.
+	./configure \
+		--prefix=/usr \
+		--extra-ldflags="-Wl,-z,stack-size=2097152" \
+		--disable-autodetect \
+		--enable-pthreads \
+		--disable-debug \
+		--disable-doc \
+		--disable-ffplay \
+		--disable-shared \
+		--disable-indevs \
+		--enable-indev=lavfi \
+		--disable-outdevs \
+		--disable-demuxer=rtsp,sdp,rtp \
+		--disable-muxer=rtsp,rtp,rtp_mpegts \
+		--enable-gpl \
+		--enable-version3 \
+		--enable-libx264 \
+		--enable-libdav1d \
+		--enable-zlib \
+		--enable-openssl
+	make
+}
+
+check() {
+	./ffmpeg -version
+	./ffprobe -version
+	# Preserve software AV1 probing/decoding without shipping the build-only
+	# encoder or assuming that the hardware-only built-in decoder is sufficient.
+	./ffmpeg -v error -f lavfi -i color=size=64x64:rate=1 -frames:v 1 -pix_fmt yuv420p -f yuv4mpegpipe - \
+		| aomenc --codec=av1 --passes=1 --cpu-used=8 --threads=1 --limit=1 --ivf -o av1.ivf -
+	[ "$(./ffprobe -v error -select_streams v -show_entries stream=codec_name,width,height -of csv=p=0 av1.ivf)" = "av1,64,64" ]
+	./ffmpeg -v error -xerror -c:v libdav1d -i av1.ivf -f null -
+	# Exercise the actual two-stream HLS fixup used by yt-dlp, including AAC's
+	# ADTS-to-ASC filter. A version/list check cannot detect a remux crash.
+	./ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=25 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac hls-source.mp4
+	./ffmpeg -y -v error -i hls-source.mp4 -c copy -hls_time 1 -hls_list_size 0 stream.m3u8
+	./ffmpeg -y -v error -xerror -i file:stream0.ts -map 0 -dn -ignore_unknown -c copy -f mp4 -bsf:a aac_adtstoasc -movflags +faststart file:hls-fixed.mp4
+	[ "$(./ffprobe -v error -show_entries stream=codec_type -of csv=p=0 hls-fixed.mp4)" = "$(printf 'video\naudio')" ]
+	./ffprobe -v error -show_entries format=duration -of csv=p=0 hls-fixed.mp4 | awk '{ if ($1 >= 1.8 && $1 <= 2.2) found=1 } END { exit !found }'
+	# CVE-2026-107696 affects RTSP redirect handling. That input/output family
+	# must remain absent, independently of a scanner's coarse version range.
+	local demuxers muxers
+	demuxers="$(./ffmpeg -hide_banner -demuxers)"
+	muxers="$(./ffmpeg -hide_banner -muxers)"
+	! printf '%s\n' "$demuxers" | grep -Eq '[[:space:]](rtsp|sdp|rtp)[[:space:]]'
+	! printf '%s\n' "$muxers" | grep -Eq '[[:space:]](rtsp|rtp|rtp_mpegts)[[:space:]]'
+}
+
+package() {
+	install -Dm755 ffmpeg "$pkgdir/usr/bin/ffmpeg"
+	install -Dm755 ffprobe "$pkgdir/usr/bin/ffprobe"
+	install -Dm644 COPYING.GPLv3 "$pkgdir/usr/share/licenses/ffmpeg/COPYING.GPLv3"
+	install -Dm644 LICENSE.md "$pkgdir/usr/share/licenses/ffmpeg/LICENSE.md"
+}
+
+sha512sums="
+48c07902a673a19ef5aa30096a3e48ce2f2a6e461cf5d206e370419af79fdf6397cb785a87eaed13c109e2ff7abbd1100f90cd82c7d3086f2a7517ed6bdef1da  ffmpeg-9.0.2.tar.gz
+"

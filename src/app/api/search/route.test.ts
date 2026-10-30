@@ -46,6 +46,8 @@ function apiItem(title: string, duration: number) {
 it.each(["", "&providers=true", "&provider=mediathekview"])(
   "preserves optional catalogue content through the raw client and GUI without changing NZBs (%s)",
   async (form) => {
+    // Both requests compare metadata at the same instant; NZBs include time.
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
     const raw = apiItem("Catalogue fields", 120);
     const fetch = vi
       .spyOn(globalThis, "fetch")

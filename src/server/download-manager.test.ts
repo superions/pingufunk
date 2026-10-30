@@ -989,6 +989,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await shutdownDownloadProcessing();
   getDownloadWorkerState().shuttingDown = false;
+  getDownloadWorkerState().drainRequested = false;
   getDownloadWorkerState().pendingFailures.clear();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
