@@ -3812,3 +3812,36 @@ für die Entwicklung geschlossen. Die abschließende Dokumentation ändert
 keine geprüften Produkt-/Testinputs; dieselben grünen Belege werden
 wiederverwendet. Produktiver Readback und eine weiterhin nicht freigegebene
 echte Medienübertragung bleiben ausdrücklich getrennt.
+
+## Nachreview P05.4/P06.2 — Worker-Wiederaufnahme und Sonarr-Releaseidentität (30.10.2026)
+
+Zwei unabhängige Fehler: Ein fehlgeschlagener Statuswrite konnte den einzelnen
+Worker bis zum nächsten Enqueue pausieren. Ein im Katalog gültiger deutscher
+Serienname ist außerdem nicht automatisch ein von Sonarr akzeptierter Importname;
+RSS-ID-Erkennung hat nicht die Ausnahme einer ausdrücklich interaktiven Auswahl.
+Die Fehlerfälle wurden vor dem Fix durch gezielte Regressionen reproduziert.
+
+Ein pro Prozess geteilter 30-s-Timer weckt denselben exklusiv gesicherten Drain.
+Vor weiteren bereits wartenden Jobs wird der dauerhafte Status des ungewissen
+Vorgängers gelesen: erfolgreicher Commit bleibt erfolgreich, sonst wird die
+Unterbrechung geschlossen. Kein neuer Job, kein Retry des Transfers, kein zweiter
+Worker und kein Timer nach Shutdown oder bei deaktiviertem Schreibgate.
+Ein frischer Enqueue ersetzt den ausstehenden Timer; dauerhafte Störungen werden
+höchstens alle 30 Sekunden erneut abgeglichen. Die ursprüngliche externe
+Transferursache wird damit nicht nachträglich als bewiesen dargestellt.
+
+Der Sonarr-Merge bewahrt separat einen bestätigten Release-Namen. Ein deutscher
+Titel bleibt Releasepräfix, wenn dieselbe Instanz ihn als Titel oder serienweiten
+Alias kennt; sonst gilt ihr kanonischer Titel. Es werden keine Sonarr-Metadaten,
+XEM-Aliase oder Historyeinträge umgeschrieben. GUI-Identität, deutsche Episodentitel,
+Quellen, GUIDs, Koordinaten und gespeicherte Jobpfade bleiben erhalten. Alle
+Match-Owner und RSS/NZB konsumieren denselben transienten Namen. Die native
+YouTube-Importfixture enthält absichtlich einen unbekannten deutschen Katalogtitel
+und verlangt echte RSS-Imports mit Titelmatch statt ID-only-Match.
+
+Lokal bisher Produktgates erfolgreich; aktuelle Fork-CI und native Containergates
+stehen noch aus. Der lokale Docker-Daemon ist nicht gestartet; isolierte reale
+SQLite-/PG-/Arr-Container werden deshalb durch die bestehende Fork-CI geprüft.
+Dies ist ein Selbstreview, keine unabhängige Peer-Abnahme und keine
+Produktions-/Bibliotheksabnahme. Bestehende widersprüchliche Importhistory wird
+separat nur lesend geprüft und nicht aus einem hasFile-Bit als korrekt erklärt.

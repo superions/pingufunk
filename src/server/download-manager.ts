@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { DOWNLOAD_CONCURRENCY, getDownloadWorkerState } from "./download-worker-state";
 import { acquireWorkerLease, WorkerOwnershipError, type WorkerLease } from "./worker-lease";
-import { assertWritesEnabled } from "@/lib/write-gate";
+import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
 import { isMkvConversionEnabled } from "@/lib/settings";
 import { readPersistedMediaExpectations } from "@/lib/media-expectations";
 import { MediaProbeError } from "./media-probe";
@@ -30,11 +30,24 @@ async function getDownloadTempPath(): Promise<string> {
 
 const runtime = getDownloadWorkerState();
 
+/** One delayed wakeup reconciles durable outcomes; it never re-enqueues a job. */
+function scheduleQueueRecovery(): void {
+  if (runtime.shuttingDown || !writesEnabled() || runtime.recoveryTimer) return;
+  runtime.recoveryTimer = setTimeout(() => {
+    runtime.recoveryTimer = undefined;
+    if (runtime.shuttingDown || !writesEnabled()) return;
+    void startDownloadProcessing().catch(() => {
+      console.error("[Download] Queue recovery deferred; will reconcile again");
+    });
+  }, 30_000);
+  runtime.recoveryTimer.unref();
+}
+
 /** Closed observation, never exposing lease owner/fence or database values. */
 export function getWorkerRuntimeState() {
   return {
     state:
-      runtime.pendingFailures.size > 0
+      runtime.pendingFailures.size > 0 || runtime.recoveryTimer
         ? "paused"
         : runtime.processingPromise || runtime.directWork.size
           ? "draining"
@@ -79,6 +92,8 @@ export async function startDownloadProcessing(): Promise<void> {
     runtime.rerunRequested = true;
     return runtime.processingPromise;
   }
+  clearTimeout(runtime.recoveryTimer);
+  runtime.recoveryTimer = undefined;
 
   runtime.processingPromise = (async () => {
     try {
@@ -86,6 +101,12 @@ export async function startDownloadProcessing(): Promise<void> {
         runtime.rerunRequested = false;
         await processQueue();
       } while (runtime.rerunRequested);
+    } catch (error) {
+      // Wake the same fenced drain after a transient failure, not the failed
+      // transfer. It rereads terminal outcomes before advancing existing queued
+      // jobs. No enqueue or automatic retransmission is performed here.
+      scheduleQueueRecovery();
+      throw error;
     } finally {
       runtime.processingPromise = null;
     }
@@ -147,6 +168,8 @@ async function processQueue(): Promise<void> {
 /** Stop scheduling and abort only this process's transfers; do not re-grab. */
 export async function shutdownDownloadProcessing(): Promise<void> {
   runtime.shuttingDown = true;
+  clearTimeout(runtime.recoveryTimer);
+  runtime.recoveryTimer = undefined;
   runtime.activeLease?.abort();
   await runtime.processingPromise;
   await Promise.all(runtime.directWork);
@@ -180,6 +203,9 @@ async function processDownload(downloadId: string): Promise<void> {
   runtime.directWork.add(work);
   try {
     await work;
+  } catch (error) {
+    if (runtime.pendingFailures.size) scheduleQueueRecovery();
+    throw error;
   } finally {
     runtime.directWork.delete(work);
   }

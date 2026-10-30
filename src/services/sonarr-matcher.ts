@@ -252,6 +252,7 @@ export function matchSonarrEpisodes(
       episode,
       item,
       showName: show.germanName || show.name,
+      releaseShowName: show.sonarrReleaseName,
       matchedTitle: item.title,
       tvdbId: show.id,
       ...(runtimeConflict

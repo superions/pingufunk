@@ -96,6 +96,8 @@ export interface TvdbData {
   sonarrVerifiedCoordinates?: string[];
   /** Delivery enrollment only; fresh instance state is checked again before RSS. */
   sonarrMonitoredCoordinates?: string[];
+  /** Instance-confirmed release identity, separate from localized display names. */
+  sonarrReleaseName?: string;
   sonarrUnavailable?: boolean;
 }
 
@@ -209,6 +211,7 @@ export interface MatchedEpisodeInfo {
   episode: TvdbEpisode;
   item: ApiResultItem;
   showName: string;
+  releaseShowName?: string;
   matchedTitle: string;
   tvdbId: number;
   /** Visible explicit-search review, not permission to enqueue. */

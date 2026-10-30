@@ -781,6 +781,31 @@ describe("RSS rendition eligibility", () => {
     ]);
   });
 
+  it("changes only the Sonarr release name, preserving source/GUID/coordinates for standard and daily releases", () => {
+    const original = generateRssItems(episodeInfo, "all", false);
+    const corrected = generateRssItems(
+      { ...episodeInfo, releaseShowName: "Canonical Series" },
+      "all",
+      false
+    );
+    expect(corrected.map((row) => row.guid)).toEqual(original.map((row) => row.guid));
+    expect(corrected.map((row) => row.attributes)).toEqual(original.map((row) => row.attributes));
+    expect(corrected.map((row) => row.link)).toEqual(original.map((row) => row.link));
+    expect(corrected[0].title).toMatch(/^Canonical\.Series\.S/);
+    const daily = generateRssItems(
+      {
+        ...episodeInfo,
+        releaseShowName: "Canonical Series",
+        episode: { ...episodeInfo.episode, seasonNumber: 2024 },
+      },
+      "all",
+      false
+    );
+    expect(daily).toHaveLength(2);
+    expect(daily.every((row) => row.title.startsWith("Canonical.Series."))).toBe(true);
+    expect(episodeInfo.showName).toBe("Example Show");
+  });
+
   it("preserves every available rendition when HLS is enabled", () => {
     const tvItems = generateRssItems(episodeInfo, "all", true);
     const movieItems = generateMovieRssItems(

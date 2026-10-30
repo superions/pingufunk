@@ -43,6 +43,19 @@ globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
   if (
     youtube &&
+    url.href === "https://raw.githubusercontent.com/superions/pingufunk/main/data/shows.json"
+  )
+    return Response.json([
+      {
+        tvdbId: 2147483002,
+        name: "Synthetic Series",
+        germanName: "Deutsche Testserie",
+        aliases: [],
+        episodes: [],
+      },
+    ]);
+  if (
+    youtube &&
     url.hostname === "rr1.synthetic.googlevideo.com" &&
     url.pathname === "/videoplayback"
   ) {

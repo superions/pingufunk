@@ -92,6 +92,13 @@ beforeEach(() => {
             },
           ],
         },
+        {
+          tvdbId: 321,
+          name: "Canonical Series",
+          germanName: "Deutsche Serie",
+          aliases: [],
+          episodes: [],
+        },
       ]);
     if (url.pathname.endsWith("/system/status")) return Response.json({ version: "4.0.16.2944" });
     if (url.pathname.endsWith("/series"))
@@ -140,6 +147,75 @@ afterEach(async () => {
   clearMetadataCaches();
   mediathekCache.clear();
 });
+
+it.each([false, true])(
+  "uses only Sonarr-confirmed release names through exact, season and RSS to NZB (German alias=%s)",
+  async (knownGermanAlias) => {
+    state.settings.set("matching.minDuration", "0");
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (value: string) => {
+      const url = new URL(value);
+      if (url.pathname.endsWith("/series"))
+        return Response.json([
+          {
+            id: 98,
+            tvdbId: 321,
+            title: "Canonical Series",
+            monitored: true,
+            alternateTitles: knownGermanAlias
+              ? [{ title: "Deutsche Serie", seasonNumber: -1 }]
+              : [{ title: "Deutsche Serie", seasonNumber: 1 }],
+          },
+        ]);
+      if (url.pathname.endsWith("/episode"))
+        return Response.json([
+          {
+            id: 67,
+            seriesId: 98,
+            seasonNumber: 2,
+            episodeNumber: 3,
+            title: "Die fehlende Folge",
+            monitored: true,
+            hasFile: false,
+            runtime: 2,
+            airDateUtc: new Date(Date.now() - 3600_000).toISOString(),
+          },
+        ]);
+      if (url.hostname === "mediathekviewweb.de")
+        return Response.json({
+          result: {
+            results: [
+              {
+                ...source,
+                topic: "Deutsche Serie",
+                title: "Die fehlende Folge",
+                audioLanguage: "de",
+                sourceVideoDimensions: [{ url: source.url_video, width: 1280, height: 720 }],
+              },
+            ],
+          },
+          err: null,
+        });
+      return original(value);
+    });
+    for (const query of [
+      "t=tvsearch&tvdbid=321&season=2&ep=3",
+      "t=tvsearch&tvdbid=321&season=2",
+      "t=tvsearch&cat=5000",
+    ]) {
+      const response = await GET(new NextRequest(`http://localhost/api/newznab?${query}`));
+      expect(response.status).toBe(200);
+      const release = (await parseStringPromise(await response.text())).rss.channel[0].item[0];
+      expect(release.title[0]).toContain(
+        `${knownGermanAlias ? "Deutsche.Serie" : "Canonical.Series"}.S02E03.Die.fehlende.Folge`
+      );
+      const nzb = await downloadNzb(new NextRequest(release.enclosure[0].$.url));
+      expect(nzb.status).toBe(200);
+      expect(parseNzbContent(await nzb.text())?.title).toBe(release.title[0]);
+    }
+    expect(state.addToQueue).not.toHaveBeenCalled();
+  }
+);
 
 it("exposes a source-coordinate-bound future TBA duration conflict consistently without releasing its NZB", async () => {
   const base = fetchMock.getMockImplementation()!;

@@ -320,6 +320,14 @@ try {
   const grabs = history.filter((row) => row.eventType === "grabbed");
   if (grabs.length !== 4 || new Set(grabs.map((row) => row.downloadId)).size !== 4)
     fail("duplicate/missing native grabs");
+  // A localized catalogue title unknown to Sonarr must not rely on the ID-only
+  // grab path: RSS imports deliberately have no interactive-search exemption.
+  if (
+    grabs.some(
+      (row) => !row.sourceTitle.startsWith("Synthetic.Series.") || row.data.seriesMatchType === "Id"
+    )
+  )
+    fail("localized catalogue caused an ID-only native series match");
   for (const episode of episodes) {
     const file = await api(
       root,

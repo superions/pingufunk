@@ -142,7 +142,9 @@ import {
   processDownload,
   recoverInterruptedDownloads,
   startDownloadProcessing,
+  shutdownDownloadProcessing,
 } from "./download-manager";
+import { getDownloadWorkerState } from "./download-worker-state";
 
 let testRoot: string;
 
@@ -663,12 +665,91 @@ it("pauses on a failed completion DB write, then reconciles its own job before t
   expect(probeJobMedia).toHaveBeenCalledTimes(1);
 });
 
+it.each([false, true])(
+  "reconciles an ambiguous completion automatically without retransferring it (committed=%s)",
+  async (committed) => {
+    const job = progressiveJob("automatic-reconciliation");
+    let unavailable = false;
+    downloadUpdate.mockImplementation(async ({ data }) => {
+      if (data.status === "completed") {
+        if (committed) job.status = "completed";
+        unavailable = true;
+        throw new Error("synthetic lost database connection");
+      }
+      if (unavailable) throw new Error("synthetic unavailable database");
+      if (data.status) job.status = data.status;
+      return job;
+    });
+    downloadFindFirst.mockImplementation(async () => (job.status === "queued" ? job : null));
+    downloadFindUnique.mockImplementation(async () => {
+      if (unavailable) throw new Error("synthetic unavailable database");
+      return job;
+    });
+    vi.useFakeTimers();
+    try {
+      await expect(startDownloadProcessing()).rejects.toThrow("synthetic unavailable database");
+      expect(job.status).toBe(committed ? "completed" : "downloading");
+      unavailable = false;
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(() => expect(job.status).toBe(committed ? "completed" : "failed"));
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(probeJobMedia).toHaveBeenCalledTimes(1);
+      expect(getDownloadWorkerState().pendingFailures.size).toBe(0);
+    } finally {
+      await shutdownDownloadProcessing();
+      getDownloadWorkerState().shuttingDown = false;
+      getDownloadWorkerState().pendingFailures.clear();
+      vi.useRealTimers();
+    }
+  }
+);
+
 it("validates stored v1 before fetching and never recovers a corrupt payload as legacy", async () => {
   const job = progressiveJob("corrupt-expectations", "{}");
   await processDownload(job.id);
   expect(fetch).not.toHaveBeenCalled();
   expect(probeJobMedia).not.toHaveBeenCalled();
   expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(false);
+});
+
+it("advances an existing queued job after delayed reconciliation without retrying its predecessor", async () => {
+  const interrupted = progressiveJob("interrupted-predecessor");
+  const next = { ...interrupted, id: "existing-successor", title: "Existing successor" };
+  let unavailable = false;
+  downloadFindFirst.mockImplementation(
+    async () => [interrupted, next].find((job) => job.status === "queued") ?? null
+  );
+  downloadFindUnique.mockImplementation(async ({ where }) => {
+    if (unavailable) throw Error("synthetic database unavailable");
+    return [interrupted, next].find((job) => job.id === where.id);
+  });
+  downloadUpdate.mockImplementation(async ({ where, data }) => {
+    if (where.id === interrupted.id && data.status === "completed") {
+      unavailable = true;
+      throw Error("synthetic database unavailable");
+    }
+    const job = [interrupted, next].find((job) => job.id === where.id)!;
+    if (data.status) job.status = data.status;
+    return job;
+  });
+  vi.useFakeTimers();
+  try {
+    await expect(startDownloadProcessing()).rejects.toThrow("synthetic database unavailable");
+    unavailable = false;
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(next.status).toBe("completed"));
+    expect(interrupted.status).toBe("failed");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      downloadUpdate.mock.calls.filter(
+        ([args]) => args.where.id === interrupted.id && args.data.status === "downloading"
+      )
+    ).toHaveLength(1);
+  } finally {
+    await shutdownDownloadProcessing();
+    getDownloadWorkerState().shuttingDown = false;
+    vi.useRealTimers();
+  }
 });
 
 it("does not overwrite a verified durable completion after a lost write acknowledgement", async () => {
@@ -830,6 +911,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await shutdownDownloadProcessing();
+  getDownloadWorkerState().shuttingDown = false;
+  getDownloadWorkerState().pendingFailures.clear();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   await rm(testRoot, { recursive: true, force: true });
@@ -1303,6 +1387,33 @@ it("resets queue state after a database poll failure", async () => {
   await expect(startDownloadProcessing()).resolves.toBeUndefined();
   expect(downloadFindFirst).toHaveBeenCalledTimes(2);
 });
+
+it.each(["shutdown", "maintenance", "enqueue"])(
+  "does not overlap a scheduled reconciliation with %s",
+  async (operation) => {
+    vi.stubGlobal("fetch", vi.fn());
+    downloadFindFirst
+      .mockRejectedValueOnce(new Error("synthetic temporary database failure"))
+      .mockResolvedValue(null);
+    vi.useFakeTimers();
+    try {
+      await expect(startDownloadProcessing()).rejects.toThrow(
+        "synthetic temporary database failure"
+      );
+      if (operation === "shutdown") await shutdownDownloadProcessing();
+      if (operation === "maintenance") vi.stubEnv("PINGUFUNK_WRITES_ENABLED", "0");
+      if (operation === "enqueue") await startDownloadProcessing();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(downloadFindFirst).toHaveBeenCalledTimes(operation === "enqueue" ? 2 : 1);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(getDownloadWorkerState().recoveryTimer).toBeUndefined();
+    } finally {
+      await shutdownDownloadProcessing();
+      getDownloadWorkerState().shuttingDown = false;
+      vi.useRealTimers();
+    }
+  }
+);
 
 it("rechecks the queue when an enqueue wakeup races with an empty poll", async () => {
   let release!: () => void;
