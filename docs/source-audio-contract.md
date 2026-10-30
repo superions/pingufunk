@@ -76,8 +76,9 @@ Audiosprache beweist keine Bildauflösung. Die getrennte Korrektur P09.3 bindet
 optionale Maße aus dem bereits gelesenen strukturierten ARTE-/ARD-JSON an die exakte
 URL; `url_video_hd` allein ist kein 1080p-Beleg. Ohne Maße bleibt die Auflösung
 unbekannt. Umfang, historische GUIDs und Rolloutgrenzen stehen im
-[Auflösungsvertrag](rendition-quality-contract.md). Die offene MP4-Sprachgrenze
-P03.4 wird dadurch nicht allein behoben.
+[Auflösungsvertrag](rendition-quality-contract.md). Die dort dokumentierte
+Vier-Fenster-Grenze gilt auch nach der Abnahme von P03.4; neue unbelegte Quellen
+werden dadurch nicht automatisch unterstützt.
 Die strukturierten Provider-Schnittstellen sind keine von Pingufunk kontrollierten
 Dienst mit zugesicherter Verfügbarkeit. Vertragsänderungen werden nicht durch
 einen HTML-Fallback kaschiert, sondern verlangen Providerprüfung und Regression.
@@ -87,7 +88,8 @@ einen HTML-Fallback kaschiert, sondern verlangen Providerprüfung und Regression
 P12 ergänzt für neue eigene Jobs v3, siehe [Settings-/Jobvertrag](settings-contract.md).
 Die folgenden v1/v2-Ausführungen dokumentieren den erhaltenen Altvertrag.
 v3 behält denselben Audio-/Providerbelegschutz und trennt zusätzlich eingefrorene
-Quellen- und Episodendauer. Keine neue Sprachheuristik oder vollständige P03.4-Abnahme.
+Quellen- und Episodendauer. Keine neue Sprachheuristik; der Abnahmescope von
+P03.4 steht im Phasenvertrag und erweitert nicht diese Quellen-/Budgetgrenzen.
 
 `MediaExpectations` v1 bleibt für vorhandene Jobs unverändert. Bei MP4-Sprach-
 Tags wird weiterhin der strenge v1-Trackvertrag geprüft. ARTE-/ARD-Providerbelege

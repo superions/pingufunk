@@ -15,8 +15,11 @@ Beide Backends sind gleichwertig unterstützt; ohne PG-Konfiguration wird SQLite
 verwendet. Getrennte Clients,
 Migrationen und Container-/Runtimeproben sind in
 [database-backends.md](database-backends.md) beschrieben. Ein fertiger
-PG→SQLite-Rücktransfer ist damit nicht behauptet; weitere PG-Abnahmen bleiben
-im Phasenvertrag offen.
+PG→SQLite-Rücktransfer ist damit nicht behauptet; dieser optionale Ausbau bleibt
+als P11.9 zurückgestellt. Die Pflichtabnahmen P11.1–P11.8 sind abgeschlossen;
+ein weiterer installationsbezogener Cutover benötigt weiterhin eigenen Preflight
+und Freigabe. Die aktuelle CI prüft PostgreSQL 18 und separat SQLite; historische
+PG17-Nachweise verlangen keinen weiteren PG17-Lauf.
 
 ## Entscheidung, Umfang und Reihenfolge
 
@@ -160,12 +163,12 @@ setzen und spätere Inserts über den echten Client testen.
 
 ### P11.3-Feldvertrag des vorbereiteten Preflight
 
-Der aktuelle Preflight (`scripts/postgresql-preflight.mjs`) inspiziert alle sechs
-Modelle, akzeptiert historische Bootstrap-/Prisma-Konturen sowie die aktuelle
-append-only P07-Kontur mit kombiniertem Serien-/Topicindex und berichtet niemals
-Zeileninhalte. Historische SQL-Dateien bleiben unverändert. Die
-folgenden Regeln sind bereits als Eingangsprüfung implementiert; die
-Import-/Vergleichsabnahme in P11.5–P11.6 steht noch aus.
+Der Preflight (`scripts/postgresql-preflight.mjs`) inspiziert die sechs
+ursprünglichen Modelle sowie die unten dokumentierte EnqueueIntent-Erweiterung.
+Er akzeptiert die ausdrücklich unterstützten historischen und aktuellen
+append-only Konturen und berichtet niemals Zeileninhalte. Historische SQL-Dateien
+bleiben unverändert. Die folgenden Regeln sind implementierte Eingangsprüfungen;
+Import und vollständiger semantischer Vergleich sind in P11.5–P11.6 abgenommen.
 
 | Quelle/Felder                                                                                                                                         | Abbildung bzw. Abbruch                                                                                                                                                                                                                                                                                  |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -192,9 +195,9 @@ läuft daher erst auf dem per Backup-API konsistent erzeugten privaten Snapshot.
 
 Lieferergebnisse stehen in P11.3–P11.8 der
 [Phasen-TODOs](../todo/proxy-retirement.md), ihre freigegebene produktive
-Ausführung in P10.2–P10.5. Runner und Runbookentwurf sind implementiert; die
-vollständige Abnahme bleibt im TODO offen. Gewählt ist explizit typisierter Snapshotimport, kein blinder
-pgloader-Schemagenerator.
+Ausführung in P10.2–P10.5. Runner und Runbook sind implementiert und in ihrem
+jeweiligen Scope abgenommen. Gewählt ist explizit typisierter Snapshotimport,
+kein blinder pgloader-Schemagenerator und kein implementierter PG→SQLite-Rückweg.
 
 Backupverfahren und die Trennung von Integrity-/FK-Prüfung stützen sich auf
 die [SQLite-Backup-Dokumentation](https://www.sqlite.org/backup.html) und
@@ -269,8 +272,9 @@ benötigt eine eigene Abnahme. Keine dieser Betriebsangaben gehört als
 konkreter Endpoint oder Secret in dieses öffentliche Repository.
 
 Artefakte, Entscheidungen und Status werden nur in den Phasen-TODOs geführt.
-Bis zu implementiertem Runner und geprobtem Runbook gibt es hier keine
-vermeintlich fertigen Deploymentbefehle.
+Die tatsächlich implementierten Operatorbefehle stehen im
+[Migrationsrunbook](postgresql-migration-runbook.md); private Betriebswerte und
+Freigaben werden daraus nicht erfunden.
 
 ## Append-only Erweiterung P15.4 (08.10.2026)
 

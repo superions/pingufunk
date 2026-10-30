@@ -1,8 +1,9 @@
 # Exklusiver Queuebesitz, Quellenworker und Shutdown
 
 Entwicklungsvertrag P15.1; Status und Abnahme ausschließlich im
-[Phasen-TODO](../todo/proxy-retirement.md). Kein Produktionsrestart,
-Replikazahlerhöhung oder Cutover ist freigegeben.
+[Phasen-TODO](../todo/proxy-retirement.md). Diese technische Referenz erteilt
+keine Freigabe für neue Produktionsrestarts, Replikazahlerhöhungen oder Cutover.
+Der separat beauftragte Betriebswechsel vom 30.10.2026 ist in P17.7 abgenommen.
 
 Nutzerklarstellung 30.10.2026 (P17.7): YouTube und Mediatheken müssen unabhängig
 und parallel herunterladen. Der bisherige serielle Einzelworker wird durch
@@ -119,8 +120,10 @@ Lease nicht. Vor einem separat freigegebenen Update alle alten Writer stoppen
 und aktive Jobs/Dateieffekte abstimmen. Auch bei Rücknahme zuerst alle neuen
 Writer stoppen; kein älterer ungesicherter Writer darf parallel laufen.
 Die in P15.4 hinzugefügte Receipt-DDL begrenzt weiterhin ältere Imagekompatibilität:
-nur nachweislich schema-/v3-kompatible Images, Provider erhalten und PG-Writes
-niemals durch Reaktivierung eines veralteten SQLitebestands verlieren.
+nur nachweislich schema-/receipt- und zu allen gespeicherten Jobversionen
+kompatible Images (derzeit v1–v5, einschließlich v4-Audits und v5-Quellenbindung).
+Provider erhalten und PG-Writes niemals durch Reaktivierung eines veralteten
+SQLitebestands verlieren.
 
 ## Kausale Abnahme
 

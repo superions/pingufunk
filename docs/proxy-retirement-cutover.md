@@ -1,9 +1,11 @@
 # Proxy retirement cutover runbook — GUID transition gate
 
-Status: preparatory only. This is not deployment authorization or an executable
-host-specific procedure. P10.2 must bind the reviewed GitOps state, consumer
-instances, and approved operating window before any cutover; P10.3–P10.7 retain
-their independent migration, writer, routing, and proxy-removal gates.
+Status: allgemeiner Cutoververtrag, keine neue Deploymentfreigabe oder konkrete
+Hostprozedur. P10.2 bindet vor einem weiteren Cutover GitOps-Stand, Consumer und
+freigegebenes Betriebsfenster. Die bereits abgenommene Installation und ihre
+nativen Routen stehen in P10.2–P10.6; P10.7 behält den eigenständigen Stopp vor
+einer endgültigen Proxyentfernung. Historische Zukunftsformulierungen unten
+verlangen keinen erneuten Cutover einer bereits unverändert geprüften Route.
 
 ## RSS GUID transition
 

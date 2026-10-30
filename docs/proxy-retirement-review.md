@@ -1,6 +1,6 @@
 # Review des Proxy-Ablöseplans
 
-Stand: 21.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
+Stand: 30.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
 Aktueller Implementierungsstatus ausschließlich im Phasen-TODO; die datierten
 folgenden Bewertungen sind keine konkurrierende Abnahme-/Deploymentfreigabe.
 Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
@@ -3939,3 +3939,137 @@ aktuellen Sonarr-Datensätzen überein. Diese Dateistände bleiben getrennt, nat
 History wird nicht passend umgeschrieben. Keine Doppelgrabs oder manuellen
 Import-POSTs. P17.7 ist damit abgenommen; andere offene Phasen und bestehende
 unabhängige Importwarnungen werden dadurch nicht als erledigt erklärt.
+
+## Kritischer TODO-Abgleich (30.10.2026)
+
+Ausdrücklich beauftragter Replan: die zehn noch offenen Checkboxen mit ihren
+Originalanforderungen, aktuellen Ownern, Consumer-/Negativtests, Workflows und
+vorhandenen Betriebsbelegen abgleichen; obsolete Arbeit verwerfen. Dies ist
+ein quellen- und evidenzgestützter Selbstreview, kein unabhängiger Peer-Review
+oder erneuter Vollaudit sämtlicher bereits abgenommener Produktowner.
+Der ausführbare Status bleibt ausschließlich im [Phasenvertrag](../todo/proxy-retirement.md).
+Historische datierte Findings oben bleiben als Verlauf erhalten und sind ohne
+einen fortbestehenden konkreten Befund kein heutiger Implementierungsauftrag.
+
+### Erledigte Owner und obsolete Restforderungen
+
+**P15.1/P15.4:** Der alte Reconnectbefund war ein realer Commitfehler, keine
+beliebig wegzuerklärende Umgebungsstörung. Der aktuelle unkeyed PostgreSQL-Pfad
+in `download.ts::addToQueue` wartet jetzt auf bestätigte Transaktion; vorher
+keine UUID oder Workerweckung. `enqueue-commit.test.ts` schützt Commit und
+verlorene Commitantwort. `media-container-contract.mjs` behält den unabhängigen
+SQL-Read der quittierten UUID und verlangt danach den wirklichen Medienabschluss.
+Die zuvor rote unveränderte Assertion besteht in beiden finalen Containerketten.
+Zweiprozess-/Fence-/Crash-/Expiry-/Ausfall- und Signal-/Mux-/Restart-/Draingates
+sind ebenfalls erfolgreich. Beide Punkte schließen; die globale serielle
+Ein-Transfer-Vorgabe ist durch P17.7 ersetzt, exklusiver Besitz und Fencing nicht.
+
+**P09.5/P03.4:** `mp4-audio-language.ts` enthält den kleinen Parent-Lookbehind
+und Parsergeneration `mp4-tracks-v2`. Die große Track-/Trailerregression prüft
+Deutsch und 1920×1080 innerhalb vier begrenzter Fenster; zusätzliche negative
+Fälle sichern fünftes Fenster, Asset-/ETagwechsel, beschädigte/mehrdeutige Tracks
+und unabhängige Sprache/Dimensionen. Dazu kommen exakte ARTE-/ARD-URL-Belege,
+RBB-Producer-/Worker-Gate, native Radarr-Sprach-/Qualitätserkennung direkt/via
+Prowlarr und beide Persistenz-/Medienbackends. Konkrete Anforderungen bleiben
+in Tonsprachen-/Auflösungsvertrag und ihren kausalen Tests erhalten. Die erledigte
+Fensterkorrektur nicht erneut planen. Die unbestimmte Restforderung „allgemeine
+Sprachabdeckung“ wird verworfen: erlaubte Hosts, vier Fenster und Unknown bei
+unbelegten Fakten sind bewusst begrenztes Produktverhalten. Ein neuer konkreter
+Provider-/Layoutfehler kann den Owner wieder öffnen; vollständige Abdeckung
+beliebiger zukünftiger Quellen ist kein bestehender binärer Arbeitsauftrag.
+
+**P10.6:** Native Indexer- und SAB-Routen waren bereits seit dem freigegebenen
+Cutover in Betrieb; P10.3–P10.5 dokumentieren Daten-/Restart-/Rückwegabnahme.
+Der jüngste ausdrücklich autorisierte GitOps-Wechsel bestätigte unveränderte
+Warteschlange/Settings/Backend und gesunde tatsächliche Imageidentität. Ein
+bestehender YouTube-Transfer wurde ohne Abbruch beendet und nativ importiert;
+die sechs beauftragten Mediathekfolgen sind bis zur gepaarten History und
+stabilen Bibliotheksdatei bestätigt. Die aktuellen nativen Radarr-/Sonarr-/
+Prowlarr- und Backup-/Rückweggates bleiben gültig. Erneutes Umschalten derselben
+funktionierenden Routen oder ein zusätzlicher Beobachtungsdeploy entfällt.
+Lokale Images bleiben außerhalb automatischer Registryprüfung; genaue
+Artefaktscans und ein kompatibler Rückweg bleiben Betriebsregeln. Die unabhängig
+bestehende alte Historyabweichung wird nicht als behoben behauptet und bleibt
+konkret im noch offenen Bestandsaudit P06.4. Proxyentfernung bleibt P10.7.
+
+**P17.6:** Mainintegration, Schemaerweiterung, Registeraktivierung und Main-
+Katalogbindung sind ausgeführt; der P17.5-Kalenderfix gehört zum abgenommenen
+produktiven Image. Die alten Aussagen „noch keine Aktivierung“/„reale Downloads
+unfreigegeben“ sind für den später ausdrücklich beauftragten Scope obsolet.
+Reale vorhandene YouTube-Datei mit nativem Import am Altworker, neue parallele
+Bytefortschritte und synthetische native v5-Medien-/Arr-Dateiabnahmen sind
+getrennt belegt.
+Keiner dieser Belege wird zu einem anderen umetikettiert. Der neue Build erhält
+insbesondere keine behauptete vollständige reale YouTube-Dateiabnahme allein
+aus dem Geschwindigkeitsfenster. Ein weiterer eigens angelegter isolierter
+echter Referenzgrab wird als doppelter Arbeitsauftrag verworfen; der begrenzte
+Rollout-/Parallelitätsabschluss ist mit P17.7 konsolidiert. P17.6 bleibt auf den
+fehlenden realen Dateinachweis des geänderten Transferpfads begrenzt offen:
+zuerst vorhandenen, dem neuen Build sicher zugeordneten Auftrag mit Original-
+Download-ID, Worker-Medienfacts und tatsächlichem nativem Dateiimport abgleichen.
+Ein alleiniger Versions-/Konfigurationsreadback schließt diesen Rest nicht.
+
+### Verbleibender Scope statt historischer Sammelblocker
+
+**P06.4** bleibt als begrenzter produktiver Mehrstaffel-/Importaudit offen.
+Suchverbreiterung, sicherer TBA-/Konfliktowner, Hintergrund-/Nachlieferjournal,
+v4-Einzelquellenfreigabe und Desktopdialog sind implementiert. Kalte native
+81-Quellen-/80-Folgen-Ketten direkt und via Prowlarr sowie Review-/Workerfälle
+auf beiden Backends sind grün. Die pauschalen Wiederholungsaufträge und falschen
+„nicht implementiert“-Behauptungen entfallen. Der frühere breite reale
+Bestandsaudit samt unabhängig dokumentierter widersprüchlicher Importhistory
+hat dagegen keinen vollständigen zugeordneten Abschlussbeleg. Die sechs zuletzt
+geprüften Folgen ersetzen ihn nicht. Zuerst historische Zielidentität auflösen,
+dann vorhandenen Bestand lesend bis zur tatsächlichen Datei paaren; keine neuen
+Suchen/Grabs/Imports, Metadaten- oder Toleranzänderungen aus diesem Review.
+
+**P11.9** bleibt ausdrücklich optional und zurückgestellt. Der vorhandene
+Vorwärtsimport mit sieben Fachmodellen ist kein sicherer PG→SQLite-Runner.
+Konsistenter PG-Lesesnapshot, NEW-Datei-/Resume-/Rollengrenze, typisierter
+Rückvergleich und negative Abbruchmatrix fehlen weiterhin als eigener
+Rücktransfer. SQLite bleibt ebenso wie PostgreSQL unterstützt; allein produktives
+PostgreSQL 18 macht diese Option nicht technisch erledigt. Kein impliziter
+Umsetzungsauftrag oder Blocker für andere Arbeit; der geprüfte PG-kompatible
+Rückweg bleibt verfügbar, der alte SQLite-Snapshot bleibt gesperrt.
+
+**P10.7** bleibt der gesonderte endgültige Proxy-Entfernungsschritt. Aus einem
+funktionierenden nativen Betrieb oder diesem Dokumentationsauftrag wird keine
+Löschfreigabe abgeleitet. Vor einer späteren Entfernung aktuelle Existenz,
+Referenzen und Rückweg erneut feststellen; keine fremden Networks/Secrets/
+Volumes oder Datenbanken bereinigen.
+
+**P18.1** bleibt echte nicht gelieferte Produktdokumentation: eine gleichwertige
+englische README fehlt, und die verlangte zweisprachige Informationsarchitektur,
+Gegenüberstellung und Desktop-Renderabnahme sind nicht durch Branding oder
+funktionierende Code-CI erfüllt. Die falsche vorläufige YouTube-Statusnotiz in
+der bestehenden README wird jetzt berichtigt; das schließt P18.1 nicht.
+
+### Konsistenz und Prüfgrenze
+
+Veraltete aktive Statusaussagen in TODO-Kopf/Arbeitsfolge, README sowie
+Tonsprachen-, Auflösungs-, TV-, YouTube-, Queuebesitz-, Cutover- und PG-Referenz
+werden berichtigt. IDs, fachliche Sicherheits-/Erhaltungsregeln, beide Backends
+und spätere konkrete Freigabestopps bleiben erhalten. Keine neue TODO-Kopie,
+kein Done-Archiv und keine ungetrackte Schlussoperation. Aktuelle CI/native
+PG-Harnesses verwenden PostgreSQL 18; frühere PG17-Läufe bleiben historische
+Evidenz, kein erneut auszuführender Auftrag.
+
+Ein weiterer relevanter Referenzfehler: Der Queue-/Qualitätsrückweg nannte nur
+v3-Kompatibilität, obwohl v4-Audits und v5-Quellenjobs bereits ausgeliefert sind.
+Die Rückwegregel verlangt jetzt ausdrücklich alle tatsächlich gespeicherten
+Jobversionen, aktuelle Schema-/Receiptkompatibilität und unveränderten Provider.
+Das präzisiert den vorhandenen Erhaltungsvertrag; ein v3-only Image wird nicht
+als sicherer Rückweg für den heutigen Bestand freigegeben.
+
+Wiederverwendete unveränderte Produktinputs: `22df50ad0c959a614b62492171a00b1eae3af439`.
+Alle sechs Checks vollständig erfolgreich, darunter
+[Produkt-/PG18-CI](https://github.com/superions/pingufunk/actions/runs/41108621889),
+[PR-Containerkette](https://github.com/superions/pingufunk/actions/runs/41108621914)
+und [zweite native Containerkette](https://github.com/superions/pingufunk/actions/runs/41108613401).
+Geprüft wurden die ausführbaren Workflows und ihre konkreten Assertions, nicht
+nur Testnamen oder eine grüne HTTP-Antwort. Vorhandene private Betriebsbelege
+wurden ohne neue Liveoperationen ausgewertet; Rohantworten/Identitäten bleiben
+privat. Dieser reine Dokumentationsreplan ändert keine ausführbaren Inputs;
+Referenz-/Vollständigkeits- und Diffprüfung ersetzen keine behauptete neue
+Produkt-, Browser-, CI- oder Betriebsprobe. Fünf Checkboxen bleiben offen,
+davon eine bewusst zurückgestellte Option.

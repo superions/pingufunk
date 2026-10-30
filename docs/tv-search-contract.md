@@ -1,8 +1,9 @@
 # Breite TV-Suche ohne erfundene Identität
 
-Stand: 21.10.2026. Technischer Vertrag; ausführbare Abnahme ausschließlich
-in [P06.4/P09.5](../todo/proxy-retirement.md). Ein Produktionsrollout braucht
-weiterhin eine gesonderte, konkrete Freigabe.
+Stand: 30.10.2026. Technischer Vertrag; ausführbare Abnahme ausschließlich
+in [P06.4/P09.5](../todo/proxy-retirement.md). Entwicklungs-/native Abnahme und
+der noch offene breite produktive Bestandsaudit bleiben getrennt. Ein neuer
+Produktionsrollout braucht weiterhin eine gesonderte, konkrete Freigabe.
 Instanzbezogene Rollout-Abnahme und Sicherungen bleiben im privaten Betriebsrunbook.
 
 ## Mehr Kandidaten finden, danach dieselben strengen Belege verlangen
@@ -137,13 +138,13 @@ keinen Suchhinweis. Eine kalte Suche darf neutral sein; nach abgeschlossener
 Prüfung konsumiert die nächste Suche die Belege ohne erfundene Sprache/Auflösung.
 Der Hintergrundworker startet keine erneute Sonarr-Suche und keinen Grab.
 
-Historischer Verbraucherbefund, Abnahme noch offen in P06.4: Sonarr verarbeitet
-eine abgeschlossene Staffelsuche nicht nochmals, nur weil dieser Cache später
-HD-Belege enthält.
-Das normale RSS-Verfahren garantiert bisher keine Nachlieferung zuvor gefundener
-alter Episoden. Die warme Folgeabfrage beweist deshalb Auffindbarkeit, nicht
-vollständige automatische Beschaffung. Der neue Befund und der anschließend
-ausdrücklich beauftragte Readiness-/Nachliefervertrag stehen im
+Historischer, inzwischen in der Entwicklung behobener Verbraucherbefund:
+Sonarr verarbeitet eine abgeschlossene Staffelsuche nicht nochmals, nur weil
+dieser Cache später HD-Belege enthält.
+Die Nachlieferung zuvor gefundener alter Episoden wird deshalb durch den
+folgenden Journalvertrag abgesichert; eine bloße warme Folgeabfrage wäre kein
+Nachweis vollständiger automatischer Beschaffung. Der ursprüngliche Befund
+und der ausdrücklich beauftragte Readiness-/Nachliefervertrag stehen im
 [Review](proxy-retirement-review.md#erneut-offener-verbraucherbefund-kalte-suche-ohne-nachlieferung).
 
 Der neue Owner `tv-search-delivery.ts` hält höchstens 128 überwachte, noch fehlende
@@ -161,9 +162,12 @@ späteres HD nach SD ist ein eigenes Releaseereignis. Gespeichert werden maximal
 sechs GUID-Hashes/Zeitpunkte pro Quelleneintrag, keine Medienbelege oder ACKs.
 Feedleser sind keine ACKs; 60s-Snapshots stabilisieren die komplette
 Pagination. Sonarr entscheidet weiterhin selbst über Queue, Profil und Import.
-Vorab-RSS ist dadurch nicht pauschal freigegeben. Abnahme bleibt offen bis zum
-kalten nativen Mehrstaffellauf ohne zweite Suche bis zu realen Dateiimporten,
+Vorab-RSS ist dadurch nicht pauschal freigegeben. Die Entwicklungsabnahme umfasst
+den kalten nativen Mehrstaffellauf ohne zweite Suche bis zu realen Dateiimporten,
 direkt und über Prowlarr, einschließlich Restart/Fehler-/Kapazitätsnegativen.
+Diese Gates bestehen im aktuellen geprüften Produktstand; P06.4 führt den noch
+offenen installationsbezogenen Bestands-/Importaudit getrennt. Die Abnahme
+einzelner anderer Folgen ersetzt diesen breiten Audit nicht.
 
 ## Abgrenzung zu MediathekArr
 
