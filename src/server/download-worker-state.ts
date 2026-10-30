@@ -36,6 +36,7 @@ interface DownloadWorkerState {
   semaphore: Semaphore;
   processingPromise: Promise<void> | null;
   rerunRequested: boolean;
+  recoveryTimer?: ReturnType<typeof setTimeout>;
   activeLease: WorkerLease | null;
   shuttingDown: boolean;
   ownershipState: "idle" | "waiting" | "held" | "lost";

@@ -252,6 +252,7 @@ async function matchesSeasonAndEpisode(
     episode: matchedEpisode,
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
+    releaseShowName: tvdbData.sonarrReleaseName,
     matchedTitle: `S${season}E${episode}`,
     tvdbId: tvdbData.id,
   };
@@ -295,6 +296,7 @@ async function matchesItemTitleIncludes(
     episode: matchedEpisode,
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
+    releaseShowName: tvdbData.sonarrReleaseName,
     matchedTitle: constructedTitle,
     tvdbId: tvdbData.id,
   };
@@ -355,6 +357,7 @@ async function matchesItemTitleExact(
     episode: matchedEpisode,
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
+    releaseShowName: tvdbData.sonarrReleaseName,
     matchedTitle: constructedTitle,
     tvdbId: tvdbData.id,
   };
@@ -382,6 +385,7 @@ async function matchesItemTitleEqualsAirdate(
     episode: matchedEpisode,
     item,
     showName: tvdbData.name || tvdbData.germanName || "",
+    releaseShowName: tvdbData.sonarrReleaseName,
     matchedTitle: constructedTitle,
     tvdbId: tvdbData.id,
   };

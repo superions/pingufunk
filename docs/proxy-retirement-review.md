@@ -3812,3 +3812,55 @@ für die Entwicklung geschlossen. Die abschließende Dokumentation ändert
 keine geprüften Produkt-/Testinputs; dieselben grünen Belege werden
 wiederverwendet. Produktiver Readback und eine weiterhin nicht freigegebene
 echte Medienübertragung bleiben ausdrücklich getrennt.
+
+## Nachreview P05.4/P06.2 — Worker-Wiederaufnahme und Sonarr-Releaseidentität (30.10.2026)
+
+Zwei unabhängige Fehler: Ein fehlgeschlagener Statuswrite konnte den einzelnen
+Worker bis zum nächsten Enqueue pausieren. Ein im Katalog gültiger deutscher
+Serienname ist außerdem nicht automatisch ein von Sonarr akzeptierter Importname;
+RSS-ID-Erkennung hat nicht die Ausnahme einer ausdrücklich interaktiven Auswahl.
+Die Fehlerfälle wurden vor dem Fix durch gezielte Regressionen reproduziert.
+
+Ein pro Prozess geteilter 30-s-Timer weckt denselben exklusiv gesicherten Drain.
+Vor weiteren bereits wartenden Jobs wird der dauerhafte Status des ungewissen
+Vorgängers gelesen: erfolgreicher Commit bleibt erfolgreich, sonst wird die
+Unterbrechung geschlossen. Kein neuer Job, kein Retry des Transfers, kein zweiter
+Worker und kein Timer nach Shutdown oder bei deaktiviertem Schreibgate.
+Ein frischer Enqueue ersetzt den ausstehenden Timer; dauerhafte Störungen werden
+höchstens alle 30 Sekunden erneut abgeglichen. Die ursprüngliche externe
+Transferursache wird damit nicht nachträglich als bewiesen dargestellt.
+
+Der Sonarr-Merge bewahrt separat einen bestätigten Release-Namen. Ein deutscher
+Titel bleibt Releasepräfix, wenn dieselbe Instanz ihn als Titel oder serienweiten
+Alias kennt; sonst gilt ihr kanonischer Titel. Die offiziellen globalen
+Null-/Minus-eins-Formen bleiben lesbar; bedingte oder auf Staffeln begrenzte
+Aliase werden nicht zu allgemeinen Importnamen erweitert. Es werden keine Sonarr-Metadaten,
+XEM-Aliase oder Historyeinträge umgeschrieben. GUI-Identität, deutsche Episodentitel,
+Quellen, GUIDs und Koordinaten bleiben erhalten. Bereits gespeicherte ungestartete
+v5-Serienjobs erhalten den bestätigten technischen Serienpräfix vor dem ersten
+Transfer unter derselben Lease und einem Vergleich des alten Jobinhalts. Das
+funktioniert ausschließlich aus der eingefrorenen Serien-/Episodenbindung,
+bei null übertragenen Bytes und ohne existierende Staging-/Completed-Artefakte.
+Keine ID-/Quell-/Intentänderung, keine Umbenennung laufender Jobs oder Dateien;
+Legacy-/benutzerdefinierte Namen bleiben unverändert. Bei Consumer-Ausfall wartet
+der Job vor dem Transfer auf den vorhandenen verzögerten Weckruf. Alle
+Match-Owner und RSS/NZB konsumieren denselben transienten Namen. Die native
+YouTube-Importfixture enthält absichtlich einen unbekannten deutschen Katalogtitel
+und verlangt echte RSS-Imports mit Titelmatch statt ID-only-Match.
+
+Produktcode `8967bbb`: [Produkt-CI](https://github.com/superions/pingufunk/actions/runs/41049821932)
+und [native Container-CI](https://github.com/superions/pingufunk/actions/runs/41049821950)
+vollständig erfolgreich, einschließlich PostgreSQL 17/18, SQLite/PG-Arr-Ketten,
+vier tatsächlicher YouTube-Importketten mit gespeicherten alten NZB-Namen,
+80/80 kalter nativer Imports je direktem/weitergeleitetem Weg ohne Doppelgrab
+bei erneutem RSS sowie Medien-, Persistenz-, TLS- und Rollbackgates.
+Der währenddessen integrierte Main-Stand `8bfcc30` ergänzt ausschließlich
+Katalogdaten, deren Tests und Dokumentation; Worker, Namenscode und native
+Fixtures bleiben unverändert. Kombinierter Checkpoint `7dfc3f1`: frisch 1.659
+reguläre Tests, Lint, Typecheck, Format und exakter OCI-Produktionsbuild grün.
+Die passenden CI-Gates werden für unveränderte Inputs wiederverwendet.
+Der lokale Docker-Daemon ist nicht gestartet; isolierte reale SQLite-/PG-/Arr-
+Container wurden durch die bestehende Fork-CI geprüft.
+Dies ist ein Selbstreview, keine unabhängige Peer-Abnahme und keine
+Produktions-/Bibliotheksabnahme. Bestehende widersprüchliche Importhistory wird
+separat nur lesend geprüft und nicht aus einem hasFile-Bit als korrekt erklärt.

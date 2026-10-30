@@ -15,6 +15,30 @@ const youtube = process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
 if (youtube) {
   const emit = Server.prototype.emit;
   Server.prototype.emit = function (event, request, response, ...rest) {
+    if (event === "request" && request?.url?.startsWith("/api/newznab/fake_nzb_download?")) {
+      const url = new URL(request.url, "http://pingufunk:6767");
+      const raw = url.searchParams.get("encodedExpectations");
+      const expected = raw ? JSON.parse(Buffer.from(raw, "base64").toString("utf8")) : null;
+      if (expected?.version === 5 && expected.sourceRef?.programme?.kind === "series") {
+        const title = Buffer.from(url.searchParams.get("encodedTitle") ?? "", "base64").toString(
+          "utf8"
+        );
+        if (!title.startsWith("Synthetic.Series.")) throw Error("Owned canonical release required");
+        // Emulate an NZB saved before the release-name correction. The frozen
+        // binding and native download ID must survive its pre-transfer transition.
+        url.searchParams.set(
+          "encodedTitle",
+          Buffer.from(title.replace(/^Synthetic\.Series\./, "Deutsche.Testserie.")).toString(
+            "base64"
+          )
+        );
+        request.url = url.pathname + url.search;
+        appendFileSync(
+          "/qa/youtube-legacy-names.jsonl",
+          JSON.stringify({ id: expected.sourceRef.videoId }) + "\n"
+        );
+      }
+    }
     if (event === "request" && request?.url?.startsWith("/api/newznab")) {
       const query = new URL(request.url, "http://pingufunk:6767").searchParams;
       const fields = Object.fromEntries(
@@ -41,6 +65,19 @@ const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString(
 const ardUrl = "https://rbb-progressive.ard-mcdn.de/synthetic/film-1080.mp4?edition=standard";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (
+    youtube &&
+    url.href === "https://raw.githubusercontent.com/superions/pingufunk/main/data/shows.json"
+  )
+    return Response.json([
+      {
+        tvdbId: 2147483002,
+        name: "Synthetic Series",
+        germanName: "Deutsche Testserie",
+        aliases: [],
+        episodes: [],
+      },
+    ]);
   if (
     youtube &&
     url.hostname === "rr1.synthetic.googlevideo.com" &&

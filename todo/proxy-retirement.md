@@ -612,6 +612,16 @@ B08/B11/B16/O01, R2 und API-/Cache-Gates.
       Die explizite Betreiberprüfung auf bisher authentifizierte Proxy-URLs
       bleibt vor einem späteren Deployment erforderlich.
 - [x] **P05.4 — Queue kann nach Fehlern weiterarbeiten.**
+      Nachbefund 30.10.2026: Nach fehlgeschlagener Statuspersistenz fehlte ein
+      eigener Weckruf; erst ein späterer Enqueue konnte den pausierten Drain
+      fortsetzen. Ergänzung erneut abgenommen mit Produkt-CI 41049821932 und
+      nativer Container-CI 41049821950, einschließlich SQLite/PG und tatsächlichen
+      Arr-Imports; keine produktive Betriebsabnahme. Ein einziger 30-s-Timer
+      startet denselben
+      leasegesicherten Abgleich, liest einen ungewissen Commit neu und schützt
+      terminale Jobs. Kein neuer Enqueue und kein automatischer Retransfer eines
+      fehlgeschlagenen/unterbrochenen Jobs; Shutdown/Wartung/Enqueue überlappen
+      den Timer nicht. Lokale kausale Regressionen schützen diese Grenzen.
       `download-manager.ts::{processQueue,startDownloadProcessing,markAsFailed}`
       und `download.ts::triggerDownloadProcessing` über gesamte Fehler-/Abbruch-
       pfade reviewen, `isProcessing` verlässlich zurücksetzen und Retry/Restart
@@ -1243,6 +1253,22 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       unveränderte DB-/Runtimeinputs wiederverwendet; Parser ist noch kein
       integrierter Sonarr-Consumer und benötigt keine neue UI-Abnahme.
 - [x] **P06.2 — Sicherer Provider mit vollständig fehlertolerantem Consumer.**
+      Nachbefund 30.10.2026: Lokalisierte Release-Namen konnten bei RSS nur
+      per TVDB-ID erkannt und anschließend von Sonarr für den Import gesperrt
+      werden. Ergänzung erneut nativ abgenommen mit den Gates von P05.4:
+      vier YouTube-Ketten auf SQLite/PG direkt und über Prowlarr mit alten
+      gespeicherten NZB-Namen, identischen Auftragsbindungen und tatsächlichen
+      Imports. Keine produktive Import-/Historyabnahme. Der bestätigte Instanztitel
+      ist technische Releaseidentität; Deutsch bleibt erlaubt, wenn Sonarr
+      diesen Titel selbst oder als serienweiten Alias bestätigt. Anzeige und
+      deutsche Episodentitel bleiben getrennt, Staffelaliase gelten nicht global.
+      GUIDs/Koordinaten/Quellbindungen bleiben stabil, RSS und NZB teilen den
+      korrigierten Namen. Noch ungestartete v5-Serienjobs dürfen unter derselben
+      Lease und CAS ausschließlich ihren Serienpräfix korrigieren: feste
+      TVDB-/Episodenbindung, frisch bestätigter Sonarr-Titel, null übertragene
+      Bytes und keine Staging-/Completed-Artefakte. ID/Quelle/Intent und deutsche
+      Episodentitel bleiben gleich. Laufende Jobs/Dateien werden nicht umbenannt;
+      Consumer-Ausfall pausiert vor Transfer und erzeugt keinen Ersatzauftrag.
       Ergänzungsbefund erneut abgenommen 05.10.2026 auf `b189bf2`: 998 reguläre
       Tests, Lint/Types/Format/Build und Fork-CI 37323756642 einschließlich
       separater PG-Integration grün. Docker-Gate 37323756720 mit nativen

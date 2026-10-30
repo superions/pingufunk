@@ -315,6 +315,7 @@ export function generateTitle(
   episodeType: EpisodeType
 ): string {
   const episode = info.episode;
+  const showName = withoutSourceResolution(info.releaseShowName ?? info.showName);
   // Render the actual source title for placeholders; never mutate stored metadata.
   const episodeTitle = isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber)
     ? parseEpisodeFromTitle(info.item.title).episodeName || episode.name
@@ -324,13 +325,13 @@ export function generateTitle(
     const aired = episode.aired ? new Date(episode.aired) : new Date();
     const dateStr = aired.toISOString().split("T")[0]; // yyyy-MM-dd
     return applyLanguageEdition(
-      `${withoutSourceResolution(info.showName)}.${dateStr}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
+      `${showName}.${dateStr}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
       info.item
     ).replace(/ /g, ".");
   }
 
   return applyLanguageEdition(
-    `${withoutSourceResolution(info.showName)}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
+    `${showName}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
     info.item
   ).replace(/ /g, ".");
 }

@@ -242,6 +242,17 @@ export function mergeSonarrShow(
         .map((name) => ({ name, language: "und" })),
     ],
     episodes,
+    // Sonarr does not use arbitrary TVDB translations as import aliases. Keep a
+    // localized release name only when this same instance recognizes it globally.
+    sonarrReleaseName:
+      base?.germanName &&
+      [supplemental.series.title, ...(supplemental.series.aliases ?? [])].some(
+        (name) =>
+          name.normalize("NFC").trim().toLocaleLowerCase("de-DE") ===
+          base.germanName!.normalize("NFC").trim().toLocaleLowerCase("de-DE")
+      )
+        ? base.germanName
+        : supplemental.series.title,
     sonarrVerifiedCoordinates: supplemental.episodes.map(coordinate),
     sonarrMonitoredCoordinates: supplemental.series.monitored
       ? supplemental.episodes
