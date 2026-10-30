@@ -1,15 +1,18 @@
 # YouTube als zusätzliche Katalogquelle — Vertrag P17
 
 Fachentwurf vom 25.10.2026 gegen den damaligen Main `1c9d4f9` und Upstream
-`345f5ed`; Entwicklungsabnahme am 26.10.2026 auf `ea00f30`.
+`345f5ed`; Entwicklungsabnahme am 26.10.2026 auf `ea00f30`,
+Quellenparallelität und gesonderter Betriebsabschluss am 30.10.2026.
 Nutzerauftrag: separat und über die GUI pflegbare ÖR-YouTube-Kanäle,
 automatische Serien-/Film-ID-Zuordnung mit Vorbelegungen, Mediathek-nahes
 JSON, KISS und Bestandsschutz. Pflichtreferenz ist KultKrimi / Der Kommissar.
-P17.1–P17.5 einschließlich der Mediathek-Modulgrenzen, Registeroberfläche,
-ID-Bindung und gemeinsamer Such-/Downloadconsumer sind in der Entwicklung
-abgenommen. Der Auftrag zur Mainintegration und zum anschließenden Rollout
-liegt vor; zusätzliche Schemaaktualisierung und echte Referenzübertragung
-bleiben getrennt freizugeben. Reihenfolge, Status und Abnahme ausschließlich in
+Mediathek-Modulgrenzen, Registeroberfläche, ID-Bindung, gemeinsamer Such-/
+Downloadconsumer und zwei Quellenworker sind in der Entwicklung abgenommen.
+Die separat beauftragte Mainintegration, notwendige Schemaerweiterung und
+Produktionsaktivierung sind ausgeführt; der reale YouTube-Dateinachweis am
+neuen Transferbuild bleibt getrennt in P17.6. Das ist keine Freigabe weiterer
+Grabs, Migrationen oder Rollouts. Reihenfolge, Status und Abnahmescope stehen
+ausschließlich in
 [P17](../todo/proxy-retirement.md#phase-p17--youtube-quellen-im-bestehenden-katalogvertrag).
 Keine Streaming-Webseite, Impressumsinventur oder zusätzliche Medienverwaltung.
 
@@ -541,11 +544,15 @@ Ein YouTube-Metadatenabruf oder ein gemockter yt-dlp-Exit beweist keinen echten
 YouTube-Transfer. Die isolierte reale Medien-/Arr-Testkette muss darüber hinaus
 die neue Resolver-/Job-/Workerstrecke tatsächlich ausführen.
 
-P17.1–P17.5 liefern Entwicklungsabnahme, keine Mainintegration oder Produktion.
-Ein echter YouTube-Mediendownload und späterer Rollout bleiben das separat
-freizugebende optionale P17.6. Bestehende offene P03.4/P06.4/P09.5/P15.1/P15.4
-und Proxyentfernung werden nicht pauschal geschlossen oder zu Vorbedingungen
-für die unabhängigen Register-/Mappingarbeiten erklärt.
+P17.1–P17.5 liefern Entwicklungsnachweise; Mainintegration und Betrieb besitzen
+ihre eigenen dokumentierten Nachweise in P17.6/P17.7. Der dort konsolidierte
+Abschluss ersetzt keinen realen Dateibeleg durch einen Mock oder bloßen
+Metadatenabruf. Ein zusätzlicher eigens gestarteter echter Referenzgrab wird
+im Replan vom 30.10.2026 nicht mehr ohne konkrete offene Fehlerhypothese verlangt.
+P17.6 verlangt zuerst den vollständigen Dateinachweis an einem bereits vom
+neuen Build verarbeiteten vorhandenen Auftrag, keine Ableitung aus Altworker-
+Import oder parallelem Fortschritt. Andere Bibliotheksabnahmen und die
+Proxyentfernung bleiben unabhängig.
 
 ## P17.3: implementierte Bindung und Bericht
 
@@ -705,8 +712,8 @@ Quittung und zum Auftrag. Eine gemeinsame Watch-URL ist kein Auswahlkriterium.
 Die bisherigen Mediathekwerte `hd`, `sd`, `low` bleiben unverändert gültig;
 die GUI konsumiert denselben serverseitigen Auswahlvertrag für beide Quellen.
 Auch ein vorbereiteter Medienbeleg ist keine physische Datei- oder Importabnahme.
-Die synthetischen nativen und Desktopgates bleiben Voraussetzung für P17.4/5;
-Produktivaktivierung und echte YouTube-Mediendownloads bleiben P17.6.
+Die synthetischen nativen und Desktopgates bleiben Voraussetzung für P17.4/5.
+Der gesonderte Betriebsnachweis ist in P17.6/P17.7 abgegrenzt.
 
 Der Rückweg dieser Quellenrevision ist der gepinnte v1–v4-fähige P17.3-Stand,
 nicht eines der historischen Datenbank-Cutoverimages vor dem Medienprotokoll.
@@ -716,14 +723,15 @@ Schreibgate aus und kein Bootprocessing. Ein vorbereiteter wartender v5-Auftrag
 samt Intentquittung und fünf bereits abgeschlossene synthetische Aufträge
 müssen dabei einschließlich IDs, Payloads und Status erhalten bleiben. Der
 Rücksprung startet in dieser Prüfung ebenfalls ohne automatischen Transfer;
-er ist kein Auftrag zum erneuten Download. Ein produktiver Rückweg benötigt
-den getrennten P17.6-Plan und darf keine unbekannten wartenden Verträge durch
-einen älteren Worker ausführen lassen.
+er ist kein Auftrag zum erneuten Download. Ein produktiver Code-Downgrade
+benötigt einen konkret freigegebenen kompatiblen Build; unbekannte wartende
+Verträge dürfen nicht durch einen älteren Worker ausgeführt werden.
 
 Das tatsächliche OCI-Image wird zusätzlich offline auf gepinntes yt-dlp,
 gebündeltes EJS und ausdrücklich ausgewähltes Node 24 geprüft. Ein absichtlich
 nicht unterstützter Input ohne verwendbaren Extraktor prüft die Toolfähigkeit,
-keine öffentliche Quelle. Der separate reale Downloadnachweis bleibt P17.6.
+keine öffentliche Quelle. Er wird nicht als der getrennte reale Betriebsbeleg
+aus P17.6/P17.7 ausgegeben.
 
 Der typisierte Journalvertrag erlaubt höchstens zehn Veröffentlichungsidentitäten
 pro YouTube-Eintrag (fünf gemessene Auflösungen, jeweils reguläre/Jahresform).
@@ -742,5 +750,6 @@ Originaltitel noch aus einer lokalisierten Metadatenantwort erfunden.
 Die Entwicklungsabnahme von P17.1–P17.5 samt nativen Backend-/Arr-/Rückwegbelegen
 steht im [Reviewbericht](proxy-retirement-review.md); der verbindliche Status
 und die gesonderten Freigaben für echte Medien und Betrieb stehen in
-[P17](../todo/proxy-retirement.md). Synthetische echte Dateien und reale
-Metadatenabfragen ersetzen den optionalen echten Referenzdownload nicht.
+[P17](../todo/proxy-retirement.md). Synthetische echte Dateien,
+Metadatenabfragen, reale Transfers und native Dateiimporte bleiben getrennte
+Beweisarten. Der Statusabgleich ordnet nur die tatsächlich vorhandenen Belege zu.

@@ -11,11 +11,12 @@
 Rundfunk-Indexer für Sonarr/Radarr - Automatischer Download von ARD, ZDF und anderen deutschen Mediatheken.
 
 > Pingufunk wird eigenständig weiterentwickelt. SQLite und PostgreSQL werden
-> gleichwertig unterstützt. Der YouTube-Kanal- und Metadatenkatalog ist in der
-> Entwicklung umgesetzt. Automatische Programm-/Episodenbindung, kanonischer
-> Zuordnungsbericht und der gemeinsame Such-/Downloadpfad sind mit isolierten
-> Fixtures nativ geprüft. Echte YouTube-Referenzübertragung und produktive
-> Aktivierung werden separat freigegeben. Siehe [Projektstand](todo/proxy-retirement.md).
+> gleichwertig unterstützt. Optionale YouTube-Quellen bieten ein pflegbares
+> Kanalregister, automatische Programm-/Episodenbindung und einen kanonischen
+> Zuordnungsbericht. YouTube und Mediatheken laden über zwei unabhängige
+> Quellenworker im selben Appprozess parallel. Der gemeinsame Such-/Downloadpfad
+> ist mit nativen Arr-Fixtures geprüft und für eine gesondert freigegebene
+> Installation produktiv abgenommen. Siehe [Projektstand](todo/proxy-retirement.md).
 
 ## Screenshots
 

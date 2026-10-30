@@ -85,8 +85,9 @@ Korrektur werden echte Sample-Entry-Maße und kohärente Sprache gelesen.
 Bildmaße und kohärente Tonsprachen sind unabhängig: gemischte Audiospuren bleiben
 sprachlich neutral, können aber belegte Bildmaße haben. Die exakte URL ist die
 Bindung beider Fakten. Andere Hosts, HLS und übersprungene Probeidentitäten
-bleiben ohne passenden bestehenden Providerbeleg unbekannt. P03.4s darüber
-hinaus offene Sprach-/Abdeckungsbefunde werden dadurch nicht pauschal geschlossen.
+bleiben ohne passenden bestehenden Providerbeleg unbekannt. Diese Grenzen sind
+Teil des abgenommenen begrenzten Vertrags, keine Zusage vollständiger Abdeckung
+beliebiger anderer Quellen oder zukünftiger Metadatenlayouts.
 
 Ergänzung 08.10.2026: Der vorhandene ARD-JSON-Belegowner akzeptiert zusätzlich
 den exakt bestätigten RBB-CDN. Producer und Worker benutzen denselben URL-Gate.
@@ -160,13 +161,15 @@ bash scripts/media-container-smoke.sh
 
 Der Docker-Forkworkflow führt die nativen QA-Varianten 720p, unbekannt und
 widersprüchlich ohne Image-Publikation aus. Der Abnahmestatus steht ausschließlich
-im P09.3-TODO; angelegte Gates sind noch kein Ausführungsnachweis.
+in P09.3/P09.5 im Phasen-TODO. Die dort benannten aktuellen grünen Läufe
+prüfen diese Gates tatsächlich; ein bloß angelegter Gate genügt weiterhin nicht.
 
 Produktionsrollout bleibt separat freizugeben. Vorher Queue/History, neue
 UNKNOWN-Titel, konkret konfigurierte Qualitätsauswahl und Consumerprofile im
 installationsbezogenen Runbook prüfen. Neue Jobs erhalten strengere Sollmaße;
-ein App-Rollback muss alle vorhandenen Jobversionen (heute v1/v2/v3) und die
+ein App-Rollback muss alle vorhandenen Jobversionen (derzeit v1–v5) und die
 vorhandenen Dimensionschecks verstehen und
 die aktuelle Datenbank behalten. Zurück zum alten Slot-Stempel wäre ein
 bewusster Rückfall auf den Fehler, kein geprüfter Qualitätsrollback. Nach PG-
-Writes keinen veralteten SQLite-Snapshot reaktivieren. P03.4 bleibt unabhängig.
+Writes keinen veralteten SQLite-Snapshot reaktivieren. Tonsprachen- und
+Dimensionsbelege bleiben fachlich unabhängig.
