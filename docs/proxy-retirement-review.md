@@ -3832,7 +3832,9 @@ Transferursache wird damit nicht nachträglich als bewiesen dargestellt.
 
 Der Sonarr-Merge bewahrt separat einen bestätigten Release-Namen. Ein deutscher
 Titel bleibt Releasepräfix, wenn dieselbe Instanz ihn als Titel oder serienweiten
-Alias kennt; sonst gilt ihr kanonischer Titel. Es werden keine Sonarr-Metadaten,
+Alias kennt; sonst gilt ihr kanonischer Titel. Die offiziellen globalen
+Null-/Minus-eins-Formen bleiben lesbar; bedingte oder auf Staffeln begrenzte
+Aliase werden nicht zu allgemeinen Importnamen erweitert. Es werden keine Sonarr-Metadaten,
 XEM-Aliase oder Historyeinträge umgeschrieben. GUI-Identität, deutsche Episodentitel,
 Quellen, GUIDs, Koordinaten und gespeicherte Jobpfade bleiben erhalten. Alle
 Match-Owner und RSS/NZB konsumieren denselben transienten Namen. Die native

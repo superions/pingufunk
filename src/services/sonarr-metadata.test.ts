@@ -29,10 +29,18 @@ describe("Sonarr metadata boundary (not yet connected to lookup/RSS)", () => {
             { title: "  Deutscher Titel  ", seasonNumber: -1, path: "/private" },
             { title: "Deutscher Titel", seasonNumber: -1 },
             { title: "Andere Staffel", seasonNumber: 2 },
+            { title: "Globale Nullform", seasonNumber: null, sceneSeasonNumber: null },
+            { title: "Scene-Staffel", seasonNumber: -1, sceneSeasonNumber: 2 },
+            { title: "Bedingter Alias", seasonNumber: -1, comment: "Limited matching" },
+            {
+              title: "Nicht prüfbarer Kommentar",
+              seasonNumber: null,
+              comment: "Special condition",
+            },
           ],
         },
       ])[0].aliases
-    ).toEqual(["Deutscher Titel"]);
+    ).toEqual(["Deutscher Titel", "Globale Nullform"]);
     expect(() =>
       parseSonarrSeries([
         { ...series, alternateTitles: [{ title: "Example", seasonNumber: "-1" }] },

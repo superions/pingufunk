@@ -148,9 +148,10 @@ afterEach(async () => {
   mediathekCache.clear();
 });
 
-it.each([false, true])(
-  "uses only Sonarr-confirmed release names through exact, season and RSS to NZB (German alias=%s)",
-  async (knownGermanAlias) => {
+it.each(["global", "global-null", "season", "scene-season", "conditional"])(
+  "uses only Sonarr-confirmed release names through exact, season and RSS to NZB (alias scope=%s)",
+  async (scope) => {
+    const knownGermanAlias = scope === "global" || scope === "global-null";
     state.settings.set("matching.minDuration", "0");
     const original = fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async (value: string) => {
@@ -162,9 +163,14 @@ it.each([false, true])(
             tvdbId: 321,
             title: "Canonical Series",
             monitored: true,
-            alternateTitles: knownGermanAlias
-              ? [{ title: "Deutsche Serie", seasonNumber: -1 }]
-              : [{ title: "Deutsche Serie", seasonNumber: 1 }],
+            alternateTitles: [
+              {
+                title: "Deutsche Serie",
+                seasonNumber: scope === "global-null" ? null : scope === "season" ? 1 : -1,
+                sceneSeasonNumber: scope === "scene-season" ? 1 : null,
+                comment: scope === "conditional" ? "Limited matching" : null,
+              },
+            ],
           },
         ]);
       if (url.pathname.endsWith("/episode"))

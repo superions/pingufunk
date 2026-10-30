@@ -17,7 +17,9 @@ const seriesSchema = z.object({
     .array(
       z.object({
         title: z.string().trim().min(1).max(1024),
-        seasonNumber: z.number().int().min(-1).max(2_147_483_647),
+        seasonNumber: z.number().int().min(-1).max(2_147_483_647).nullish(),
+        sceneSeasonNumber: z.number().int().min(-1).max(2_147_483_647).nullish(),
+        comment: z.string().max(1024).nullish(),
       })
     )
     .max(256)
@@ -41,7 +43,7 @@ export interface SonarrSeriesMetadata {
   tvdbId: number;
   title: string;
   monitored: boolean;
-  /** Only series-wide aliases; season-scoped scene titles are not global identities. */
+  /** Only unrestricted series-wide aliases, never season mappings or conditional matches. */
   aliases?: string[];
 }
 
@@ -89,7 +91,15 @@ export function parseSonarrSeries(payload: unknown): SonarrSeriesMetadata[] {
             aliases: [
               ...new Set(
                 series.alternateTitles
-                  .filter((alias) => alias.seasonNumber === -1)
+                  // Sonarr uses null and -1 for global scope. A condition is
+                  // surfaced as a comment ("Limited matching" when unnamed).
+                  // The API does not expose that regex, so never promote it.
+                  .filter(
+                    (alias) =>
+                      (alias.seasonNumber ?? -1) === -1 &&
+                      (alias.sceneSeasonNumber ?? -1) === -1 &&
+                      !alias.comment?.trim()
+                  )
                   .map((alias) => alias.title)
               ),
             ],
