@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export DATABASE_PROVIDER=postgresql
-CI_PG_IMAGE="${PINGUFUNK_CI_POSTGRES_IMAGE:-postgres:17-alpine}"
+CI_PG_IMAGE="${PINGUFUNK_CI_POSTGRES_IMAGE:-postgres:18-alpine}"
 case "$CI_PG_IMAGE" in
   postgres:17-alpine|postgres:18-alpine) ;;
   *) echo "Only reviewed disposable PostgreSQL test images are allowed" >&2; exit 1 ;;

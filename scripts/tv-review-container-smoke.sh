@@ -26,7 +26,7 @@ cleanup() {
 trap cleanup EXIT
 docker network create --internal "$net" >/dev/null
 if [[ "$provider" == postgresql ]]; then
-  docker run -d --name "$pg" --network "$net" --label "pingufunk.media-qa.owner=$owner" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine >/dev/null
+  docker run -d --name "$pg" --network "$net" --label "pingufunk.media-qa.owner=$owner" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:18-alpine >/dev/null
   ready=0
   for ((n=0;n<30;n++)); do if docker exec "$pg" pg_isready -q -h 127.0.0.1 -U postgres; then ready=1; break; fi; sleep 1; done
   [[ "$ready" == 1 ]]

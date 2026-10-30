@@ -3568,6 +3568,19 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Runtime messen; Source-/Mockgates nicht als Betriebsbeleg ausgeben.
       Betriebswechsel benötigt den bestehenden separaten Freigabeweg und muss
       aktive Alttransfers/Dateien erhalten, keine beiläufigen Abbrüche oder Grabs.
+      Gegenprobe auf `e6d9f95`: Beide nativen Imageabnahmen scheitern beim
+      PostgreSQL-Reconnect mit bestätigter, anschließend fehlender unkeyed
+      Job-ID. Derselbe Fall auf echtem disposable PostgreSQL 18 lokal mit
+      protokolliertem Insert reproduziert. Der native Assert bleibt unverändert.
+      Legacy-PG-Aufnahme erhält deshalb dieselbe bestätigte Transaktionsgrenze
+      wie typisierte/keyed Aufträge; keine ACK/Workerweckung vor Commit, kein
+      blinder Retry. Zwei neue Commit-/Fehlerregressionen scheitern vorher und
+      sind danach grün; die echte PG18-Medien-/Mux-/Restart-/Ausfallkette besteht
+      anschließend einschließlich unabhängigem SQL-Read und Folgeabschluss.
+      Auf Nutzerklarstellung wird die aktuelle CI einschließlich der nativen
+      PG-Testharnesses ausschließlich auf PostgreSQL 18 ausgerichtet. Der
+      Medien-/Reconnectgate läuft früh vor den langen Consumerkombinationen.
+      Neue finale CI und Betriebsabnahme bleiben erforderlich.
 
 ## Phase P18 — Eigenständige zweisprachige Projektdarstellung
 

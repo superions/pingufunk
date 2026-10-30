@@ -3890,3 +3890,19 @@ verwendet deshalb jetzt begrenzte Range-Anfragen mit exakter Antwortprüfung;
 Mediathek-Vollabrufe behalten ihren Vertrag. Fehlerdiagnosen bleiben geschlossen
 und enthalten keine kurzlebigen Zugriffsadressen. Eine tatsächliche Steigerung
 der Produktionsgeschwindigkeit ist damit noch nicht attestiert.
+
+Die beiden ersten nativen Imagegates für `e6d9f95` scheitern im bestehenden
+Reconnect-Fall: Ein unkeyed SAB-POST quittiert eine UUID, deren Zeile im
+unabhängigen PostgreSQL-Read fehlt. Der Test wurde unverändert auf PostgreSQL 18
+lokal reproduziert; die SQL-Trace bestätigt die Insert-Anweisung. Damit ist ein
+Statement-Ergebnis nach Verbindungsunterbrechung keine hinreichende dauerhafte
+Aufnahmebestätigung. Der Legacy-PG-Pfad in `addToQueue` verwendet nun eine
+explizit bestätigte Transaktion, wie bereits die typisierten/keyed Pfade.
+Die Vorbereitung des bestehenden Write-Checkpoints erfolgt davor außerhalb
+der Transaktion. SQLite-Aufnahme, IDs und Idempotenz bleiben unverändert;
+Commitfehler erzeugen keine Erfolgsantwort, keine Weckung und keinen Retry.
+Zwei vorher rote ACK-Regressionsfälle werden grün; derselbe reale PG18-Gate
+bestätigt danach eine dauerhaft vorhandene Zeile und sicheren Queuefortschritt.
+Die automatische CI-Matrix und alle aktiven nativen PG-Harnesses werden gemäß
+Nutzerklarstellung auf PostgreSQL 18 ausgerichtet. Der strikte Reconnectgate
+wird früh ausgeführt; die weiteren Consumer-/Persistenzprüfungen bleiben erhalten.

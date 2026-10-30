@@ -85,7 +85,7 @@ SMOKE_SOURCE="$SMOKE_ROOT/source/source.sqlite" SMOKE_VARIANT="$SOURCE_VARIANT" 
 docker network create --internal "$SMOKE_NETWORK" >/dev/null
 SMOKE_NETWORK_CREATED=1
 docker run --rm -d --name "$PG_CONTAINER" --network "$SMOKE_NETWORK" \
-  -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine >/dev/null
+  -e POSTGRES_HOST_AUTH_METHOD=trust postgres:18-alpine >/dev/null
 SMOKE_PG_STARTED=1
 
 wait_for_pg() {
