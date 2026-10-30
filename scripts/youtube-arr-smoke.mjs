@@ -395,6 +395,7 @@ try {
   if (
     transfers.length !== 8 ||
     new Set(transfers.map((row) => row.id + ":" + row.stream)).size !== 8 ||
+    transfers.some((row) => !row.ranged || row.start !== 0 || row.end !== row.total - 1) ||
     transfers.some((row) => row.id === "00000000004")
   )
     fail("exact video/audio transfer ownership mismatch");

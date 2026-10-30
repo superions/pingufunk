@@ -19,7 +19,7 @@ cleanup() {
   if [[ "$PG_STARTED" == 1 ]]; then
     if [[ "$(docker inspect --format '{{.State.Paused}}' "$PG_CONTAINER")" == true ]]; then docker unpause "$PG_CONTAINER" >/dev/null; fi
     docker stop "$PG_CONTAINER" >/dev/null
-    docker rm "$PG_CONTAINER" >/dev/null
+    docker rm --volumes "$PG_CONTAINER" >/dev/null
   fi
   if [[ "$NETWORK_CREATED" == 1 ]]; then docker network rm "$QA_NETWORK" >/dev/null; fi
   if [[ "$QA_ROOT" == "${QA_PARENT}/media-smoke."* && -d "$QA_ROOT" ]]; then rm -r -- "$QA_ROOT"; fi
@@ -29,7 +29,7 @@ docker network create --internal "$QA_NETWORK" >/dev/null
 NETWORK_CREATED=1
 pg_options=()
 if [[ "${PINGUFUNK_MEDIA_QA_TRACE:-}" == 1 ]]; then pg_options=(postgres -c log_statement=all); fi
-docker run -d --name "$PG_CONTAINER" --network "$QA_NETWORK" --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine "${pg_options[@]}" >/dev/null
+docker run -d --name "$PG_CONTAINER" --network "$QA_NETWORK" --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" -e POSTGRES_HOST_AUTH_METHOD=trust postgres:18-alpine "${pg_options[@]}" >/dev/null
 PG_STARTED=1
 ready=0
 for ((attempt=0;attempt<30;attempt++)); do

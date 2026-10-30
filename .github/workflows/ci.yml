@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        postgres: ["postgres:17-alpine", "postgres:18-alpine"]
+        postgres: ["postgres:18-alpine"]
     permissions:
       contents: read
 

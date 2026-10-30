@@ -1,7 +1,8 @@
 # Bestätigung eines GUI-Downloadauftrags
 
 Aktueller ausführbarer Status: [P15.4 im Phasenvertrag](../todo/proxy-retirement.md).
-Kein Deployment- oder Migrationsauftrag. Es bleibt bei einem Downloadworker.
+Kein Deployment- oder Migrationsauftrag. Der exklusive Queuebesitz bleibt;
+P17.7 ergänzt zwei Quellenworker im selben Appprozess.
 
 ## Auftrag statt unsicherem Transportretry
 
@@ -11,6 +12,14 @@ Erstellungszeit in Unix-Millisekunden. Er ist keine Authentifizierung und
 keine globale Film-/Serien-/URL-Deduplikation. Native SAB-Clients ohne Header
 bleiben unverändert; identische native Aufträge können weiterhin getrennte Jobs
 erzeugen. Beide vorhandenen SAB-Endpunkte und Legacy/v1/v2/v3-NZBs bleiben nutzbar.
+
+PostgreSQL bestätigt auch native Aufträge ohne Schlüssel erst nach einer
+explizit bestätigten Transaktion. Ein erfolgreiches Insert-Ergebnis allein
+reicht nach einer Verbindungsunterbrechung nicht als dauerhafte Quittung.
+Vor dem Commit wird weder eine Job-ID zurückgegeben noch ein Quellenworker
+geweckt. Ein ungewisser/fehlgeschlagener Commit ergibt einen Fehler und wird
+nicht blind wiederholt. Es entstehen dadurch keine neuen Receipt-Schlüssel
+oder Deduplikationsregeln für native Clients; bestehende IDs bleiben erhalten.
 
 Der Server bindet den Schlüssel an den normalisierten Auftragsinhalt
 (exakte URL einschließlich Selektoren/Signatur, Titel, Kategorie und über den

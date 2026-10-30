@@ -23,6 +23,7 @@ const {
 }));
 
 vi.mock("@/lib/db", () => ({
+  databaseProvider: "sqlite",
   prisma: {
     config: { findUnique: configFindUnique },
     download: {

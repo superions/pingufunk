@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export DATABASE_PROVIDER=postgresql
-CI_PG_IMAGE="${PINGUFUNK_CI_POSTGRES_IMAGE:-postgres:17-alpine}"
+CI_PG_IMAGE="${PINGUFUNK_CI_POSTGRES_IMAGE:-postgres:18-alpine}"
 case "$CI_PG_IMAGE" in
   postgres:17-alpine|postgres:18-alpine) ;;
   *) echo "Only reviewed disposable PostgreSQL test images are allowed" >&2; exit 1 ;;
@@ -96,6 +96,7 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   -c 'CREATE SCHEMA p15_enqueues AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_workers AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_reconnect AUTHORIZATION pingufunk_qa_runtime' \
+  -c 'CREATE SCHEMA p17_source_workers AUTHORIZATION pingufunk_qa_runtime' \
   -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_runtime' \
   -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_qa_runtime' \
@@ -127,7 +128,7 @@ PINGUFUNK_REQUIRE_PG_TESTS=1 \
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
   DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  npx vitest run scripts/download-read-runtime.test.ts scripts/enqueue-runtime.test.ts scripts/worker-lease-runtime.test.ts
+  npx vitest run scripts/download-read-runtime.test.ts scripts/enqueue-runtime.test.ts scripts/worker-lease-runtime.test.ts scripts/source-workers-runtime.test.ts
 
 # Pause only this harness-owned container, after the parallel CRUD suites finish.
 DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \

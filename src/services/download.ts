@@ -106,7 +106,14 @@ export async function addToQueue(
     enqueueKey !== undefined
       ? await createEnqueueIntent(data, enqueueKey, admit)
       : await (async () => {
-          if (!admit) return prisma.download.create({ data });
+          if (!admit) {
+            if (databaseProvider === "sqlite") return prisma.download.create({ data });
+            // A statement result after reconnect is not a durable admission
+            // receipt. Like typed/keyed jobs, legacy PG jobs acknowledge COMMIT
+            // before returning their UUID or waking either source worker.
+            await prisma.$prepareMutation();
+            return prisma.$transaction((tx) => tx.download.create({ data }));
+          }
           const admission = await admit();
           const persist = () =>
             prisma.$transaction(async (tx) => {

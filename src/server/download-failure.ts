@@ -16,6 +16,7 @@ export interface TransferFailure {
     | "http_status"
     | "missing_body"
     | "invalid_length"
+    | "invalid_range"
     | "length_overflow"
     | "length_mismatch";
   code: string;

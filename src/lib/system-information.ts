@@ -17,7 +17,7 @@ export interface SystemInformation {
     writesEnabled: boolean;
     worker: {
       state: "disabled" | "idle" | "draining" | "paused";
-      configuredConcurrency: 1;
+      configuredConcurrency: 1 | 2;
       exclusiveOwnership: "unverified" | "idle" | "waiting" | "held" | "lost";
     };
   };
@@ -50,7 +50,7 @@ export function parseSystemInformation(input: unknown): SystemInformation | null
     typeof data.runtime.writesEnabled !== "boolean" ||
     !data.runtime.worker ||
     !["disabled", "idle", "draining", "paused"].includes(data.runtime.worker.state) ||
-    data.runtime.worker.configuredConcurrency !== 1 ||
+    ![1, 2].includes(data.runtime.worker.configuredConcurrency) ||
     !["unverified", "idle", "waiting", "held", "lost"].includes(
       data.runtime.worker.exclusiveOwnership
     ) ||
@@ -101,7 +101,7 @@ export function parseSystemInformation(input: unknown): SystemInformation | null
       writesEnabled: data.runtime.writesEnabled,
       worker: {
         state: data.runtime.worker.state,
-        configuredConcurrency: 1,
+        configuredConcurrency: data.runtime.worker.configuredConcurrency,
         exclusiveOwnership: data.runtime.worker.exclusiveOwnership,
       },
     },

@@ -74,6 +74,10 @@ it("dispatches frozen video and audio exactly once through the existing transfer
   expect((await stat(result.path)).size).toBe(8);
   expect(state.resolve).toHaveBeenCalledWith(source, ctx.signal, source.selection);
   expect(state.download).toHaveBeenCalledTimes(2);
+  for (const call of state.download.mock.calls) {
+    expect(call[3]).toBe(ctx.signal);
+    expect(call[4]).toEqual({ chunkSize: 10 * 1024 * 1024 });
+  }
   expect(state.mux).toHaveBeenCalledWith(
     path.join(dir, "synthetic.video"),
     path.join(dir, "synthetic.audio"),

@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import { mediathekDownloadAdapter } from "@/providers/mediathek/download";
 import { youtubeDownloadAdapter } from "@/providers/youtube/download";
 import { youtubeWatchUrl, rejectUntypedYoutubeUrl } from "@/lib/youtube-source";
-import type { MediaExpectations } from "@/lib/media-expectations";
+import { readPersistedMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
 import { safeFileExtension } from "@/lib/download-paths";
 import { SourceDownloadError } from "./download-failure";
 import type {
@@ -18,6 +18,20 @@ const adapters: ReadonlyMap<string, SourceDownloadAdapter> = new Map([
   ["mediathek", mediathekDownloadAdapter],
   ["youtube", youtubeDownloadAdapter],
 ]);
+
+/** Each registered source owns one independent FIFO transfer worker. */
+export const downloadSourceFamilies = [...adapters.keys()];
+
+/** Invalid persisted payloads still reach the normal closed failure path.
+ * Never classify an untyped URL as a YouTube job or silently repair its identity.
+ */
+export function downloadWorkerFamily(url: string, persisted: string | null): string {
+  try {
+    return downloadSource(url, readPersistedMediaExpectations(persisted)).family;
+  } catch {
+    return "mediathek";
+  }
+}
 
 /** Legacy jobs keep their exact source; typed jobs never infer a backend from a URL. */
 export function downloadSource(

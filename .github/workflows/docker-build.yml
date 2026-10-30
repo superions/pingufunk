@@ -49,6 +49,14 @@ jobs:
           load: true
           tags: pingufunk-p11-migrator-qa
 
+      - name: Verify real media completion on both disposable backends
+        env:
+          PINGUFUNK_SMOKE_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_SMOKE_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+        run: |
+          docker pull postgres:18-alpine
+          bash scripts/media-container-smoke.sh
+
       - name: Prepare pinned source-contract rollback and Arr fixtures
         env:
           SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
@@ -68,7 +76,6 @@ jobs:
           PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
           PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
-          docker pull postgres:18-alpine
           for provider in sqlite postgresql; do
             node scripts/youtube-arr-smoke.mjs direct "$provider"
             node scripts/youtube-arr-smoke.mjs forwarded "$provider"
@@ -121,12 +128,6 @@ jobs:
       - name: Verify isolated SQLite runtime and persistence
         run: |
           PINGUFUNK_SMOKE_ROLLBACK_IMAGE="$(docker image inspect pingufunk-sqlite-source-rollback-qa --format '{{.Id}}')" bash scripts/sqlite-container-smoke.sh
-
-      - name: Verify real media completion on both disposable backends
-        env:
-          PINGUFUNK_SMOKE_RUNNER_IMAGE: pingufunk-p11-runtime-qa
-          PINGUFUNK_SMOKE_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-        run: bash scripts/media-container-smoke.sh
 
       - name: Verify explicit TV source review and real worker on both backends
         env:

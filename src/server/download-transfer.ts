@@ -23,7 +23,8 @@ export async function downloadFile(
     totalBytes: number,
     speed: number
   ) => Promise<void>,
-  parentSignal?: AbortSignal
+  parentSignal?: AbortSignal,
+  options?: { chunkSize: number }
 ): Promise<TransferFailure | null> {
   const abortController = new AbortController();
   const abort = () => abortController.abort();
@@ -71,105 +72,165 @@ export async function downloadFile(
 
   try {
     abortController.signal.throwIfAborted();
-    resetStallTimer();
-    const response = await fetch(url, { redirect: "error", signal: abortController.signal });
-    phase = "response";
-    httpStatus = response.status;
-
-    if (!response.ok || !response.body) {
-      fail(response.ok ? "missing_body" : "http_status");
-      return failure;
-    }
-
-    const lengthHeader = response.headers.get("content-length");
-    const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
-    // Fetch may decode an encoded body: its wire Content-Length is not the
-    // resulting file length. Compare only an unencoded, fully valid length.
-    const reliableLength = lengthHeader !== null && (!encoding || encoding === "identity");
+    const chunkSize = options?.chunkSize;
     if (
-      reliableLength &&
-      (!/^\d+$/.test(lengthHeader) || !Number.isSafeInteger(Number(lengthHeader)))
+      chunkSize !== undefined &&
+      (!Number.isSafeInteger(chunkSize) || chunkSize < 1 || chunkSize > 10 * 1024 * 1024)
     ) {
-      fail("invalid_length");
+      fail("invalid_range");
       return failure;
     }
-    const contentLength = reliableLength ? Number(lengthHeader) : 0;
-    expectedBytes = reliableLength ? contentLength : null;
-    phase = "file_open";
-    fileStream = createWriteStream(destPath, { flags: "wx" });
-    fileStream.once("open", () => {
-      fileCreated = true;
-    });
-    fileStream.on("error", (error) => {
-      fileError = error;
-      fileErrorPhase = fileCreated
-        ? phase === "file_finish"
-          ? "file_finish"
-          : "file_write"
-        : "file_open";
-      abortController.abort();
-    });
-    await new Promise<void>((resolve, reject) => {
-      fileStream!.once("open", () => resolve());
-      fileStream!.once("error", reject);
-    });
-
-    reader = response.body.getReader();
     let lastProgressUpdate = 0;
     let lastSpeedCheck = Date.now();
     let lastSpeedBytes = 0;
     let currentSpeed = 0;
-
-    while (true) {
-      phase = "body_read";
-      const { done, value } = await reader.read();
-      abortController.signal.throwIfAborted();
+    let entityTag: string | null = null;
+    do {
+      phase = "request";
       resetStallTimer();
+      const offset = downloadedBytes;
+      const response: Response = await fetch(url, {
+        redirect: "error",
+        signal: abortController.signal,
+        ...(chunkSize
+          ? {
+              headers: {
+                Range: `bytes=${offset}-${offset + chunkSize - 1}`,
+                "Accept-Encoding": "identity",
+                ...(entityTag && !entityTag.startsWith("W/") ? { "If-Range": entityTag } : {}),
+              },
+            }
+          : {}),
+      });
+      phase = "response";
+      httpStatus = response.status;
+      reader = response.body?.getReader();
 
-      if (done) {
-        break;
-      }
-      receivedBytes += value.length;
-      if (reliableLength && receivedBytes > contentLength) {
-        fail("length_overflow");
+      if (!response.ok || !response.body) {
+        fail(response.ok ? "missing_body" : "http_status");
         return failure;
       }
 
-      phase = "file_write";
-      await new Promise<void>((resolve, reject) => {
-        fileStream!.write(Buffer.from(value), (error) => (error ? reject(error) : resolve()));
-      });
-      downloadedBytes += value.length;
-
-      // Calculate speed every second
-      const now = Date.now();
-      const timeDiff = now - lastSpeedCheck;
-      if (timeDiff >= 1000) {
-        const bytesDiff = downloadedBytes - lastSpeedBytes;
-        currentSpeed = Math.round(bytesDiff / (timeDiff / 1000));
-        lastSpeedCheck = now;
-        lastSpeedBytes = downloadedBytes;
+      const lengthHeader = response.headers.get("content-length");
+      const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
+      // Fetch may decode an encoded body: its wire Content-Length is not the
+      // resulting file length. Compare only an unencoded, fully valid length.
+      const reliableLength = lengthHeader !== null && (!encoding || encoding === "identity");
+      if (
+        reliableLength &&
+        (!/^\d+$/.test(lengthHeader) || !Number.isSafeInteger(Number(lengthHeader)))
+      ) {
+        fail("invalid_length");
+        return failure;
       }
+      const contentLength = reliableLength ? Number(lengthHeader) : 0;
+      if (chunkSize) {
+        // YouTube's progressive streams require small HTTP requests. Never accept
+        // an ignored/shifted range or concatenate changing assets into a media file.
+        const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(
+          response.headers.get("content-range") ?? ""
+        );
+        const start = Number(range?.[1]),
+          end = Number(range?.[2]),
+          total = Number(range?.[3]);
+        const tag: string | null = response.headers.get("etag");
+        if (
+          response.status !== 206 ||
+          !reliableLength ||
+          !range ||
+          ![start, end, total].every(Number.isSafeInteger) ||
+          total <= 0 ||
+          start !== offset ||
+          end !== Math.min(offset + chunkSize, total) - 1 ||
+          end < start ||
+          contentLength !== end - start + 1 ||
+          (expectedBytes !== null && expectedBytes !== total) ||
+          (offset > 0 && entityTag !== tag)
+        ) {
+          fail("invalid_range");
+          return failure;
+        }
+        expectedBytes = total;
+        if (offset === 0) entityTag = tag;
+      } else {
+        expectedBytes = reliableLength ? contentLength : null;
+      }
+      if (!fileStream) {
+        phase = "file_open";
+        fileStream = createWriteStream(destPath, { flags: "wx" });
+        fileStream.once("open", () => {
+          fileCreated = true;
+        });
+        fileStream.on("error", (error) => {
+          fileError = error;
+          fileErrorPhase = fileCreated
+            ? phase === "file_finish"
+              ? "file_finish"
+              : "file_write"
+            : "file_open";
+          abortController.abort();
+        });
+        await new Promise<void>((resolve, reject) => {
+          fileStream!.once("open", () => resolve());
+          fileStream!.once("error", reject);
+        });
+      }
+      let responseBytes = 0;
 
-      // Update progress (throttled to every 1%)
-      if (contentLength > 0 && onProgress) {
-        const percent = Math.floor((downloadedBytes / contentLength) * 100);
-        if (percent > lastProgressUpdate) {
-          lastProgressUpdate = percent;
-          phase = "progress";
-          await onProgress(percent, downloadedBytes, contentLength, currentSpeed);
-          if (timedOut) {
-            fail("inactivity_timeout");
-            return failure;
+      while (true) {
+        phase = "body_read";
+        const { done, value } = await reader!.read();
+        abortController.signal.throwIfAborted();
+        resetStallTimer();
+
+        if (done) {
+          break;
+        }
+        receivedBytes += value.length;
+        responseBytes += value.length;
+        if (reliableLength && responseBytes > contentLength) {
+          fail("length_overflow");
+          return failure;
+        }
+
+        phase = "file_write";
+        await new Promise<void>((resolve, reject) => {
+          fileStream!.write(Buffer.from(value), (error) => (error ? reject(error) : resolve()));
+        });
+        downloadedBytes += value.length;
+
+        // Calculate speed every second
+        const now = Date.now();
+        const timeDiff = now - lastSpeedCheck;
+        if (timeDiff >= 1000) {
+          const bytesDiff = downloadedBytes - lastSpeedBytes;
+          currentSpeed = Math.round(bytesDiff / (timeDiff / 1000));
+          lastSpeedCheck = now;
+          lastSpeedBytes = downloadedBytes;
+        }
+
+        // Update progress (throttled to every 1%)
+        if (expectedBytes && onProgress) {
+          const percent = Math.floor((downloadedBytes / expectedBytes) * 100);
+          if (percent > lastProgressUpdate) {
+            lastProgressUpdate = percent;
+            phase = "progress";
+            await onProgress(percent, downloadedBytes, expectedBytes, currentSpeed);
+            if (timedOut) {
+              fail("inactivity_timeout");
+              return failure;
+            }
           }
         }
       }
-    }
 
-    if (reliableLength && downloadedBytes !== contentLength) {
-      fail("length_mismatch");
-      return failure;
-    }
+      if (reliableLength && responseBytes !== contentLength) {
+        fail("length_mismatch");
+        return failure;
+      }
+      reader?.releaseLock();
+      reader = undefined;
+    } while (chunkSize && downloadedBytes < expectedBytes!);
 
     phase = "file_finish";
     completed = await new Promise<boolean>((resolve) => {
@@ -187,7 +248,10 @@ export async function downloadFile(
   } finally {
     clearTimeout(stallTimer);
     parentSignal?.removeEventListener("abort", abort);
-    reader?.releaseLock();
+    if (reader) {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
     if (!completed) {
       abortController.abort();
       if (fileStream) {

@@ -7,7 +7,12 @@ import { readPersistedMediaExpectations } from "@/lib/media-expectations";
 import { MediaProbeError } from "./media-probe";
 import { recordDecision } from "./decision-diagnostics";
 import { parseDecisionEvent } from "@/lib/decision-diagnostics";
-import { transferSource, downloadSource } from "./source-download";
+import {
+  transferSource,
+  downloadSource,
+  downloadSourceFamilies,
+  downloadWorkerFamily,
+} from "./source-download";
 import {
   assertNewOutputPath,
   categoryDirectory,
@@ -54,6 +59,12 @@ export function getWorkerRuntimeState() {
           ? "draining"
           : "idle",
     configuredConcurrency: DOWNLOAD_CONCURRENCY,
+    sourceWorkers: Object.fromEntries(
+      downloadSourceFamilies.map((family) => [
+        family,
+        runtime.sourceWorkers.has(family) ? "busy" : "idle",
+      ])
+    ),
     exclusiveOwnership: runtime.activeLease
       ? runtime.activeLease.ownershipLost
         ? "lost"
@@ -130,6 +141,9 @@ async function processQueue(): Promise<void> {
   if (!lease) return;
   runtime.activeLease = lease;
   runtime.ownershipState = "held";
+  const active = new Map<string, Promise<void>>();
+  const finished: Array<{ family: string; failed: boolean; error?: unknown }> = [];
+  let wake: (() => void) | undefined;
   try {
     for (const [id, error] of runtime.pendingFailures) {
       const row = await prisma.download.findUnique({ where: { id } });
@@ -140,23 +154,66 @@ async function processQueue(): Promise<void> {
     await recoverInterruptedDownloads(lease);
     while (!runtime.shuttingDown) {
       lease.checkTransfer();
-      // Get next queued download
-      const nextDownload = await prisma.download.findFirst({
-        where: { status: "queued" },
-        orderBy: { createdAt: "asc" },
-      });
-
-      if (!nextDownload) {
-        // No more items in queue
-        break;
+      // Scan past a busy source's backlog: a slow YouTube transfer must never
+      // occupy the Mediathek worker. FIFO remains stable within each source.
+      let cursor: string | undefined;
+      const available = new Set(downloadSourceFamilies.filter((family) => !active.has(family)));
+      while (available.size && !runtime.shuttingDown) {
+        const queued = await prisma.download.findMany({
+          where: { status: "queued" },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          take: 100,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        for (const job of queued) {
+          const family = downloadWorkerFamily(job.url, job.mediaExpectations);
+          if (!available.delete(family)) continue;
+          runtime.sourceWorkers.add(family);
+          const work = (async () => {
+            await prepareSonarrJobTitle(job, lease);
+            await processOwnedDownload(job.id, lease, family);
+          })();
+          // Keep settled failures observed until the supervisor drains both
+          // workers. No lease release or startup recovery while either is alive.
+          active.set(family, work);
+          void work.then(
+            () => {
+              finished.push({ family, failed: false });
+              wake?.();
+            },
+            (error: unknown) => {
+              finished.push({ family, failed: true, error });
+              wake?.();
+            }
+          );
+        }
+        if (queued.length < 100) break;
+        cursor = queued.at(-1)!.id;
       }
-
-      // The configured concurrency is one; await status persistence before
-      // polling again so the same queued row cannot be scheduled repeatedly.
-      await prepareSonarrJobTitle(nextDownload, lease);
-      await processOwnedDownload(nextDownload.id, lease);
+      if (!active.size) break;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        if (!finished.length)
+          await new Promise<void>((resolve) => {
+            // One completion handler per transfer; repeated polls must not attach
+            // unbounded Promise.race listeners to a long-running source download.
+            wake = resolve;
+            timer = setTimeout(resolve, 1000);
+          });
+        for (const result of finished.splice(0)) {
+          if (result.failed) throw result.error;
+          active.delete(result.family);
+          runtime.sourceWorkers.delete(result.family);
+        }
+      } finally {
+        wake = undefined;
+        clearTimeout(timer);
+      }
     }
   } finally {
+    if (active.size) lease.abort();
+    await Promise.allSettled(active.values());
+    runtime.sourceWorkers.clear();
     // Transfers/children have settled before ownership can pass to another process.
     try {
       await lease.release();
@@ -234,7 +291,11 @@ async function executeSingleDownload(downloadId: string): Promise<void> {
   }
 }
 
-async function processOwnedDownload(downloadId: string, lease: WorkerLease): Promise<void> {
+async function processOwnedDownload(
+  downloadId: string,
+  lease: WorkerLease,
+  family?: string
+): Promise<void> {
   lease.checkTransfer();
 
   const startTime = Date.now();
@@ -252,6 +313,9 @@ async function processOwnedDownload(downloadId: string, lease: WorkerLease): Pro
       return;
     }
     const expectations = readPersistedMediaExpectations(download.mediaExpectations);
+    const source = downloadSource(download.url, expectations);
+    if (family && source.family !== family)
+      throw new SourceDownloadError("Queued source changed before transfer");
     if (expectations?.version === 4) {
       // Approval belongs to this durable job and exact source, including after
       // restart. Revalidate before transferring any bytes, not just at UI time.
@@ -291,7 +355,7 @@ async function processOwnedDownload(downloadId: string, lease: WorkerLease): Pro
         enabled ? ("mkv" as const) : ("mp4" as const)
       ));
     // The validated durable payload selects its source; the worker stays source-agnostic.
-    const artifact = await transferSource(downloadSource(download.url, expectations), {
+    const artifact = await transferSource(source, {
       stagingDirectory: tempJobDir,
       filename,
       getContainer,
