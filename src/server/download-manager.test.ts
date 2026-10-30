@@ -145,6 +145,7 @@ import {
   shutdownDownloadProcessing,
 } from "./download-manager";
 import { getDownloadWorkerState } from "./download-worker-state";
+import * as queuedNames from "./sonarr-job-title";
 
 let testRoot: string;
 
@@ -748,6 +749,68 @@ it("advances an existing queued job after delayed reconciliation without retryin
   } finally {
     await shutdownDownloadProcessing();
     getDownloadWorkerState().shuttingDown = false;
+    vi.useRealTimers();
+  }
+});
+
+it("rereads the prepared queued name before constructing any staging or completed filename", async () => {
+  const job = progressiveJob("prepared-name");
+  const originalTitle = job.title;
+  const prepare = vi
+    .spyOn(queuedNames, "prepareSonarrJobTitle")
+    .mockImplementationOnce(async (selected, lease) => {
+      expect(selected.id).toBe(job.id);
+      await lease.mutate((tx) =>
+        tx.download.update({ where: { id: job.id }, data: { title: "Canonical.S01E01" } })
+      );
+    });
+  downloadUpdate.mockImplementation(async ({ data }) => {
+    if (data.title) job.title = data.title;
+    if (data.status) job.status = data.status;
+    return job;
+  });
+  downloadFindFirst.mockImplementation(async () => (job.status === "queued" ? job : null));
+  try {
+    await startDownloadProcessing();
+    const completed = downloadUpdate.mock.calls.find(
+      ([call]) => call.data.status === "completed"
+    )![0].data;
+    expect(completed.filePath).toBe(
+      path.join(testRoot, "sonarr", jobDirectoryName(job.title, job.id), `${job.title}.mp4`)
+    );
+    await expect(
+      access(path.join(testRoot, "sonarr", jobDirectoryName(originalTitle, job.id)))
+    ).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(prepare).toHaveBeenCalledOnce();
+  } finally {
+    prepare.mockRestore();
+  }
+});
+
+it("defers an unstarted job when name preparation is unavailable, then transfers it only once", async () => {
+  const job = progressiveJob("deferred-name");
+  const prepare = vi
+    .spyOn(queuedNames, "prepareSonarrJobTitle")
+    .mockRejectedValueOnce(Error("synthetic consumer unavailable"))
+    .mockResolvedValue(undefined);
+  downloadFindFirst.mockImplementation(async () => (job.status === "queued" ? job : null));
+  downloadUpdate.mockImplementation(async ({ data }) => {
+    if (data.status) job.status = data.status;
+    return job;
+  });
+  vi.useFakeTimers();
+  try {
+    await expect(startDownloadProcessing()).rejects.toThrow("synthetic consumer unavailable");
+    expect(job.status).toBe("queued");
+    expect(fetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(job.status).toBe("completed"));
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally {
+    await shutdownDownloadProcessing();
+    getDownloadWorkerState().shuttingDown = false;
+    prepare.mockRestore();
     vi.useRealTimers();
   }
 });

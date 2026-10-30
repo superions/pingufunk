@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import * as path from "path";
 import { SourceDownloadError } from "./download-failure";
 import { completeValidatedDownload, moveIntoJobDir } from "./download-completion";
+import { prepareSonarrJobTitle } from "./sonarr-job-title";
 
 async function getDownloadTempPath(): Promise<string> {
   const basePath = await getDownloadBasePath();
@@ -152,6 +153,7 @@ async function processQueue(): Promise<void> {
 
       // The configured concurrency is one; await status persistence before
       // polling again so the same queued row cannot be scheduled repeatedly.
+      await prepareSonarrJobTitle(nextDownload, lease);
       await processOwnedDownload(nextDownload.id, lease);
     }
   } finally {

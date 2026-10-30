@@ -3836,7 +3836,14 @@ Alias kennt; sonst gilt ihr kanonischer Titel. Die offiziellen globalen
 Null-/Minus-eins-Formen bleiben lesbar; bedingte oder auf Staffeln begrenzte
 Aliase werden nicht zu allgemeinen Importnamen erweitert. Es werden keine Sonarr-Metadaten,
 XEM-Aliase oder Historyeinträge umgeschrieben. GUI-Identität, deutsche Episodentitel,
-Quellen, GUIDs, Koordinaten und gespeicherte Jobpfade bleiben erhalten. Alle
+Quellen, GUIDs und Koordinaten bleiben erhalten. Bereits gespeicherte ungestartete
+v5-Serienjobs erhalten den bestätigten technischen Serienpräfix vor dem ersten
+Transfer unter derselben Lease und einem Vergleich des alten Jobinhalts. Das
+funktioniert ausschließlich aus der eingefrorenen Serien-/Episodenbindung,
+bei null übertragenen Bytes und ohne existierende Staging-/Completed-Artefakte.
+Keine ID-/Quell-/Intentänderung, keine Umbenennung laufender Jobs oder Dateien;
+Legacy-/benutzerdefinierte Namen bleiben unverändert. Bei Consumer-Ausfall wartet
+der Job vor dem Transfer auf den vorhandenen verzögerten Weckruf. Alle
 Match-Owner und RSS/NZB konsumieren denselben transienten Namen. Die native
 YouTube-Importfixture enthält absichtlich einen unbekannten deutschen Katalogtitel
 und verlangt echte RSS-Imports mit Titelmatch statt ID-only-Match.

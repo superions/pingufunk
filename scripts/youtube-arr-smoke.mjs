@@ -496,6 +496,15 @@ try {
       ])
     );
   const before = readJobs(controller);
+  const legacyNames = readFileSync(join(root, "pingufunk", "youtube-legacy-names.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  if (
+    new Set(legacyNames.map((row) => row.id)).size !== 4 ||
+    before.some((job) => job.category === "sonarr" && !job.title.startsWith("Synthetic.Series."))
+  )
+    fail("saved localized NZB names were not transitioned on the original four jobs");
   if (
     before.length !== 5 ||
     before.some((job) => JSON.parse(job.mediaExpectations).version !== 5) ||

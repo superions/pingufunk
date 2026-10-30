@@ -1258,7 +1258,12 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       diesen Titel selbst oder als serienweiten Alias bestätigt. Anzeige und
       deutsche Episodentitel bleiben getrennt, Staffelaliase gelten nicht global.
       GUIDs/Koordinaten/Quellbindungen bleiben stabil, RSS und NZB teilen den
-      korrigierten Namen; vorhandene Jobs/Dateien werden nicht umbenannt.
+      korrigierten Namen. Noch ungestartete v5-Serienjobs dürfen unter derselben
+      Lease und CAS ausschließlich ihren Serienpräfix korrigieren: feste
+      TVDB-/Episodenbindung, frisch bestätigter Sonarr-Titel, null übertragene
+      Bytes und keine Staging-/Completed-Artefakte. ID/Quelle/Intent und deutsche
+      Episodentitel bleiben gleich. Laufende Jobs/Dateien werden nicht umbenannt;
+      Consumer-Ausfall pausiert vor Transfer und erzeugt keinen Ersatzauftrag.
       Ergänzungsbefund erneut abgenommen 05.10.2026 auf `b189bf2`: 998 reguläre
       Tests, Lint/Types/Format/Build und Fork-CI 37323756642 einschließlich
       separater PG-Integration grün. Docker-Gate 37323756720 mit nativen
