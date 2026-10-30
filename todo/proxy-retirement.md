@@ -3538,7 +3538,7 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Antworten/Topologie/Dateien nicht öffentlich dokumentieren. Nachweise und
       verbleibende Abdeckung ehrlich trennen; kein Gesamtprodukt-/Proxyabschluss.
 
-- [ ] **P17.7 — Unabhängige Quellenworker und begrenzte YouTube-Teilabrufe.**
+- [x] **P17.7 — Unabhängige Quellenworker und begrenzte YouTube-Teilabrufe.**
       Ausdrücklicher Nutzerauftrag 30.10.2026: YouTube und Mediatheken parallel
       herunterladen; je ein eigener Quellenworker, Aufträge sauber anhand ihrer
       Quellenbindung zuweisen, Sonarr-/Radarr-Ziel und alle bestehenden Jobs/
@@ -3580,7 +3580,9 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Auf Nutzerklarstellung wird die aktuelle CI einschließlich der nativen
       PG-Testharnesses ausschließlich auf PostgreSQL 18 ausgerichtet. Der
       Medien-/Reconnectgate läuft früh vor den langen Consumerkombinationen.
-      Neue finale CI und Betriebsabnahme bleiben erforderlich.
+      Finale CI: alle sechs Checks von `22df50a` erfolgreich, einschließlich
+      beider nativen Container-/Arr-Ketten und PostgreSQL 18; PR #14 und #15
+      gemergt. Unveränderte grüne Produktnachweise werden wiederverwendet.
       Nutzerauftrag 30.10.2026 nach Merge der Quellenworker: Imagebefunde beheben
       und ausdrücklich ausrollen, aktive Downloads und Daten erhalten, danach
       tatsächliche Parallelität/Geschwindigkeit und die sechs beauftragten
@@ -3590,8 +3592,24 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Reale SQLite-/PG18-Regressionen prüfen beide Pfade mit unveränderten
       wartenden Zeilen und Dateien; nativer Mediengate prüft Drain, erhaltene
       Admission und anschließenden Restart. Das Image verwendet das versionierte
-      Medien-APK gemäß `docs/container-media-tools.md`; Runtime-/Scan-/Importabnahme
-      des tatsächlich verteilten Artefakts bleibt vor Abschluss erforderlich.
+      Medien-APK gemäß `docs/container-media-tools.md`. Das tatsächlich verteilte
+      amd64-Artefakt besteht den bestehenden Trivy-Freigabegate; ergänzender
+      Grype-Scan ohne behebbare High/Critical. Der ungefixte RTSP-Versionsbefund
+      bleibt dokumentiert, die betroffene Protokollfamilie ist nicht einkompiliert.
+      Betriebsabnahme 30.10.2026: aktiver Alttransfer vor dem Wechsel ohne
+      Abbruch abgeschlossen und nativ importiert, wartende Jobs/Daten erhalten;
+      geprüfte Imageidentität und gesunde Laufzeit nach normalem GitOps-Wechsel.
+      Ein Appcontainer überträgt unter einer exklusiven Lease beide Quellen
+      gleichzeitig: YouTube etwa 9–21 MB/s, Mediatheken etwa 38–70 MB/s im
+      18-Sekunden-Messfenster. Alle sechs beauftragten Folgen anschließend durch
+      Sonarr automatisch importiert und bis zur stabilen Bibliotheksdatei mit
+      passender Download-/Importhistory, 1080p und Laufzeit abgenommen. Deutsch
+      und Standard ohne Audiodeskription sind an der exakten Originalquelle
+      belegt; fehlende Audio-Sprachtags werden nicht erfunden. Die bestehende
+      Tdarr-Nachverarbeitung ist getrennt nachgewiesen: Original-Importgröße/-pfad
+      am tatsächlichen Eingang, aktuelle Größe am aktuellen Sonarr-Dateidatensatz,
+      HEVC-Video und unverändert kopiertes AAC-Audio. Keine History-Umschreibung,
+      Doppelgrabs oder zusätzlichen Container; Nachverfolgung beendet.
 
 ## Phase P18 — Eigenständige zweisprachige Projektdarstellung
 
