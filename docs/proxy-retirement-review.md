@@ -3888,8 +3888,11 @@ Adressen und lud jedes Asset als einzelne volle HTTP-Antwort. Der gepinte
 yt-dlp-YouTube-Extractor schreibt dagegen 10-MiB-Teilabrufe vor. Der Adapter
 verwendet deshalb jetzt begrenzte Range-Anfragen mit exakter Antwortprüfung;
 Mediathek-Vollabrufe behalten ihren Vertrag. Fehlerdiagnosen bleiben geschlossen
-und enthalten keine kurzlebigen Zugriffsadressen. Eine tatsächliche Steigerung
-der Produktionsgeschwindigkeit ist damit noch nicht attestiert.
+und enthalten keine kurzlebigen Zugriffsadressen. Die Produktionsmessung nach
+dem freigegebenen Rollout bestätigt gleichzeitig fortschreitende Bytes beider
+Quellen unter derselben Lease: YouTube etwa 9–21 MB/s und Mediatheken etwa
+38–70 MB/s über 18 Sekunden. Das ist ein begrenztes reales Messfenster, keine
+allgemeine Geschwindigkeitsgarantie für jede Quelle.
 
 Die beiden ersten nativen Imagegates für `e6d9f95` scheitern im bestehenden
 Reconnect-Fall: Ein unkeyed SAB-POST quittiert eine UUID, deren Zeile im
@@ -3906,3 +3909,33 @@ bestätigt danach eine dauerhaft vorhandene Zeile und sicheren Queuefortschritt.
 Die automatische CI-Matrix und alle aktiven nativen PG-Harnesses werden gemäß
 Nutzerklarstellung auf PostgreSQL 18 ausgerichtet. Der strikte Reconnectgate
 wird früh ausgeführt; die weiteren Consumer-/Persistenzprüfungen bleiben erhalten.
+
+PR #14 und #15 sind gemergt. Alle sechs finalen Checks für `22df50a` sind grün,
+einschließlich beider nativen Container-/Arr-Abnahmen und PostgreSQL 18. Das
+tatsächlich verteilte amd64-Artefakt besteht den bestehenden Trivy-Freigabegate;
+der ergänzende Grype-Scan enthält keine behebbaren High/Critical. Der ungefixte
+FFmpeg-RTSP-Versionsbefund wird nicht unterdrückt; die betroffene Protokollfamilie
+ist nicht einkompiliert. Die Medien-APK-Grenzen und verbleibenden Befunde stehen
+in `docs/container-media-tools.md`. Ein realer HLS-Absturz unter Musl wurde auf
+die Threadstackgrenze zurückgeführt; der kausale Fix und die unveränderte
+HLS-/Medienabnahme bestehen nativ.
+
+Der autorisierte Betriebswechsel ließ den aktiven Alttransfer ohne Abbruch
+fertigladen und durch Sonarr importieren. Wartende Aufträge und vorhandene Daten
+blieben erhalten. Vor dem normalen GitOps-Wechsel war die geprüfte Imageidentität
+auf allen zulässigen Nodes verfügbar; danach wurden tatsächliches Image, Health,
+ein Appcontainer mit zwei Quellenworkern und paralleler Bytefortschritt bestätigt.
+Andere Serviceimages, Datenbankschema und Profile blieben unverändert.
+
+Die sechs beauftragten Folgen wurden automatisch durch Sonarr importiert; die
+exakte Grab-/Download-/Importhistory-Paarung und aktuelle reguläre, stabile
+Bibliotheksdateien sind unabhängig geprüft. Alle Dateien sind 1920×1080 mit
+passender Laufzeit. Fehlende Audio-Sprachtags werden nicht als Deutsch ausgelegt:
+Frische, an die exakte Originalquelle gebundene Anbieterbelege bestätigen Deutsch
+und Standard ohne Audiodeskription. Die bestehende Tdarr-Automatik wandelte die
+Videos danach in HEVC um und kopierte AAC unverändert. Original-Importgrößen und
+-pfade sind am tatsächlichen Eingang belegt, aktuelle Dateigrößen stimmen mit den
+aktuellen Sonarr-Datensätzen überein. Diese Dateistände bleiben getrennt, native
+History wird nicht passend umgeschrieben. Keine Doppelgrabs oder manuellen
+Import-POSTs. P17.7 ist damit abgenommen; andere offene Phasen und bestehende
+unabhängige Importwarnungen werden dadurch nicht als erledigt erklärt.
