@@ -32,9 +32,14 @@ if (pgEnabled) {
     throw Error("Disposable loopback PostgreSQL required");
 }
 
-for (const provider of ["sqlite", "postgresql"] as const)
+for (const [provider, stop] of [
+  ["sqlite", "abort"],
+  ["sqlite", "drain"],
+  ["postgresql", "abort"],
+  ["postgresql", "drain"],
+] as const)
   it.skipIf(provider === "postgresql" && !pgEnabled)(
-    `runs both source workers under one real ${provider} fence and drains them before release`,
+    `${stop}s both source workers under one real ${provider} fence before release`,
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "pingufunk-source-workers-"));
       const pg = provider === "postgresql" ? new URL(pgUrl!) : null;
@@ -99,6 +104,8 @@ for (const provider of ["sqlite", "postgresql"] as const)
       const begun = new Set<string>();
       const aborted = new Set<string>();
       let finishMedia!: () => void;
+      let finishYoutube!: () => void;
+      let finishSecondMedia!: () => void;
       const mediaGate = new Promise<void>((resolve) => {
         finishMedia = resolve;
       });
@@ -106,7 +113,8 @@ for (const provider of ["sqlite", "postgresql"] as const)
         .spyOn(youtubeDownloadAdapter, "transfer")
         .mockImplementation(async (_source, context) => {
           begun.add("youtube");
-          await new Promise<void>((_resolve, reject) =>
+          await new Promise<void>((resolve, reject) => {
+            finishYoutube = resolve;
             context.signal.addEventListener(
               "abort",
               () => {
@@ -114,9 +122,11 @@ for (const provider of ["sqlite", "postgresql"] as const)
                 reject(new Error("Owned shutdown"));
               },
               { once: true }
-            )
-          );
-          throw Error("Unreachable");
+            );
+          });
+          const file = path.join(context.stagingDirectory, context.filename + ".webm");
+          await writeFile(file, "finished youtube bytes");
+          return { path: file, extension: ".webm" };
         });
       const mediathek = vi
         .spyOn(mediathekDownloadAdapter, "transfer")
@@ -124,7 +134,8 @@ for (const provider of ["sqlite", "postgresql"] as const)
           begun.add("mediathek");
           if (context.filename === "Synthetic.Second.Mediathek") {
             begun.add("second-media");
-            await new Promise<void>((_resolve, reject) =>
+            await new Promise<void>((resolve, reject) => {
+              finishSecondMedia = resolve;
               context.signal.addEventListener(
                 "abort",
                 () => {
@@ -132,8 +143,8 @@ for (const provider of ["sqlite", "postgresql"] as const)
                   reject(new Error("Owned shutdown"));
                 },
                 { once: true }
-              )
-            );
+              );
+            });
           }
           await mediaGate;
           const file = path.join(context.stagingDirectory, context.filename + ".webm");
@@ -204,11 +215,43 @@ for (const provider of ["sqlite", "postgresql"] as const)
         });
         void manager.startDownloadProcessing();
         await vi.waitFor(() => expect(begun.has("second-media")).toBe(true), { timeout: 3000 });
-        await manager.shutdownDownloadProcessing();
+        if (stop === "drain") {
+          let drained = false;
+          const draining = manager.drainDownloadProcessing().then(() => {
+            drained = true;
+          });
+          await manager.startDownloadProcessing();
+          expect(drained).toBe(false);
+          expect(aborted.size).toBe(0);
+          expect(await acquireWorkerLease()).toBeNull();
+          finishYoutube();
+          await vi.waitFor(async () =>
+            expect(
+              (await prisma.download.findUniqueOrThrow({ where: { id: "youtube" } })).status
+            ).toBe("completed")
+          );
+          expect(drained).toBe(false);
+          expect(await prisma.download.findUnique({ where: { id: "next-youtube" } })).toEqual(
+            queued
+          );
+          finishSecondMedia();
+          await draining;
+          expect(aborted.size).toBe(0);
+          expect(manager.getWorkerRuntimeState()).toMatchObject({
+            drainRequested: true,
+            state: "paused",
+            exclusiveOwnership: "idle",
+          });
+          for (const id of ["youtube", "second-media"]) {
+            const row = await prisma.download.findUniqueOrThrow({ where: { id } });
+            expect(row.status).toBe("completed");
+            expect((await readFile(row.filePath!, "utf8")).length).toBeGreaterThan(0);
+          }
+        } else await manager.shutdownDownloadProcessing();
         await running;
-        expect(aborted).toEqual(new Set(["youtube", "mediathek"]));
+        expect(aborted).toEqual(stop === "abort" ? new Set(["youtube", "mediathek"]) : new Set());
         expect((await prisma.download.findUnique({ where: { id: "youtube" } }))?.status).toBe(
-          "failed"
+          stop === "abort" ? "failed" : "completed"
         );
         expect(await prisma.download.findUnique({ where: { id: "next-youtube" } })).toEqual(queued);
         expect(await readFile(sentinel, "utf8")).toBe("preserved bytes");
@@ -220,9 +263,12 @@ for (const provider of ["sqlite", "postgresql"] as const)
         ).toBe("");
       } finally {
         finishMedia();
+        finishYoutube?.();
+        finishSecondMedia?.();
         await manager.shutdownDownloadProcessing();
         await running;
         getDownloadWorkerState().shuttingDown = false;
+        getDownloadWorkerState().drainRequested = false;
         youtube.mockRestore();
         mediathek.mockRestore();
         if (pg) {

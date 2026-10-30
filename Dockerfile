@@ -11,6 +11,19 @@ COPY prisma ./prisma
 COPY scripts/generate-database-clients.mjs ./scripts/
 RUN npm ci
 
+# Build only the media CLI's required external libraries. Keep an actual APK
+# receipt for vulnerability/package coverage; the build key never leaves here.
+FROM node:24-alpine AS media-tools
+RUN apk add --no-cache alpine-sdk openssl-dev x264-dev nasm
+COPY docker/media-tools/APKBUILD /build/media-tools/APKBUILD
+WORKDIR /build/media-tools
+RUN abuild-keygen -a -n \
+    && cp /root/.abuild/*.rsa.pub /etc/apk/keys/ \
+    && REPODEST=/packages abuild -F -r \
+    && cp /packages/build/$(apk --print-arch)/ffmpeg-9.0.2-r0.apk /ffmpeg.apk \
+    && mkdir /media-package-keys \
+    && cp /root/.abuild/*.rsa.pub /media-package-keys/
+
 # Explicit one-shot migration runner, built from the same schema and pinned CLI.
 # This target is never part of a normal application container startup.
 FROM deps AS migrator
@@ -57,16 +70,20 @@ WORKDIR /app
 RUN rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
-# Install runtime dependencies for FFmpeg and user management
+# Install the build-owned media package and runtime user management.
 # Note: yt-dlp standalone binary includes bundled Python, no separate install needed
+COPY --from=media-tools /ffmpeg.apk /tmp/ffmpeg.apk
+COPY --from=media-tools /media-package-keys /tmp/media-package-keys
 RUN apk add --no-cache \
     tar \
     xz \
-    wget \
     curl \
     su-exec \
     shadow \
-    ffmpeg \
+    x264-libs \
+    && apk add --no-network --keys-dir /tmp/media-package-keys /tmp/ffmpeg.apk \
+    && rm /tmp/ffmpeg.apk \
+    && rm -r /tmp/media-package-keys \
     && rm -rf /var/cache/apk/*
 
 COPY src/server/ytdlp-release.json /tmp/ytdlp-release.json
@@ -126,7 +143,7 @@ ENV HOSTNAME="0.0.0.0"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:6767/api/health?mode=ready || exit 1
+    CMD curl --fail --silent --max-time 8 http://localhost:6767/api/health?mode=ready >/dev/null || exit 1
 
 # Start the application with entrypoint for PUID/PGID support
 ENTRYPOINT ["/entrypoint.sh"]

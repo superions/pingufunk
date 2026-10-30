@@ -88,6 +88,18 @@ Transfers/Tools vor terminalem Write und Freigabe der Lease. Erfolg endet mit
 Prozessabschluss. Dann ist Expiry/Recovery nötig, keine Freigabe vorgetäuscht.
 Wartungsstarts entfernen das manuelle Signalflag und starten keinen Worker.
 
+Ein geplanter, separat autorisierter Wechsel verwendet zuerst `SIGUSR2` für
+einen nicht abbrechenden Drain. Der gemeinsame Prozesszustand sperrt nur neue
+Starts; beide bereits reservierten Quellenworker dürfen Medienprüfung und
+Completion abschließen. Weitere Admissions bleiben als dieselben `queued`-Jobs
+gespeichert. Der HTTP-Prozess bleibt verfügbar. Erst wenn `drainRequested=true`,
+`state=paused`, `exclusiveOwnership=idle` und keine aktive Arbeit beobachtet
+werden, darf der Operator den Prozess ersetzen. `SIGTERM` vorher behält seine
+Abbruchwirkung und ist kein verlustfreier Drain. Es gibt kein automatisches
+Resume im alten Prozess; nach einem überprüften Neustart übernimmt der neue
+Supervisor dieselbe Queue. Ein Drainfehler verlangt einen Readback und erlaubt
+keinen blinden Restart oder erneuten Grab.
+
 Lazy Entwicklungs-Toolinstallation ist keine leasegeschützte Downloadqueue und
 besitzt noch keinen vollständigen Prozessbaum-Abbruchvertrag; vor dem tatsächlichen
 Medientoolstart wird der Abbruch nochmals geprüft. Container besitzen die Tools

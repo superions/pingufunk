@@ -438,7 +438,9 @@ do {
       container,
       "node",
       "-e",
-      'const fs=require("node:fs");console.log(fs.existsSync("/tmp/media-mux-ready")&&fs.readdirSync("/proc").filter(x=>/^\\d+$/.test(x)).some(pid=>{try{const a=fs.readFileSync("/proc/"+pid+"/cmdline","utf8").split("\\0");return a[0]==="/usr/bin/ffmpeg"&&a.includes("-re");}catch{return false}}));',
+      // Cross-architecture Docker exposes the actual interpreter before the
+      // executable twice; still require its exact FFmpeg path and owned flag.
+      'const fs=require("node:fs");console.log(fs.existsSync("/tmp/media-mux-ready")&&fs.readdirSync("/proc").filter(x=>/^\\d+$/.test(x)).some(pid=>{try{const a=fs.readFileSync("/proc/"+pid+"/cmdline","utf8").split("\\0");const executable=a[0]==="/usr/bin/ffmpeg"||(/^\\/usr\\/bin\\/qemu-(x86_64|aarch64)$/.test(a[0])&&a[1]==="/usr/bin/ffmpeg"&&a[2]==="/usr/bin/ffmpeg");return executable&&a.includes("-re");}catch{return false}}));',
     ]).trim() === "true";
   if (!actualMux) await delay(100);
 } while (!actualMux && Date.now() < muxDeadline);
@@ -638,3 +640,53 @@ if (pgContainer) {
     throw new Error("Worker reconnect did not reconcile and drain safely");
   console.log("Owned PostgreSQL worker outage, failed-write pause and next-wakeup recovery passed");
 }
+
+// A planned update must finish active media, retain later admissions and only
+// restart after the common supervisor is idle. This is distinct from forced TERM.
+request("api/settings", JSON.stringify({ "download.convertToMkv": "true" }));
+run([
+  "exec",
+  container,
+  "node",
+  "-e",
+  'const fs=require("node:fs");fs.rmSync("/tmp/media-mux-ready",{force:true});fs.writeFileSync("/tmp/slow-next-mux","synthetic",{flag:"wx"});fs.chownSync("/tmp/slow-next-mux",Number(process.env.PUID),Number(process.env.PGID));',
+]);
+const plannedId = request("api?mode=addfile&cat=sonarr", nzb("slow-mux.mp4", 10).body).nzo_ids[0];
+const plannedDeadline = Date.now() + 40_000;
+while (Date.now() < plannedDeadline && readJob(plannedId).status !== "converting") await delay(100);
+if (readJob(plannedId).status !== "converting") throw new Error("Planned drain had no active mux");
+run(["kill", "--signal", "USR2", container]);
+request("api/settings", JSON.stringify({ "download.convertToMkv": "false" }));
+const plannedNext = request("api?mode=addfile&cat=sonarr", nzb("valid.mp4", 2).body).nzo_ids[0];
+const waitingBefore = readJob(plannedNext);
+if (waitingBefore.status !== "queued") throw new Error("Planned drain started a later job");
+while (Date.now() < plannedDeadline && readJob(plannedId).status !== "completed") await delay(200);
+const plannedFile = readJob(plannedId);
+if (plannedFile.status !== "completed" || !fileExists(plannedFile.filePath))
+  throw new Error("Planned drain lost its active media");
+let idle = false;
+while (Date.now() < plannedDeadline && !idle) {
+  const worker = request("api/system").runtime.worker;
+  idle =
+    worker.drainRequested === true &&
+    worker.state === "paused" &&
+    worker.exclusiveOwnership === "idle";
+  if (!idle) await delay(100);
+}
+if (!idle || JSON.stringify(readJob(plannedNext)) !== JSON.stringify(waitingBefore))
+  throw new Error("Planned drain did not release ownership and preserve its queued job");
+run(["stop", "--time", "15", container]);
+if (run(["inspect", "--format", "{{.State.ExitCode}}", container]).trim() !== "143")
+  throw new Error("Planned update did not stop its idle writer cleanly");
+run(["start", container]);
+let resumed = false;
+const resumedDeadline = Date.now() + 40_000;
+while (Date.now() < resumedDeadline && !resumed) {
+  resumed = readJob(plannedNext).status === "completed";
+  if (!resumed) await delay(200);
+}
+if (!resumed || !fileExists(readJob(plannedNext).filePath) || !fileExists(plannedFile.filePath))
+  throw new Error("Planned update lost completed media or its queued successor");
+console.log(
+  "Planned SIGUSR2 drain finished active mux, retained admission and resumed after idle restart"
+);

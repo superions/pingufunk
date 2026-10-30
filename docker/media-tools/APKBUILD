@@ -1,0 +1,58 @@
+# Build a tracked APK so image scanners retain FFmpeg version/package coverage.
+pkgname=ffmpeg
+pkgver=9.0.2
+pkgrel=0
+pkgdesc="FFmpeg media tools for Pingufunk (no capture devices or RTSP)"
+url="https://ffmpeg.org/"
+arch="x86_64 aarch64"
+license="GPL-3.0-or-later"
+makedepends="build-base pkgconf nasm openssl-dev x264-dev"
+_revision=946fcce07b6dcd0331c8cc609192aeff5e1924f8
+source="ffmpeg-$pkgver.tar.gz::https://github.com/FFmpeg/FFmpeg/archive/$_revision.tar.gz"
+builddir="$srcdir/FFmpeg-$_revision"
+
+build() {
+	# Keep built-in codecs, containers, filters and HTTP(S)/HLS. Device capture,
+	# playback integrations and RTSP are not Pingufunk sources. Explicitly disable
+	# autodetection so an incidental build dependency cannot add them back.
+	./configure \
+		--prefix=/usr \
+		--disable-autodetect \
+		--disable-debug \
+		--disable-doc \
+		--disable-ffplay \
+		--disable-shared \
+		--disable-indevs \
+		--enable-indev=lavfi \
+		--disable-outdevs \
+		--disable-demuxer=rtsp,sdp,rtp \
+		--disable-muxer=rtsp,rtp,rtp_mpegts \
+		--enable-gpl \
+		--enable-version3 \
+		--enable-libx264 \
+		--enable-openssl
+	make
+}
+
+check() {
+	./ffmpeg -version
+	./ffprobe -version
+	# CVE-2026-107696 affects RTSP redirect handling. That input/output family
+	# must remain absent, independently of a scanner's coarse version range.
+	local demuxers muxers
+	demuxers="$(./ffmpeg -hide_banner -demuxers)"
+	muxers="$(./ffmpeg -hide_banner -muxers)"
+	! printf '%s\n' "$demuxers" | grep -Eq '[[:space:]](rtsp|sdp|rtp)[[:space:]]'
+	! printf '%s\n' "$muxers" | grep -Eq '[[:space:]](rtsp|rtp|rtp_mpegts)[[:space:]]'
+}
+
+package() {
+	install -Dm755 ffmpeg "$pkgdir/usr/bin/ffmpeg"
+	install -Dm755 ffprobe "$pkgdir/usr/bin/ffprobe"
+	install -Dm644 COPYING.GPLv3 "$pkgdir/usr/share/licenses/ffmpeg/COPYING.GPLv3"
+	install -Dm644 LICENSE.md "$pkgdir/usr/share/licenses/ffmpeg/LICENSE.md"
+}
+
+sha512sums="
+48c07902a673a19ef5aa30096a3e48ce2f2a6e461cf5d206e370419af79fdf6397cb785a87eaed13c109e2ff7abbd1100f90cd82c7d3086f2a7517ed6bdef1da  ffmpeg-9.0.2.tar.gz
+"

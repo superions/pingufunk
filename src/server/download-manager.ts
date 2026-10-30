@@ -38,10 +38,11 @@ const runtime = getDownloadWorkerState();
 
 /** One delayed wakeup reconciles durable outcomes; it never re-enqueues a job. */
 function scheduleQueueRecovery(): void {
-  if (runtime.shuttingDown || !writesEnabled() || runtime.recoveryTimer) return;
+  if (runtime.shuttingDown || runtime.drainRequested || !writesEnabled() || runtime.recoveryTimer)
+    return;
   runtime.recoveryTimer = setTimeout(() => {
     runtime.recoveryTimer = undefined;
-    if (runtime.shuttingDown || !writesEnabled()) return;
+    if (runtime.shuttingDown || runtime.drainRequested || !writesEnabled()) return;
     void startDownloadProcessing().catch(() => {
       console.error("[Download] Queue recovery deferred; will reconcile again");
     });
@@ -53,12 +54,15 @@ function scheduleQueueRecovery(): void {
 export function getWorkerRuntimeState() {
   return {
     state:
-      runtime.pendingFailures.size > 0 || runtime.recoveryTimer
+      runtime.pendingFailures.size > 0 ||
+      runtime.recoveryTimer ||
+      (runtime.drainRequested && !runtime.processingPromise && !runtime.directWork.size)
         ? "paused"
         : runtime.processingPromise || runtime.directWork.size
           ? "draining"
           : "idle",
     configuredConcurrency: DOWNLOAD_CONCURRENCY,
+    drainRequested: runtime.drainRequested,
     sourceWorkers: Object.fromEntries(
       downloadSourceFamilies.map((family) => [
         family,
@@ -98,6 +102,9 @@ export async function recoverInterruptedDownloads(owned?: WorkerLease): Promise<
 export async function startDownloadProcessing(): Promise<void> {
   assertWritesEnabled();
   if (runtime.shuttingDown) throw new Error("Worker is shutting down");
+  // Admissions stay durable while an operator waits for existing transfers.
+  // Only the new process after rollout may schedule those queued jobs again.
+  if (runtime.drainRequested) return;
   if (runtime.processingPromise) {
     // A new queue row can arrive just after the last empty poll. Run one
     // additional pass after the current drain rather than losing that wakeup.
@@ -112,7 +119,7 @@ export async function startDownloadProcessing(): Promise<void> {
       do {
         runtime.rerunRequested = false;
         await processQueue();
-      } while (runtime.rerunRequested);
+      } while (runtime.rerunRequested && !runtime.drainRequested && !runtime.shuttingDown);
     } catch (error) {
       // Wake the same fenced drain after a transient failure, not the failed
       // transfer. It rereads terminal outcomes before advancing existing queued
@@ -128,7 +135,7 @@ export async function startDownloadProcessing(): Promise<void> {
 
 async function processQueue(): Promise<void> {
   let lease: WorkerLease | null = null;
-  while (!runtime.shuttingDown && !lease) {
+  while (!runtime.shuttingDown && !runtime.drainRequested && !lease) {
     lease = await acquireWorkerLease();
     if (!lease) {
       runtime.ownershipState = "waiting";
@@ -158,7 +165,7 @@ async function processQueue(): Promise<void> {
       // occupy the Mediathek worker. FIFO remains stable within each source.
       let cursor: string | undefined;
       const available = new Set(downloadSourceFamilies.filter((family) => !active.has(family)));
-      while (available.size && !runtime.shuttingDown) {
+      while (available.size && !runtime.shuttingDown && !runtime.drainRequested) {
         const queued = await prisma.download.findMany({
           where: { status: "queued" },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -166,6 +173,7 @@ async function processQueue(): Promise<void> {
           ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         });
         for (const job of queued) {
+          if (runtime.drainRequested || runtime.shuttingDown) break;
           const family = downloadWorkerFamily(job.url, job.mediaExpectations);
           if (!available.delete(family)) continue;
           runtime.sourceWorkers.add(family);
@@ -224,6 +232,18 @@ async function processQueue(): Promise<void> {
   }
 }
 
+/** Stop scheduling, finish both owned transfers and release their fence.
+ * Unlike shutdown, this leaves partial files, media children and the HTTP app
+ * alive. No automatic resume: the operator must observe idle before rollout.
+ */
+export async function drainDownloadProcessing(): Promise<void> {
+  runtime.drainRequested = true;
+  clearTimeout(runtime.recoveryTimer);
+  runtime.recoveryTimer = undefined;
+  await runtime.processingPromise;
+  await Promise.all(runtime.directWork);
+}
+
 /** Stop scheduling and abort only this process's transfers; do not re-grab. */
 export async function shutdownDownloadProcessing(): Promise<void> {
   runtime.shuttingDown = true;
@@ -238,6 +258,13 @@ export async function shutdownDownloadProcessing(): Promise<void> {
 export function installWorkerShutdownHandlers(stopBackground?: () => Promise<void>): void {
   if (runtime.shutdownHandlersInstalled) return;
   runtime.shutdownHandlersInstalled = true;
+  // SIGTERM retains bounded cancellation. A planned update first requests this
+  // non-aborting drain and waits for idle; it must not sacrifice active bytes.
+  process.on("SIGUSR2", () => {
+    void drainDownloadProcessing().catch(() => {
+      console.error("[Download] Planned drain failed; inspect durable state before rollout");
+    });
+  });
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {
       // This exact process owns the worker and tools. If persistence is unavailable,
@@ -276,6 +303,7 @@ async function executeSingleDownload(downloadId: string): Promise<void> {
   let lease: WorkerLease | null = null;
   try {
     if (runtime.shuttingDown) throw new Error("Worker is shutting down");
+    if (runtime.drainRequested) throw new Error("Worker is draining for planned update");
     lease = await acquireWorkerLease();
     if (!lease) throw new WorkerOwnershipError();
     runtime.activeLease = lease;

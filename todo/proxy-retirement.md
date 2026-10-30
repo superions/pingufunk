@@ -3581,6 +3581,17 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       PG-Testharnesses ausschließlich auf PostgreSQL 18 ausgerichtet. Der
       Medien-/Reconnectgate läuft früh vor den langen Consumerkombinationen.
       Neue finale CI und Betriebsabnahme bleiben erforderlich.
+      Nutzerauftrag 30.10.2026 nach Merge der Quellenworker: Imagebefunde beheben
+      und ausdrücklich ausrollen, aktive Downloads und Daten erhalten, danach
+      tatsächliche Parallelität/Geschwindigkeit und die sechs beauftragten
+      Sonarr-Imports abnehmen. Neuer nicht abbrechender SIGUSR2-Drain reserviert
+      keine weiteren Jobs, lässt beide aktiven Quellen abschließen und gibt die
+      Lease erst danach frei; bestehende SIGTERM-Abbruchsemantik bleibt erhalten.
+      Reale SQLite-/PG18-Regressionen prüfen beide Pfade mit unveränderten
+      wartenden Zeilen und Dateien; nativer Mediengate prüft Drain, erhaltene
+      Admission und anschließenden Restart. Das Image verwendet das versionierte
+      Medien-APK gemäß `docs/container-media-tools.md`; Runtime-/Scan-/Importabnahme
+      des tatsächlich verteilten Artefakts bleibt vor Abschluss erforderlich.
 
 ## Phase P18 — Eigenständige zweisprachige Projektdarstellung
 

@@ -40,6 +40,7 @@ interface DownloadWorkerState {
   recoveryTimer?: ReturnType<typeof setTimeout>;
   activeLease: WorkerLease | null;
   shuttingDown: boolean;
+  drainRequested: boolean;
   ownershipState: "idle" | "waiting" | "held" | "lost";
   directWork: Set<Promise<void>>;
   pendingFailures: Map<string, string>;
@@ -61,6 +62,7 @@ export function getDownloadWorkerState(): DownloadWorkerState {
     rerunRequested: false,
     activeLease: null,
     shuttingDown: false,
+    drainRequested: false,
     ownershipState: "idle",
     directWork: new Set(),
     // Unknown writes pause this drain until its interrupted jobs can be reconciled.

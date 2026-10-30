@@ -38,6 +38,9 @@ jobs:
           push: false
           load: true
           tags: pingufunk-p11-runtime-qa
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/superions/pingufunk
 
       - name: Build migration image without publishing
         uses: docker/build-push-action@v7
@@ -136,3 +139,25 @@ jobs:
         run: |
           bash scripts/tv-review-container-smoke.sh sqlite
           bash scripts/tv-review-container-smoke.sh postgresql
+
+      - name: Export the exact tested runtime without publishing
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p release-artifact
+          release_image="pingufunk-homelab-runner:${GITHUB_SHA}"
+          docker tag pingufunk-p11-runtime-qa "$release_image"
+          docker save -o release-artifact/runner-amd64.tar "$release_image"
+          docker image inspect "$release_image" --format '{{json .}}' | node -e '
+            let input="";process.stdin.on("data",x=>input+=x);process.stdin.on("end",()=>{
+              const x=JSON.parse(input);require("node:fs").writeFileSync("release-artifact/image-identity.json",JSON.stringify({id:x.Id,os:x.Os,architecture:x.Architecture,revision:x.Config.Labels["org.opencontainers.image.revision"]}));
+            });'
+          sha256sum release-artifact/runner-amd64.tar > release-artifact/archive.sha256
+
+      - name: Retain the tested runtime for explicit distribution
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: pingufunk-runner-amd64-${{ github.sha }}
+          path: release-artifact/
+          retention-days: 3
+          compression-level: 1
