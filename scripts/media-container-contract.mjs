@@ -229,7 +229,9 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
     await delay(200);
   const job = readJob(id);
   if (job.status !== status || job.expectations !== JSON.stringify(expected))
-    throw new Error("Frozen media contract mismatch");
+    throw new Error(
+      `Frozen media contract mismatch (${mediaKind}/${filename}: expected ${status}, actual ${job.status}; payloadSame=${job.expectations === JSON.stringify(expected)})`
+    );
   const facts = JSON.parse(job.validation ?? "null");
   if (status === "completed") {
     assertCompletedDiagnosis(id, job);

@@ -21,6 +21,11 @@ Der Healthcheck verwendet das vorhandene Curl; GNU Wget entfällt.
 Der Paketcheck erzeugt eine synthetische AV1-Datei mit einem reinen
 Buildcheck-Encoder, prüft Codec/Auflösung und dekodiert sie tatsächlich mit
 dav1d. Der Encoder gelangt nicht in die Laufzeitabhängigkeiten.
+Die Linkeroption für `GNU_STACK` setzt den nativen Thread-Stack auf 2 MiB,
+ohne ihn ausführbar zu machen. Der kleine musl-Standard läuft beim
+MPEG-TS-Einlesen über. Ein zusätzlicher Paketcheck erzeugt H.264/AAC-HLS und
+prüft den tatsächlichen MP4-Abschluss mit ADTS-zu-ASC und Faststart sowie
+anschließend beide Spuren und die Laufzeit.
 
 CVE-2026-107696 betrifft RTSP-Redirects bis einschließlich FFmpeg 9.0.2.
 Die entsprechende Ein-/Ausgabefamilie ist ausdrücklich aus dem Build entfernt.

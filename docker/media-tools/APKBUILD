@@ -16,9 +16,13 @@ build() {
 	# Keep built-in codecs, containers, filters and HTTP(S)/HLS. Device capture,
 	# playback integrations and RTSP are not Pingufunk sources. Explicitly disable
 	# autodetection so an incidental build dependency cannot add them back.
+	# musl's default thread stack overflows in the MPEG-TS demuxer. Request
+	# 2 MiB in GNU_STACK; keep the stack non-executable and the source unchanged.
 	./configure \
 		--prefix=/usr \
+		--extra-ldflags="-Wl,-z,stack-size=2097152" \
 		--disable-autodetect \
+		--enable-pthreads \
 		--disable-debug \
 		--disable-doc \
 		--disable-ffplay \
@@ -46,6 +50,13 @@ check() {
 		| aomenc --codec=av1 --passes=1 --cpu-used=8 --threads=1 --limit=1 --ivf -o av1.ivf -
 	[ "$(./ffprobe -v error -select_streams v -show_entries stream=codec_name,width,height -of csv=p=0 av1.ivf)" = "av1,64,64" ]
 	./ffmpeg -v error -xerror -c:v libdav1d -i av1.ivf -f null -
+	# Exercise the actual two-stream HLS fixup used by yt-dlp, including AAC's
+	# ADTS-to-ASC filter. A version/list check cannot detect a remux crash.
+	./ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=25 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac hls-source.mp4
+	./ffmpeg -y -v error -i hls-source.mp4 -c copy -hls_time 1 -hls_list_size 0 stream.m3u8
+	./ffmpeg -y -v error -xerror -i file:stream0.ts -map 0 -dn -ignore_unknown -c copy -f mp4 -bsf:a aac_adtstoasc -movflags +faststart file:hls-fixed.mp4
+	[ "$(./ffprobe -v error -show_entries stream=codec_type -of csv=p=0 hls-fixed.mp4)" = "$(printf 'video\naudio')" ]
+	./ffprobe -v error -show_entries format=duration -of csv=p=0 hls-fixed.mp4 | awk '{ if ($1 >= 1.8 && $1 <= 2.2) found=1 } END { exit !found }'
 	# CVE-2026-107696 affects RTSP redirect handling. That input/output family
 	# must remain absent, independently of a scanner's coarse version range.
 	local demuxers muxers
