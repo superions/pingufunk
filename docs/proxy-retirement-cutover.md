@@ -3,9 +3,11 @@
 Status: allgemeiner Cutoververtrag, keine neue Deploymentfreigabe oder konkrete
 Hostprozedur. P10.2 bindet vor einem weiteren Cutover GitOps-Stand, Consumer und
 freigegebenes Betriebsfenster. Die bereits abgenommene Installation und ihre
-nativen Routen stehen in P10.2–P10.6; P10.7 behält den eigenständigen Stopp vor
-einer endgültigen Proxyentfernung. Historische Zukunftsformulierungen unten
-verlangen keinen erneuten Cutover einer bereits unverändert geprüften Route.
+nativen Routen stehen in P10.2–P10.6; P10.7 dokumentiert die separat autorisierte
+endgültige Entfernung der inaktiven Proxy-Dienstdefinition am 31.10.2026.
+Für weitere Installationen gilt weiterhin der eigene Entfernungsauftrag.
+Historische Zukunftsformulierungen unten verlangen keinen erneuten Cutover
+einer bereits unverändert geprüften Route.
 
 ## RSS GUID transition
 
