@@ -1,5 +1,55 @@
 [
   {
+    "tvdbId": 481445,
+    "name": "Forgotten – Vanished in the Moor",
+    "germanName": "Das Vergessen – Spurlos im Moor",
+    "aliases": ["Das Vergessen - Spurlos im Moor"],
+    "episodes": [
+      {
+        "name": "Vermisst",
+        "seasonNumber": 1,
+        "episodeNumber": 1,
+        "aired": "2026-10-24",
+        "runtime": 44
+      },
+      {
+        "name": "Versunken",
+        "seasonNumber": 1,
+        "episodeNumber": 2,
+        "aired": "2026-10-24",
+        "runtime": 45
+      },
+      {
+        "name": "Verborgen",
+        "seasonNumber": 1,
+        "episodeNumber": 3,
+        "aired": "2026-10-24",
+        "runtime": 46
+      },
+      {
+        "name": "Verraten",
+        "seasonNumber": 1,
+        "episodeNumber": 4,
+        "aired": "2026-10-24",
+        "runtime": 46
+      },
+      {
+        "name": "Verschwunden",
+        "seasonNumber": 1,
+        "episodeNumber": 5,
+        "aired": "2026-10-25",
+        "runtime": 45
+      },
+      {
+        "name": "Verloren",
+        "seasonNumber": 1,
+        "episodeNumber": 6,
+        "aired": "2026-10-25",
+        "runtime": 45
+      }
+    ]
+  },
+  {
     "tvdbId": 472491,
     "name": "Take the Money and Run",
     "germanName": "Take the Money and Run",

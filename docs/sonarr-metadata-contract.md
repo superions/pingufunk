@@ -131,6 +131,35 @@ kausal am früheren sofortigen Rücksprung nach dem lokalen Treffer. Lokale
 Korrekturen bleiben unverändert; ein Ausfall beider konfigurierter API-Anbieter
 verwirft die unabhängig belegten Katalogepisoden nicht.
 
+## Belegte Katalogergänzung vom 30.10.2026
+
+`data/shows.json` verknüpft TVDB **481445** (`Forgotten – Vanished in the Moor`)
+mit `Das Vergessen – Spurlos im Moor`, einschließlich der Schreibweise mit
+einfachem Bindestrich. Die [ARD-Staffelübersicht](https://www.ardmediathek.de/serie/das-vergessen-spurlos-im-moor/staffel-1/Y3JpZDovL2Rhc2Vyc3RlLmRlL2Rhcy12ZXJnZXNzZW4tc3B1cmxvcy1pbS1tb29y/1)
+belegt die sechs Titel und die in Minuten angegebenen Episodenlaufzeiten:
+
+| Episode | Titel        | Laufzeit   |
+| ------- | ------------ | ---------- |
+| S01E01  | Vermisst     | 44 Minuten |
+| S01E02  | Versunken    | 45 Minuten |
+| S01E03  | Verborgen    | 46 Minuten |
+| S01E04  | Verraten     | 46 Minuten |
+| S01E05  | Verschwunden | 45 Minuten |
+| S01E06  | Verloren     | 45 Minuten |
+
+Die Katalogtage beziehen sich auf die [Ausstrahlung im Ersten](https://tivolifilm.tv/das-vergessen-spurlos-im-moor-feiert-tv-premiere-in-orf-1-und-im-ersten/):
+24.10.2026 für Folgen 1–4, 25.10.2026 für Folgen 5–6. Das sind weder die frühere
+ORF-Premiere noch die Mediathek-Verfügbarkeit. Der englische Serienname bleibt
+erhalten; Sonarr-Platzhalter `TBA` überschreiben keine belegten Katalogtitel.
+
+Der isolierte Katalogtest prüft URL-Lader und Dateifallback, tatsächlich deutsche
+Suchbegriffe, alle sechs exakten Newznab-/NZB-Zuordnungen und die Staffelantwort.
+Ohne deutsche Serienidentität oder konkrete Episodentitel scheitert dieselbe
+Zuordnung; fremde Themen/Staffeln/Titel, unpassende Dauer und Audiodeskription
+bleiben gesperrt. Medien und Sonarr-Antworten sind synthetisch, Writes gesperrt.
+Katalogtitel liefern keinen Tonsprachenbeleg. Kein produktiver Katalogwechsel,
+Grab oder Dateiimport wird durch diese Entwicklungsprüfung behauptet.
+
 ## Dauer und begrenztes RSS
 
 Die genehmigten technischen Startwerte stehen im TODO; keine Sonarr-Zusagen:
