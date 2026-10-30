@@ -74,16 +74,14 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
 # Note: yt-dlp standalone binary includes bundled Python, no separate install needed
 COPY --from=media-tools /ffmpeg.apk /tmp/ffmpeg.apk
 COPY --from=media-tools /media-package-keys /tmp/media-package-keys
-RUN apk add --no-cache \
+RUN cp /etc/apk/keys/* /tmp/media-package-keys/ \
+    && apk add --no-cache --keys-dir /tmp/media-package-keys \
     tar \
     xz \
     curl \
     su-exec \
     shadow \
-    x264-libs \
-    dav1d \
-    zlib \
-    && apk add --no-network --keys-dir /tmp/media-package-keys /tmp/ffmpeg.apk \
+    /tmp/ffmpeg.apk \
     && rm /tmp/ffmpeg.apk \
     && rm -r /tmp/media-package-keys \
     && rm -rf /var/cache/apk/*
