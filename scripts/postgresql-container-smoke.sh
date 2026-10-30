@@ -201,8 +201,10 @@ docker run -d --name "$APP_CONTAINER" \
   "$RUNNER_IMAGE" >/dev/null
 SMOKE_APP_STARTED=1
 ready=0
+# The application binds IPv4; BusyBox wget does not fall back from localhost's
+# IPv6 address. Use the runtime's curl with the exact listener for every image.
 for ((attempt = 0; attempt < 30; attempt++)); do
-  if docker exec "$APP_CONTAINER" wget -q --spider http://localhost:6767/api/download?mode=version; then
+  if docker exec "$APP_CONTAINER" curl -fsS --max-time 5 'http://127.0.0.1:6767/api/download?mode=version' >/dev/null; then
     ready=1
     break
   fi
@@ -254,7 +256,7 @@ DATABASE_URL="$RUNTIME_URL" docker run -d --name "$APP_CONTAINER" \
 SMOKE_APP_STARTED=1
 ready=0
 for ((attempt = 0; attempt < 30; attempt++)); do
-  if docker exec "$APP_CONTAINER" wget -q --spider http://localhost:6767/api/download?mode=version; then
+  if docker exec "$APP_CONTAINER" curl -fsS --max-time 5 'http://127.0.0.1:6767/api/download?mode=version' >/dev/null; then
     ready=1
     break
   fi
@@ -348,7 +350,7 @@ if [[ -n "$ROLLBACK_IMAGE" ]]; then
   SMOKE_APP_STARTED=1
   ready=0
   for ((attempt = 0; attempt < 30; attempt++)); do
-    if docker exec "$APP_CONTAINER" wget -q --spider http://localhost:6767/api/download?mode=version; then ready=1; break; fi
+    if docker exec "$APP_CONTAINER" curl -fsS --max-time 5 'http://127.0.0.1:6767/api/download?mode=version' >/dev/null; then ready=1; break; fi
     sleep 1
   done
   [[ "$ready" == 1 ]] || { echo "PG-compatible rollback image did not become ready" >&2; exit 1; }
