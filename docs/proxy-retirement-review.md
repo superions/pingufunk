@@ -3848,9 +3848,19 @@ Match-Owner und RSS/NZB konsumieren denselben transienten Namen. Die native
 YouTube-Importfixture enthält absichtlich einen unbekannten deutschen Katalogtitel
 und verlangt echte RSS-Imports mit Titelmatch statt ID-only-Match.
 
-Lokal bisher Produktgates erfolgreich; aktuelle Fork-CI und native Containergates
-stehen noch aus. Der lokale Docker-Daemon ist nicht gestartet; isolierte reale
-SQLite-/PG-/Arr-Container werden deshalb durch die bestehende Fork-CI geprüft.
+Produktcode `8967bbb`: [Produkt-CI](https://github.com/superions/pingufunk/actions/runs/41049821932)
+und [native Container-CI](https://github.com/superions/pingufunk/actions/runs/41049821950)
+vollständig erfolgreich, einschließlich PostgreSQL 17/18, SQLite/PG-Arr-Ketten,
+vier tatsächlicher YouTube-Importketten mit gespeicherten alten NZB-Namen,
+80/80 kalter nativer Imports je direktem/weitergeleitetem Weg ohne Doppelgrab
+bei erneutem RSS sowie Medien-, Persistenz-, TLS- und Rollbackgates.
+Der währenddessen integrierte Main-Stand `8bfcc30` ergänzt ausschließlich
+Katalogdaten, deren Tests und Dokumentation; Worker, Namenscode und native
+Fixtures bleiben unverändert. Kombinierter Checkpoint `7dfc3f1`: frisch 1.659
+reguläre Tests, Lint, Typecheck, Format und exakter OCI-Produktionsbuild grün.
+Die passenden CI-Gates werden für unveränderte Inputs wiederverwendet.
+Der lokale Docker-Daemon ist nicht gestartet; isolierte reale SQLite-/PG-/Arr-
+Container wurden durch die bestehende Fork-CI geprüft.
 Dies ist ein Selbstreview, keine unabhängige Peer-Abnahme und keine
 Produktions-/Bibliotheksabnahme. Bestehende widersprüchliche Importhistory wird
 separat nur lesend geprüft und nicht aus einem hasFile-Bit als korrekt erklärt.
