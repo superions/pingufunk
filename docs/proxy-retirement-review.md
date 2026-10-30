@@ -1,6 +1,6 @@
 # Review des Proxy-Ablöseplans
 
-Stand: 30.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
+Stand: 31.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
 Aktueller Implementierungsstatus ausschließlich im Phasen-TODO; die datierten
 folgenden Bewertungen sind keine konkurrierende Abnahme-/Deploymentfreigabe.
 Review von [proxy-retirement-plan.md](proxy-retirement-plan.md).
@@ -4073,3 +4073,32 @@ privat. Dieser reine Dokumentationsreplan ändert keine ausführbaren Inputs;
 Referenz-/Vollständigkeits- und Diffprüfung ersetzen keine behauptete neue
 Produkt-, Browser-, CI- oder Betriebsprobe. Fünf Checkboxen bleiben offen,
 davon eine bewusst zurückgestellte Option.
+
+## P10.7 — Endgültiger Rückbau der inaktiven Proxy-Dienstdefinition (31.10.2026)
+
+Der anschließende tatsächliche Live-Abgleich unterschied zwei Zustände:
+Der Proxy war längst außer Betrieb, seine null-Replika-Dienstdefinition stand
+aber noch in der aktiven GitOps-Quelle und in Swarm. Nach dem ausdrücklich
+beauftragten Rückbau wurden ausschließlich dieser Compose-Dienst und seine
+exklusive Config-Referenz entfernt. Die übrigen Dienstdefinitionen sowie
+alle gemeinsamen Networks, Secrets und Mounts bleiben semantisch exakt gleich.
+MCP prüfte die vollständige Compose-Datei und Repositorypolicies;
+der bestehende Portainer-Gitcontroller übernahm die Änderung ohne Zusatzcontroller.
+Git-Publikation allein wurde nicht als Abschluss gewertet: Die tatsächliche
+Proxy-Serviceabwesenheit ist anschließend unabhängig in Swarm bestätigt.
+
+Der globale Vorher-/Nachherabgleich bestätigt identische Spezifikationen und
+aktive Task-IDs aller übrigen Dienste. Pingufunks Container, Startzeit,
+Imageconfig/Revision und gesunde Laufzeit bleiben gleich; PostgreSQL-Identität,
+Settings, alle vorhandenen Downloadzeilen, Receipts und Dateifakten unverändert.
+Zum Änderungszeitpunkt waren keine Transfers oder Staging-Dateien aktiv.
+Sonarr und Radarr erreichen über ihre unveränderten Clientdaten die native
+SAB-Versionsantwort von Pingufunk; Prowlarr besitzt die direkte Indexerroute.
+Alle drei Arr-APIs antworten, ohne verbliebene Proxyverweise in den geprüften
+Consumerkonfigurationen. Dies waren ausschließlich GETs, keine Testsuche.
+Die drei unverändert weiterlaufenden Arr-Tags wurden vor Veröffentlichung gegen
+ihre aktuellen unveränderten Registrydigests geprüft; kein Imagewechsel.
+Keine Daten-/Backuplöschung und keine neuen Suchen/Grabs/Imports. Konkrete
+GitOps-/Task-/Datenbelege stehen ausschließlich im privaten Betriebsjournal.
+P10.7 ist damit tatsächlich abgeschlossen; vier Checkboxen bleiben offen.
+Der frühere Reviewstatus „P10.7 offen“ beschreibt den Stand vor diesem Auftrag.

@@ -1,6 +1,7 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 30.10.2026, nach dem ausdrücklich beauftragten kritischen Statusreview.
+Stand: 31.10.2026; kritischer Statusreview vom 30.10.2026 und anschließend
+ausdrücklich beauftragter Betriebsabschluss P10.7.
 Die Checkboxen unten sind der einzige ausführbare Arbeitsvertrag. Erledigte
 Anforderungen bleiben mit stabilen Paket-IDs und ihrem konkreten Nachweis
 referenzierbar; überholte Zwischenstände sind im
@@ -2089,13 +2090,27 @@ P11.2–P11.8 sind nur für PostgreSQL-Betriebsfreigabe Pflicht, P11.9 ist optio
       verbleibt ausdrücklich bei P06.4, nicht als behaupteter Routingfehler.
       Keine Freigabe zur Proxy-/Backup-/DB-Entfernung; P10.7 bleibt separat.
 
-- [ ] **P10.7 — Proxy erst nach letzter eigener Freigabe entfernen.** Nach
-      funktionaler/betrieblicher Abnahme und dokumentiertem DB-/Routing-/Jobzustand
-      **anhalten und explizite Proxy-Entfernungsfreigabe abwarten**. Erst dann
-      obsolete Proxyservice-/Routingkonfiguration gezielt aus GitOps nehmen,
-      bestehende Networks/Secrets/Volumes anderer Consumer unangetastet lassen.
-      Abnahme: native Indexer-/SAB-Verbindungen und gewählter DB-Betrieb bleiben gesund,
-      Rückweg dokumentiert, kein zweiter Proxy, keine Datenbank-/Backup-Löschung.
+- [x] **P10.7 — Inaktive Proxy-Dienstdefinition endgültig aus GitOps entfernen.**
+      Nach ausdrücklicher Nutzerfreigabe am 31.10.2026 (Europe/Berlin) den
+      bereits auf null Replikate gesetzten Kompatibilitätsproxy und seine
+      ausschließlich dort genutzte Config-Referenz aus der aktiven Stackquelle
+      entfernt. Vollständige Compose-/Repositorypolicyprüfung erfolgreich;
+      der normale Portainer-Gitcontroller hat die Änderung übernommen. Unabhängiger
+      Readback bestätigt tatsächliche Dienstabwesenheit in Swarm und GitOps.
+      Alle übrigen Dienste behalten exakt ihre Spezifikationen und
+      aktiven Task-IDs. Pingufunks Container/Startzeit, Image, Health, gewähltes
+      PostgreSQL, Settings, vorhandene Downloadzeilen, Receipts und Dateifakten
+      stimmen vor/nach dem Wechsel überein. Zum Änderungszeitpunkt waren keine
+      Transfers oder Staging-Dateien aktiv. Lesende Nachprüfung: Sonarr/Radarr
+      erreichen Pingufunks SAB-Versionsantwort mit ihren bestehenden Clientdaten;
+      Prowlarr behält die native Indexerroute ohne Proxyverweis. Alle drei
+      Arr-APIs antworten. Gemeinsame Networks/Secrets/Mounts, andere Configs,
+      Datenbanken, Archive und Backups unangetastet. Kein Neustart,
+      zweiter Controller oder neuer Grab.
+      Historische Adapterquellen sind keine aktive Dienstdefinition; ihre
+      Aufbewahrung verlangt keinen weiteren Produkt-/Rolloutpunkt. Aktuelle
+      Sicherungen und Git-Historie bleiben erhalten; eine Wiedereinführung oder
+      weitere Diensteingriffe benötigen einen neuen konkreten Auftrag.
 
 ## Phase P12 — Konsistente Toleranzen und verlässliche Settings-GUI
 
