@@ -3864,3 +3864,29 @@ Container wurden durch die bestehende Fork-CI geprüft.
 Dies ist ein Selbstreview, keine unabhängige Peer-Abnahme und keine
 Produktions-/Bibliotheksabnahme. Bestehende widersprüchliche Importhistory wird
 separat nur lesend geprüft und nicht aus einem hasFile-Bit als korrekt erklärt.
+
+## Quellenparallelität und YouTube-Transfer (30.10.2026)
+
+Der erneute Nutzerabgleich zeigt eine echte Funktionslücke: P17.4 hat zwar
+Mediathek-/YouTube-Downloadmodule, der zentrale Scheduler wartet jedoch jeden
+Transfer vollständig ab (`DOWNLOAD_CONCURRENCY=1`). Quellenmodule sind keine
+unabhängigen Ausführungsworker. Die alte Vorgabe „kein zweiter Worker“ erklärt
+die Implementierung, erfüllt aber nicht den jetzt klargestellten Parallelauftrag.
+P17.7 ersetzt genau diese Begrenzung; andere offene Phasen bleiben unabhängig.
+
+Zwei asynchrone Quellenworker teilen den bestehenden exklusiven Supervisor.
+Dieser blockiert doppelte Appwriter weiterhin über die getestete DB-Lease,
+startet je Quelle höchstens einen Transfer und liest auch hinter mehr als einer
+Queue-Seite weiter. Die validierte persistierte Quellenbindung entscheidet,
+Sonarr-/Radarr-Kategorien bleiben Importziele. Dateien, IDs und Receipts bleiben
+unverändert; weder neue DB-Spalten noch Queue-Neuanlage oder Replikazahlerhöhung.
+Normale Jobfehler schließen nur den eigenen Auftrag ab. Besitz-/DB-Fehler und
+Shutdown drainieren beide Abläufe vor gemeinsamer Freigabe.
+
+Der typisierte YouTube-Adapter konsumierte nur die vom Extractor aufgelösten
+Adressen und lud jedes Asset als einzelne volle HTTP-Antwort. Der gepinte
+yt-dlp-YouTube-Extractor schreibt dagegen 10-MiB-Teilabrufe vor. Der Adapter
+verwendet deshalb jetzt begrenzte Range-Anfragen mit exakter Antwortprüfung;
+Mediathek-Vollabrufe behalten ihren Vertrag. Fehlerdiagnosen bleiben geschlossen
+und enthalten keine kurzlebigen Zugriffsadressen. Eine tatsächliche Steigerung
+der Produktionsgeschwindigkeit ist damit noch nicht attestiert.

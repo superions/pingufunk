@@ -3377,7 +3377,8 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       `media-expectations.ts`, `sab-api.ts`, `download-manager.ts`,
       `download-completion.ts`, `source-media-facts.ts` und `tv-search-delivery.ts`.
       YouTube als zweite Implementierung beider Verträge integrieren;
-      keine YouTube-Zweige in Queue/Completion/GUI oder zweiter Worker.
+      keine YouTube-Zweige in Queue/Completion/GUI. Die damalige Begrenzung auf
+      einen Worker wird durch den Nutzerauftrag P17.7 vom 30.10.2026 ersetzt.
       Quellenfakten und Transfer verwenden denselben YouTube-Resolver;
       gemeinsam benutztes yt-dlp/FFmpeg bleibt Transportprimitive, kein Backend.
       `sourceProviderId=youtube` und kleine servervalidierte `sourceRef` für
@@ -3536,6 +3537,37 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Retry/Grab oder Altdateiersatz aus dieser Planfreigabe. Konkrete private
       Antworten/Topologie/Dateien nicht öffentlich dokumentieren. Nachweise und
       verbleibende Abdeckung ehrlich trennen; kein Gesamtprodukt-/Proxyabschluss.
+
+- [ ] **P17.7 — Unabhängige Quellenworker und begrenzte YouTube-Teilabrufe.**
+      Ausdrücklicher Nutzerauftrag 30.10.2026: YouTube und Mediatheken parallel
+      herunterladen; je ein eigener Quellenworker, Aufträge sauber anhand ihrer
+      Quellenbindung zuweisen, Sonarr-/Radarr-Ziel und alle bestehenden Jobs/
+      heruntergeladenen Daten erhalten. Die frühere Ein-Transfer-Begrenzung in
+      P15/P17.4 wird für diese Erweiterung ausdrücklich aufgehoben; keine
+      ungesicherte Replikazahlerhöhung. Owner: `download-manager.ts`,
+      `download-worker-state.ts`, `source-download.ts`, YouTube-Downloadadapter,
+      `download-transfer.ts` und geschlossene Runtimeanzeige.
+      Zwei unabhängige asynchrone Quellenworker unter derselben DB-Lease;
+      höchstens ein aktiver Auftrag pro Quelle, FIFO `createdAt,id` pro Quelle.
+      Neue Mediathekaufträge auch hinter langen YouTube-Rückstaus erkennen.
+      Gemeinsame Job-/Pfad-/Completionowner, keine zweite Persistenz oder neue
+      IDs. Recovery nur einmal vor dem Start beider Worker; bei Besitzverlust
+      beide abbrechen und drainieren, bevor die Lease freigegeben wird.
+      YouTube-Video/-Audio über höchstens 10-MiB-HTTP-Range-Anfragen laden,
+      exakte Bereiche/Gesamtlänge/ETag und tatsächliche Bytezahl prüfen;
+      keine Weiterleitungs-/Vollabruf-/Retryausweichpfade. Vorhandene Dateien
+      nicht überschreiben, bestehende Queue/History/Quellenbindung erhalten.
+      Abnahme: blockierter YouTube-Transfer plus gleichzeitig abgeschlossener
+      Mediathekauftrag, über eine DB-Seite älterer YouTubejobs, späterer
+      Mediathek-Enqueue, FIFO/kein Doppelstart, beide Importkategorien und
+      gemeinsame Shutdown-/Fencegrenze; echte disposable SQLite-/PG-Gates.
+      Reale lokale HTTP-Mehrbereichsdatei sowie ignorierte/verschobene Bereiche,
+      geänderte Länge/ETag, Kurz-/Überlänge, Abbruch und vorhandene Artefakte.
+      Native YouTube-Arr-Fixture muss die Teilabrufe bis zur Medien-/Importprüfung
+      konsumieren. Produktionsgeschwindigkeit erst am tatsächlich aktualisierten
+      Runtime messen; Source-/Mockgates nicht als Betriebsbeleg ausgeben.
+      Betriebswechsel benötigt den bestehenden separaten Freigabeweg und muss
+      aktive Alttransfers/Dateien erhalten, keine beiläufigen Abbrüche oder Grabs.
 
 ## Phase P18 — Eigenständige zweisprachige Projektdarstellung
 

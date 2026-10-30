@@ -36,7 +36,10 @@ export const youtubeDownloadAdapter: SourceDownloadAdapter = {
             Math.max(completedBytes + bytes, resolved.size, completedBytes + total),
             speed
           ),
-        context.signal
+        context.signal,
+        // Same 10 MiB request bound as the pinned yt-dlp YouTube extractor.
+        // A single full-file HTTP request can be throttled by the source CDN.
+        { chunkSize: 10 * 1024 * 1024 }
       );
       if (failure) throw new SourceDownloadError(transferFailureMessage(failure), failure);
       completedBytes += (await fs.stat(file)).size;

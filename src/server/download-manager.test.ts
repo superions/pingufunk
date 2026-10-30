@@ -20,6 +20,7 @@ const {
   configFindUnique,
   downloadCount,
   downloadFindFirst,
+  downloadFindMany,
   downloadFindUnique,
   downloadUpdate,
   downloadUpdateMany,
@@ -31,6 +32,7 @@ const {
   configFindUnique: vi.fn(),
   downloadCount: vi.fn(),
   downloadFindFirst: vi.fn(),
+  downloadFindMany: vi.fn(),
   downloadFindUnique: vi.fn(),
   downloadUpdate: vi.fn(),
   downloadUpdateMany: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock("@/lib/db", () => ({
     download: {
       count: downloadCount,
       findFirst: downloadFindFirst,
+      findMany: downloadFindMany,
       findUnique: downloadFindUnique,
       update: downloadUpdate,
       updateMany: downloadUpdateMany,
@@ -91,6 +94,12 @@ import { mediaSourceIdentity } from "@/services/source-audio";
 import { validateMediaProbe, MediaProbeError } from "./media-probe";
 import type { TransferFailure } from "./download-failure";
 import { mediathekDownloadAdapter } from "@/providers/mediathek/download";
+import { youtubeDownloadAdapter } from "@/providers/youtube/download";
+import {
+  youtubeRenditionFingerprint,
+  youtubeWatchUrl,
+  type YoutubeSourceReference,
+} from "@/lib/youtube-source";
 
 const basicFacts = {
   durationSeconds: 120,
@@ -961,6 +970,10 @@ beforeEach(async () => {
   configFindUnique.mockReset();
   downloadCount.mockReset();
   downloadFindFirst.mockReset();
+  downloadFindMany.mockReset().mockImplementation(async () => {
+    const job = await downloadFindFirst();
+    return job ? [job] : [];
+  });
   downloadFindUnique.mockReset();
   downloadUpdate.mockReset();
   downloadUpdateMany.mockReset();
@@ -1494,6 +1507,130 @@ it("rechecks the queue when an enqueue wakeup races with an empty poll", async (
   release();
   await Promise.all([first, wakeup]);
   expect(downloadFindFirst).toHaveBeenCalledTimes(2);
+});
+
+it("runs independent source workers, preserves per-source FIFO and destinations, and wakes an idle source behind a long backlog", async () => {
+  const source: YoutubeSourceReference = {
+    version: 1,
+    family: "youtube",
+    videoId: "abcdefghijk",
+    channelId: "UC" + "a".repeat(22),
+    mappingRevision: "a".repeat(64),
+    originalTitle: "Synthetic",
+    programme: { kind: "movie", targetId: 42 },
+    selection: {
+      videoFormat: "137",
+      audioFormat: "140",
+      audioTrack: "140",
+      language: "de",
+      width: 1920,
+      height: 1080,
+      duration: 120,
+    },
+  };
+  const expected = {
+    ...unknownJobMediaExpectations(),
+    version: 5,
+    mediaKind: "movie",
+    sourceRef: source,
+    durations: {
+      source: { seconds: 120, provenance: "source_catalogue", tolerancePercent: 10 },
+      metadata: null,
+    },
+    sourceAudio: {
+      provider: "youtube",
+      videoId: source.videoId,
+      channelId: source.channelId,
+      mediaIdentity: youtubeRenditionFingerprint(source),
+      language: "de",
+      selection: source.selection,
+    },
+    resolution: { width: 1920, height: 1080, provenance: "provider_dimensions" },
+  };
+  progressiveJob();
+  const jobs: Array<{
+    id: string;
+    title: string;
+    status: string;
+    category: string;
+    url: string;
+    mediaExpectations: string | null;
+  }> = Array.from({ length: 102 }, (_, index) => ({
+    id: "yt-" + index,
+    title: "YouTube-" + index,
+    status: "queued",
+    category: "radarr",
+    url: youtubeWatchUrl(source),
+    mediaExpectations: JSON.stringify(expected),
+  }));
+  const media = {
+    id: "media",
+    title: "Mediathek",
+    status: "queued",
+    category: "sonarr",
+    url: "https://synthetic.invalid/media.mp4",
+    mediaExpectations: null,
+  };
+  downloadFindMany.mockImplementation(async ({ cursor, take }) => {
+    const start = cursor ? jobs.findIndex((row) => row.id === cursor.id) + 1 : 0;
+    return jobs
+      .slice(start)
+      .filter((row) => row.status === "queued")
+      .slice(0, take);
+  });
+  downloadFindUnique.mockImplementation(
+    async ({ where }) => jobs.find((job) => job.id === where.id) ?? null
+  );
+  downloadUpdate.mockImplementation(async ({ where, data }) =>
+    Object.assign(jobs.find((job) => job.id === where.id)!, data)
+  );
+  const release = new Map<string, () => void>();
+  const started: string[] = [];
+  const run: typeof youtubeDownloadAdapter.transfer = async (_source, context) => {
+    started.push(context.filename);
+    await new Promise<void>((resolve) => release.set(context.filename, resolve));
+    const output = path.join(context.stagingDirectory, context.filename + ".webm");
+    await writeFile(output, context.filename);
+    return { path: output, extension: ".webm" };
+  };
+  const youtube = vi.spyOn(youtubeDownloadAdapter, "transfer").mockImplementation(run);
+  const mediathek = vi.spyOn(mediathekDownloadAdapter, "transfer").mockImplementation(run);
+  const work = startDownloadProcessing();
+  try {
+    await vi.waitFor(() => expect(started).toEqual(["YouTube-0"]));
+    // A new Mediathek job must be noticed while the YouTube worker stays busy,
+    // even when more than one database page of older YouTube jobs is waiting.
+    jobs.push(media);
+    void startDownloadProcessing();
+    await vi.waitFor(() => expect(started).toEqual(["YouTube-0", "Mediathek"]), { timeout: 2500 });
+    expect(getDownloadWorkerState().sourceWorkers).toEqual(new Set(["youtube", "mediathek"]));
+    release.get("Mediathek")!();
+    await vi.waitFor(() => expect(media.status).toBe("completed"));
+    expect(jobs[0].status).toBe("downloading");
+    expect(jobs[1].status).toBe("queued");
+    const completed = downloadUpdate.mock.calls.find(
+      ([call]) => call.where.id === "media" && call.data.status === "completed"
+    )![0].data;
+    expect(completed.filePath).toContain(path.join(testRoot, "sonarr"));
+    expect(await readFile(completed.filePath, "utf8")).toBe("Mediathek");
+    // Leave only the next same-source job, retaining the long-backlog evidence above.
+    jobs.splice(2, 100);
+    release.get("YouTube-0")!();
+    await vi.waitFor(() => expect(started).toEqual(["YouTube-0", "Mediathek", "YouTube-1"]));
+    release.get("YouTube-1")!();
+    await work;
+    expect(
+      jobs.filter((job) => job.category === "radarr").every((job) => job.status === "completed")
+    ).toBe(true);
+    expect(started).toHaveLength(3);
+  } finally {
+    // Never leave a fixture transfer holding the shared supervisor on a failed assertion.
+    jobs.splice(0);
+    for (const finish of release.values()) finish();
+    await work;
+    youtube.mockRestore();
+    mediathek.mockRestore();
+  }
 });
 
 it("marks only interrupted active rows failed at startup", async () => {

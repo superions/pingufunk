@@ -93,14 +93,33 @@ globalThis.fetch = async (input, init) => {
     const file = readFileSync(
       `/qa/youtube-${stream}${format === "136" ? "-720" : ""}.${stream === "video" ? "mp4" : "m4a"}`
     );
+    const range = new Headers(init?.headers).get("Range");
+    const part = range ? /^bytes=(\d+)-(\d+)$/.exec(range) : null;
+    if (range && (!part || Number(part[2]) - Number(part[1]) >= 10 * 1024 * 1024))
+      throw Error("Owned bounded YouTube range required");
+    const start = part ? Number(part[1]) : 0;
+    const end = part ? Math.min(Number(part[2]), file.length - 1) : file.length - 1;
+    if (start > end) throw Error("Owned valid YouTube range required");
     appendFileSync(
       "/qa/youtube-transfers.jsonl",
-      JSON.stringify({ id, stream, format, sig: url.searchParams.get("sig") }) + "\n"
+      JSON.stringify({
+        id,
+        stream,
+        format,
+        sig: url.searchParams.get("sig"),
+        start,
+        end,
+        total: file.length,
+        ranged: !!part,
+      }) + "\n"
     );
-    return new Response(file, {
+    return new Response(file.subarray(start, end + 1), {
+      status: part ? 206 : 200,
       headers: {
         "Content-Type": stream === "video" ? "video/mp4" : "audio/mp4",
-        "Content-Length": String(file.length),
+        "Content-Length": String(end - start + 1),
+        ETag: `"${createHash("sha256").update(file).digest("hex")}"`,
+        ...(part ? { "Content-Range": `bytes ${start}-${end}/${file.length}` } : {}),
       },
     });
   }

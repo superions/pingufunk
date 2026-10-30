@@ -27,12 +27,16 @@ function fixture() {
   };
 }
 
-it("confirms read-only capabilities separately from readiness and drops extra raw diagnostics", () => {
-  const value = fixture();
-  expect(
-    parseSystemInformation({ ...value, privateResponse: "synthetic private path/token" })
-  ).toEqual(value);
-});
+it.each([1, 2])(
+  "confirms capabilities and configured concurrency %i without raw diagnostics",
+  (concurrency) => {
+    const value = fixture();
+    value.runtime.worker.configuredConcurrency = concurrency;
+    expect(
+      parseSystemInformation({ ...value, privateResponse: "synthetic private path/token" })
+    ).toEqual(value);
+  }
+);
 
 it.each([
   (value: ReturnType<typeof fixture>) => {

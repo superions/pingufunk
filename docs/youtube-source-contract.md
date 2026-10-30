@@ -505,12 +505,31 @@ Zeitfenster ändern und keine zweite manuelle Suche als Lösung voraussetzen.
 
 Kanalaktivierung, Zuordnung und Discovery starten keine Downloads. Medien
 gehen nur über bestehende explizite GUI-/Arr-Aufträge und dieselben Enqueue-
-Receipts, Einzelworker-/Abbruchgrenzen, Kategorien, Pfade und Mediengates.
+Receipts, Besitz-/Abbruchgrenzen, Kategorien, Pfade und Mediengates.
 YouTube erhält einen eigenen stabilen Quell-/Fassungsnamespace; bestehende
 GUI-/RSS-/NZB-IDs, Jobs, Dateien, History und Profile werden nicht umgeschrieben.
 Deaktivieren beendet neue YouTube-Discovery und neue Veröffentlichungen,
 nicht bereits angenommene Jobs. Diese behalten ihren gespeicherten Vertrag;
 eine Stornierung bleibt eine eigene explizite Bedienhandlung.
+
+Nutzerklarstellung 30.10.2026: Je ein Quellenworker für YouTube und Mediatheken
+arbeitet parallel unter demselben exklusiven Queuebesitz; Details im
+[Workervertrag](worker-ownership-contract.md). Die frühere Begrenzung auf
+einen seriellen Download gilt damit nicht mehr. Quelle und Sonarr-/Radarr-Ziel
+bleiben unabhängige gespeicherte Eigenschaften.
+
+Der YouTube-Adapter lädt Video und Audio mit HTTP-Range-Anfragen von höchstens
+10 MiB statt jeweils einer einzigen unbeschränkten Anfrage. Das entspricht der
+Vorgabe im [gepinten yt-dlp-Extractor](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/yt_dlp/extractor/youtube/_video.py#L3081)
+und seinem [HTTP-Downloader](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/yt_dlp/downloader/http.py#L42).
+Die [offizielle FAQ](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#i-extracted-a-video-url-but-it-does-not-play-on-another-machine--in-my-web-browser)
+beschreibt die YouTube-Drosselung zu großer Anfragen. Jede Antwort muss 206,
+den exakten Bytebereich, eine konstante Gesamtlänge und unveränderte ETags
+(wenn vorhanden) liefern. Keine Weiterleitung, Bereichsrückfall oder blinde
+Wiederholung. Dateiöffnung bleibt exklusiv; vorhandene Dateien werden nicht
+überschrieben. Signed URLs bleiben flüchtig und erscheinen nicht in Fehlern.
+Chunks verbessern den Transferpfad; eine reale Geschwindigkeitszusage benötigt
+zusätzlich eine Messung am tatsächlich laufenden Build.
 
 ## Grenzen der Abnahme
 

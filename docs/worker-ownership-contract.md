@@ -1,8 +1,14 @@
-# Exklusiver Einzelworker, Fencing und Shutdown
+# Exklusiver Queuebesitz, Quellenworker und Shutdown
 
 Entwicklungsvertrag P15.1; Status und Abnahme ausschließlich im
 [Phasen-TODO](../todo/proxy-retirement.md). Kein Produktionsrestart,
 Replikazahlerhöhung oder Cutover ist freigegeben.
+
+Nutzerklarstellung 30.10.2026 (P17.7): YouTube und Mediatheken müssen unabhängig
+und parallel herunterladen. Der bisherige serielle Einzelworker wird durch
+zwei Quellenworker unter einem exklusiven Supervisor ersetzt. Das sind zwei
+asynchrone Transferabläufe im selben Appprozess, keine zusätzlichen Container
+oder ungesicherten DB-Writer. Metadaten-/Belegworker sind davon unabhängig.
 
 ## Besitz ist kein Prozessflag
 
@@ -26,7 +32,7 @@ und bei PG der dauerhafte First-write-Checkpoint bleiben vor Raw-/Modelwrites
 wirksam. Der Checkpoint wird vor interaktiven Transaktionen vorbereitet, nicht
 über eine dort blockierte zweite Poolverbindung.
 
-Der zweite Prozess berührt fremde aktive Jobs nicht. Nur nach erworbenem Besitz
+Ein zweiter Supervisorprozess berührt fremde aktive Jobs nicht. Nur nach erworbenem Besitz
 werden `downloading`/`converting` als unterbrochen beendet. Recovery transferiert
 nichts erneut; neue `queued`-Jobs dürfen anschließend weiterlaufen. Ein DB-Fehler
 oder ungewisser Commit ist kein Retrybeleg. Bereits persistierte terminale
@@ -41,6 +47,27 @@ Leader-Exit allein lässt terminierte Nachkommen nicht absichtlich zurück.
 Auf Windows ist ein begrenzter PID-bezogener `taskkill`-Pfad implementiert,
 aber nicht als nativ geprüft behauptet. Ein Killaufruf ist kein Abschluss:
 Transfer-/Probe-/Muxowner warten auf tatsächliches `close`.
+
+Der Supervisor reserviert je registrierter Quelle genau einen aktiven Platz.
+Die gespeicherte, validierte Quellenreferenz entscheidet über den Worker;
+Legacy-Mediathekaufträge behalten ihren Pfad. Ungültige Referenzen werden durch
+den normalen Jobowner abgelehnt, nicht aus einem Titel oder einer Zielkategorie
+erraten. Die Sonarr-/Radarr-Kategorie bleibt das unabhängige Importziel.
+FIFO gilt innerhalb einer Quelle mit stabiler Reihenfolge `createdAt, id`.
+Seitenweise Queueprüfung passiert auch hinter einem langen Rückstau der anderen
+Quelle; ein neu eingegangener Auftrag der freien Quelle wird beim nächsten
+einsekündigen Poll erkannt. Aufträge werden weder neu erzeugt noch in der
+Datenbank umsortiert. Titelvorbereitung, eigene Pfade, Medienprüfung und
+Completion bleiben gemeinsame Owner.
+
+Normale Jobfehler belegen nur den eigenen Quellenworker. Bei Besitz-/DB-Fehlern
+oder Shutdown bricht der Supervisor beide eigenen Abläufe ab und wartet auf
+ihren Abschluss, bevor er die gemeinsame Lease freigibt. Startup-Recovery
+läuft genau einmal vor beiden Quellenworkern; kein Worker beendet den aktiven
+Nachbarn als angeblich unterbrochen. Wartende Aufträge und bestehende Artefakte
+werden durch die Architekturänderung nicht migriert oder umbenannt. Ein Update
+darf einen alten laufenden Transfer nicht ungeprüft abbrechen; Betriebswechsel
+und Bestand müssen separat abgestimmt werden.
 
 FFmpeg überschreibt keine vorhandene Ausgabe (`-n`), abgebrochene Muxes werden
 auch bei Exitcode null nicht completed. Jobbezogene Staging-/Zielverzeichnisse
@@ -70,8 +97,10 @@ bereits. Ein harter Prozessabschluss lässt die Lease konservativ auslaufen.
 
 Runtime liefert nur geschlossene prozesslokale Zustände `idle`, `waiting`,
 `held`, `lost`, niemals Owner/Fence/Configinhalt. `held` beobachtet diesen
-Leaseowner; es ist kein Download- oder Arr-Importnachweis und keine Freigabe für
-mehrere Worker. Konfiguriert bleibt Parallelität eins.
+Leaseowner; es ist kein Download- oder Arr-Importnachweis. Konfiguriert sind
+insgesamt zwei Downloads, höchstens einer je Quelle. `sourceWorkers` meldet
+deren geschlossenen Zustand `idle`/`busy`, ohne Job- oder Quelldaten offenzulegen.
+Eine Erhöhung der Appreplikazahl ist damit nicht vorgesehen.
 
 **Gemischte alte/neue Writer sind nicht sicher:** historische Images kennen die
 Lease nicht. Vor einem separat freigegebenen Update alle alten Writer stoppen
