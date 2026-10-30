@@ -52,6 +52,8 @@ import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { mergeSonarrShow } from "./sonarr-provider";
 import { sourceMediaFacts } from "./source-media-facts";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { GET as downloadNzb } from "@/app/api/newznab/fake_nzb_download/route";
+import { parseNzbContent } from "./nzb-release";
 
 const series = catalogue.find((show) => show.tvdbId === 258535)!;
 const episodes = [
@@ -86,8 +88,11 @@ const sources: ApiResultItem[] = episodes.map((episode, index) => ({
 }));
 let fallback = false;
 let extraSources: ApiResultItem[] = [];
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: ReturnType<typeof vi.fn<(input: string, init?: RequestInit) => Promise<Response>>>;
 let catalogueClock = Date.now();
+let selectedSeries = series;
+let selectedSonarrEpisodes = sonarrEpisodes;
+let selectedSources = sources;
 
 beforeEach(() => {
   // The real catalogue owner refreshes hourly; each case must exercise its
@@ -108,6 +113,9 @@ beforeEach(() => {
   state.tmdb.mockReset().mockResolvedValue(null);
   fallback = false;
   extraSources = [];
+  selectedSeries = series;
+  selectedSonarrEpisodes = sonarrEpisodes;
+  selectedSources = sources;
   vi.stubEnv("PINGUFUNK_SONARR_API_KEY", "synthetic-catalogue-key");
   vi.stubEnv("PINGUFUNK_SONARR_API_KEY_FILE", undefined);
   // This is an isolated read-only check, not a production maintenance change.
@@ -119,11 +127,16 @@ beforeEach(() => {
     if (url.hostname === "example.invalid" && url.pathname.endsWith("/system/status"))
       return Response.json({ version: "4.0.20.3014" });
     if (url.hostname === "example.invalid" && url.pathname.endsWith("/series"))
-      return Response.json([{ id: 12, tvdbId: 258535, title: series.name, monitored: true }]);
+      return Response.json([
+        { id: 12, tvdbId: selectedSeries.tvdbId, title: selectedSeries.name, monitored: true },
+      ]);
     if (url.hostname === "example.invalid" && url.pathname.endsWith("/episode"))
-      return Response.json(sonarrEpisodes);
+      return Response.json(selectedSonarrEpisodes);
     if (url.hostname === "mediathekviewweb.de")
-      return Response.json({ result: { results: [...sources, ...extraSources] }, err: null });
+      return Response.json({
+        result: { results: [...selectedSources, ...extraSources] },
+        err: null,
+      });
     throw new Error(`Unexpected synthetic catalogue request: ${init?.method ?? "GET"}`);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -310,6 +323,128 @@ it("fails causally without the catalogue titles, without guessing from equal run
   missing.episodes = missing.episodes.map((episode) => ({ ...episode, name: "TBA" }));
   expect(matchSonarrEpisodes(missing, sources, 300, 10)).toEqual([]);
 });
+
+it.each([false, true])(
+  "maps all six Vergessen episodes from the actual catalogue through Newznab/NZB, local fallback=%s",
+  async (localFallback) => {
+    fallback = localFallback;
+    const expected = [
+      { name: "Vermisst", runtime: 44, aired: "2026-10-24" },
+      { name: "Versunken", runtime: 45, aired: "2026-10-24" },
+      { name: "Verborgen", runtime: 46, aired: "2026-10-24" },
+      { name: "Verraten", runtime: 46, aired: "2026-10-24" },
+      { name: "Verschwunden", runtime: 45, aired: "2026-10-25" },
+      { name: "Verloren", runtime: 45, aired: "2026-10-25" },
+    ].map((episode, index) => ({ ...episode, seasonNumber: 1, episodeNumber: index + 1 }));
+    const germanName = "Das Vergessen – Spurlos im Moor";
+    selectedSeries = catalogue.find((show) => show.tvdbId === 481445)!;
+    expect(selectedSeries).toMatchObject({
+      name: "Forgotten – Vanished in the Moor",
+      germanName,
+      episodes: expected,
+    });
+    selectedSonarrEpisodes = expected.map((episode, index) => ({
+      id: 201 + index,
+      seriesId: 12,
+      seasonNumber: 1,
+      episodeNumber: index + 1,
+      title: "TBA",
+      airDateUtc: `${episode.aired}T04:00:00Z`,
+      runtime: 45,
+      hasFile: false,
+      monitored: true,
+    }));
+    selectedSources = expected.map((episode, index) => ({
+      ...sources[0],
+      channel: "ARD",
+      topic: germanName,
+      title: `Folge ${index + 1}: ${episode.name}`,
+      duration: episode.runtime * 60 - 12,
+      url_video: `https://example.invalid/vergessen-${index + 1}.mp4`,
+      url_website: `https://example.invalid/vergessen-${index + 1}`,
+    }));
+    // Retrieval must actually ask for a German identity; English-only queries
+    // reproduce the empty provider result instead of an always-successful mock.
+    const defaultFetch = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
+      if (new URL(input).hostname !== "mediathekviewweb.de") return defaultFetch(input, init);
+      const request = JSON.parse(String(init?.body)) as { queries: { query: string }[] };
+      const found = request.queries.some(({ query }) =>
+        query.toLocaleLowerCase("de-DE").includes("das vergessen")
+      );
+      return Response.json({ result: { results: found ? selectedSources : [] }, err: null });
+    });
+    const show = (await getShowInfoByTvdbId(481445))!;
+    expect(show.germanName).toBe(germanName);
+    expect(show.sonarrBlockedCoordinates).toEqual([]);
+    expect(matchSonarrEpisodes(show, selectedSources, 300, 10)).toHaveLength(6);
+    expect(
+      matchSonarrEpisodes(
+        show,
+        selectedSources.map((source) => ({ ...source, topic: "Das Vergessen - Spurlos im Moor" })),
+        300,
+        10
+      )
+    ).toHaveLength(6);
+    const withoutGermanIdentity = { ...show, germanName: null, aliases: [] };
+    expect(matchSonarrEpisodes(withoutGermanIdentity, selectedSources, 300, 10)).toEqual([]);
+    const withoutEpisodeTitles = {
+      ...show,
+      episodes: show.episodes.map((episode) => ({ ...episode, name: "TBA" })),
+    };
+    expect(matchSonarrEpisodes(withoutEpisodeTitles, selectedSources, 300, 10)).toEqual([]);
+    for (const changes of [
+      { topic: "Unrelated synthetic series" },
+      { title: "Folge 1: Unrelated synthetic episode" },
+      { title: "Folge 1: Versunken" },
+      { title: "Vermisst (S02/E01)" },
+      { duration: 600 },
+      { title: "Folge 1: Vermisst (Audiodeskription)" },
+    ])
+      expect(matchSonarrEpisodes(show, [{ ...selectedSources[0], ...changes }], 300, 10)).toEqual(
+        []
+      );
+    for (const episode of expected) {
+      const response = await GET(
+        new NextRequest(
+          `http://localhost/api/newznab?t=tvsearch&tvdbid=481445&season=1&ep=${episode.episodeNumber}`
+        )
+      );
+      expect(response.status).toBe(200);
+      const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+      expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: "1" });
+      expect(channel.item).toHaveLength(1);
+      const item = channel.item[0];
+      expect(item.title[0]).toContain(`S01E0${episode.episodeNumber}.${episode.name}`);
+      // Catalogue titles establish identity, never the source's audio language.
+      expect(item.title[0]).not.toContain("GERMAN");
+      expect(item["newznab:attr"]).toContainEqual({ $: { name: "tvdbid", value: "481445" } });
+      const nzb = await downloadNzb(new NextRequest(item.enclosure[0].$.url));
+      expect(nzb.status).toBe(200);
+      expect(parseNzbContent(await nzb.text())).toMatchObject({
+        title: item.title[0],
+        url: selectedSources[episode.episodeNumber - 1].url_video,
+        mediaExpectations: {
+          durations: {
+            metadata: { seconds: episode.runtime * 60, provenance: "episode_metadata" },
+          },
+        },
+      });
+    }
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=481445&season=1")
+    );
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: "6" });
+    expect(channel.item.map((item: { title: string[] }) => item.title[0]).sort()).toEqual(
+      expected.map((episode) =>
+        expect.stringContaining(`S01E0${episode.episodeNumber}.${episode.name}`)
+      )
+    );
+    expect(selectedSonarrEpisodes.every((episode) => episode.title === "TBA")).toBe(true);
+    expect(state.forbiddenWrite).not.toHaveBeenCalled();
+  }
+);
 
 it("keeps foreign topics, foreign source seasons and wrong durations rejected", async () => {
   const show = (await getShowInfoByTvdbId(258535))!;
