@@ -32,6 +32,19 @@ export const mediathekDownloadAdapter: SourceDownloadAdapter = {
   async transfer(source, context) {
     if (source.family !== "mediathek") throw new SourceDownloadError("Wrong download source");
     context.signal.throwIfAborted();
+    if (context.expectations?.version === 6) {
+      const { revalidateMediathekProgramme } = await import("@/services/source-programme");
+      try {
+        await revalidateMediathekProgramme(
+          source.url,
+          context.expectations,
+          undefined,
+          context.signal
+        );
+      } catch {
+        throw new SourceDownloadError("Programme source no longer verified");
+      }
+    }
     if (isStreamingUrl(source.url)) {
       const urn = srfUrnFromUrl(source.url);
       const maxHeight = getStreamHeight(source.url);

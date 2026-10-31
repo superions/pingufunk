@@ -90,6 +90,8 @@ export interface TvdbData {
   germanName: string | null;
   aliases: TvdbAlias[];
   episodes: TvdbEpisode[];
+  /** Curated publisher-to-canonical bindings; instance coordinates still require validation. */
+  mediathekProgrammes?: import("@/lib/mediathek-programme").MediathekProgrammeBinding[];
   /** Transient provenance only; never persisted as authoritative base metadata. */
   sonarrBlockedCoordinates?: string[];
   /** Validated instance coordinates; base episode values themselves stay untouched. */
@@ -214,6 +216,8 @@ export interface MatchedEpisodeInfo {
   releaseShowName?: string;
   matchedTitle: string;
   tvdbId: number;
+  /** Explicit Mediathek match context, separate from the untouched catalogue row. */
+  mediathekProgramme?: import("@/lib/mediathek-programme").MediathekProgrammeIdentity;
   /** Visible explicit-search review, not permission to enqueue. */
   runtimeConflict?: boolean;
   runtimeTolerancePercent?: number;

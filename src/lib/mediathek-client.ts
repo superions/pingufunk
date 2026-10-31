@@ -67,6 +67,7 @@ export async function queryMediathekView(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
+        ...(options.signal ? { signal: options.signal } : {}),
       },
       { deadlineAt, requestBudget: options.requestBudget }
     );
@@ -80,7 +81,8 @@ export async function queryMediathekView(
     const parsed = (await readBoundedProviderJson(
       response,
       deadlineAt,
-      MAX_RESPONSE_BYTES
+      MAX_RESPONSE_BYTES,
+      options.signal
     )) as MediathekApiResponse;
     if (parsed?.err || !Array.isArray(parsed?.result?.results)) {
       console.error("[MediathekClient] Invalid or unsuccessful API response");

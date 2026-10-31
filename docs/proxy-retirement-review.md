@@ -4404,3 +4404,32 @@ die ursprüngliche Einordnung als echte Inhaltskonflikte ist damit korrigiert.
 Quellenverfügbarkeit, Medienfreigabe und tatsächlicher Import bleiben getrennte
 Nachweise. P19.1 ist abgeschlossen; P19.2–P19.6 und die getrennten Bestands-
 und Transferabnahmen bleiben offen.
+
+## P19.2 — Explizite Mediathek-Programmbindung (in Arbeit)
+
+Der ergänzende Katalog erhält eine optionale Bindung aus öffentlicher
+Programmseite, erwarteter Sender-/Titel-/Quellkoordinate und getrenntem
+Einzelziel. Der vorhandene `source-programme.ts`-Consumer prüft diese Bindung;
+er erfindet keine YouTube-Referenz und ersetzt weder Serien- noch Medienowner.
+Der lesende Metadatenabgleich bestätigt für „Sommersonnenwende“ weiterhin das
+90-minütige Sonarr-Ziel S08E01; die kurze Specialfassung ist kein Ersatzziel.
+Keine neue Bibliothekssuche, Übertragung oder Bestandsänderung durch diese Prüfung.
+
+Der vorbereitende Leser-/Workerstand unterstützt das strikte Joberwartungsformat
+v6, bevor ein Producer es ausgibt. Publisher und kanonisches Ziel bleiben
+getrennt; Quelllaufzeit, Episodenlaufzeit, deutscher Ton und genaue Auflösung
+bleiben Pflicht. NZB-Abruf und neue Annahme prüfen aktuelle Quellenbindung,
+frischen Instanzbestand und geltende Toleranz. Der Worker verwendet dagegen
+die eingefrorene angenommene Bindung und validiert vor der Übertragung erneut
+das exakte Programm samt Rendition. Spätere Katalogänderungen schreiben
+angenommene Jobs nicht um. Historische v1–v5, Schema, Queue- und Dateipfade
+bleiben erhalten; der bestehende Diagnoseconsumer liest auch v6-Medienfakten.
+
+Lokaler Lesercheckpoint: 1.772 Tests erfolgreich, 28 Opt-in-Fälle getrennt;
+Lint, Typecheck, Format und Build erfolgreich. 155 gezielte Consumerfälle umfassen
+NZB-/Persistenztransport, Quell-/Ziel-/Fassungs-/Laufzeitnegative, eingefrorene
+Workerabsicht und tatsächliche Cancellation eines gehaltenen HTTP-Bodys.
+Beim kontrollierten Entfernen allein der Worker-Revalidierung scheitern genau
+fünf Übertragungsgegenfälle. Katalogeintrag, neue Releaseausgabe, nativer
+Einzelzielimport und kompatibler Container-Rückweg sind noch nicht abgenommen;
+P19.2 bleibt offen. Dies ist kein neuer Produktionsstand.

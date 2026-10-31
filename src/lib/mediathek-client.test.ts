@@ -9,6 +9,43 @@ vi.mock("./fetch-retry", async (importOriginal) => ({
 
 beforeEach(() => vi.resetAllMocks());
 
+it("cancels an in-flight programme body through the worker's signal", async () => {
+  const abort = new AbortController();
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+  let cancelled = false;
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        stream = controller;
+        controller.enqueue(new TextEncoder().encode('{"result":'));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    })
+  );
+  vi.mocked(fetchWithRetry).mockResolvedValue(response);
+  const reading = queryMediathekView([], 100, { signal: abort.signal });
+  await Promise.resolve();
+  abort.abort();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      reading,
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve("not cancelled"), 1000);
+      }),
+    ]);
+    expect(result).toBeNull();
+    expect(cancelled).toBe(true);
+    expect(vi.mocked(fetchWithRetry).mock.calls[0][1]?.signal).toBe(abort.signal);
+  } finally {
+    clearTimeout(timer);
+    if (!cancelled) stream.error(new Error("Owned test cleanup"));
+    await reading;
+  }
+});
+
 describe("queryMediathekView", () => {
   it("preserves successful empty results", async () => {
     vi.mocked(fetchWithRetry).mockResolvedValue(

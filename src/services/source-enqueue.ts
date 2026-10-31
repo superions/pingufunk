@@ -8,6 +8,11 @@ async function prepareSourceAdmission(
   url: string,
   expected?: MediaExpectations
 ): Promise<SourceAdmission | undefined> {
+  if (expected?.version === 6) {
+    const { validateMediathekProgrammeAdmission } = await import("./source-programme");
+    await validateMediathekProgrammeAdmission(url, expected);
+    return;
+  }
   if (!expected || !("sourceRef" in expected) || !expected.sourceRef) {
     rejectUntypedYoutubeUrl(url);
     return;
@@ -32,7 +37,7 @@ export function releaseSourceAdmission(
   url: string,
   expected?: MediaExpectations
 ): (() => Promise<SourceAdmission | undefined>) | undefined {
-  if (!expected || !("sourceRef" in expected) || !expected.sourceRef) {
+  if (expected?.version !== 6 && (!expected || !("sourceRef" in expected) || !expected.sourceRef)) {
     rejectUntypedYoutubeUrl(url);
     return;
   }

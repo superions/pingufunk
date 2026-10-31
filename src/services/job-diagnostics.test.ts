@@ -52,7 +52,7 @@ it("requires real regular owned file and exact persisted size, returns no privat
   row.size = BigInt(10);
   expect((await getJobDiagnosis(String(row.id)))?.file).toBe("unsafe");
 });
-it.each([1, 2, 3, 4, 5])(
+it.each([1, 2, 3, 4, 5, 6])(
   "reads completed media facts v%s without rewriting the job",
   async (version) => {
     row.mediaValidation = JSON.stringify({ ...JSON.parse(String(row.mediaValidation)), version });

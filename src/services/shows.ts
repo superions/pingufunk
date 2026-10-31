@@ -12,6 +12,10 @@ import { ProviderResponseError, readBoundedProviderJson } from "@/lib/bounded-pr
 import { z } from "zod";
 import { LRUCache } from "lru-cache";
 import { metadataCacheKey } from "@/lib/cache";
+import {
+  mediathekProgrammeBindingSchema,
+  type MediathekProgrammeBinding,
+} from "@/lib/mediathek-programme";
 
 // Local shows data
 interface LocalShow {
@@ -19,6 +23,7 @@ interface LocalShow {
   name: string;
   germanName: string;
   aliases: string[];
+  mediathekProgrammes?: MediathekProgrammeBinding[];
   episodes: Array<{
     name: string;
     seasonNumber: number;
@@ -46,6 +51,7 @@ const localShowsSchema = z
       name: z.string().min(1).max(500),
       germanName: z.string().max(500),
       aliases: z.array(z.string().max(500)).max(1000),
+      mediathekProgrammes: z.array(mediathekProgrammeBindingSchema).max(100).optional(),
       episodes: z
         .array(
           z.object({
@@ -151,6 +157,7 @@ function localShowMetadata(show: LocalShow): TvdbData {
     name: show.name,
     germanName: show.germanName,
     aliases: show.aliases.map((name) => ({ language: "deu", name })),
+    ...(show.mediathekProgrammes ? { mediathekProgrammes: show.mediathekProgrammes } : {}),
     episodes: show.episodes.map((ep) => ({
       name: ep.name,
       seasonNumber: ep.seasonNumber,
