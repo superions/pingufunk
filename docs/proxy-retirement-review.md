@@ -4317,3 +4317,24 @@ separat aktivierbare Fälle nicht als ausgeführt gezählt. Vollständiger Audit
 Lint, Typecheck, Format und Build erfolgreich. Neue native CI, Imagefreigabe,
 Merge und Live-Abnahme stehen aus. Der Bestand bleibt auf seinem bisherigen
 Release; vorbereitete Images sind keine Betriebsübernahme.
+
+Der abschließende PR-Abgleich zeigt einen berechtigten numerischen Gegenfall
+der ersten Tokenisierung: „Temperatur −10/+10 Grad“ und „Noch 1,5/1/5 Minuten“
+dürfen trotz gleicher bestätigter Koordinaten nicht gleichgesetzt werden.
+Der gemeinsame Vergleich erhält nun alle Zeichen neben Zahlentokens als
+uninterpretierten Inhalt; Satzzeichen zwischen gewöhnlichen Wörtern bleiben
+normalisierbar. NFC verhindert zusätzlich die Umdeutung von „x²“ zu „x2“.
+Kein Zahlenparser, keine Einzelfallausnahme und keine Änderung am Mergeowner.
+Der kontrollierte Rückbau allein dieses Vergleichs auf `412c3f9` lässt genau
+13 neue Gegenfälle scheitern: Titelvergleich, tatsächlicher Metadatenmerge
+und der YouTube-Releaseconsumer. Mit der Korrektur bestehen die 67 fokussierten
+Fälle einschließlich der bisherigen drei positiven Varianten.
+Auch das befundfreie, auf allen zulässigen Nodes vorbereitete Image `412c3f9`
+wird deshalb nicht ausgerollt. Main und Produktion sind unverändert; frische
+Produkt-/Containergates und ein neuer exakter Imagescan bleiben erforderlich.
+
+Lokale Abnahme der numerischen Korrektur: 1.721 Tests mit Coverage erfolgreich,
+28 Opt-in-Fälle weiterhin getrennt. Lint, Typecheck, Format und Build ebenfalls
+erfolgreich. Die befundfreie Paketauflösung und der vollständige Audit aus dem
+Bereinigungscheckpoint werden bei unveränderten Dependencyinputs wiederverwendet;
+die frische CI installiert und prüft sie erneut. Kein Job-/Schema-/Pfadwechsel.

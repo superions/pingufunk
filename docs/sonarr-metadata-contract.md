@@ -18,6 +18,12 @@ ohne eine andere Episode zu behaupten. Wort-/Zahlgrenzen bleiben erhalten:
 „Fall 3-1“ ist nicht „Fall 31“. Beliebige Wortauslassungen, Übersetzungen oder
 ein Ähnlichkeitsscore bilden keine Titelequivalenz.
 
+Zeichen an Zahlen bleiben unverändert in der Tokenfolge: Vorzeichen,
+Dezimal-/Bruchtrenner, Datumszeichen und Einheiten können den Inhalt ändern.
+„−10“ ist nicht „+10“, „1,5“ nicht „1/5“. Der Vergleich interpretiert oder
+berechnet diese Ausdrücke nicht. NFC erhält zudem unterschiedliche Zahlformen;
+eine Kompatibilitätsnormalisierung darf „x²“ nicht zu „x2“ umdeuten.
+
 Konkrete Inhalts- und Kalenderkonflikte sperren weiterhin. Katalogtitel,
 Sonarr-Metadaten, Quellkoordinaten und Releaseidentität werden nicht umgeschrieben.
 Die anschließenden Identitäts-, Laufzeit-, Sprach-, Fassungs- und Qualitätsgates

@@ -3264,8 +3264,10 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Deterministische Schreibvarianten am vorhandenen Metadatenowner nach
       bestätigter Serien-/Koordinatenbindung vergleichen: Groß-/Kleinschreibung,
       Zeichensetzung/Wortbindestrich, deutsche kleine Zahlwörter 0–20 und
-      optionaler führender deutscher Artikel. Wort-/Zahlgrenzen erhalten;
-      beliebige Wortauslassung, Ähnlichkeitsschwelle, Übersetzung und echte
+      optionaler führender deutscher Artikel. Wort-/Zahlgrenzen und Zeichen an
+      Zahlen erhalten: Vorzeichen, Dezimal-/Bruch-/Datumszeichen und Einheiten
+      dürfen nicht verschwinden; hochgestellte Zahlen nicht umdeuten.
+      Beliebige Wortauslassung, Ähnlichkeitsschwelle, Übersetzung und echte
       Datums-/Inhaltskonflikte bleiben ausgeschlossen. Quelltitel und
       kanonischer Titel werden nicht umgeschrieben. Die Retrieval-/Quellen-
       identitätsprüfung wird dadurch nicht global gelockert.

@@ -231,12 +231,14 @@ it("carries one cold canonical discovery through the shared worker hints and dur
   expect(state.resolve).toHaveBeenCalledTimes(1);
 });
 it.each([
-  ["Grauroter Morgen", "Grau-roter Morgen"],
-  ["Noch 10 Minuten zu leben", "Noch zehn Minuten zu leben"],
-  ["Mord nach der Uhr", "Ein Mord nach der Uhr"],
-])(
-  "carries a minor metadata title variant through source binding, RSS and NZB: %s / %s",
-  async (canonical, instance) => {
+  ["Grauroter Morgen", "Grau-roter Morgen", true],
+  ["Noch 10 Minuten zu leben", "Noch zehn Minuten zu leben", true],
+  ["Mord nach der Uhr", "Ein Mord nach der Uhr", true],
+  ["Temperatur -10 Grad", "Temperatur +10 Grad", false],
+  ["Noch 1,5 Minuten", "Noch 1/5 Minuten", false],
+] as const)(
+  "enforces metadata title identity through source binding, RSS and NZB: %s / %s",
+  async (canonical, instance, accepted) => {
     state.show!.episodes[0].name = canonical;
     state.show = mergeSonarrShow(state.show, {
       series: { sonarrId: 12, tvdbId: 42, title: "Synthetic series", monitored: true },
@@ -258,7 +260,7 @@ it.each([
         12
       ),
     });
-    expect(state.show!.sonarrBlockedCoordinates).toEqual([]);
+    expect(state.show!.sonarrBlockedCoordinates).toEqual(accepted ? [] : ["1:13"]);
     (state.index as { rows: YoutubeIndexRow[] }).rows[0].content!.title =
       `Synthetic series, Staffel 2, Folge 1: ${canonical}`;
     const options = { arteSeries: state.show!, deferLanguageSelection: true };
@@ -266,6 +268,11 @@ it.each([
     await vi.advanceTimersByTimeAsync(30);
     await sourceMediaFacts.idle();
     const warm = await queryContentWindow(query, 100, options);
+    if (!accepted) {
+      expect(warm.items).toEqual([]);
+      expect(state.resolve).not.toHaveBeenCalled();
+      return;
+    }
     expect(warm.items).toHaveLength(1);
     const bound = matchBoundSourceEpisode(warm.items[0], state.show!, 0, 10)!;
     expect(bound).not.toBeNull();

@@ -332,6 +332,34 @@ describe("non-destructive episode supplementation", () => {
   });
 
   it.each([
+    ["Temperatur -10 Grad", "Temperatur +10 Grad"],
+    ["Noch 1,5 Minuten", "Noch 1/5 Minuten"],
+  ])(
+    "blocks a numeric title conflict despite identical verified coordinates: %s / %s",
+    (canonical, instance) => {
+      const local = { ...base, episodes: [{ ...base.episodes[0], name: canonical }] };
+      const merged = mergeSonarrShow(local, {
+        series: { sonarrId: 12, tvdbId: base.id, title: base.name, monitored: true },
+        episodes: parseSonarrEpisodes(
+          [
+            {
+              ...episode,
+              seasonNumber: 1,
+              episodeNumber: 1,
+              title: instance,
+              airDate: "2026-01-01",
+            },
+          ],
+          12
+        ),
+      })!;
+      expect(merged.sonarrBlockedCoordinates).toEqual(["1:1"]);
+      expect(merged.sonarrVerifiedCoordinates).toEqual(["1:1"]);
+      expect(merged.episodes[0]).toBe(local.episodes[0]);
+    }
+  );
+
+  it.each([
     ["2026-01-01", "2025-12-31T23:00:00Z", "mapped"],
     ["2026-01-01", "2026-01-01T00:00:00+01:00", "mapped"],
     ["2026-01-01", "2026-01-02T02:00:00Z", "mapped"],

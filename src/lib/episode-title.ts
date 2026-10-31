@@ -49,19 +49,27 @@ const leadingArticles = new Set([
  */
 export function equivalentEpisodeTitles(left: string, right: string): boolean {
   const keys = (title: string) => {
-    const words =
+    const parts = (
       title
-        .normalize("NFKC")
+        .normalize("NFC")
         .toLocaleLowerCase("de-DE")
         .replace(/(?<=\p{L})[-\u2010\u2011](?=\p{L})/gu, "")
-        .match(/[\p{L}\p{N}]+/gu) ?? [];
-    const key = (parts: string[]) =>
-      parts
-        .map((word) => {
-          const number = germanNumbers.indexOf(word);
-          return number < 0 ? word : String(number);
-        })
-        .join(" ");
+        .match(/[\p{L}\p{N}]+|[^\p{L}\p{N}]+/gu) ?? []
+    )
+      .map((word) => {
+        const number = germanNumbers.indexOf(word);
+        return number < 0 ? word.replace(/\s+/gu, "") : String(number);
+      })
+      .filter(Boolean);
+    // Numeric punctuation carries content: signs, decimals, fractions and dates
+    // cannot disappear with ordinary punctuation between words. Keep it opaque.
+    const words = parts.filter(
+      (part, index) =>
+        /[\p{L}\p{N}]/u.test(part) ||
+        /\p{N}/u.test(parts[index - 1] ?? "") ||
+        /\p{N}/u.test(parts[index + 1] ?? "")
+    );
+    const key = (parts: string[]) => parts.join(" ");
     return [
       key(words),
       ...(leadingArticles.has(words[0] ?? "") ? [key(words.slice(1))] : []),
