@@ -8,6 +8,29 @@ synthetische Ressourcen. Netzwerk-, Merge-, Such- und RSS-Consumer sind jetzt
 implementiert und werden ausschließlich mit synthetischen Antworten geprüft;
 das ist keine Live-Abnahme einer Betreiberinstanz.
 
+## Schreibvarianten im verifizierten Metadatenmerge (P19.1)
+
+Der gemeinsame Episoden-Titelvergleich wird erst innerhalb derselben bestätigten
+TVDB-Serie und Staffel-/Folgenkoordinate angewendet. Groß-/Kleinschreibung,
+Zeichensetzung, Wortbindestriche, deutsche Zahlwörter von null bis zwanzig und
+ein optionaler führender deutscher Artikel dürfen die Schreibweise verändern,
+ohne eine andere Episode zu behaupten. Wort-/Zahlgrenzen bleiben erhalten:
+„Fall 3-1“ ist nicht „Fall 31“. Beliebige Wortauslassungen, Übersetzungen oder
+ein Ähnlichkeitsscore bilden keine Titelequivalenz.
+
+Zeichen an Zahlen bleiben unverändert in der Tokenfolge: Vorzeichen,
+Dezimal-/Bruchtrenner, Datumszeichen und Einheiten können den Inhalt ändern.
+„−10“ ist nicht „+10“, „1,5“ nicht „1/5“. Der Vergleich interpretiert oder
+berechnet diese Ausdrücke nicht. NFC erhält zudem unterschiedliche Zahlformen;
+eine Kompatibilitätsnormalisierung darf „x²“ nicht zu „x2“ umdeuten.
+
+Konkrete Inhalts- und Kalenderkonflikte sperren weiterhin. Katalogtitel,
+Sonarr-Metadaten, Quellkoordinaten und Releaseidentität werden nicht umgeschrieben.
+Die anschließenden Identitäts-, Laufzeit-, Sprach-, Fassungs- und Qualitätsgates
+bleiben nötig. Das ist keine globale Lockerung der Quellen- oder Textsuche.
+Keine zusätzlichen Einzelfall-Aliasse oder Katalogfelder für Schreibvarianten.
+Abnahme und Betriebsstand stehen ausschließlich im Phasen-TODO/Review.
+
 ## API und Herkunft
 
 Primärquelle: [offizielle API-Dokumentation](https://sonarr.tv/docs/api/), geprüft

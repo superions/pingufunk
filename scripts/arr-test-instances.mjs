@@ -742,12 +742,20 @@ async function seriesFixture(root, manifest) {
             ).run(series.Id, season, episode, 2147483003 + (season - 1) * 40 + episode - 1);
           }
         if (manifest.youtube) {
+          // Canonical source titles stay fixed. Three native metadata spellings
+          // exercise punctuation, leading article and number-word equivalence.
           const episodes = db
             .prepare("SELECT Id,SeasonNumber,EpisodeNumber FROM Episodes WHERE SeriesId=?")
             .all(series.Id);
           for (const episode of episodes)
             db.prepare("UPDATE Episodes SET Title=? WHERE Id=?").run(
-              `Synthetic Episode ${episode.SeasonNumber}-${episode.EpisodeNumber}`,
+              episode.SeasonNumber === 1 && episode.EpisodeNumber === 1
+                ? "Synthetic: Episode 1-1"
+                : episode.SeasonNumber === 1 && episode.EpisodeNumber === 2
+                  ? "Ein Synthetic Episode 1-2"
+                  : episode.SeasonNumber === 2 && episode.EpisodeNumber === 1
+                    ? "Synthetic Episode zwei-1"
+                    : `Synthetic Episode ${episode.SeasonNumber}-${episode.EpisodeNumber}`,
               episode.Id
             );
         }

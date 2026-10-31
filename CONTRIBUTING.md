@@ -62,6 +62,25 @@ der übergeordneten Pakete auflösen und mit `npm ci` sowie der tatsächlich
 verwendeten Coverage-/Schema-Prüfung verifizieren; zusätzliche Overrides nur bei
 einer belegten, anderweitig nicht lösbaren Abhängigkeitsgrenze einführen.
 
+Die Lint-Werkzeuge verwenden gemeinsam minimatch 11.0.3 über den internen
+Dev-Adapter `tools/minimatch-compat`. Ältere ESLint-/React-/A11y-/Import-Consumer
+erwarten einen aufrufbaren CommonJS-Export, der TypeScript-Parser benannte
+Exporte. Der Adapter verbindet diese Aufrufarten mit derselben korrigierten
+Glob-Engine. `eslint-plugin-import` verwendet von `makeRe` ausschließlich
+`test`; dieses Prädikat delegiert ebenfalls an den Matcher. Die Schnittstelle
+ist auf die tatsächlich genutzten Lint-Consumer begrenzt.
+
+`.npmrc` lässt `npm ci` den lokalen Adapter als Paket installieren. Dieselben
+Eingaben werden vor dem Docker-Installationsschritt kopiert. Die Consumerfälle
+in `scripts/dependency-glob-contract.test.ts` schützen Dateiauswahl, Regeln und
+negative Treffer. Der Adapter kann entfallen, sobald sämtliche gelockten
+Consumer die korrigierte minimatch-API direkt unterstützen. Beim Aktualisieren
+die tatsächlich aufgelösten Pakete mit `npm ls minimatch minimatch-engine`
+und dem unveränderten vollständigen Dependency-Audit prüfen.
+Die typisierten Regelübersteuerungen sind an dieselben TS-/TSX-Dateien wie
+Nexts Pluginregistrierung gebunden; JavaScript-Devdateien nutzen ihre ebenfalls
+geprüften allgemeinen Regeln.
+
 ## Pull Requests
 
 ### Workflow

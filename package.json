@@ -67,6 +67,7 @@
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "17.6.0",
+    "minimatch": "file:tools/minimatch-compat",
     "postcss": "^8.5.28",
     "prettier": "^3.8.0",
     "tailwindcss": "^4.1.18",
@@ -75,6 +76,7 @@
     "vitest": "4.1.12"
   },
   "overrides": {
+    "minimatch": "$minimatch",
     "@next/eslint-plugin-next@16.3.8": {
       "fast-glob": "npm:tinyglobby@0.2.17"
     },

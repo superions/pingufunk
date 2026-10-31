@@ -1,5 +1,10 @@
 # Review des Proxy-Ablöseplans
 
+Aktuelle Einordnung:
+[Importprobleme, Ursachen und Zuständigkeiten vom 31.10.2026](#strukturreview-der-importprobleme-31102026).
+Die verlinkten P19-Pakete ergänzen den einzigen ausführbaren Phasenvertrag.
+Historische Fehler werden dadurch nicht pauschal wieder geöffnet.
+
 Stand: 31.10.2026; ursprünglicher Planreview vom 28.09.2026, datierte Folgeprüfungen unten.
 Aktueller Implementierungsstatus ausschließlich im Phasen-TODO; die datierten
 folgenden Bewertungen sind keine konkurrierende Abnahme-/Deploymentfreigabe.
@@ -4102,3 +4107,266 @@ Keine Daten-/Backuplöschung und keine neuen Suchen/Grabs/Imports. Konkrete
 GitOps-/Task-/Datenbelege stehen ausschließlich im privaten Betriebsjournal.
 P10.7 ist damit tatsächlich abgeschlossen; vier Checkboxen bleiben offen.
 Der frühere Reviewstatus „P10.7 offen“ beschreibt den Stand vor diesem Auftrag.
+
+## Strukturreview der Importprobleme (31.10.2026)
+
+### Ergebnis und Aussagegrenze
+
+„Import funktioniert nicht“ bezeichnet unterschiedliche Fehler entlang derselben
+Kette: Quelle finden → Identität zuordnen → Fassung/Medien belegen → Release an
+Arr liefern → Auftrag dauerhaft annehmen → übertragen → lokale Datei validieren
+→ nativ importieren. Ein früher Erfolg beweist keinen späteren. Sonarr und
+Radarr bleiben die primären Bedienoberflächen; Pingufunk besitzt die Quellen-
+und Downloadverträge.
+
+Grundlage sind die konkreten Oktoberfälle, dokumentierte Folgefixes, der
+Main-Code `a8e45dc` und vorhandene private Abnahmebelege. Dies ist ein
+Selbstreview, keine neue Produktionsabnahme durch diesen Dokumentationsauftrag.
+Der inzwischen abgeschlossene, separat beauftragte lesende Kommissar-Audit vom
+31.10.2026 wird unten wiederverwendet. Andere alte Bestandszahlen werden nicht
+zu aktuellen Messungen umetikettiert.
+
+Die meisten Schwierigkeiten sind technisch oder durch belegte Datenpflege
+lösbar. Unterschiedliche Nummerierungen, Zweiteiler, fehlende Titel und
+widersprüchliche Sprachangaben sind keine pauschalen Quellen-Ausnahmen.
+Konkrete Restfähigkeiten gehören in P19. Erledigte Worker-, Transfer-, Commit-
+und Nachlieferfixes bleiben erledigt.
+
+### Aktueller Kommissar-Audit und vier unterschiedliche Restgruppen
+
+Der separat beauftragte lesende Bestandsaudit vom 31.10.2026 ist abgeschlossen.
+Konkrete Bibliotheksmengen, Einzeldateien, History-IDs und die operative
+Episodenliste bleiben in dessen privatem Nachweis. Der Audit unterscheidet:
+
+| Fallgruppe                   | Belegter Zustand                                                                                                                            | Zuständigkeit/nächster Nachweis                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fehlgeschlagener Download    | Native Downloadfehler und Sonarr-Blocklist; Transport-/DB-Abbruch sowie ein zusätzlicher Sprachkonflikt dokumentiert.                       | P06.4 trennt Versuch, Build und Fehlerphase; verbleibender Sprachkonflikt zu P19.5. Kein blinder Retry oder Blocklist-Reset.                      |
+| Zugeordnete Quelle ohne Grab | Im gespeicherten Index sicher zugeordnet, kein nativer Grab dokumentiert. Konkrete Ablehnungsursache offen, darunter ein TBA-Metadatenfall. | P06.4 prüft Medienbereitschaft, Release-/RSS-Nachlieferung und tatsächliche Arr-Entscheidung. TBA nicht ungeprüft zum Alleinverursacher erklären. |
+| Metadaten-Titelvariante      | Der heutige Vergleich sperrt konkrete Schreibvarianten.                                                                                     | P19.1: „Grauroter/Grau-roter Morgen“, „10/zehn Minuten“, „Mord/Ein Mord nach der Uhr“ identitätsgebunden abgleichen.                              |
+| Fehlende Quellenbindung      | Keine sichere Quelle im gespeicherten Index gebunden.                                                                                       | P06.4 trennt Bindungsfehler, Indexabdeckung und tatsächlich fehlenden Upload. Erst der letzte bestätigte Fall kann Quellgrenze sein.              |
+
+Ein positiver Datei-/Importbeleg stammt von einem späteren Auftrag statt des
+ursprünglich beobachteten fehlgeschlagenen Versuchs. Ihn zuerst gegen die
+exakten Build-/Quellen-/Jobanforderungen von P17.6 prüfen; keine weitere
+Referenzübertragung allein zur Wiederholung vorhandener Evidenz. Die bekannte
+separate History-/Fileabweichung bleibt ebenfalls offen. Ein gespeicherter
+Quellenindex ist kein neuer Verfügbarkeitsabruf.
+
+### Kategorien und Fallzuordnung
+
+„Behoben“ gilt im belegten Scope; „offen“ bezeichnet eine konkrete Fähigkeit
+oder ungeklärte Ursache, „Abnahme offen“ einen fehlenden Nachweis.
+Quellgrenzen/Entscheidungen werden gemeinsam bewertet, nicht automatisch
+als verworfene Arbeit behandelt.
+
+| Kategorie                       | Konkrete Fälle und Ursache                                                                                                                                                                                                                                                                                           | Owner und heutige Zuordnung                                                                                                                                              |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **1. Identität/Metadaten**      | „Die Düsteren“, „Entgleist“, „Lebensretterin“, „Das Vergessen“: fehlende Aliasse/Episodentitel bzw. Katalogdaten verhinderten die Verbindung zur Quelle. Die drei letztgenannten Katalogfälle sind konkret korrigiert. Bei „Die Düsteren“ sind Downloads belegt, der historische Importabschluss blieb damals offen. | `shows.ts`, `sonarr-provider.ts`, `sonarr-matcher.ts`, `data/shows.json`; Katalogowner P06.2/P06.3, konkreter historischer Importrest P06.4. Keine globale Fuzzy-Regel.  |
+| **1. Identität/Metadaten**      | Kommissar: UTC-Zeitpunkt und Kalendertag verwechselt; behoben. Die drei weiter gesperrten Fälle zeigen konkrete Titelvarianten; die heutige Sperre beweist noch keinen inhaltlichen Widerspruch.                                                                                                                     | `sonarr-provider.ts::mergeSonarrShow`, `youtube-bindings.ts`, `youtube-mapping.ts`; P17.5 erledigt, Rest P19.1.                                                          |
+| **2. Nummerierung/Dateiumfang** | „Sommersonnenwende“: Quell-S2019E01 gegenüber kanonischem S08E01, daneben ein abweichender Special-Datensatz. Eine belegte programmgenaue Übersetzung fehlt im Mediathekpfad.                                                                                                                                        | `sonarr-matcher.ts`, `tv-source-review.ts`, Katalogparser; P19.2. YouTubes vorhandenes `sourceNumbering=publisher` nicht erneut bauen.                                   |
+| **2. Nummerierung/Dateiumfang** | „Der Tod ist groß“: eine rund 88-minütige Quelle gegenüber zwei etwa 45-minütigen Specials S00E02/E03. `TvReviewSelector` und `MatchedEpisodeInfo` binden jeweils eine Episode. Ein Laufzeit-Override löst das nicht.                                                                                                | Identitätsowner plus Release-/NZB-/Job-/Importconsumer; P19.3. Eine Datei/ein Auftrag für beide bestätigten Ziele.                                                       |
+| **3. Sprache/Fassung/Qualität** | RBB/„La La Land“, große ZDF-MP4-Layouts: fehlende Unterstützung bzw. erschöpftes Belegbudget ließen Quellen als Unknown erscheinen. Die konkreten RBB-/Fensterfixes sind behoben.                                                                                                                                    | `ard-source-audio.ts`, `source-audio.ts`, `mp4-audio-language.ts`, `rendition-quality.ts`; P03.4/P09.5 im geprüften Scope erledigt. Keine Zusage für beliebige Hosts.    |
+| **3. Sprache/Fassung/Qualität** | „Protection“/WDR: damaliger Host nicht im Belegpfad, zugleich FSK-Sperre ohne Streams. Eine bloße Hostfreigabe reicht nicht. Im heutigen Code weiterhin nur die bestätigten ARD-CDNs; kein spezifischer WDR-Abschlussbeleg gefunden.                                                                                 | `ard-source-audio.ts`, Producer-/Workergate in `source-audio.ts`; begrenzte Fallklärung P19.6. Aktuelle Verfügbarkeit erst prüfen, kein behaupteter heutiger Livefehler. |
+| **3. Sprache/Fassung/Qualität** | „Misericordia“: ARTE-HbbTV-Belegantwort 404, fehlende Qualitätsbindung sowie beobachtete Sprach-/Zeitfensterablehnungen. 404 beweist weder das Ende der ganzen API noch das Fehlen aller Filmfassungen. Technische Belegursache offen.                                                                               | `source-audio.ts::getArteStreams`, `arte-editions.ts`, Qualitäts-/Diagnoseowner; P19.4. Sprache und Erreichbarkeit getrennt klären.                                      |
+| **3. Sprache/Fassung/Qualität** | „La La Land“: Anbieter behauptet Deutsch, lokale Audiotracks tragen `eng`; Sperre vor Completed. Die spätere private Rettung mit Dateigleichheitsnachweis ersetzt keinen allgemeinen Vertrag für diesen Widerspruch.                                                                                                 | `source-audio.ts`, `media-probe.ts`, Jobdiagnose; P19.5. Falsche Tags, falscher Anbieterbeleg und tatsächlich falscher Ton unterscheiden.                                |
+| **3. Sprache/Fassung/Qualität** | Berliner Folgen: Hörfassungen statt gewünschter Standardfassungen. Fünf ausdrücklich beauftragte Ersetzungen separat abgeschlossen; Herkunft weiterer Aufträge ungeklärt. Den heutigen Fassungsowner nicht allein aus diesem alten Verlauf erneut als defekt erklären.                                               | `language-editions.ts`, `language-policy.ts`, eingefrorene Joberwartungen; Bestands-/Auftragsklärung P06.4. Standard/AD/OV/OmU bleiben getrennt.                         |
+| **4. Suche/Nachlieferung**      | Kalte Mehrstaffelsuche lieferte zunächst unbelegte Qualität; spätere Cacheerwärmung startete keine Sonarr-Suche. Persistierter RSS-Nachlieferweg implementiert und mit kalten nativen 80-Folgen-Ketten geprüft.                                                                                                      | `source-media-facts.ts`, `tv-search-delivery.ts`, `newznab.ts`; Implementierung erledigt, historischer Bestandsrest P06.4.                                               |
+| **4. Suche/Nachlieferung**      | SHOWS_URL-Pin, verzögertes Katalogrefresh und Verwechslung von Index, Zuordnung und Medienbereitschaft erschwerten YouTube-/Vergessen-Prüfung. Pin entfernt; stündlicher Katalogabruf ist beabsichtigt.                                                                                                              | `shows.ts`, `youtube-catalogue.ts`, `youtube-report.ts`; kein pauschaler neuer Cachefix. Revision/Indexzeit und Prüfzustand verwenden.                                   |
+| **5. Transfer/Worker/DB**       | YouTube-Vollabruf massiv langsamer als Teilabrufe; serieller Worker blockierte Mediathekaufträge. Mit geprüften 10-MiB-Bereichen und zwei Quellenworkern im selben Appprozess behoben; begrenzte parallele Produktionsmessung dokumentiert.                                                                          | `providers/youtube/download.ts`, `download-transfer.ts`, `download-manager.ts`; P17.7 erledigt. Realer neuer YouTube-Dateiabschluss bleibt P17.6.                        |
+| **5. Transfer/Worker/DB**       | Fortschritts-/Statuswrites konnten Transfers abbrechen und den Worker bis zum nächsten Enqueue pausieren. Verzögerter dauerhafter Statusabgleich behoben. Das beweist nicht die Ursache jeder alten Netzwerkexception oder jedes P1017-Abbruchs.                                                                     | `download-manager.ts`, `download-failure.ts`; P05.4 erledigt. Alte ungewisse Auftragsgenerationen bleiben P06.4.                                                         |
+| **5. Transfer/Worker/DB**       | Nach PG-Unterbrechung quittierte Job-ID ohne dauerhafte Zeile. Nativ reproduziert und durch explizit bestätigte Transaktion korrigiert.                                                                                                                                                                              | `download.ts::addToQueue`, Enqueue-/Receiptowner; P15.1/P15.4 erledigt, PG18-Gate erhalten. Kein DB-Wechsel als Importreparatur.                                         |
+| **6. Arr-Import/Herkunft**      | „Der Kommissar“/„The Commissioner“, zuvor „Die Düsteren“/„The Grim Ones“: ID-Erkennung garantierte keinen erlaubten Importnamen. Instanzbestätigter technischer Präfix und sichere Anpassung ungestarteter v5-Jobs implementiert.                                                                                    | `sonarr-provider.ts`, `server/sonarr-job-title.ts`, RSS/NZB; P06.2-Nachfix erledigt. Deutsche Anzeige bleibt erhalten.                                                   |
+| **6. Arr-Import/Herkunft**      | TBA kann korrekt geladene Vorabfolgen zusätzlich in Sonarr blockieren. Pingufunks Laufzeit-Einzelfreigabe ist weder Nummerierungsfreigabe noch Sonarr-Importbefehl.                                                                                                                                                  | Sonarr-Consumerentscheidung; bestehender eng gebundener nativer Prüf-/Importweg bei ausdrücklichem Auftrag. Mehrfolgenabnahme in P19.3.                                  |
+| **6. Arr-Import/Herkunft**      | Kommissar: damalige Filebindung und History nannten verschiedene Folgen/Download-IDs. Berliner Zusatzauftragsgenerationen ungeklärt. Passende Dateigröße allein bestätigt keine korrekte Herkunft.                                                                                                                   | Grab→Download→Import→File-Abgleich, vorhandene Arr-Diagnose; P06.4 offen. Keine History für einen grünen Bericht umschreiben.                                            |
+| **6. Arr-Import/Herkunft**      | Tdarr ändert nach Import Codec/Größe. Bei belegter Kette erwartete Nachverarbeitung; Originaleingang und aktuelle Datei getrennt vergleichen.                                                                                                                                                                        | Importdiagnose/privates Runbook; beim Vergessen-Abschluss berücksichtigt. Kein neuer Historyowner nötig.                                                                 |
+| **7. Verfügbarkeit/Betrieb**    | „Rocky Horror“ lieferte damals nur einen 122-Sekunden-Ausschnitt. Fehlende/private YouTubevideos, Rechteablauf und Anbieterfenster sind von Parser-/Matchingfehlern zu trennen.                                                                                                                                      | Bestehende Verfügbarkeits-/Quellowner; Quellgrenzen unten. Kein Clip als vollständigen Film ausgeben.                                                                    |
+| **7. Verfügbarkeit/Betrieb**    | NAS-Speichermangel, Image-Pull-Fehler und zeitweise ausgefallener Diagnosezugang waren zusätzliche Betriebsprobleme. Fehlender Prüfzugang beweist keinen hängenden Transfer.                                                                                                                                         | Private Homelab-Betriebsverantwortung; keine daraus erfundene dauerhafte Pingufunk-Codebaustelle.                                                                        |
+
+### Heutige Fähigkeiten und konkrete Lücken
+
+- **Vorhanden:** exakte Titel-/Koordinatenprüfung, ergänzender Metadatenkatalog,
+  quellengebundene YouTube-Aliasse/Publishernummerierung, Medienbelege mit
+  RSS-Nachlieferung, zwei Quellenworker, dauerhafte Aufnahmebestätigung,
+  geschlossene Jobdiagnose und optionaler Arr-Historyread. Ein neues allgemeines
+  Matching-/Queue-/Diagnoseframework wäre Doppelarbeit.
+- **Fehlend:** `tv-source-review.ts::matches/prepare` lässt nur bereits passend
+  gematchte Einzelziele zur Freigabe. `episode_runtime_once` bestätigt deren
+  Laufzeitkonflikt; es korrigiert keine Quellnummer und bildet keine gemeinsame
+  Zweiteilerdatei ab. Dafür braucht es explizite Bindungen, keine lockerere
+  Autoerkennung.
+  `source-programme.ts` ist bereits der Konsument expliziter Bindungen,
+  akzeptiert heute aber ausschließlich das YouTube-Schema mit Einzelziel.
+  Diesen Owner erweitern, statt daneben einen weiteren Matcher zu bauen.
+- **Konkreter Titelengpass:** `mergeSonarrShow` vergleicht vorhandene konkrete
+  Episodentitel nach Trim/NFC zeichengetreu. Schon „Grauroter“ gegenüber
+  „Grau-roter“ sperrt deshalb die Koordinate, bevor YouTubes Titelaliasse greifen.
+  Datenkorrektur oder belegte koordinatengebundene Titelequivalenz muss diesen
+  Owner erreichen; ein weiterer Uploadalias allein löst die Merge-Sperre nicht.
+- **Diagnosegrenze:** `getArteStreams` macht aus 404/410 eine leere Liste. Danach
+  fehlen URL-gebundene Sprache und Maße, ohne den ausgefallenen Belegabruf
+  ausdrücklich von erfolgreich gelesenen leeren Streams zu unterscheiden.
+- **Bewusste Grenze:** `media-probe.ts` akzeptiert unbekannte Tracktags mit
+  frischem passendem Anbieterbeleg; bekannte widersprechende Tags bleiben
+  Konflikt. Ein pauschaler Anbieter-vor-Datei-Default wäre kein kausaler Fix.
+
+### Wenige Quellgrenzen — zur gemeinsamen Einordnung
+
+1. **Die vollständige Datei fehlt tatsächlich:** ausgelistet, privat/gelöscht
+   oder nur als Ausschnitt vorhanden. Andere konfigurierte Quellen bleiben
+   möglich; fehlender Inhalt lässt sich nicht herstellen. Ein begrenztes
+   Suchfenster allein beweist keine Nichtverfügbarkeit. Der
+   [Rocky-Horror-Angebotseintrag](https://www.arte.tv/de/videos/017594-000-A/the-rocky-horror-picture-show/)
+   meldet beim öffentlichen Read am 31.10.2026 inzwischen „nicht mehr verfügbar“;
+   der Ausschnittbefund bleibt historische Evidenz.
+2. **Die gewünschte Fassung fehlt nachweisbar:** Originalton mit deutschen
+   Untertiteln ist kein deutscher Ton; 480p ist kein HD. Gegebenenfalls bewusste
+   Profil-/Fassungsentscheidung, kein erfundenes Sprach-/Qualitätslabel. Fehlende
+   deutsche Fassung bei einem Anbieter beweist keine weltweite Nichtverfügbarkeit.
+3. **Zugangs-/Rechtefenster:** zeitliche Freigabe, Geoblocking oder Anmeldung.
+   Sauberes Warten und spätere normale Prüfung sind handhabbar. Account-/Token-
+   oder Umgehungsdienste gehören nicht beiläufig zur Lösung. Die
+   [Misericordia-Seite](https://www.arte.tv/de/videos/128673-000-A/misericordia/)
+   nennt weiterhin Jugendschutzbedingungen; die beim Webabruf sichtbare
+   Geomeldung beweist nichts über den Standort der eigenen Installation.
+
+Titelkonflikte, Nummerierungsabweichungen, Mehrfolgen und fehlgeschlagene
+Metadatenendpunkte fallen nicht automatisch in diese Ausnahmen. Eine allgemeine
+OmU-Freigabe wurde aus den früheren Rückfragen nicht beschlossen.
+
+### Arbeitsweg und Abnahme
+
+Die einzige ausführbare Reihenfolge steht im
+[P19-Arbeitsweg](../todo/proxy-retirement.md#phase-p19--konkrete-verbliebene-importlücken).
+P06.4 klärt Altbestand und widersprüchliche Auftragsherkunft; P17.6 schließt den
+realen Dateinachweis des geänderten YouTube-Transfers. Beides sind fehlende
+Abnahmen, keine neu zu bauenden Workerfunktionen. P19.1 nutzt vorhandene Mittel
+für konkrete Titelkonflikte; P19.2/P19.3 ergänzen Nummerierungs-/Zweiteilerbindung;
+P19.4–P19.6 klären die beobachteten Medienbelegprobleme. README und optionaler
+DB-Rücktransfer werden nicht zu Importvoraussetzungen.
+
+Je Fall getrennt erkennen: **gefunden, sicher zugeordnet, Fassung belegt,
+von Arr angenommen, dauerhaft queued, Bytes fortschreitend, lokal validiert,
+nativ importiert**. Vorhandene Diagnosen/Daten verwenden; kein Auftrag für
+eine weitere Übersicht oder Telemetrieplattform. Fehlender Nachweis hält genau
+diese Stufe offen. Eine vorhandene Datei schließt keine fremde Download-ID,
+ein Suchtest keinen Import, ein Geschwindigkeitsfenster keinen Transfer ab.
+
+Nur Dokumentation/Planung geändert. Keine neuen Live-Suchen, Grabs, Retries,
+Imports, Dienst-/Profil-/DB-Änderungen oder Medienproben. Passende vorhandene
+Produktnachweise bleiben gültig; Format, Verweise, Fallzuordnung und Diff
+werden frisch geprüft.
+
+## P19.1 — Allgemeiner Vergleich marginaler Episodentitel (31.10.2026)
+
+Nutzerpräzisierung: diese Fälle im gemeinsamen Vergleich lösen, keine je Folge
+gepflegten Ausnahme-Aliasse. `equivalentEpisodeTitles` am vorhandenen
+`episode-title.ts`-Owner vergleicht deterministische Schreibvarianten;
+`mergeSonarrShow` verwendet ihn ausschließlich nach bestätigter TVDB-Serie und
+gleicher Staffel-/Folgenkoordinate. Groß-/Kleinschreibung, Zeichensetzung,
+Wortbindestriche, deutsche kleine Zahlwörter und führende Artikel werden
+berücksichtigt. Wort-/Zahlgrenzen, konkrete Inhalts- und Kalenderkonflikte
+bleiben geschützt. Katalog, Providerdaten, Suchziel und Titel werden nicht
+umgeschrieben. Keine Schema-/Jobversion-/Pfadänderung und keine neue Persistenz.
+
+Die sechs Merge-/Quellen-/RSS-/NZB-Consumerfälle scheitern beim kontrollierten
+Rückbau auf den alten zeichengetreuen Vergleich und bestehen mit der Korrektur.
+Weitere Negative prüfen andere Inhaltswörter, andere Zahlen, ausgelassene
+Binnenwörter und zusammengezogene Zahlgrenzen. Der bestehende externe
+Netzverkehr ausschließende native YouTube-Harness enthält jetzt vier kuratierte
+Episoden und drei abweichende tatsächliche Sonarr-Schreibweisen; er muss
+weiterhin genau vier native Dateiimporte ohne RSS-Doppelgrab erreichen.
+Der unveränderte private Kommissar-Metadaten-/Indexsnapshot bestätigt lokal
+genau die drei erwarteten zusätzlichen Bindungen; tatsächliche Quellenlücken
+bleiben offen. Das ist eine Offline-Gegenprobe, kein neuer Live-Such-/Grabaufruf.
+
+Die Titelkorrektur allein wurde mit 1.697 regulären Tests, Lint, Typecheck,
+Format, Build und vollständiger nativer CI auf beiden Backends geprüft.
+Das exportierte Image von `e45d485` ist befundfrei gescannt und vorbereitet,
+aber nicht live übernommen. Nach der folgenden Dev-Dependencyänderung sind
+frische Produktgates und ein neues exakt geprüftes Image erforderlich;
+P19.1 bleibt bis zur vollständigen Abnahme offen.
+
+Der ursprüngliche Freigabebefund waren 17 moderate transitive Dev-Tool-Meldungen
+aus [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+Der Nutzer entschied ausdrücklich für die Bereinigung vor Merge/Rollout.
+minimatch 11.0.3 ist jetzt die gemeinsame korrigierte Engine. Ein kleiner
+interner Dev-Adapter erhält die tatsächlich verwendeten aufrufbaren CommonJS-
+und benannten ESM-Schnittstellen. Der Import-Consumer nutzt von `makeRe` nur
+das delegierte `test`-Prädikat. Es gibt keine Modulloader-Eingriffe und keine
+je Linterpaket gepflegten Quellpatches. Der TypeScript-Lintverbund wird innerhalb
+des erlaubten v8-Bereichs gemeinsam auf 8.72.1 aktualisiert. Produktabhängigkeiten und
+sämtliche 429 wirksamen TypeScript-Regeln bleiben unverändert. Die typisierten
+Regelübersteuerungen folgen jetzt Nexts TS-/TSX-Pluginregistrierung; damit sind
+auch JavaScript-Devdateien am vorhandenen Lintowner tatsächlich prüfbar.
+
+Frisches `npm ci`, vollständiger Dependency-Audit und Paketauflösung sind
+befundfrei. Dreizehn Consumerfälle schützen unter anderem ESLint-Dateiauswahl,
+React-Ausnahmen, tatsächliche A11y-Labels, erlaubte/verbotene Importpfade und
+den begrenzten Optimierungslauf. Beim direkten Rückbau auf den neuen
+Namespace-Export scheitern drei tatsächliche Regelconsumer. Die kausale
+Quellen-Gegenprobe des Amplifikationsfalls beendet die alte 9.0.9 in einem
+eigenen begrenzten Prozess durch Speichererschöpfung; die korrigierte Engine
+begrenzt denselben Fall und behält positive/negative Matches. Kein Audit-Ignore,
+kein abgeschwächtes LOW-Gate und keine Ausnahme. Der Adaptervertrag und sein
+Entfallkriterium stehen in `CONTRIBUTING.md`.
+Eine Auditgegenprobe mit einer verwundbaren Engine hinter demselben Paketalias
+meldet weiterhin genau das Advisory; der Alias verdeckt den Scannerbefund nicht.
+
+Lokaler Bereinigungscheckpoint: 1.706 Tests mit Coverage erfolgreich, 28
+separat aktivierbare Fälle nicht als ausgeführt gezählt. Vollständiger Audit,
+Lint, Typecheck, Format und Build erfolgreich. Neue native CI, Imagefreigabe,
+Merge und Live-Abnahme stehen aus. Der Bestand bleibt auf seinem bisherigen
+Release; vorbereitete Images sind keine Betriebsübernahme.
+
+Der abschließende PR-Abgleich zeigt einen berechtigten numerischen Gegenfall
+der ersten Tokenisierung: „Temperatur −10/+10 Grad“ und „Noch 1,5/1/5 Minuten“
+dürfen trotz gleicher bestätigter Koordinaten nicht gleichgesetzt werden.
+Der gemeinsame Vergleich erhält nun alle Zeichen neben Zahlentokens als
+uninterpretierten Inhalt; Satzzeichen zwischen gewöhnlichen Wörtern bleiben
+normalisierbar. NFC verhindert zusätzlich die Umdeutung von „x²“ zu „x2“.
+Kein Zahlenparser, keine Einzelfallausnahme und keine Änderung am Mergeowner.
+Der kontrollierte Rückbau allein dieses Vergleichs auf `412c3f9` lässt genau
+13 neue Gegenfälle scheitern: Titelvergleich, tatsächlicher Metadatenmerge
+und der YouTube-Releaseconsumer. Mit der Korrektur bestehen die 67 fokussierten
+Fälle einschließlich der bisherigen drei positiven Varianten.
+Auch das befundfreie, auf allen zulässigen Nodes vorbereitete Image `412c3f9`
+wird deshalb nicht ausgerollt. Main und Produktion sind unverändert; frische
+Produkt-/Containergates und ein neuer exakter Imagescan bleiben erforderlich.
+
+Lokale Abnahme der numerischen Korrektur: 1.721 Tests mit Coverage erfolgreich,
+28 Opt-in-Fälle weiterhin getrennt. Lint, Typecheck, Format und Build ebenfalls
+erfolgreich. Die befundfreie Paketauflösung und der vollständige Audit aus dem
+Bereinigungscheckpoint werden bei unveränderten Dependencyinputs wiederverwendet;
+die frische CI installiert und prüft sie erneut. Kein Job-/Schema-/Pfadwechsel.
+
+Die native CI von `7c1ef5b` deckt anschließend einen widersprüchlichen Positivfall
+im eigenen Testfixture auf: `Synthetic Episode 1-1` wurde als
+`Synthetic Episode 1 1` geliefert. Der korrigierte Vergleich sperrt diese
+abweichende Zahlstruktur zu Recht; dadurch entstehen nur drei der vier
+verlangten nativen Grabs und die unveränderte Abnahme scheitert.
+Das Positivfixture verwendet jetzt `Synthetic: Episode 1-1`, also Satzzeichen
+zwischen Wörtern bei erhaltener Zahlstruktur. Der bisherige negative Zahlenfall
+ist ausdrücklich abgesichert. Keine Produkttoleranz gelockert, keine Importzahl
+reduziert und keine Assertion übersprungen. 69 fokussierte Fälle bestehen;
+der Rückbau auf den ursprünglichen Vergleich lässt nun genau 14 Schutzfälle
+scheitern. Produktcode und Dependencies bleiben gegenüber `7c1ef5b` unverändert;
+die nativen Gates müssen mit dem korrigierten Fixture erneut bestehen.
+Frische lokale Abnahme: 1.723 Tests mit Coverage, Lint, Typecheck, Format und
+Build erfolgreich; 28 Opt-in-Fälle weiterhin separat gezählt.
+
+Die PR-Nativprüfung von `ef407b3` scheitert anschließend im vorhandenen
+PostgreSQL-Ausfalltest, während der gleichzeitige Push-Lauf diesen Gate besteht.
+Der Test hielt die Probe nur durch eine feste Acht-Sekunden-Pause zurück und
+wartete danach auf einen Fehlertext. Eine Gegenprobe mit neun Sekunden
+Beobachterverzögerung weist das Rennen nach: Die Probe läuft bereits vor der
+bestätigten Datenbankpause; der neue Schutztest scheitert mit der bisherigen
+Steuerung. Das Fixture wartet jetzt begrenzt auf eine ausdrückliche Freigabe,
+die erst nach der bestätigten DB-Pause erfolgt. Der Test prüft anschließend
+den geschlossenen Laufzeitstatus `paused` und weiterhin die fehlschlagende
+Queue-API, unabhängig persistierte Wiederaufnahme und tatsächliche Datei-/
+Jobzustände. Produkt-Timeouts und Worker bleiben unverändert.
+Zwei ausgeführte Shell-Fixturefälle bestehen einschließlich der verzögerten
+Beobachtung; der alte Zeitablauf lässt einen davon scheitern. Die frische
+Coverage-Abnahme umfasst 1.725 bestandene Tests und 28 getrennte Opt-in-Fälle;
+Lint, Typecheck, Format, Build und Shellsyntax sind erfolgreich. Die echte PostgreSQL-
+Abnahme muss mit diesem deterministischen Faulttest erneut bestehen.

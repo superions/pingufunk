@@ -5,6 +5,8 @@ const eslintConfig = [
   ...nextConfig,
   eslintConfigPrettier,
   {
+    // Match Next's TypeScript plugin registration for the typed rule overrides.
+    files: ["**/*.ts", "**/*.tsx"],
     rules: {
       // Relaxed rules for open-source friendliness
       "@typescript-eslint/no-unused-vars": [
@@ -16,6 +18,10 @@ const eslintConfig = [
         },
       ],
       "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
+  {
+    rules: {
       // Allow console for server-side logging
       "no-console": "off",
     },

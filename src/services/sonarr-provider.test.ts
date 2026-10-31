@@ -309,6 +309,57 @@ describe("non-destructive episode supplementation", () => {
   });
 
   it.each([
+    ["Grauroter Morgen", "Grau-roter Morgen"],
+    ["Noch 10 Minuten zu leben", "Noch zehn Minuten zu leben"],
+    ["Mord nach der Uhr", "Ein Mord nach der Uhr"],
+  ])("retains canonical identity for a minor title variant: %s / %s", (canonical, instance) => {
+    const local = { ...base, episodes: [{ ...base.episodes[0], name: canonical }] };
+    const supplemental = {
+      series: { sonarrId: 12, tvdbId: base.id, title: base.name, monitored: true },
+      episodes: parseSonarrEpisodes(
+        [{ ...episode, seasonNumber: 1, episodeNumber: 1, title: instance, airDate: "2026-01-01" }],
+        12
+      ),
+    };
+    const merged = mergeSonarrShow(local, supplemental)!;
+    expect(merged.sonarrBlockedCoordinates).toEqual([]);
+    expect(merged.episodes[0]).toBe(local.episodes[0]);
+    supplemental.episodes[0].airedDay = "2026-01-02";
+    expect(mergeSonarrShow(local, supplemental)!.sonarrBlockedCoordinates).toEqual(["1:1"]);
+    supplemental.episodes[0].airedDay = "2026-01-01";
+    supplemental.episodes[0].title = "Different episode";
+    expect(mergeSonarrShow(local, supplemental)!.sonarrBlockedCoordinates).toEqual(["1:1"]);
+  });
+
+  it.each([
+    ["Temperatur -10 Grad", "Temperatur +10 Grad"],
+    ["Noch 1,5 Minuten", "Noch 1/5 Minuten"],
+  ])(
+    "blocks a numeric title conflict despite identical verified coordinates: %s / %s",
+    (canonical, instance) => {
+      const local = { ...base, episodes: [{ ...base.episodes[0], name: canonical }] };
+      const merged = mergeSonarrShow(local, {
+        series: { sonarrId: 12, tvdbId: base.id, title: base.name, monitored: true },
+        episodes: parseSonarrEpisodes(
+          [
+            {
+              ...episode,
+              seasonNumber: 1,
+              episodeNumber: 1,
+              title: instance,
+              airDate: "2026-01-01",
+            },
+          ],
+          12
+        ),
+      })!;
+      expect(merged.sonarrBlockedCoordinates).toEqual(["1:1"]);
+      expect(merged.sonarrVerifiedCoordinates).toEqual(["1:1"]);
+      expect(merged.episodes[0]).toBe(local.episodes[0]);
+    }
+  );
+
+  it.each([
     ["2026-01-01", "2025-12-31T23:00:00Z", "mapped"],
     ["2026-01-01", "2026-01-01T00:00:00+01:00", "mapped"],
     ["2026-01-01", "2026-01-02T02:00:00Z", "mapped"],

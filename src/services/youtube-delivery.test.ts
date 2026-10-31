@@ -46,6 +46,8 @@ import { createUiNzbDownloads } from "./ui-nzb";
 import { youtubeMappingKey } from "@/lib/youtube-catalogue";
 import { matchMovieItems } from "./movie-matcher";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { mergeSonarrShow } from "./sonarr-provider";
+import { parseSonarrEpisodes } from "./sonarr-metadata";
 import {
   assembleMovieReleases,
   assembleRecentMovieReleases,
@@ -228,6 +230,71 @@ it("carries one cold canonical discovery through the shared worker hints and dur
   expect(() => downloadSource("https://evil.invalid", nzb.mediaExpectations!)).toThrow();
   expect(state.resolve).toHaveBeenCalledTimes(1);
 });
+it.each([
+  ["Grauroter Morgen", "Grau-roter Morgen", true],
+  ["Noch 10 Minuten zu leben", "Noch zehn Minuten zu leben", true],
+  ["Mord nach der Uhr", "Ein Mord nach der Uhr", true],
+  ["Temperatur -10 Grad", "Temperatur +10 Grad", false],
+  ["Noch 1,5 Minuten", "Noch 1/5 Minuten", false],
+] as const)(
+  "enforces metadata title identity through source binding, RSS and NZB: %s / %s",
+  async (canonical, instance, accepted) => {
+    state.show!.episodes[0].name = canonical;
+    state.show = mergeSonarrShow(state.show, {
+      series: { sonarrId: 12, tvdbId: 42, title: "Synthetic series", monitored: true },
+      episodes: parseSonarrEpisodes(
+        [
+          {
+            id: 45,
+            seriesId: 12,
+            seasonNumber: 1,
+            episodeNumber: 13,
+            title: instance,
+            airDate: "2001-01-01",
+            airDateUtc: "2001-01-01T20:00:00Z",
+            runtime: 10,
+            monitored: true,
+            hasFile: false,
+          },
+        ],
+        12
+      ),
+    });
+    expect(state.show!.sonarrBlockedCoordinates).toEqual(accepted ? [] : ["1:13"]);
+    (state.index as { rows: YoutubeIndexRow[] }).rows[0].content!.title =
+      `Synthetic series, Staffel 2, Folge 1: ${canonical}`;
+    const options = { arteSeries: state.show!, deferLanguageSelection: true };
+    await queryContentWindow(query, 100, options);
+    await vi.advanceTimersByTimeAsync(30);
+    await sourceMediaFacts.idle();
+    const warm = await queryContentWindow(query, 100, options);
+    if (!accepted) {
+      expect(warm.items).toEqual([]);
+      expect(state.resolve).not.toHaveBeenCalled();
+      return;
+    }
+    expect(warm.items).toHaveLength(1);
+    const bound = matchBoundSourceEpisode(warm.items[0], state.show!, 0, 10)!;
+    expect(bound).not.toBeNull();
+    const releases = generateRssItems(bound, "all");
+    expect(releases).toHaveLength(1);
+    expect(releases[0].title).toContain(".S01E13.");
+    expect(releases[0].title).toContain(".GERMAN.");
+    const nzb = parseNzbContent(
+      Object.values(createUiNzbDownloads(warm.items[0], false, bound.episode))[0]!
+    )!;
+    expect(nzb.mediaExpectations).toMatchObject({
+      version: 5,
+      sourceRef: { programme: { kind: "series", targetId: 42, season: 1, episode: 13 }, selection },
+    });
+    await expect(validateReleaseSource(nzb.url, nzb.mediaExpectations)).resolves.toBeUndefined();
+    expect(downloadSource(nzb.url, nzb.mediaExpectations!)).toMatchObject({
+      family: "youtube",
+      programme: { targetId: 42, season: 1, episode: 13 },
+    });
+  }
+);
+
 it("keeps successful required base results including a true empty window during optional YouTube failure, but never treats YouTube-only failure as an empty success", async () => {
   (state.index as { current: boolean }).current = false;
   const context = await searchCacheContext();
