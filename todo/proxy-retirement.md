@@ -3250,7 +3250,7 @@ Zusatzentscheidung: zuerst den bestehenden Dev-Dependency-Audit bereinigen;
 keine Audit-Ausnahme. Geänderte Dependencyinputs verlangen neue Produkt-/
 Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Images.
 
-- [ ] **P19.1 — Metadaten-Titelvarianten identitätsgebunden auflösen.**
+- [x] **P19.1 — Metadaten-Titelvarianten identitätsgebunden auflösen.**
       Unabhängig startbar. Owner: `sonarr-provider.ts::mergeSonarrShow`,
       `shows.ts`, `data/shows.json`, `youtube-bindings.ts`,
       `lib/youtube-mapping.ts`, vorhandenes Kanalregister und Zuordnungsbericht.
@@ -3284,6 +3284,13 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Quellen fehlen/unavailable und Identität konfliktbehaftet getrennt zählen;
       keine behauptete 97/97-Verfügbarkeit. Fachreferenz/Review am selben Punkt
       aktualisieren; Codeänderungen nutzen die gemeinsamen Produktgates.
+      Abgenommen am 01.11.2026: gemeinsamer Vergleich und Dev-Auditbereinigung
+      mit allen Produkt-/Nativgates; PR #19 gemergt und das exakt gescannte
+      CI-Image live übernommen. Lesender Vorher-/Nachhervergleich bestätigt
+      vorhandene Aufträge, Dateien, Episodenbindungen, History, Einstellungen,
+      Mounts und Schema unverändert. Keine neuen manuellen Medienaufträge.
+      Der eingefrorene Quellenbericht bestätigt 93 sichere Bindungen und vier
+      getrennte Quellenlücken; dies behauptet keine 97/97-Verfügbarkeit.
 
 - [ ] **P19.2 — Belegte abweichende Mediatheknummerierung an ein Einzelziel binden.**
       Unabhängig von P19.1/P19.4–P19.6. Owner: `data/shows.json` und dessen

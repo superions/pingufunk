@@ -4370,3 +4370,37 @@ Beobachtung; der alte Zeitablauf lässt einen davon scheitern. Die frische
 Coverage-Abnahme umfasst 1.725 bestandene Tests und 28 getrennte Opt-in-Fälle;
 Lint, Typecheck, Format, Build und Shellsyntax sind erfolgreich. Die echte PostgreSQL-
 Abnahme muss mit diesem deterministischen Faulttest erneut bestehen.
+
+### Abschluss P19.1 (01.11.2026)
+
+Die abschließende reguläre Push-/PR-CI und beide vollständigen Nativläufe von
+`427f36709dd032eed4b9cd73a1842bf513f63afa` sind erfolgreich:
+[reguläre CI](https://github.com/superions/pingufunk/actions/runs/41249358382),
+[native Push-Abnahme](https://github.com/superions/pingufunk/actions/runs/41249354374),
+[native PR-Abnahme](https://github.com/superions/pingufunk/actions/runs/41249358348).
+1.725 Tests mit Coverage, Lint, Typecheck, Format, Build und vollständiger
+Dependency-Audit ohne Befunde; 28 Opt-in-Fälle weiterhin getrennt gezählt.
+Die Nativabnahme umfasst SQLite und PostgreSQL 18, echte Medienabschlüsse,
+deterministischen DB-Ausfall samt Erholung, direkte und über Prowlarr geführte
+Sonarr-Importe, kalte Suche/RSS, TLS-/Post-Write-Rollback und Persistenz.
+
+[PR #19](https://github.com/superions/pingufunk/pull/19) ist als
+`43c949e853a31cacce7e082d7837af321a1b83cf` gemergt; sein Dateibaum entspricht
+dem vollständig geprüften Quellstand. Der exakte CI-Export für Linux/amd64 mit
+Imageconfig `sha256:df75035f27ebd1391a7e8abcca623a6178ba2d797cfa8265b4a68c959410a051`
+ist mit frischer Scanner-Datenbank befundfrei und live übernommen. Es wurde
+kein öffentliches Registryimage veröffentlicht. Geordneter Worker-Drain,
+normaler GitOps-Wechsel, gesunder neuer Container, kompatibles unverändertes
+Schema und betriebsbereite Quellenworker sind bestätigt. Der lesende
+Vorher-/Nachhervergleich erhält alle vorhandenen Aufträge, Receipts, Dateien,
+Episodenbindungen, History, Einstellungen, Profile und Mounts. Keine neuen
+manuellen Live-Suchen, Grabs, Retries oder Imports; private Betriebsbelege
+bleiben im zuständigen Tagesjournal.
+
+Der unveränderte eingefrorene Metadaten-/Indexsnapshot hat mit dem endgültigen
+numerisch geschützten Vergleich genau 93 sichere Bindungen und vier fehlende
+Quellenbindungen. Die drei marginalen Titelvarianten sind strukturell gelöst;
+die ursprüngliche Einordnung als echte Inhaltskonflikte ist damit korrigiert.
+Quellenverfügbarkeit, Medienfreigabe und tatsächlicher Import bleiben getrennte
+Nachweise. P19.1 ist abgeschlossen; P19.2–P19.6 und die getrennten Bestands-
+und Transferabnahmen bleiben offen.
