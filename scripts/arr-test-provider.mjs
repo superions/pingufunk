@@ -75,7 +75,13 @@ globalThis.fetch = async (input, init) => {
         name: "Synthetic Series",
         germanName: "Deutsche Testserie",
         aliases: [],
-        episodes: [],
+        episodes: Array.from({ length: 4 }, (_, i) => ({
+          name: `Synthetic Episode ${Math.floor(i / 2) + 1}-${(i % 2) + 1}`,
+          seasonNumber: Math.floor(i / 2) + 1,
+          episodeNumber: (i % 2) + 1,
+          aired: "2019-01-01",
+          runtime: 1,
+        })),
       },
     ]);
   if (
