@@ -1,7 +1,7 @@
 # Pingufunk: ausführbare Phasen-TODOs
 
-Stand: 31.10.2026; kritischer Statusreview vom 30.10.2026 und anschließend
-ausdrücklich beauftragter Betriebsabschluss P10.7.
+Stand: 31.10.2026; kritischer Statusreview vom 30.10.2026, Betriebsabschluss
+P10.7 und strukturelle Einordnung der Mediathek-/YouTube-Importprobleme in P19.
 Die Checkboxen unten sind der einzige ausführbare Arbeitsvertrag. Erledigte
 Anforderungen bleiben mit stabilen Paket-IDs und ihrem konkreten Nachweis
 referenzierbar; überholte Zwischenstände sind im
@@ -95,6 +95,14 @@ erneut implementiert; ihre Architekturbegründung bleibt im
 [Review](../docs/proxy-retirement-review.md#architektur-folgeauftrag-06102026).
 Optionale zurückgestellte Arbeit und ein gesonderter Betriebsstopp blockieren
 keine unabhängige Produkt-/Dokumentationsarbeit.
+
+Der Import-Arbeitsweg vom 31.10.2026 trennt Nachweise und neue Fähigkeiten:
+P06.4 für die konkrete Bestands-/Historyklärung, P17.6 für den realen neuen
+YouTube-Dateiabschluss; danach beziehungsweise unabhängig davon P19.1 für
+Titelkonflikte, P19.2→P19.3 für Nummerierungs-/Mehrfolgenbindung und P19.4–P19.6
+für konkrete Medienbelegprobleme. Nur P19.3 hängt von P19.2 ab. Bereits laufende
+Abgleiche nicht doppelt starten. Die Fallklassifikation und ihre Beleggrenzen
+stehen im [Strukturreview](../docs/proxy-retirement-review.md#strukturreview-der-importprobleme-31102026).
 
 ## Phase P00 — Reproduzierbare Regressionen und sichere Fork-CI
 
@@ -1292,6 +1300,27 @@ B08/B09. Sonarr-Key nötig, neues TVDB-/TMDB-Konto nicht.
       ungeprüft; keine behauptete aktuelle Produktstörung allein aus altem Status.
       Kein neuer Grab, Retry, Import oder Rollout aus diesem Reviewauftrag;
       dafür gegebenenfalls den genau benannten nächsten Auftrag einholen.
+      Konkretisierung aus dem Strukturreview 31.10.2026: Der frühere
+      Mehrstaffelfall ist „Letzte Spur Berlin“; insbesondere die zusätzlichen
+      Auftragsgenerationen von S09E11/S10E09 und ihre Freigabebindung klären.
+      Kommissar hat den separaten damaligen History-/Filewiderspruch.
+      Für „Die Düsteren“ liegen geprüfte Downloads mit damaliger
+      Sonarr-Importsperre vor, aber hier kein zugeordneter vollständiger
+      Importabschluss. Diese benannten Fälle mit vorhandenen Belegen abgleichen,
+      aktuelle Serien-/Episodenidentitäten zuerst bestätigen; keine Ausweitung
+      auf einen beliebigen Vollbibliotheksaudit. Zeitgleich laufende Abgleiche
+      einmal auswerten statt doppelt ausführen.
+      Wiederverwendeter Kommissar-Audit 31.10.2026: Der private Nachweis nennt
+      die konkreten Restfolgen und Auftragsgenerationen. Fehlgeschlagene/
+      blocklistgebundene Downloads nach Versuch, Build, Fehlerphase und
+      vorhandenem Ergebnis trennen; kein automatischer Retry oder Blocklist-Reset.
+      Zugeordnete Quellen ohne Grab auf Belegbereitschaft, Release-/RSS-
+      Nachlieferung und tatsächliche Arr-Ablehnung abgleichen. Fehlende
+      Indexbindungen auf Abdeckung und Quellenlage prüfen; fehlende Bindung
+      beweist keinen fehlenden Upload. Titelvarianten sind P19.1, zusätzlicher
+      Sprachbefund P19.5. Historische Fehler nicht zu neuen Produktregressionen
+      machen; belegte aktuelle Regression am Owner öffnen. Bibliotheksmengen
+      und operative Einzelinventare nicht ins öffentliche Repository übernehmen.
 
 ## Phase P07 — Allgemeines ARTE-Matching statt Titel-Allowlist
 
@@ -3036,6 +3065,13 @@ kein Zeitversprechen. Alle Punkte bleiben bis tatsächlicher Umsetzung offen.
       Runbook, redigierter Abschluss hier. Falls kein geeigneter vorhandener
       Auftrag belegbar ist, den konkreten fehlenden Beleg melden; neuer Grab,
       Retry, Import, Login/Token oder Rollout bleibt ein eigener Auftrag.
+      Neuer wiederverwendbarer Einzelbeleg vom 31.10.2026: Der private
+      Kommissar-Audit bestätigt eine tatsächliche Datei mit nativer Paarung,
+      jedoch über einen späteren Auftrag statt des ursprünglich gescheiterten
+      Versuchs. Diesen erfolgreichen Auftrag zuerst exakt dem Build,
+      eingefrorenen Quellenvertrag und Workerabschluss zuordnen; keinen neuen
+      Grab zur Wiederholung vorhandener Evidenz anlegen. Der Bestandsbericht
+      allein ersetzt fehlende Build-/Jobbelege weiterhin nicht.
 
 - [x] **P17.7 — Unabhängige Quellenworker und begrenzte YouTube-Teilabrufe.**
       Ausdrücklicher Nutzerauftrag 30.10.2026: YouTube und Mediatheken parallel
@@ -3185,3 +3221,168 @@ Vergleich und dessen GitHub-Darstellungsabnahme offen.
       wegen Dokuänderungen. Kohärenten eigenen Topiccommit pushen; Mainmerge,
       Imagepublikation, Produktrollout und Medienaufträge sind nicht enthalten.
       Öffentliches Ergebnis bleibt frei von privaten Topologie-/API-/Mediendaten.
+
+## Phase P19 — Konkrete verbliebene Importlücken
+
+Ergebnis: die im [Strukturreview](../docs/proxy-retirement-review.md#strukturreview-der-importprobleme-31102026)
+benannten Restfälle kausal schließen, ohne erledigte Quellen-/Workerfunktionen
+neu zu bauen. Nutzerauftrag 31.10.2026: Probleme strukturell einordnen und ihren
+Ownern zuweisen. Dies ist der daraus abgeleitete Arbeitsvertrag, noch keine
+Implementierungs- oder Betriebsabnahme.
+
+Gemeinsam für P19: vorhandene Katalog-, Match-, Medien-, Queue-/Receipt- und
+Diagnoseowner verwenden. Sonarr/Radarr bleiben primäre Such-/Importoberflächen;
+kein allgemeiner zweiter manueller Indexermodus. Quellgrenzen erst anhand
+konkreter Quellenfakten einordnen: fehlender Vollinhalt, fehlende Wunschfassung
+oder tatsächliche Zugangsbedingungen. Konflikte und Unknown nicht durch
+Profiländerungen, Fuzzy-Guessing, Sprachetiketten oder höhere globale Toleranzen
+beseitigen. Technische Diagnose, notwendige Nutzerentscheidung und fehlender
+Abschlussbeleg bleiben getrennt. Kein Punkt erteilt Betriebs-, Grab-, Retry-,
+Import- oder Bestandsänderungsfreigabe; betroffene konkrete Operation vor ihrer
+Ausführung separat benennen und autorisieren lassen. Reine lesende Diagnose
+vorhandener Belege/Metadaten bleibt möglich.
+
+- [ ] **P19.1 — Metadaten-Titelvarianten identitätsgebunden auflösen.**
+      Unabhängig startbar. Owner: `sonarr-provider.ts::mergeSonarrShow`,
+      `shows.ts`, `data/shows.json`, `youtube-bindings.ts`,
+      `lib/youtube-mapping.ts`, vorhandenes Kanalregister und Zuordnungsbericht.
+      Der wiederverwendete Audit vom 31.10.2026 bestätigt S03E10/S07E08/S07E12
+      mit „Grauroter/Grau-roter Morgen“, „10/zehn Minuten“ und „Mord/Ein Mord
+      nach der Uhr“. `mergeSonarrShow` sperrt bereits nach zeichengetreuem
+      Trim-/NFC-Vergleich; Uploadaliase greifen erst danach und lösen diese
+      Merge-Sperre nicht. Kanonische Episode, Sonarr-Metadaten und konkreten
+      Upload abgleichen; belegte Datenkorrektur oder koordinatengebundene
+      Titelequivalenz am bestehenden Metadatenowner konsumieren. Keine globale
+      Artikel-/Zahlwort-/Fuzzy-Normalisierung aus diesen Beispielen ableiten.
+      Publishernummerierung und belegte Titelaliasse sind bereits implementiert.
+      Fehlende Übersetzung, falscher Metadatentitel, falsche
+      Koordinate und tatsächlich anderer Inhalt verlangen verschiedene Befunde.
+      Belegte Katalog-/Aliasfehler am bestehenden Owner korrigieren; keine
+      widersprechenden Autoritäten still überschreiben oder allein nach Laufzeit
+      zuordnen. Bei echter ungeklärter Identität genau den fehlenden Beleg bzw.
+      die notwendige Entscheidung festhalten. Abnahme: alle identifizierten
+      Fälle mit konkretem Ergebnis, sichere Korrekturen durch Bericht und
+      RSS→NZB→persistierten Job geschützt; Gegenfälle bleiben gesperrt.
+      Reiner belegter Datenfix braucht keine neue Matchingarchitektur.
+      Quellen fehlen/unavailable und Identität konfliktbehaftet getrennt zählen;
+      keine behauptete 97/97-Verfügbarkeit. Fachreferenz/Review am selben Punkt
+      aktualisieren; Codeänderungen nutzen die gemeinsamen Produktgates.
+
+- [ ] **P19.2 — Belegte abweichende Mediatheknummerierung an ein Einzelziel binden.**
+      Unabhängig von P19.1/P19.4–P19.6. Owner: `data/shows.json` und dessen
+      Schema in `shows.ts`, `types/index.ts`, `sonarr-matcher.ts`,
+      `source-programme.ts::matchBoundSourceEpisode`, `tv-source-review.ts`,
+      Release-/NZB-Erwartungsowner und
+      `docs/tv-search-contract.md`. Bekannter Referenzfall „Sommersonnenwende“:
+      Quelle S2019E01, bestätigtes langes Ziel S08E01 statt kurzer Specialfassung.
+      Eine optionale explizite Quellenbindung im bestehenden ergänzenden
+      Showkatalog vorsehen: stabile öffentliche Programmidentität, erwartete
+      Quellnummer/Titel und kanonisches Ziel getrennt erhalten. Keine signierten
+      Medienadressen oder privaten Bibliotheks-IDs im Katalog. Nur die exakt
+      belegte Quelle darf die widersprechende Quellnummer überführen; frisch
+      validierter Serien-/Episodenbestand, passende Fassung und Medienbelege
+      bleiben Pflicht. Titel-/Dauerähnlichkeit allein aktiviert keine Bindung.
+      Kein globales Umrechnen von Jahresstaffeln und keine Umdeutung anderer
+      Sendungen. Dieselbe Bindung vor RSS/NZB-Ausgabe, Enqueue und Workerprüfung
+      konsumieren; reiner GUI-Override reicht für den Arr-Weg nicht.
+      Den vorhandenen expliziten Bindungskonsumenten in `source-programme.ts`
+      erweitern; Mediathekbindungen nicht als YouTube-`sourceRef` deklarieren
+      oder einen zweiten unabhängigen Episodenmatcher einführen.
+      Producer/Parser/persistierter Job/Worker gemeinsam kompatibel erweitern;
+      historische Jobs, GUIDs und Pfade behalten ihren Vertrag. Neue explizite
+      Bindung samt Ursprung im bestehenden versionierten Joberwartungsowner
+      festhalten, keine zweite Persistenz. Abnahme: synthetische Referenz direkt
+      und via Prowlarr bis zur nativen Sonarr-Dateibindung auf SQLite/PG18;
+      fremdes Programm, kurzes Special, geänderte Quelle, AD/Sprach-/Laufzeit-
+      konflikt und ungeprüftes Ziel negativ. Rückweg muss neue Jobs verstehen.
+      Erstmals kanonisch gebundene frühere neutrale Kandidaten erhalten eine
+      ausdrücklich geprüfte zielgebundene Releaseidentität; Altjobs/History
+      nicht umschreiben und Übergang gegen Doppelgrab prüfen.
+
+- [ ] **P19.3 — Eine bestätigte Langfassung nativ zwei Episoden zuordnen.**
+      Abhängigkeit P19.2. Owner: dessen Quellenbindung,
+      `source-programme.ts`, `types/index.ts::MatchedEpisodeInfo`, `newznab.ts`, `nzb-release.ts`,
+      `release-media-expectations.ts`, `lib/media-expectations.ts`,
+      `tv-source-review.ts`, Queue-/Completion-/Arr-Diagnoseconsumer und
+      vorhandener nativer Sonarr-Harness. Referenz „Der Tod ist groß“:
+      Quell-S10E13, bestätigte ganze Standardfassung für S00E02 und S00E03.
+      Explizite Quellenbindung auf genau diese zwei validierten Ziele erweitern;
+      Quellen- und Ziellaufzeiten getrennt führen, gesamte bestätigte Laufzeit
+      statt Vergleich mit nur einer Hälfte prüfen. Keine Datei teilen und keine
+      zweite Datei oder zweiten Download erzeugen. Release, GUID, NZB und
+      eingefrorener Job müssen denselben gemeinsamen Episodenumfang tragen;
+      bei Suche nach jeder enthaltenen Folge denselben Release liefern.
+      Singles bleiben unverändert; allgemeine Episodenbereiche nicht auf die
+      erste Nummer verkürzen. Unbekannte/fehlende/inkonsistente Teile sperren.
+      Der heutige reine Laufzeitentscheid darf nicht rückwirkend zur
+      Nummerierungs-/Mehrfolgenfreigabe werden. Abnahme direkt/via Prowlarr auf
+      SQLite/PG18: genau ein Grab/Job/eine physische Datei, native Bindung beider
+      Episoden an dieselbe FileId mit exakt gepaarter Download-/Importhistory,
+      kein zweiter Grab über Einzelsuche/RSS/Restart. TBA-Consumerblocker separat
+      belegen; dessen native ausdrücklich bestätigte Zuordnung in der isolierten
+      Abnahme prüfen, ohne Sonarr-Metadaten oder globale Profile umzuschreiben.
+      Bestehenden TV-/Job-/Diagnosevertrag und kompatiblen Rückweg mitpflegen.
+
+- [ ] **P19.4 — ARTE-Belegausfall von fehlender Fassung und Rechtefenster trennen.**
+      Unabhängig startbar. Owner: `source-audio.ts::getArteStreams`,
+      `arte-editions.ts`, `rendition-quality.ts`, `lib/decision-diagnostics.ts`,
+      bestehende Quelltests sowie Tonsprachen-/Qualitäts-/Diagnosereferenzen.
+      Den konkreten Misericordia-Befund anhand vorhandener Belege und begrenzter
+      öffentlicher Metadaten kausal klären: HbbTV-404/410, gültige leere
+      Streamantwort, Zugangsfenster, falsche Rendition und Schema-/Transportfehler
+      sind keine austauschbaren Ursachen. Keine Live-Bibliothekssuche nötig.
+      Geschlossene Diagnose am vorhandenen Owner so ergänzen, dass ein fehlender
+      Belegendpunkt nicht als erfolgreich gelesene Quellenleere erscheint.
+      Falls eine unterstützte strukturierte Quelle dieselbe exakte Rendition
+      belegt, den bestehenden Audio-/Maßowner gemeinsam mit frischer
+      Workerprüfung korrigieren. Andernfalls konkreten fehlenden Vertrag und
+      Quellzustand festhalten; kein behaupteter Qualitätsfix allein durch
+      Fehlertext. Kein neuer HTML-/Sendercrawler, Account-/Token-Dienst,
+      Alters-/Geoblocking-Bypass oder Schluss von Website-DE auf deutschen Ton.
+      Abnahme: kausale positive/negative synthetische Fälle bis zur tatsächlichen
+      Arr-Sprach-/Qualitätsentscheidung, keine Raw-URLs in Diagnose, unveränderte
+      Unknown-/Konfliktsperren und frische Revalidation. Eine auslaufende einzelne
+      Sendung darf keinen unbestimmten allgemeinen ARTE-Ausbauauftrag erzeugen.
+
+- [ ] **P19.5 — Den konkreten Anbieter-/Track-Sprachwiderspruch fachlich schließen.**
+      Unabhängig startbar. Owner: `source-audio.ts`, `media-probe.ts`,
+      `providers/youtube/audio.ts`, `providers/youtube/resolve.ts`,
+      gespeicherte `mediaValidation`, vorhandene Job-/Arr-Diagnose und
+      `docs/source-audio-contract.md`. Historischer La-La-Land-Fall: Anbieter
+      Deutsch, lokale Tags `eng`; private erfolgreiche Rettung getrennt von
+      einem allgemeinen Produktfix bewerten. Zusätzlich den im aktuellen
+      Kommissar-Audit belegten Sprachfehler von S06E10 exakt seiner Quelle,
+      Auswahl, Fehlerstufe und Auftragsgeneration zuordnen; nicht allein aus
+      derselben Fehlerklasse dieselbe Ursache folgern. Vorhandene Inhalts-/Dateibelege
+      auswerten und Ursache genau zuordnen: falsches Tag, falscher Quellbeleg,
+      andere Rendition oder tatsächlich andere Sprache. Fehlende Belege konkret
+      benennen, keine neue automatische Spracherkennungsinfrastruktur einführen.
+      Ein belegter Producer-/Renditionfehler erhält seinen kausalen Fix samt
+      Consumerregression. Für einen verbleibenden echten Tag-/Inhaltswiderspruch
+      vor einer Produktänderung den eng an exakte Datei/Quelle gebundenen
+      Korrekturvertrag und dessen Nutzerentscheidung vorlegen; der heutige
+      Unknown-/Konfliktschutz bleibt bis dahin gültig. Keine globale Vorrangregel
+      „Anbieter gewinnt“, kein stilles Umtaggen oder Completed trotz Konflikt.
+      Abnahme: konkreter Ursachen-/Korrekturbeleg oder ausdrücklich benannter
+      offener Entscheidungsstopp; ein ungeklärter Fall bleibt ungeklärt und
+      ungecheckt. Produktkorrektur erst mit unverändert negativen Fremdsprachen-/
+      Mischtrackfällen und durchgängiger Datei-/Importbindung schließen.
+
+- [ ] **P19.6 — Den konkreten WDR-/Protection-Belegfall abschließend einordnen.**
+      Unabhängig startbar. Owner: `ard-source-audio.ts`, `source-audio.ts`,
+      bestehender Producer-/Worker-URL-Gate, `rendition-quality.ts` und
+      Tonsprachen-/Auflösungsreferenz. Historisch fehlende Hostunterstützung
+      von der zugleich gemeldeten FSK-Sperre ohne Streams trennen. Vorhandene
+      Belege sowie begrenzte öffentliche Metadaten der betroffenen Programme
+      prüfen; keine aktuelle Störung allein aus dem Altbefund behaupten.
+      Bei heute verfügbaren strukturierten Belegen die exakte Programm-/URL-/
+      Sprach-/Maßbindung prüfen und nur den konkret belegten Host im vorhandenen
+      ARD-Owner für Producer und Worker gemeinsam unterstützen. Kein pauschales
+      WDR-/CDN-Wildcardvertrauen, Sendercrawler oder Ausweichen auf einen anderen
+      Stream. Bei tatsächlicher Zugangsgrenze oder ausgelisteter Quelle diesen
+      konkreten Rest ausweisen; daraus keinen unbegrenzten Ausbau ableiten.
+      Abnahme: eindeutige Fallklassifikation mit vorhandenem bzw. fehlendem
+      Abschlussbeleg; ein notwendiger Adapterfix benötigt kausale positive und
+      negative URL-/Rechte-/Audio-/Qualitätsfälle samt nativem Arr-Consumer.
+      Unbelegte Sprache/Qualität bleibt Unknown; tatsächlicher Download/Import
+      benötigt weiterhin seinen eigenen freigegebenen Nachweis.
