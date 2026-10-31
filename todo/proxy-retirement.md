@@ -3242,6 +3242,11 @@ Import- oder Bestandsänderungsfreigabe; betroffene konkrete Operation vor ihrer
 Ausführung separat benennen und autorisieren lassen. Reine lesende Diagnose
 vorhandener Belege/Metadaten bleibt möglich.
 
+Ausführungsauftrag 31.10.2026: P19 der Reihe nach umsetzen, mergen und live
+ausrollen; bestehende Aufträge und Dateien erhalten. Die konkrete Rollout-
+Autorisierung liegt damit vor. Neue Bibliothekssuchen, Grabs, Retries und
+manuelle Imports werden daraus nicht als zusätzliche Medienaufträge abgeleitet.
+
 - [ ] **P19.1 — Metadaten-Titelvarianten identitätsgebunden auflösen.**
       Unabhängig startbar. Owner: `sonarr-provider.ts::mergeSonarrShow`,
       `shows.ts`, `data/shows.json`, `youtube-bindings.ts`,
@@ -3251,9 +3256,16 @@ vorhandener Belege/Metadaten bleibt möglich.
       nach der Uhr“. `mergeSonarrShow` sperrt bereits nach zeichengetreuem
       Trim-/NFC-Vergleich; Uploadaliase greifen erst danach und lösen diese
       Merge-Sperre nicht. Kanonische Episode, Sonarr-Metadaten und konkreten
-      Upload abgleichen; belegte Datenkorrektur oder koordinatengebundene
-      Titelequivalenz am bestehenden Metadatenowner konsumieren. Keine globale
-      Artikel-/Zahlwort-/Fuzzy-Normalisierung aus diesen Beispielen ableiten.
+      Upload abgleichen. Nutzerpräzisierung 31.10.2026: marginale Unterschiede
+      im gemeinsamen Vergleich lösen, keine je Folge gepflegten Ausnahmen.
+      Deterministische Schreibvarianten am vorhandenen Metadatenowner nach
+      bestätigter Serien-/Koordinatenbindung vergleichen: Groß-/Kleinschreibung,
+      Zeichensetzung/Wortbindestrich, deutsche kleine Zahlwörter 0–20 und
+      optionaler führender deutscher Artikel. Wort-/Zahlgrenzen erhalten;
+      beliebige Wortauslassung, Ähnlichkeitsschwelle, Übersetzung und echte
+      Datums-/Inhaltskonflikte bleiben ausgeschlossen. Quelltitel und
+      kanonischer Titel werden nicht umgeschrieben. Die Retrieval-/Quellen-
+      identitätsprüfung wird dadurch nicht global gelockert.
       Publishernummerierung und belegte Titelaliasse sind bereits implementiert.
       Fehlende Übersetzung, falscher Metadatentitel, falsche
       Koordinate und tatsächlich anderer Inhalt verlangen verschiedene Befunde.

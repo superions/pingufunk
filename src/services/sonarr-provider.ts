@@ -1,6 +1,6 @@
 import { LRUCache } from "lru-cache";
 import { createHash } from "node:crypto";
-import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
+import { equivalentEpisodeTitles, isPlaceholderEpisodeTitle } from "@/lib/episode-title";
 import { getSetting } from "@/lib/settings";
 import { externalCredential } from "@/lib/credential-settings";
 import { cacheContextEpoch, coalesceMetadata, metadataCacheKey } from "@/lib/cache";
@@ -211,7 +211,7 @@ export function mergeSonarrShow(
       if (
         (!isPlaceholderEpisodeTitle(original.name, original.episodeNumber) &&
           !isPlaceholderEpisodeTitle(episode.title, episode.episodeNumber) &&
-          original.name.trim().normalize("NFC") !== episode.title.trim().normalize("NFC")) ||
+          !equivalentEpisodeTitles(original.name, episode.title)) ||
         (original.aired &&
           airedDay &&
           new Date(original.aired).toISOString().slice(0, 10) !== airedDay)

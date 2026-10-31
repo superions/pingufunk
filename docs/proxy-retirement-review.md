@@ -4255,3 +4255,40 @@ Nur Dokumentation/Planung geändert. Keine neuen Live-Suchen, Grabs, Retries,
 Imports, Dienst-/Profil-/DB-Änderungen oder Medienproben. Passende vorhandene
 Produktnachweise bleiben gültig; Format, Verweise, Fallzuordnung und Diff
 werden frisch geprüft.
+
+## P19.1 — Allgemeiner Vergleich marginaler Episodentitel (31.10.2026)
+
+Nutzerpräzisierung: diese Fälle im gemeinsamen Vergleich lösen, keine je Folge
+gepflegten Ausnahme-Aliasse. `equivalentEpisodeTitles` am vorhandenen
+`episode-title.ts`-Owner vergleicht deterministische Schreibvarianten;
+`mergeSonarrShow` verwendet ihn ausschließlich nach bestätigter TVDB-Serie und
+gleicher Staffel-/Folgenkoordinate. Groß-/Kleinschreibung, Zeichensetzung,
+Wortbindestriche, deutsche kleine Zahlwörter und führende Artikel werden
+berücksichtigt. Wort-/Zahlgrenzen, konkrete Inhalts- und Kalenderkonflikte
+bleiben geschützt. Katalog, Providerdaten, Suchziel und Titel werden nicht
+umgeschrieben. Keine Schema-/Jobversion-/Pfadänderung und keine neue Persistenz.
+
+Die sechs Merge-/Quellen-/RSS-/NZB-Consumerfälle scheitern beim kontrollierten
+Rückbau auf den alten zeichengetreuen Vergleich und bestehen mit der Korrektur.
+Weitere Negative prüfen andere Inhaltswörter, andere Zahlen, ausgelassene
+Binnenwörter und zusammengezogene Zahlgrenzen. Der bestehende externe
+Netzverkehr ausschließende native YouTube-Harness enthält jetzt vier kuratierte
+Episoden und drei abweichende tatsächliche Sonarr-Schreibweisen; er muss
+weiterhin genau vier native Dateiimporte ohne RSS-Doppelgrab erreichen.
+Der unveränderte private Kommissar-Metadaten-/Indexsnapshot bestätigt lokal
+genau die drei erwarteten zusätzlichen Bindungen; tatsächliche Quellenlücken
+bleiben offen. Das ist eine Offline-Gegenprobe, kein neuer Live-Such-/Grabaufruf.
+
+Lokaler Checkpoint: 1.697 reguläre Tests, 28 getrennt aktivierbare Fälle nicht
+als ausgeführt gezählt; Lint, Typecheck und Format erfolgreich. Native CI,
+Merge, Imagefreigabe und autorisierter bestandserhaltender Rollout stehen noch
+aus; P19.1 bleibt bis zur vollständigen Abnahme offen.
+
+Separater bereits im unveränderten Lockfile vorhandener Freigabebefund:
+`npm audit --include=dev` meldet 17 moderate transitive Dev-Tool-Befunde aus
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+Die unterstützte Korrektur liegt in minimatch 11; gelockte Lintconsumer nutzen
+Version 3 und 9 mit unterschiedlichen Import-/API-Verträgen. Keine blinde
+Major-Übersteuerung, kein Audit-Ignore und keine Abschwächung des bestehenden
+LOW-Gates. `npm audit --omit=dev` ist ohne Befund. Dieser Baselinebefund bleibt
+getrennt von der Titelkorrektur sichtbar und ist nicht als grünes Gate erklärt.
