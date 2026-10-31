@@ -516,11 +516,11 @@ if (pgContainer) {
     container,
     "node",
     "-e",
-    'const fs=require("node:fs");fs.writeFileSync("/tmp/pause-next-probe","synthetic test control");fs.chownSync("/tmp/pause-next-probe",Number(process.env.PUID),Number(process.env.PGID));',
+    'const fs=require("node:fs");for(const p of ["/tmp/media-probe-ready","/tmp/media-probe-release"])fs.rmSync(p,{force:true});fs.writeFileSync("/tmp/pause-next-probe","synthetic test control");fs.chownSync("/tmp/pause-next-probe",Number(process.env.PUID),Number(process.env.PGID));',
   ]);
   const fixture = nzb("valid.mp4", 2);
   const interruptedId = request("api?mode=addfile&cat=sonarr", fixture.body).nzo_ids[0];
-  const deadline = Date.now() + 30_000;
+  const probeDeadline = Date.now() + 30_000;
   let ready = false;
   do {
     ready =
@@ -532,20 +532,21 @@ if (pgContainer) {
         'console.log(require("node:fs").existsSync("/tmp/media-probe-ready"))',
       ]).trim() === "true";
     if (!ready) await delay(100);
-  } while (!ready && Date.now() < deadline);
+  } while (!ready && Date.now() < probeDeadline);
   if (!ready) throw new Error("Owned probe synchronization failed");
-  const priorFailures = run(["logs", container]).split(
-    "Failed to start download processing"
-  ).length;
   run(["pause", pgContainer]);
   try {
+    if (run(["inspect", "--format", "{{.State.Paused}}", pgContainer]).trim() !== "true")
+      throw new Error("Owned database pause was not confirmed");
+    run(["exec", container, "sh", "-c", ": > /tmp/media-probe-release"]);
+    // Observe the closed runtime contract after the confirmed fault, not a logging catch path.
+    const failureDeadline = Date.now() + 30_000;
     let pausedFailure = false;
     do {
-      pausedFailure =
-        run(["logs", container]).split("Failed to start download processing").length >
-        priorFailures;
+      const worker = request("api/health?mode=ready", undefined, undefined, 503).worker;
+      pausedFailure = worker.state === "paused" && worker.drainRequested === false;
       if (!pausedFailure) await delay(200);
-    } while (!pausedFailure && Date.now() < deadline);
+    } while (!pausedFailure && Date.now() < failureDeadline);
     if (!pausedFailure) throw new Error("Worker did not pause at its failed DB write");
     const unavailable = run([
       "exec",

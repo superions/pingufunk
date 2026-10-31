@@ -64,13 +64,14 @@ for provider in "${providers[@]}"; do
   DATABASE_URL="$QA_URL" docker run -d --name "$APP_CONTAINER" --network "$QA_TRANSPORT" \
     --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" \
     -e DATABASE_URL -e "DATABASE_PROVIDER=$provider" -e PINGUFUNK_WRITES_ENABLED=1 \
-    -e PINGUFUNK_FFPROBE_PATH=/app/ffmpeg/ffprobe-qa \
+    -e PINGUFUNK_FFPROBE_PATH=/qa/ffprobe-qa.sh \
     -e PINGUFUNK_PUBLIC_URL=http://127.0.0.1:6767 \
     -e "PINGUFUNK_MEDIA_QA_OWNER=$MEDIA_QA_ID" \
     -e NODE_OPTIONS='--import /qa/provider.mjs' \
     -e "PUID=$(id -u)" -e "PGID=$(id -g)" \
     --mount "type=bind,src=${QA_ROOT}/${provider},dst=/qa" \
     --mount "type=bind,src=$(pwd)/scripts/media-container-provider.mjs,dst=/qa/provider.mjs,readonly" \
+    --mount "type=bind,src=$(pwd)/scripts/media-container-ffprobe.sh,dst=/qa/ffprobe-qa.sh,readonly" \
     --entrypoint /bin/sh "$RUNNER_IMAGE" -ec '
       mkdir -p /app/public/pingufunk-media-qa
       ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=25 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/valid.mp4
@@ -80,7 +81,6 @@ for provider in "${providers[@]}"; do
       ffmpeg -y -v error -i /app/public/pingufunk-media-qa/valid.mp4 -c copy -hls_time 1 -hls_list_size 0 /app/public/pingufunk-media-qa/stream.m3u8
       node -e '\''require("node:fs").writeFileSync("/app/public/pingufunk-media-qa/invalid.mp4","<!doctype html><title>Synthetic error</title>")'\''
       node -e '\''const fs=require("node:fs");const file=fs.readFileSync("/app/public/pingufunk-media-qa/valid.mp4");fs.writeFileSync("/app/public/pingufunk-media-qa/truncated.mp4",file.subarray(0,Math.floor(file.length/2)))'\''
-      node -e '\''require("node:fs").writeFileSync("/app/ffmpeg/ffprobe-qa","#!/bin/sh\nif [ -f /tmp/pause-next-probe ]; then mv /tmp/pause-next-probe /tmp/media-probe-ready; sleep 8; fi\nexec /usr/bin/ffprobe \"$@\"\n",{mode:0o755})'\''
       node -e '\''const fs=require("node:fs"),p="/app/ffmpeg/ffmpeg",s="#!/bin/sh\nif [ -f /tmp/slow-next-mux ]; then mv /tmp/slow-next-mux /tmp/media-mux-ready; exec /usr/bin/ffmpeg -re \"$@\"; fi\nexec /usr/bin/ffmpeg \"$@\"\n";if(fs.lstatSync(p).isSymbolicLink()){if(fs.readlinkSync(p)!=="/usr/bin/ffmpeg")throw Error("Unexpected fixture tool");fs.unlinkSync(p);fs.writeFileSync(p,s,{mode:0o755,flag:"wx"});}else if(!fs.lstatSync(p).isFile()||fs.readFileSync(p,"utf8")!==s)throw Error("Unexpected fixture wrapper")'\''
       exec /entrypoint.sh node server.js
     ' >/dev/null

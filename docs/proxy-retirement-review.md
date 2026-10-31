@@ -4353,3 +4353,20 @@ scheitern. Produktcode und Dependencies bleiben gegenüber `7c1ef5b` unveränder
 die nativen Gates müssen mit dem korrigierten Fixture erneut bestehen.
 Frische lokale Abnahme: 1.723 Tests mit Coverage, Lint, Typecheck, Format und
 Build erfolgreich; 28 Opt-in-Fälle weiterhin separat gezählt.
+
+Die PR-Nativprüfung von `ef407b3` scheitert anschließend im vorhandenen
+PostgreSQL-Ausfalltest, während der gleichzeitige Push-Lauf diesen Gate besteht.
+Der Test hielt die Probe nur durch eine feste Acht-Sekunden-Pause zurück und
+wartete danach auf einen Fehlertext. Eine Gegenprobe mit neun Sekunden
+Beobachterverzögerung weist das Rennen nach: Die Probe läuft bereits vor der
+bestätigten Datenbankpause; der neue Schutztest scheitert mit der bisherigen
+Steuerung. Das Fixture wartet jetzt begrenzt auf eine ausdrückliche Freigabe,
+die erst nach der bestätigten DB-Pause erfolgt. Der Test prüft anschließend
+den geschlossenen Laufzeitstatus `paused` und weiterhin die fehlschlagende
+Queue-API, unabhängig persistierte Wiederaufnahme und tatsächliche Datei-/
+Jobzustände. Produkt-Timeouts und Worker bleiben unverändert.
+Zwei ausgeführte Shell-Fixturefälle bestehen einschließlich der verzögerten
+Beobachtung; der alte Zeitablauf lässt einen davon scheitern. Die frische
+Coverage-Abnahme umfasst 1.725 bestandene Tests und 28 getrennte Opt-in-Fälle;
+Lint, Typecheck, Format, Build und Shellsyntax sind erfolgreich. Die echte PostgreSQL-
+Abnahme muss mit diesem deterministischen Faulttest erneut bestehen.
