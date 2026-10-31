@@ -4338,3 +4338,18 @@ Lokale Abnahme der numerischen Korrektur: 1.721 Tests mit Coverage erfolgreich,
 erfolgreich. Die befundfreie Paketauflösung und der vollständige Audit aus dem
 Bereinigungscheckpoint werden bei unveränderten Dependencyinputs wiederverwendet;
 die frische CI installiert und prüft sie erneut. Kein Job-/Schema-/Pfadwechsel.
+
+Die native CI von `7c1ef5b` deckt anschließend einen widersprüchlichen Positivfall
+im eigenen Testfixture auf: `Synthetic Episode 1-1` wurde als
+`Synthetic Episode 1 1` geliefert. Der korrigierte Vergleich sperrt diese
+abweichende Zahlstruktur zu Recht; dadurch entstehen nur drei der vier
+verlangten nativen Grabs und die unveränderte Abnahme scheitert.
+Das Positivfixture verwendet jetzt `Synthetic: Episode 1-1`, also Satzzeichen
+zwischen Wörtern bei erhaltener Zahlstruktur. Der bisherige negative Zahlenfall
+ist ausdrücklich abgesichert. Keine Produkttoleranz gelockert, keine Importzahl
+reduziert und keine Assertion übersprungen. 69 fokussierte Fälle bestehen;
+der Rückbau auf den ursprünglichen Vergleich lässt nun genau 14 Schutzfälle
+scheitern. Produktcode und Dependencies bleiben gegenüber `7c1ef5b` unverändert;
+die nativen Gates müssen mit dem korrigierten Fixture erneut bestehen.
+Frische lokale Abnahme: 1.723 Tests mit Coverage, Lint, Typecheck, Format und
+Build erfolgreich; 28 Opt-in-Fälle weiterhin separat gezählt.

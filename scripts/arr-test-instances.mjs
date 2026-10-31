@@ -750,7 +750,7 @@ async function seriesFixture(root, manifest) {
           for (const episode of episodes)
             db.prepare("UPDATE Episodes SET Title=? WHERE Id=?").run(
               episode.SeasonNumber === 1 && episode.EpisodeNumber === 1
-                ? "Synthetic Episode 1 1"
+                ? "Synthetic: Episode 1-1"
                 : episode.SeasonNumber === 1 && episode.EpisodeNumber === 2
                   ? "Ein Synthetic Episode 1-2"
                   : episode.SeasonNumber === 2 && episode.EpisodeNumber === 1

@@ -10,6 +10,7 @@ it.each([
   ["Zwölf Tage", "12 Tage"],
   ["Die Temperatur -10 Grad", "Temperatur -zehn Grad"],
   ["Ein Fall: zehn Prozent", "Fall: 10 Prozent"],
+  ["Synthetic Episode 1-1", "Synthetic: Episode 1-1"],
 ])("compares deterministic orthographic variants: %s / %s", (left, right) => {
   expect(equivalentEpisodeTitles(left, right)).toBe(true);
   expect(equivalentEpisodeTitles(right, left)).toBe(true);
@@ -28,6 +29,7 @@ it.each([
   ["Noch 1,5 Minuten", "Noch 1/5 Minuten"],
   ["Fall 3-1", "Fall 3/1"],
   ["Fall 3–1", "Fall 3 1"],
+  ["Synthetic Episode 1-1", "Synthetic Episode 1 1"],
   ["Zehn Prozent: 10%", "Zehn Prozent: 10"],
   ["Der 1. Mai", "Der 1 Mai"],
   ["Distanz x²", "Distanz x2"],
