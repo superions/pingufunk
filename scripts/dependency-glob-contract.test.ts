@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import lintStaged from "lint-staged";
-import { Linter } from "eslint";
+import { ESLint, Linter } from "eslint";
+import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 const pluginDirectory = path.dirname(require.resolve("@next/eslint-plugin-next"));
@@ -23,6 +24,150 @@ afterEach(() => {
 });
 
 describe("installed development glob consumers", () => {
+  it("keeps callable CommonJS and named ESM matching consistent", async () => {
+    const legacy = require("minimatch");
+    const modern = await import(
+      pathToFileURL(path.join(path.dirname(require.resolve("minimatch")), "index.mjs")).href
+    );
+    expect(modern.default).toBe(legacy);
+    expect(modern.minimatch).toBe(legacy);
+    expect(modern.Minimatch).toBe(legacy.Minimatch);
+    for (const matches of [legacy, modern.minimatch]) {
+      expect(matches("src/nested/view.tsx", "**/*.{ts,tsx}")).toBe(true);
+      expect(matches("src/nested/view.css", "**/*.{ts,tsx}")).toBe(false);
+    }
+  });
+
+  it("preserves ESLint file selection, extglobs, dot directories and global ignores", async () => {
+    const cwd = fixture();
+    for (const directory of ["src", ".hidden", "ignored"]) {
+      mkdirSync(path.join(cwd, directory));
+      for (const name of ["a", "b", "c"])
+        writeFileSync(path.join(cwd, directory, name + ".js"), "debugger;");
+    }
+    const linter = new ESLint({
+      cwd,
+      overrideConfigFile: true,
+      overrideConfig: [
+        { ignores: ["ignored/**"] },
+        { files: ["**/*.{js,jsx}"], rules: { "no-debugger": "error" } },
+      ],
+    });
+    const results = await linter.lintFiles(["**/@(a|b).js"]);
+    expect(results.map((result) => path.relative(cwd, result.filePath)).sort()).toEqual([
+      ".hidden/a.js",
+      ".hidden/b.js",
+      "src/a.js",
+      "src/b.js",
+    ]);
+    for (const result of results)
+      expect(result.messages.map((message) => message.ruleId)).toEqual(["no-debugger"]);
+  });
+
+  it("applies actual project rules to JavaScript tools within their registered language scope", async () => {
+    const linter = new ESLint();
+    const results = await linter.lintText('const view = <img src="/fixture.png"/>;', {
+      filePath: "tools/minimatch-compat/fixture.mjs",
+    });
+    const rules = results[0].messages.map((message) => message.ruleId);
+    expect(rules).toContain("jsx-a11y/alt-text");
+    expect(rules).toContain("@next/next/no-img-element");
+  });
+
+  it("retains React name exceptions without allowing other invalid component names", () => {
+    const messages = new Linter().verify("const view = <><Bad_name/><Legacy_bad/><GoodName/></>;", [
+      {
+        languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } },
+        plugins: { react: require("eslint-plugin-react") },
+        rules: { "react/jsx-pascal-case": ["error", { ignore: ["Legacy_*"] }] },
+      },
+    ]);
+    expect(messages.map((message) => message.ruleId)).toEqual(["react/jsx-pascal-case"]);
+    expect(messages[0].message).toContain("Bad_name");
+  });
+
+  it("keeps React render-prop glob permission distinct from unstable nested components", () => {
+    const messages = new Linter().verify(
+      "function Parent() { return <List renderFooter={() => <span/>} drawFooter={() => <span/>}/>; }",
+      [
+        {
+          languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } },
+          plugins: { react: require("eslint-plugin-react") },
+          rules: { "react/no-unstable-nested-components": "error" },
+        },
+      ]
+    );
+    expect(messages.map((message) => message.ruleId)).toEqual([
+      "react/no-unstable-nested-components",
+    ]);
+  });
+
+  it("keeps custom accessibility controls subject to an actual label", () => {
+    const messages = new Linter().verify(
+      "const view = <><label><FieldOne/></label><label>Name<FieldOne/></label></>;",
+      [
+        {
+          languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } },
+          plugins: { a11y: require("eslint-plugin-jsx-a11y") },
+          rules: {
+            "a11y/label-has-associated-control": [
+              "error",
+              { assert: "either", controlComponents: ["Field*"] },
+            ],
+          },
+        },
+      ]
+    );
+    expect(messages.map((message) => message.ruleId)).toEqual([
+      "a11y/label-has-associated-control",
+    ]);
+  });
+
+  it.each(["allow", "forbid"] as const)(
+    "preserves import path %s rules through their compiled test consumer",
+    (mode) => {
+      const cwd = fixture();
+      for (const directory of ["public", "private"]) {
+        mkdirSync(path.join(cwd, directory));
+        writeFileSync(path.join(cwd, directory, "api.js"), "export const value = 1;");
+      }
+      const messages = new Linter({ cwd }).verify(
+        'import "./public/api.js"; import "./private/api.js";',
+        [
+          {
+            plugins: { import: require("eslint-plugin-import") },
+            rules: {
+              "import/no-internal-modules": [
+                "error",
+                mode === "allow" ? { allow: ["**/public/**"] } : { forbid: ["**/private/**"] },
+              ],
+            },
+          },
+        ],
+        { filename: path.join(cwd, "entry.js") }
+      );
+      expect(messages.map((message) => message.ruleId)).toEqual(["import/no-internal-modules"]);
+      expect(messages[0].message).toContain("./private/api.js");
+    }
+  );
+
+  it("bounds globparts amplification while retaining positive and negative matches", () => {
+    const result = execFileSync(
+      process.execPath,
+      [
+        "--max-old-space-size=64",
+        "-e",
+        `const {Minimatch} = require("minimatch");
+        const pattern = Array(24).fill("**/../a/b").join("/");
+        const value = Array(24).fill("../a/b").join("/");
+        const matcher = new Minimatch(pattern, {optimizationLevel: 2, braceExpandMax: 64});
+        if (matcher.set.length > 64 || !matcher.match(value) || matcher.match(value + "/wrong")) process.exit(1);`,
+      ],
+      { timeout: 5000 }
+    );
+    expect(result.toString()).toBe("");
+  }, 10000);
+
   it("preserves Next rootDir defaults, directory-only braces, extglobs and arrays", () => {
     const cwd = fixture();
     for (const name of ["web", "admin", "other", ".hidden"]) {

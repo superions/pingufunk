@@ -3246,6 +3246,9 @@ Ausführungsauftrag 31.10.2026: P19 der Reihe nach umsetzen, mergen und live
 ausrollen; bestehende Aufträge und Dateien erhalten. Die konkrete Rollout-
 Autorisierung liegt damit vor. Neue Bibliothekssuchen, Grabs, Retries und
 manuelle Imports werden daraus nicht als zusätzliche Medienaufträge abgeleitet.
+Zusatzentscheidung: zuerst den bestehenden Dev-Dependency-Audit bereinigen;
+keine Audit-Ausnahme. Geänderte Dependencyinputs verlangen neue Produkt-/
+Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Images.
 
 - [ ] **P19.1 — Metadaten-Titelvarianten identitätsgebunden auflösen.**
       Unabhängig startbar. Owner: `sonarr-provider.ts::mergeSonarrShow`,

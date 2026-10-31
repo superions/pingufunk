@@ -4279,16 +4279,41 @@ Der unveränderte private Kommissar-Metadaten-/Indexsnapshot bestätigt lokal
 genau die drei erwarteten zusätzlichen Bindungen; tatsächliche Quellenlücken
 bleiben offen. Das ist eine Offline-Gegenprobe, kein neuer Live-Such-/Grabaufruf.
 
-Lokaler Checkpoint: 1.697 reguläre Tests, 28 getrennt aktivierbare Fälle nicht
-als ausgeführt gezählt; Lint, Typecheck und Format erfolgreich. Native CI,
-Merge, Imagefreigabe und autorisierter bestandserhaltender Rollout stehen noch
-aus; P19.1 bleibt bis zur vollständigen Abnahme offen.
+Die Titelkorrektur allein wurde mit 1.697 regulären Tests, Lint, Typecheck,
+Format, Build und vollständiger nativer CI auf beiden Backends geprüft.
+Das exportierte Image von `e45d485` ist befundfrei gescannt und vorbereitet,
+aber nicht live übernommen. Nach der folgenden Dev-Dependencyänderung sind
+frische Produktgates und ein neues exakt geprüftes Image erforderlich;
+P19.1 bleibt bis zur vollständigen Abnahme offen.
 
-Separater bereits im unveränderten Lockfile vorhandener Freigabebefund:
-`npm audit --include=dev` meldet 17 moderate transitive Dev-Tool-Befunde aus
-[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
-Die unterstützte Korrektur liegt in minimatch 11; gelockte Lintconsumer nutzen
-Version 3 und 9 mit unterschiedlichen Import-/API-Verträgen. Keine blinde
-Major-Übersteuerung, kein Audit-Ignore und keine Abschwächung des bestehenden
-LOW-Gates. `npm audit --omit=dev` ist ohne Befund. Dieser Baselinebefund bleibt
-getrennt von der Titelkorrektur sichtbar und ist nicht als grünes Gate erklärt.
+Der ursprüngliche Freigabebefund waren 17 moderate transitive Dev-Tool-Meldungen
+aus [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+Der Nutzer entschied ausdrücklich für die Bereinigung vor Merge/Rollout.
+minimatch 11.0.3 ist jetzt die gemeinsame korrigierte Engine. Ein kleiner
+interner Dev-Adapter erhält die tatsächlich verwendeten aufrufbaren CommonJS-
+und benannten ESM-Schnittstellen. Der Import-Consumer nutzt von `makeRe` nur
+das delegierte `test`-Prädikat. Es gibt keine Modulloader-Eingriffe und keine
+je Linterpaket gepflegten Quellpatches. Der TypeScript-Lintverbund wird innerhalb
+des erlaubten v8-Bereichs gemeinsam auf 8.72.1 aktualisiert. Produktabhängigkeiten und
+sämtliche 429 wirksamen TypeScript-Regeln bleiben unverändert. Die typisierten
+Regelübersteuerungen folgen jetzt Nexts TS-/TSX-Pluginregistrierung; damit sind
+auch JavaScript-Devdateien am vorhandenen Lintowner tatsächlich prüfbar.
+
+Frisches `npm ci`, vollständiger Dependency-Audit und Paketauflösung sind
+befundfrei. Dreizehn Consumerfälle schützen unter anderem ESLint-Dateiauswahl,
+React-Ausnahmen, tatsächliche A11y-Labels, erlaubte/verbotene Importpfade und
+den begrenzten Optimierungslauf. Beim direkten Rückbau auf den neuen
+Namespace-Export scheitern drei tatsächliche Regelconsumer. Die kausale
+Quellen-Gegenprobe des Amplifikationsfalls beendet die alte 9.0.9 in einem
+eigenen begrenzten Prozess durch Speichererschöpfung; die korrigierte Engine
+begrenzt denselben Fall und behält positive/negative Matches. Kein Audit-Ignore,
+kein abgeschwächtes LOW-Gate und keine Ausnahme. Der Adaptervertrag und sein
+Entfallkriterium stehen in `CONTRIBUTING.md`.
+Eine Auditgegenprobe mit einer verwundbaren Engine hinter demselben Paketalias
+meldet weiterhin genau das Advisory; der Alias verdeckt den Scannerbefund nicht.
+
+Lokaler Bereinigungscheckpoint: 1.706 Tests mit Coverage erfolgreich, 28
+separat aktivierbare Fälle nicht als ausgeführt gezählt. Vollständiger Audit,
+Lint, Typecheck, Format und Build erfolgreich. Neue native CI, Imagefreigabe,
+Merge und Live-Abnahme stehen aus. Der Bestand bleibt auf seinem bisherigen
+Release; vorbereitete Images sind keine Betriebsübernahme.

@@ -6,7 +6,8 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
 # Copy package files and prisma schema (needed for postinstall)
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
+COPY tools/minimatch-compat ./tools/minimatch-compat
 COPY prisma ./prisma
 COPY scripts/generate-database-clients.mjs ./scripts/
 RUN npm ci
