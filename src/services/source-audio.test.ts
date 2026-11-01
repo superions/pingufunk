@@ -12,6 +12,7 @@ import { decodeMediaExpectations, generateFakeNzb } from "./nzb-release";
 import { parseNzbContent } from "./download";
 import { sourceMediaFacts } from "./source-media-facts";
 import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
+import { withDecisionDiagnostics } from "@/server/decision-diagnostics";
 
 const item: ApiResultItem = {
   channel: "ARTE.DE",
@@ -294,6 +295,102 @@ it("distinguishes missing evidence from outages and invalid bodies, never publis
     "Source evidence unavailable"
   );
 });
+
+it.each([
+  [404, "source_endpoint_missing", "unavailable"],
+  [410, "source_endpoint_missing", "unavailable"],
+  [200, "source_empty", "missing"],
+])(
+  "keeps ARTE HTTP %i separate from a valid empty response in producer and fresh worker",
+  async (status, reason, evidence) => {
+    const fetch = mock({ videoStreams: [] }, status as number);
+    const { result, report } = await withDecisionDiagnostics(() =>
+      enrichSourceAudio([item], new HttpRequestBudget(1))
+    );
+    const output = result.get(item)!;
+    expect(output).toHaveLength(3);
+    expect(
+      selectLanguageVariants(output, {
+        ...readLanguagePolicy(null),
+        includeUnverifiedLegacy: false,
+      })
+    ).toEqual([]);
+    for (const candidate of output) {
+      expect(candidate.audioLanguage).toBeUndefined();
+      const expected = releaseMediaExpectations(candidate);
+      expect(expected.audio).toBeNull();
+      expect(expected.sourceAudio).toBeNull();
+      expect(expected.resolution).toBeNull();
+    }
+    expect(report.events).toContainEqual({ stage: "language", reason, evidence, count: 1 });
+    expect(report.events.map((event) => event.reason)).not.toContain(
+      status === 200 ? "source_endpoint_missing" : "source_empty"
+    );
+    const expected = {
+      provider: "arte_hbbtv" as const,
+      videoId: "123456-001-A",
+      language: "de",
+      mediaIdentity: mediaSourceIdentity(item.url_video_hd),
+    };
+    await expect(
+      verifyArteSourceAudio(expected, item.url_video_hd, new HttpRequestBudget(1))
+    ).rejects.toMatchObject({ diagnostic: { stage: "language", reason, evidence } });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(report)).not.toMatch(/https?:|123456|german\.mp4/);
+  }
+);
+
+it.each(["http", "transport", "schema", "json", "body"])(
+  "preserves a closed ARTE %s failure without a partial language/quality promise",
+  async (kind) => {
+    const fetch = vi.fn(async () => {
+      if (kind === "transport") throw Error("https://private.invalid/secret");
+      if (kind === "http") return new Response(null, { status: 503 });
+      if (kind === "json") return new Response("{https://private.invalid/secret");
+      if (kind === "body")
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(Error("private"));
+            },
+          })
+        );
+      return Response.json({ videoStreams: [{ ...streams().videoStreams[1], audioCode: null }] });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const reason = ["http", "transport"].includes(kind)
+      ? "source_failed"
+      : "source_response_invalid";
+    const { report } = await withDecisionDiagnostics(async () => {
+      await expect(enrichSourceAudio([item], new HttpRequestBudget(1))).rejects.toMatchObject({
+        message: "Source evidence unavailable",
+        diagnostic: { stage: "language", reason, evidence: "unavailable" },
+      });
+    });
+    expect(report.events).toContainEqual({
+      stage: "language",
+      reason,
+      evidence: "unavailable",
+      count: 1,
+    });
+    await expect(
+      verifyArteSourceAudio(
+        {
+          provider: "arte_hbbtv",
+          videoId: "123456-001-A",
+          language: "de",
+          mediaIdentity: mediaSourceIdentity(item.url_video_hd),
+        },
+        item.url_video_hd,
+        new HttpRequestBudget(1)
+      )
+    ).rejects.toMatchObject({
+      diagnostic: { stage: "language", reason, evidence: "unavailable" },
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(report)).not.toMatch(/https?:|private|123456/);
+  }
+);
 
 it("uses bounded deterministic identities and does not reset an exhausted caller budget", async () => {
   const fetch = mock();

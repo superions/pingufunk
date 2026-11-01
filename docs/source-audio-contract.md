@@ -66,7 +66,16 @@ unbekannt. Keine vollständige Sprachabdeckung großer Staffeln/RSS-Fenster oder
 neuer HLS-Sprachbeleg. `best` bleibt nach dem Aufteilen eine Rendition je
 Episode/Fassung, nicht versehentlich alle Qualitäts-URLs.
 
-Nicht unterstütztes MP4/Range-Verhalten und ARTE 404/410 liefern keine Evidenz.
+Nicht unterstütztes MP4/Range-Verhalten liefert keine Evidenz. ARTE 404/410
+meldet getrennt `source_endpoint_missing` (unavailable); eine erfolgreich
+gelesene leere Streamliste meldet `source_empty` (missing). Beide bleiben im
+Producer ohne Sprach-/Maßbeleg neutral oder entsprechend der bestehenden
+Sprachpolitik ausgeschlossen. Der fehlende Belegendpunkt beweist weder die
+Auslistung des Films noch das Ende der ganzen API. Eine unlesbare oder
+schematisch ungültige Antwort meldet `source_response_invalid`, ein HTTP-/
+Transportausfall `source_failed`. Die frische Workerprüfung verwendet dieselben
+Unterschiede und verweigert bei fehlendem Beleg weiterhin den Abschluss;
+fremde Rendition oder widersprechende Sprache bleiben `source_evidence_mismatch`.
 Transport-/Deadline-/Bodylimit-Fehler sowie ungültiges Provider-JSON brechen die
 Anfrage ab; keine erfolgreiche Teilantwort oder deren Antwortcache. Redirects
 sind nicht erlaubt, alle Antwortkörper sind begrenzt, Fehlermeldungen enthalten
@@ -94,8 +103,30 @@ P19.2 verwendet für eine explizit gebundene einzelne Mediathek-Standardfassung
 v6 mit denselben unabhängigen Audio-/Dauer-/Pixelbelegen. Die Quellenbindung
 selbst beweist keine Sprache und erlaubt keine AD-/OV-Umdeutung. Alle bekannten
 fremden oder gemischten Tracks bleiben vor Completed gesperrt; der genaue
-[Programm-/Rückwegvertrag](tv-search-contract.md#explizite-einzelne-mediathek-programme-p192-native-abnahme-offen)
-ersetzt keine Medienprobe. Native Abnahme von P19.2 bleibt offen.
+[Programm-/Rückwegvertrag](tv-search-contract.md#explizite-einzelne-mediathek-programme-p192)
+ersetzt keine Medienprobe. P19.2 ist nativ abgenommen und live. P19.3 erweitert
+den eingefrorenen Umfang auf genau zwei bestätigte Ziele; Audio-/Pixelbelege
+bleiben davon unabhängig.
+
+## Konkreter ARTE-Befund P19.4
+
+Der begrenzte Metadatenabruf vom 01.11.2026, 03:03 UTC, trennt für
+[Misericordia](https://www.arte.tv/de/videos/128673-000-A/misericordia/)
+Programm `128673-000-A` folgende Fakten: Der HbbTV-Belegendpunkt antwortet 404;
+die unterstützte Player-v2-Antwort antwortet für dieselbe Programm-ID 200 und
+nennt 5.885 Sekunden. Sie enthält nur ein HLS-Manifest ohne Pixelmaße mit
+französischem Originalton, Untertitelvarianten und französischer AD. Deutsche
+Untertitel sind kein deutscher Ton. Das deklarierte Rechteende am 13.11.2026,
+04:00 UTC, steht getrennt vom konkreten Alters-/Zugangsfenster bis 01.11.2026,
+05:59:59 CET. Diese eingefrorenen Metadaten behaupten keine spätere Verfügbarkeit.
+
+Die begrenzte MediathekView-Abfrage enthält die exakte ARTE.DE-Originalversion
+mit Untertiteln sowie andere Programme bzw. einen kurzen Filmtipp. Der
+Playerbeleg bindet keine der indexierten progressiven MP4-URLs mitsamt Audio
+und Maßen. Damit fehlt für diese konkreten Fassungen weiterhin der benötigte
+strukturierte Renditionbeleg. P19.4 korrigiert die Diagnose, behauptet aber
+keinen Qualitätsfix oder verfügbare deutsche Standardfassung. Kein neuer HLS-/
+HTML-Fallback, Sendercrawler, Token-/Accountdienst oder Alters-/Geoblocking-Bypass.
 
 `MediaExpectations` v1 bleibt für vorhandene Jobs unverändert. Bei MP4-Sprach-
 Tags wird weiterhin der strenge v1-Trackvertrag geprüft. ARTE-/ARD-Providerbelege

@@ -14,6 +14,9 @@ export const DECISION_REASONS = [
   "catalogue_empty",
   "catalogue_candidates",
   "source_failed",
+  "source_endpoint_missing",
+  "source_empty",
+  "source_response_invalid",
   "followup_failed",
   "window_limited",
   "sources_disabled",
@@ -91,7 +94,12 @@ export class DecisionFailure extends Error {
     super(
       event.reason === "source_evidence_mismatch"
         ? "Source evidence mismatch"
-        : event.reason === "source_failed"
+        : [
+              "source_failed",
+              "source_endpoint_missing",
+              "source_empty",
+              "source_response_invalid",
+            ].includes(event.reason)
           ? "Source evidence unavailable"
           : event.reason === "identity_missing"
             ? "Invalid source identity"

@@ -27,6 +27,13 @@ Eine API-Signaturänderung erfordert einen neuen Beleg, nicht bloß eine ähnlic
 
 ## Veröffentlichung und Auswahl
 
+P19.4 macht ARTE-Belegausfälle genauer sichtbar, erweitert aber keine
+Qualitätsfreigabe: fehlender Endpunkt, gültige leere Streamliste und ungültige
+Antwort sind getrennte Zustände. Ohne exakte Maße bleibt dieselbe Fassung
+`UNKNOWN`; Website-DE, ein HD-Katalogslot oder ein fremdes HLS-Manifest
+liefern keine Pixel. Der konkrete fehlende Vertrag für „Misericordia“ steht im
+[Tonsprachenvertrag](source-audio-contract.md#konkreter-arte-befund-p194).
+
 Belegte Höhen 480/576/720/1080/2160 erhalten ihre entsprechende `p`-Angabe.
 Andere Höhen bleiben im Titel `UNKNOWN`, obwohl vorhandene exakte Maße im
 Worker-Vertrag weiterhin geprüft werden. Aus abgeschnittenem Cinemascope,

@@ -137,51 +137,76 @@ it("rejects escaped paths or symlinked job files before starting a tool", async 
   expect(state.spawn).not.toHaveBeenCalled();
 });
 
-it.each(["german", "foreign", "missing", "wrong-source"])(
-  "revalidates v2 %s provider binding before accepting unknown local tracks",
-  async (kind) => {
-    const url = "https://fixture.akamaized.net/movie.mp4";
-    const proof = {
-      provider: "arte_hbbtv" as const,
-      videoId: "123456-001-A",
-      language: "de",
-      mediaIdentity: mediaSourceIdentity(url),
-    };
-    const expected = parseMediaExpectations({
-      ...unknownMediaExpectations(),
-      version: 2,
-      sourceAudio: proof,
+it.each([
+  "german",
+  "foreign",
+  "missing",
+  "wrong-source",
+  "endpoint-missing",
+  "invalid",
+  "unavailable",
+])("revalidates v2 %s provider binding before accepting unknown local tracks", async (kind) => {
+  const url = "https://fixture.akamaized.net/movie.mp4";
+  const proof = {
+    provider: "arte_hbbtv" as const,
+    videoId: "123456-001-A",
+    language: "de",
+    mediaIdentity: mediaSourceIdentity(url),
+  };
+  const expected = parseMediaExpectations({
+    ...unknownMediaExpectations(),
+    version: 2,
+    sourceAudio: proof,
+  });
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+    if (kind === "endpoint-missing") return new Response(null, { status: 404 });
+    if (kind === "invalid") return Response.json({ videoStreams: null });
+    if (kind === "unavailable") return new Response(null, { status: 503 });
+    return Response.json({
+      videoStreams:
+        kind === "missing"
+          ? []
+          : [{ programId: proof.videoId, url, audioCode: kind === "foreign" ? "VF" : "VA" }],
     });
-    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
-      Response.json({
-        videoStreams:
-          kind === "missing"
-            ? []
-            : [{ programId: proof.videoId, url, audioCode: kind === "foreign" ? "VF" : "VA" }],
-      })
-    );
-    vi.stubGlobal("fetch", fetch);
-    const result = probeJobMedia(
-      file,
-      directory,
-      expected,
-      10,
-      kind === "wrong-source" ? url + "?edition=fr" : url
-    );
-    const rejected =
-      kind === "german"
-        ? undefined
-        : expect(result).rejects.toThrow("Local media validation failed");
-    await started();
-    child.stdout.emit("data", output());
-    child.emit("close", 0);
-    if (kind === "german") {
-      const facts = await result;
-      expect(facts.audioLanguages).toEqual([]);
-      expect(facts.sourceAudioEvidence).toEqual(proof);
-      expect(facts.expectedChecks.audio).toBe("passed_provider");
-    } else await rejected;
-    expect(fetch).toHaveBeenCalledTimes(kind === "wrong-source" ? 0 : 1);
-    expect(state.spawn.mock.calls[0][1]).not.toContain(url);
-  }
-);
+  });
+  vi.stubGlobal("fetch", fetch);
+  const result = probeJobMedia(
+    file,
+    directory,
+    expected,
+    10,
+    kind === "wrong-source" ? url + "?edition=fr" : url
+  );
+  const rejected =
+    kind === "german"
+      ? undefined
+      : expect(result).rejects.toMatchObject({
+          message: "Local media validation failed",
+          reason:
+            kind === "missing"
+              ? "source_empty"
+              : kind === "endpoint-missing"
+                ? "source_endpoint_missing"
+                : kind === "invalid"
+                  ? "source_response_invalid"
+                  : kind === "unavailable"
+                    ? "source_failed"
+                    : "source_evidence_mismatch",
+          evidence: ["endpoint-missing", "invalid", "unavailable"].includes(kind)
+            ? "unavailable"
+            : kind === "missing"
+              ? "missing"
+              : "conflicting",
+        });
+  await started();
+  child.stdout.emit("data", output());
+  child.emit("close", 0);
+  if (kind === "german") {
+    const facts = await result;
+    expect(facts.audioLanguages).toEqual([]);
+    expect(facts.sourceAudioEvidence).toEqual(proof);
+    expect(facts.expectedChecks.audio).toBe("passed_provider");
+  } else await rejected;
+  expect(fetch).toHaveBeenCalledTimes(kind === "wrong-source" ? 0 : 1);
+  expect(state.spawn.mock.calls[0][1]).not.toContain(url);
+});

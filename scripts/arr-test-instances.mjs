@@ -169,7 +169,10 @@ async function up(onAllocated) {
     throw new Error("Owned localized episode QA requires its positive source-audio fixture");
   if (
     renditionQuality &&
-    (!sourceAudio || !["720p", "unknown", "conflicting", "ard-1080p"].includes(renditionQuality))
+    (!sourceAudio ||
+      !["720p", "unknown", "conflicting", "ard-1080p", "arte-missing", "arte-empty"].includes(
+        renditionQuality
+      ))
   )
     throw new Error("Owned quality QA requires the bounded source-audio fixture");
   const appImages = Object.fromEntries(
@@ -1057,9 +1060,24 @@ async function movieSearch(root, manifest, app = "radarr") {
           `quality: ${transport} Radarr release and Sonarr parser=${expected}; original HD slot, no grab`
         );
       }
+      const missingArteEvidence = ["arte-missing", "arte-empty"].includes(
+        manifest.renditionQuality
+      );
+      if (app === "radarr" && missingArteEvidence) {
+        if (
+          candidates[0].title.includes(".GERMAN.") ||
+          candidates[0].languages.length !== 1 ||
+          candidates[0].languages[0].name !== "English"
+        )
+          throw new Error("Owned missing ARTE proof was misclassified as German by native Radarr");
+        console.log(
+          `audio: ${transport} ${manifest.renditionQuality}: neutral source, native original-language fallback=English, no German/HD promise`
+        );
+      }
       if (
         app === "radarr" &&
         manifest.sourceAudio &&
+        !missingArteEvidence &&
         (!candidates[0].title.includes(".GERMAN.") ||
           candidates[0].languages.length !== 1 ||
           candidates[0].languages[0].name !== "German")
@@ -1075,7 +1093,7 @@ async function movieSearch(root, manifest, app = "radarr") {
       )
         throw new Error("Owned yearless source did not acquire verified native film identity");
       console.log(
-        `${app}: ${transport} native search parsed one synthetic candidate${app === "radarr" && manifest.sourceAudio ? "; actual audio German, fixture original language English" : ""}; no grab submitted`
+        `${app}: ${transport} native search parsed one synthetic candidate${app === "radarr" && manifest.sourceAudio ? (missingArteEvidence ? "; unverified source audio, fixture original language English" : "; actual audio German, fixture original language English") : ""}; no grab submitted`
       );
     }
   } finally {

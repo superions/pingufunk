@@ -4608,3 +4608,37 @@ Benennungspolitik. Der bestehende Fall behandelt deshalb eine tatsächlich
 gemeldete Sperre; ohne sie bleiben beide realen Datei-/Historybindungen Pflicht.
 Es wird weder eine Sperre noch eine erfolgreiche Zuordnung bloß angenommen und
 keine native globale Einstellung umgeschrieben.
+
+## P19.4 — ARTE-Belegzustände getrennt halten (in Arbeit)
+
+Der begrenzte Metadatenabruf vom 01.11.2026 um 03:03 UTC bestätigt für
+„Misericordia“ `128673-000-A` einen HbbTV-404, keine gültige leere Streamantwort.
+Player v2 liefert dieselbe Programm-ID und 5.885 Sekunden, aber nur ein
+HLS-Manifest ohne Maße mit französischen Ton-/Untertitel-/AD-Varianten.
+Rechtezeitraum und konkretes Alters-/Zugangsfenster sind getrennt deklariert.
+Der Index enthält die exakte Originalversion mit Untertiteln, andere
+Programm-IDs und einen kurzen Filmtipp. Diese sind keine Ersatzquelle für
+eine deutsche Standardfassung oder ein Beleg der indexierten MP4-Pixel.
+Ein generelles API-Ende oder eine heutige Störung aller ARTE-Sendungen ist
+damit nicht belegt. Der konkrete fehlende Renditionvertrag bleibt benannt.
+
+Der bestehende gemeinsame Belegowner trennt jetzt fehlenden Endpunkt,
+erfolgreich gelesene leere Streamliste, unlesbare/ungültige Antwort sowie
+HTTP-/Transportausfall. Suche und frische Workerprüfung konsumieren dieselbe
+Unterscheidung. Vorhandene Unknown-/Konfliktpolitik, genaue Programm-/URL-/
+Audio-/Pixelbindung, Rechteprüfung, gemeinsame Budgets und Bodygrenzen bleiben
+erhalten; keine neue Quellenarchitektur oder Qualitätsfreigabe.
+
+Sieben gezielte Consumerregressionen sind mit dem alten Owner rot. Die
+Korrektur besteht 1.858 lokale Tests mit Coverage, Lint, Typecheck, Format und
+Build; 28 Opt-in-Fälle bleiben getrennt. Die bestehenden Prozessprobetests
+prüfen auch den tatsächlich übertragenen Workerfehlergrund. Die isolierte
+Desktopprüfung auf tatsächlich gebauten Vorher-/Nachherbundles zeigt beim
+gleichen synthetischen 404 die konkrete Ursache; gültig leer und ungültig
+bleiben davon unterscheidbar. Download bleibt gesperrt, Fehlerantwort gibt
+keine Teilfreigabe, Session-Readback erhält den neuen Grund. In der Konsole
+ist die erwartete HTTP-502-Testablehnung sichtbar, keine zusätzliche
+JavaScript-Exception. Die vorhandene native Qualitätsmatrix ergänzt zwei
+Fälle für fehlenden/leeren ARTE-Beleg: direkt und über Prowlarr ein neutraler
+Release, native Qualität Unknown und keine erfundene deutsche Audiosprache.
+Diese native Abnahme, Imagescan und Live-Übernahme stehen noch aus.
