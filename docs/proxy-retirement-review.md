@@ -4599,3 +4599,12 @@ derselben beiden Ziele, weiterhin keine fremden Ziele oder Dateien.
 Identische Push-/Pull-Request-Prüfungen laufen nicht mehr doppelt: Die vorhandenen
 Produktgates bleiben auf jedem Branch-Push und erneut auf Main aktiv, PR-Metadaten
 werden weiter im PR geprüft. Keine neue Testdatei oder zusätzliche Matrix.
+
+Alle acht regulären Direkt-/Prowlarr-Importwege auf SQLite/PG18 einschließlich
+Bestandserhalt und kompatiblem Rückweg bestehen anschließend. Der zusätzliche
+TBA-Fall scheitert an seiner pauschal vorausgesetzten Sperre. Sonarrs
+`EpisodeTitleSpecification` verlangt diese nur bei entsprechender Titel-/
+Benennungspolitik. Der bestehende Fall behandelt deshalb eine tatsächlich
+gemeldete Sperre; ohne sie bleiben beide realen Datei-/Historybindungen Pflicht.
+Es wird weder eine Sperre noch eine erfolgreiche Zuordnung bloß angenommen und
+keine native globale Einstellung umgeschrieben.
