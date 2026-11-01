@@ -101,9 +101,14 @@ export async function diagnoseArrImport(
         if (imported.length < 2) return unknown("not_associated");
         if (
           imported.length !== 2 ||
-          grabs.length !== 2 ||
+          grabs.length < 2 ||
           new Set(imported.map((row) => row.episodeId)).size !== 2 ||
           new Set(grabs.map((row) => row.episodeId)).size !== 2 ||
+          grabs.some(
+            (row) =>
+              row.seriesId !== imported[0].seriesId ||
+              !imported.some((entry) => entry.episodeId === row.episodeId)
+          ) ||
           imported.some(
             (row) =>
               row.data.fileId !== imported[0].data.fileId ||
