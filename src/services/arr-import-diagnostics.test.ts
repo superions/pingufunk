@@ -77,6 +77,16 @@ it("requires paired exact download/episode history and the current API file; nev
   );
   expect(fetch).toHaveBeenCalledTimes(8);
 });
+it("accepts native null optional history metadata while requiring exact imported file fields", async () => {
+  history = history.map((row) => ({
+    ...(row as { data: object }),
+    data: { ...(row as { data: object }).data, imdbId: null },
+  }));
+  expect(await diagnoseArrImport(id, "sonarr")).toEqual({
+    state: "reported_import",
+    reason: "api_file_associated",
+  });
+});
 it("checks Radarr movie/file identities and sizes separately from hasFile", async () => {
   version = "6.4.4.10685";
   history = history.map((row) => ({

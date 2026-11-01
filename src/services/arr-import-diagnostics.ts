@@ -15,7 +15,12 @@ const historyRow = z.object({
   episodeId: positiveId.optional(),
   seriesId: positiveId.optional(),
   movieId: positiveId.optional(),
-  data: z.record(z.string(), z.string().max(16_384)),
+  // Native history may carry null optional metadata (for example imdbId).
+  // Only consumed file facts are a contract; import requires both below.
+  data: z.object({
+    fileId: z.string().max(16_384).optional(),
+    importedPath: z.string().max(16_384).optional(),
+  }),
 });
 const paging = z
   .object({
