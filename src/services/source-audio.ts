@@ -11,7 +11,7 @@ import {
   isArdProgressiveMp4,
 } from "./ard-source-audio";
 import type { SourceAudioEvidence } from "@/lib/media-expectations";
-import { fetchWithRetry, type HttpRequestBudget } from "@/lib/fetch-retry";
+import { fetchWithRetry, FetchBudgetError, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import { isProbeableMp4, probeMp4MediaFacts, type Mp4MediaFacts } from "@/lib/mp4-audio-language";
 import { arteVideoId, parseArteVersion, progressiveUrl } from "./arte-editions";
@@ -51,21 +51,28 @@ export function mediaSourceIdentity(url: string, source?: YoutubeSourceReference
   return createHash("sha256").update(stableUrlIdentity(url)).digest("hex");
 }
 
+/** null means a missing evidence endpoint; [] is a successfully read empty catalogue. */
 async function getArteStreams(
   videoId: string,
   budget: HttpRequestBudget,
   signal?: AbortSignal
-): Promise<ArteStreams> {
+): Promise<ArteStreams | null> {
   if (!/^\d{6}-\d{3}-[AF]$/.test(videoId))
     throw decisionFailure("identity", "identity_missing", "missing");
-  const response = await fetchWithRetry(
-    `https://www.arte.tv/hbbtvv2/services/web/index.php/OPA/v3/streams/${videoId}/SHOW/de`,
-    { headers: { Accept: "application/json" }, ...(signal ? { signal } : {}) },
-    { requestBudget: budget, maxRetries: 0 }
-  );
+  let response: Response;
+  try {
+    response = await fetchWithRetry(
+      `https://www.arte.tv/hbbtvv2/services/web/index.php/OPA/v3/streams/${videoId}/SHOW/de`,
+      { headers: { Accept: "application/json" }, ...(signal ? { signal } : {}) },
+      { requestBudget: budget, maxRetries: 0 }
+    );
+  } catch (error) {
+    if (error instanceof FetchBudgetError || signal?.aborted) throw error;
+    throw decisionFailure("language", "source_failed", "unavailable");
+  }
   if (response.status === 404 || response.status === 410) {
     void response.body?.cancel().catch(() => {});
-    return [];
+    return null;
   }
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
@@ -76,7 +83,12 @@ async function getArteStreams(
       await readBoundedProviderJson(response, budget.deadlineAt, 1024 * 1024, signal)
     ).videoStreams;
   } catch {
-    throw decisionFailure("language", "source_failed", "unavailable");
+    signal?.throwIfAborted();
+    if (Date.now() >= budget.deadlineAt) {
+      recordDecision("request", "deadline_exceeded", "unavailable");
+      throw new FetchBudgetError();
+    }
+    throw decisionFailure("language", "source_response_invalid", "unavailable");
   }
 }
 
@@ -110,11 +122,10 @@ export async function verifyArteSourceAudio(
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   if (!progressiveUrl(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
-  const edition = arteEdition(
-    await getArteStreams(expected.videoId, budget, signal),
-    expected.videoId,
-    url
-  );
+  const streams = await getArteStreams(expected.videoId, budget, signal);
+  if (streams === null) throw decisionFailure("language", "source_endpoint_missing", "unavailable");
+  if (!streams.length) throw decisionFailure("language", "source_empty", "missing");
+  const edition = arteEdition(streams, expected.videoId, url);
   if (!edition || edition.audioLanguage !== expected.language)
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   return expected;
@@ -160,7 +171,7 @@ export async function enrichSourceAudio(
   reuseSearchFacts = false,
   intent: "search" | "approval" = "search"
 ): Promise<Map<ApiResultItem, ApiResultItem[]>> {
-  const arte = new Map<string, ArteStreams>();
+  const arte = new Map<string, ArteStreams | null>();
   const ard = new Map<string, Awaited<ReturnType<typeof getArdSource>>>();
   const mp4 = new Map<string, Mp4MediaFacts>();
   const snapshot = productSettingsContext.getStore();
@@ -294,7 +305,11 @@ export async function enrichSourceAudio(
       if (videoId && progressiveUrl(url)) {
         if (!arte.has(videoId) && probes < maxIdentities && budget.remainingAttempts > 0) {
           probes++;
-          arte.set(videoId, await getArteStreams(videoId, budget));
+          const streams = await getArteStreams(videoId, budget);
+          arte.set(videoId, streams);
+          if (streams === null)
+            recordDecision("language", "source_endpoint_missing", "unavailable");
+          else if (!streams.length) recordDecision("language", "source_empty", "missing");
         }
         edition = arteEdition(arte.get(videoId) ?? [], videoId, url);
         const matches = (arte.get(videoId) ?? []).filter(

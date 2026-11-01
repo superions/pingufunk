@@ -223,7 +223,9 @@ globalThis.fetch = async (input, init) => {
     sourceAudio &&
     url.href ===
       "https://www.arte.tv/hbbtvv2/services/web/index.php/OPA/v3/streams/123456-001-A/SHOW/de"
-  )
+  ) {
+    if (renditionQuality === "arte-missing") return new Response(null, { status: 404 });
+    if (renditionQuality === "arte-empty") return Response.json({ videoStreams: [] });
     return Response.json({
       videoStreams: [
         {
@@ -248,6 +250,7 @@ globalThis.fetch = async (input, init) => {
           : []),
       ],
     });
+  }
   if (url.hostname === "mediathekviewweb.de" && url.pathname === "/api/query") {
     if (youtube)
       return Response.json({
@@ -287,6 +290,9 @@ globalThis.fetch = async (input, init) => {
         row.url_video = frenchUrl;
         row.url_video_hd = germanUrl;
         row.url_video_low = "";
+        // One indexed rendition keeps native Unknown classification observable;
+        // absence of a release would not prove the consumer's language/quality.
+        if (["arte-missing", "arte-empty"].includes(renditionQuality)) row.url_video = "";
         if (renditionQuality === "ard-1080p") {
           row.channel = "RBB";
           row.url_website = `https://www.ardmediathek.de/video/${ardId}`;

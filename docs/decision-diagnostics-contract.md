@@ -19,6 +19,14 @@ weiterhin nicht Deutsch. Zähler zählen ausgeführte Ownerprüfungen, **nicht**
 deduplizierte Filme/Episoden; mehrere geprüfte Metadateneinträge/Renditions dürfen
 mehrere Prüfungen ergeben. Überlauf bleibt sichtbar, keine Vollständigkeitsbehauptung.
 
+P19.4 trennt beim vorhandenen ARTE-Belegowner `source_endpoint_missing`
+(404/410, unavailable), `source_empty` (gültige leere Streamliste, missing),
+`source_response_invalid` (Body-/JSON-/Schemafehler, unavailable) und
+`source_failed` (HTTP-/Transportausfall). Dieselben Gründe erreichen die
+frische Workerprüfung; eine falsche exakte Rendition bleibt davon getrennt
+`source_evidence_mismatch`. Zugangs-/Rechtefenster behalten ihre vorhandenen
+Gründe. Keine dieser Diagnosen liefert selbst einen Sprach- oder Pixelbeleg.
+
 `recorded` bedeutet abgeschlossene Berichtserstellung, nicht vollständigen
 Katalogabruf, erfolgreiche Zuordnung, Download oder Import. Abgefangene
 HTTP-Fehler stehen als Gründe im Bericht. Ein aus dem Scope entweichender Fehler
