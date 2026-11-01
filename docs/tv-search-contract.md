@@ -123,7 +123,7 @@ keine SQL-Migration und keine spätere Umschreibung durch Katalog-/Metadatenwech
 Die Importdiagnose verlangt beide exakten Zielkoordinaten derselben TVDB-Serie,
 dieselbe aktuelle FileId samt Pfad und jeweils gepaarte Grab-/Importhistory.
 Ein Teilimport bleibt unbestätigt. Der v7-fähige Lesercheckpoint
-`c45a497d72ead6540d7ac5f606bfbd9fce16660e` ist vor dem Producer festgeschrieben;
+`2e72a284e17d4a31031012c5acce64f0cfe623aa` ist vor dem Producer festgeschrieben;
 ein v6-only Image kann angenommene v7-Jobs nicht abarbeiten.
 
 Der Producer bindet „Der Tod ist groß“ von Quell-S10E13 an S00E02 und S00E03.

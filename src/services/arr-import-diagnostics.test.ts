@@ -199,6 +199,7 @@ it("does not claim a complete import when history pagination is truncated or inc
 
 it.each([
   "complete",
+  "repeated-grab",
   "partial",
   "other-coordinate",
   "other-series",
@@ -238,9 +239,14 @@ it.each([
     };
   if (kind === "duplicate-import") history[3] = history[1];
   if (kind === "missing-grab") history.splice(2, 1);
+  if (kind === "repeated-grab") history.push(history[0], history[2]);
   const result = await diagnoseArrImport(id, "sonarr", pairedProgrammeExpectations.sourceProgramme);
   expect(result.state).toBe(
-    kind === "complete" ? "reported_import" : kind === "partial" ? "unknown" : "conflicting"
+    ["complete", "repeated-grab"].includes(kind)
+      ? "reported_import"
+      : kind === "partial"
+        ? "unknown"
+        : "conflicting"
   );
   expect(JSON.stringify(result)).not.toMatch(/synthetic|private|downloadId|fileId/);
 });

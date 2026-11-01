@@ -417,7 +417,7 @@ try {
       seriesId: series.id,
       episodeIds: targetIds,
     });
-  } else await command({ name: "EpisodeSearch", episodeIds: targetIds });
+  } else await command({ name: "EpisodeSearch", episodeIds: [target.id] });
   let grabs;
   const admissionDeadline = Date.now() + 90000;
   for (let attempt = 0; attempt < 30 && Date.now() < admissionDeadline; attempt++) {
@@ -514,6 +514,17 @@ try {
   } else assert.deepEqual(pending.expected.sourceProgramme.target, { season: 8, episode: 1 });
   const canonical = await releases();
   assert.equal(canonical.length, 1);
+  if (paired) {
+    // Native member searches may submit the same whole-programme NZB again.
+    // The shared SAB owner must acknowledge its existing active job.
+    const enclosure = new URL(canonical[0].enclosure[0].$.url);
+    const nzb = request(enclosure.pathname + enclosure.search);
+    assert.equal(nzb.status, 200);
+    const repeated = request("/api?mode=addfile&cat=sonarr", nzb.text);
+    assert.equal(repeated.status, 200);
+    assert.equal(JSON.parse(repeated.text).nzo_ids[0], pending.id);
+    assert.equal(jobs().jobs.length, 2);
+  }
   assert(!neutralGuids.includes(canonical[0].guid[0]._));
   if (paired) {
     const second = await releases(3);

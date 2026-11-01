@@ -1,7 +1,7 @@
 import { prisma, databaseProvider } from "@/lib/db";
 import type { Prisma } from "../../generated/sqlite";
 import { allDownloads, type DownloadRead } from "@/lib/download-read";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { createEnqueueIntent } from "./enqueue-intent";
 import { applySourceAdmission } from "@/lib/source-admission";
 import { releaseSourceAdmission } from "./source-enqueue";
@@ -115,10 +115,37 @@ export async function addToQueue(
             return prisma.$transaction((tx) => tx.download.create({ data }));
           }
           const admission = await admit();
+          const paired = mediaExpectations?.version === 7;
+          if (paired && databaseProvider === "postgresql") await prisma.$prepareMutation();
           const persist = () =>
             prisma.$transaction(async (tx) => {
+              if (paired && databaseProvider === "postgresql") {
+                // Native Sonarr searches both member episodes independently.
+                // Lock this complete intent, not a half-episode or a new receipt store.
+                const lock = createHash("sha256")
+                  .update(
+                    JSON.stringify([data.url, data.title, data.category, data.mediaExpectations])
+                  )
+                  .digest()
+                  .readBigInt64BE();
+                await tx.$queryRaw`SELECT pg_advisory_xact_lock(${lock})::text`;
+              }
               await applySourceAdmission(tx, admission);
-              return tx.download.create({ data });
+              if (paired) {
+                const existing = await tx.download.findFirst({
+                  where: {
+                    url: data.url,
+                    title: data.title,
+                    category: data.category,
+                    mediaExpectations: data.mediaExpectations,
+                    status: { in: ["queued", "downloading", "converting"] },
+                  },
+                  select: { id: true },
+                });
+                if (existing) return { id: existing.id, created: false };
+              }
+              const created = await tx.download.create({ data });
+              return { ...created, created: true };
             });
           return databaseProvider === "sqlite" ? serialSqliteEnqueue(persist) : persist();
         })();
