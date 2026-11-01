@@ -607,6 +607,15 @@ try {
     `/api/downloads/${pending.id}/diagnostics`
   );
   if (afterImport.import.state !== "reported_import") {
+    console.error(
+      JSON.stringify({
+        scope,
+        backend,
+        transport,
+        category: pending.category,
+        diagnosis: afterImport.import,
+      })
+    );
     // Closed diagnostics only: retain the native failure cause without leaking
     // credentials, download URLs, file paths or free provider payloads.
     const filtered = await api(
