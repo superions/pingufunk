@@ -2,6 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const { setting } = vi.hoisted(() => ({ setting: vi.fn() }));
 vi.mock("@/lib/settings", () => ({ getSetting: setting }));
 import { diagnoseArrImport } from "./arr-import-diagnostics";
+import { pairedProgrammeExpectations } from "@/lib/__fixtures__/mediathek-programme";
 const id = "10000000-0000-4000-8000-000000000001";
 let history: unknown[],
   file: Record<string, unknown>,
@@ -75,6 +76,16 @@ it("requires paired exact download/episode history and the current API file; nev
     /secret|synthetic|private|fileId/
   );
   expect(fetch).toHaveBeenCalledTimes(8);
+});
+it("accepts native null optional history metadata while requiring exact imported file fields", async () => {
+  history = history.map((row) => ({
+    ...(row as { data: object }),
+    data: { ...(row as { data: object }).data, imdbId: null },
+  }));
+  expect(await diagnoseArrImport(id, "sonarr")).toEqual({
+    state: "reported_import",
+    reason: "api_file_associated",
+  });
 });
 it("checks Radarr movie/file identities and sizes separately from hasFile", async () => {
   version = "6.4.4.10685";
@@ -184,4 +195,58 @@ it("does not claim a complete import when history pagination is truncated or inc
     return response;
   });
   expect((await diagnoseArrImport(id, "sonarr")).state).toBe("unavailable");
+});
+
+it.each([
+  "complete",
+  "repeated-grab",
+  "partial",
+  "other-coordinate",
+  "other-series",
+  "other-file",
+  "other-path",
+  "duplicate-import",
+  "missing-grab",
+])("v7 import requires both exact targets and one shared native file: %s", async (kind) => {
+  entity.seasonNumber = 0;
+  entity.episodeNumber = 2;
+  const second: Record<string, unknown> = { ...entity, id: 2, episodeNumber: 3 };
+  history.push(
+    { downloadId: id, eventType: "grabbed", episodeId: 2, seriesId: 2, data: {} },
+    {
+      downloadId: id,
+      eventType: "downloadFolderImported",
+      episodeId: 2,
+      seriesId: 2,
+      data: { fileId: "3", importedPath: file.path },
+    }
+  );
+  const native = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith("/episode/2")) return Response.json(second);
+    if (path.endsWith("/series/2"))
+      return Response.json({ id: 2, tvdbId: kind === "other-series" ? 999 : 123 });
+    return native(input, init);
+  });
+  if (kind === "partial") history.pop();
+  if (kind === "other-coordinate") second.episodeNumber = 4;
+  if (kind === "other-file") second.episodeFileId = 4;
+  if (kind === "other-path")
+    history[3] = {
+      ...(history[3] as object),
+      data: { fileId: "3", importedPath: "/different.mkv" },
+    };
+  if (kind === "duplicate-import") history[3] = history[1];
+  if (kind === "missing-grab") history.splice(2, 1);
+  if (kind === "repeated-grab") history.push(history[0], history[2]);
+  const result = await diagnoseArrImport(id, "sonarr", pairedProgrammeExpectations.sourceProgramme);
+  expect(result.state).toBe(
+    ["complete", "repeated-grab"].includes(kind)
+      ? "reported_import"
+      : kind === "partial"
+        ? "unknown"
+        : "conflicting"
+  );
+  expect(JSON.stringify(result)).not.toMatch(/synthetic|private|downloadId|fileId/);
 });

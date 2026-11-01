@@ -95,8 +95,8 @@ const solstice: ApiResultItem = {
   url_video: "https://rodlzdf-a.akamaihd.net/synthetic/solstice-720.mp4",
 };
 
-function warmSolstice() {
-  sourceMediaFacts.remember(solstice.url_video, {
+function warmSolstice(item = solstice) {
+  sourceMediaFacts.remember(item.url_video, {
     facts: { audioLanguage: "de", videoDimensions: { width: 1280, height: 720 } },
     fingerprint: "a".repeat(64),
   });
@@ -108,6 +108,128 @@ let catalogueClock = Date.now();
 let selectedSeries = series;
 let selectedSonarrEpisodes = sonarrEpisodes;
 let selectedSources = sources;
+
+it.each(["S07/E04-E05", "S07/E04E05", "S07E04–E06"])(
+  "legacy rules never truncate an unbound whole range to its first episode: %s",
+  async (coordinates) => {
+    state.rules = [
+      {
+        id: 19,
+        mediaId: 19,
+        topic: series.name,
+        priority: 1,
+        filters: "[]",
+        titleRegexRules: "[]",
+        seasonRegex: "S(\\d+)",
+        episodeRegex: "E(\\d+)",
+        matchingStrategy: "SeasonAndEpisodeNumber" as Ruleset["matchingStrategy"],
+        media: {
+          media_id: 19,
+          media_name: series.name,
+          media_type: "tv",
+          media_tvdbId: 258535,
+          media_tmdbId: null,
+          media_imdbId: null,
+        },
+      },
+    ];
+    const source = {
+      ...sources[0],
+      title: "Entgleist (S07/E04)",
+      duration: 2700,
+      url_video: "https://rodlzdf-a.akamaihd.net/synthetic/unbound-range.mp4",
+    };
+    selectedSources = [source];
+    warmSolstice(source);
+    const request = () =>
+      GET(new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=258535&season=7&ep=4"));
+    const single = await request();
+    expect(single.status).toBe(200);
+    expect((await parseStringPromise(await single.text())).rss.channel[0].item).toHaveLength(1);
+    selectedSources = [{ ...source, title: `Entgleist (${coordinates})` }];
+    mediathekCache.clear();
+    warmSolstice(source);
+    const response = await request();
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel.item ?? []).toEqual([]);
+    expect(channel["newznab:response"][0].$.total).toBe("0");
+  }
+);
+
+it.each([false, true])(
+  "loads the actual complete paired catalogue through both member searches and GUI, local fallback=%s",
+  async (localFallback) => {
+    fallback = localFallback;
+    const whole = {
+      ...solstice,
+      title: "Der Tod ist groß (S10/E13)",
+      duration: 5290,
+      url_website: series.mediathekProgrammes![1].website,
+      url_video: "https://rodlzdf-a.akamaihd.net/synthetic/whole-catalogue.mp4",
+    };
+    selectedSources = [whole];
+    selectedSonarrEpisodes = [2, 3].map((number, index) => ({
+      ...sonarrEpisodes[0],
+      id: 201 + index,
+      seasonNumber: 0,
+      episodeNumber: number,
+      title: "TBA",
+      airDateUtc: "2021-03-01T20:15:00Z",
+      runtime: 45,
+      hasFile: false,
+    }));
+    warmSolstice(whole);
+    const releases = [];
+    for (const ep of [2, 3]) {
+      const response = await GET(
+        new NextRequest(`http://localhost/api/newznab?t=tvsearch&tvdbid=258535&season=0&ep=${ep}`)
+      );
+      expect(response.status).toBe(200);
+      const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+      expect(channel.item).toHaveLength(1);
+      expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: "1" });
+      const release = channel.item[0];
+      releases.push(release);
+      expect(release.title[0]).toContain("S00E02E03.Der.Tod.ist.gross.GERMAN.720p");
+      const nzb = await downloadNzb(new NextRequest(release.enclosure[0].$.url));
+      expect(nzb.status).toBe(200);
+      expect(parseNzbContent(await nzb.text())).toMatchObject({
+        title: release.title[0],
+        mediaExpectations: {
+          version: 7,
+          episodeDurations: [{ seconds: 2700 }, { seconds: 2700 }],
+          durations: { source: { seconds: 5290 }, metadata: { seconds: 5400 } },
+          sourceProgramme: {
+            targets: [
+              { season: 0, episode: 2 },
+              { season: 0, episode: 3 },
+            ],
+          },
+        },
+      });
+    }
+    expect(releases[0].guid).toEqual(releases[1].guid);
+    const response = await search(
+      new NextRequest("http://localhost/api/search?q=Letzte%20Spur%20Berlin&type=series")
+    );
+    expect(response.status).toBe(200);
+    const rows = (await response.json()).results;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].tvReview).toMatchObject({
+      title: expect.stringContaining("S00E02E03"),
+      sourceSeconds: 5290,
+      metadataSeconds: 5400,
+      runtimeConflict: false,
+    });
+    expect(parseNzbContent(rows[0].nzbDownloads.sd)).toMatchObject({
+      title: releases[0].title[0],
+      mediaExpectations: { version: 7 },
+    });
+    expect(selectedSonarrEpisodes.map((e) => e.title)).toEqual(["TBA", "TBA"]);
+    expect(state.forbiddenWrite).not.toHaveBeenCalled();
+  }
+);
 
 beforeEach(() => {
   // The real catalogue owner refreshes hourly; each case must exercise its

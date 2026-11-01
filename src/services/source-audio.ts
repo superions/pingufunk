@@ -453,6 +453,9 @@ export async function enrichTvMatches(
       match.tvdbId,
       match.episode.seasonNumber,
       match.episode.episodeNumber,
+      ...(match.pairedEpisodes
+        ? [match.pairedEpisodes.map((episode) => [episode.seasonNumber, episode.episodeNumber])]
+        : []),
       classifyLanguageEdition(match.item).variantKey,
     ]);
     const previous = best.get(key);

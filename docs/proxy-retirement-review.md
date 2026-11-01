@@ -4481,3 +4481,130 @@ Transcode-/Gesundheitsprüfung belegen die externe Änderung einzeln. Ein erneut
 Vergleich nach dessen Abschluss bestätigt alle 155 Dateien stabil. Keine
 manuellen Live-Suchen, Grabs, Retries oder Imports. P19.2 ist abgeschlossen;
 P19.3–P19.6 bleiben offen.
+
+## P19.3 — Ganze Quelle für zwei Episoden (in Arbeit)
+
+Der vorbereitende Leser ergänzt v7 im bestehenden Erwartungsfeld, ohne v6 zu
+ändern. Genau zwei geordnete benachbarte Ziele, getrennte positive
+Teillaufzeiten und ihre Metadatensumme bleiben an die ganze exakte Quelle
+gebunden. Der vorhandene Programmowner gruppiert zwei gleichartige
+Katalogzeilen mit verschiedenen Einzelzielen; die ausgelieferte Katalogform
+bleibt dadurch lesbar. V6-only Matcher lehnen solche Mehrdeutigkeit ab.
+Neue Annahme prüft beide frischen unabhängigen Ziele, der Worker die
+eingefrorene Quelle. Der öffentliche Matcher/Formatter gibt im Lesercheckpoint
+noch keinen halben oder vollständigen Zweifolgen-Release aus.
+
+Die vorhandene Arr-Diagnose konsumiert beim v7-Job dessen eingefrorene Ziele:
+beide Koordinaten derselben TVDB-Serie, jeweils Grab-/Importhistory und eine
+gemeinsame aktuelle FileId samt Pfad. Ein Teilimport ist kein Gesamtimport;
+historische Jobformate behalten ihre bisherige Diagnose. Gezielte Prüfungen
+decken NZB-/Persistenztransport, fehlende/ungeprüfte/gesperrte/inkonsistente
+Teile, individuelle Referenzänderung bei gleicher Summe, genaue Workerquelle,
+Fremd-/Mischton und unvollständige native API-Bindung ab. Producer und native
+Abnahme sind noch offen; kein neuer Produktionsstand.
+
+Lokaler Lesercheckpoint: 1.831 Tests erfolgreich, 28 Opt-in-Fälle getrennt;
+Lint, Typecheck, Format und Build erfolgreich. Der vorangegangene Coveragelauf
+mit 1.826 Tests und die anschließenden 119 gezielten Fälle ergänzen diese
+Abnahme. Ohne v7-Workerrevalidierung scheitern vier tatsächliche
+Übertragungsgegenfälle; ohne Prüfung des vollständigen Imports scheitern fünf
+API-Consumerfälle. Beide kontrollierten Rückbauten wurden vollständig restauriert.
+
+Der anschließende Producer verwendet denselben vollständigen Umfang in Titel,
+GUID, RSS/NZB, GUI-Payload und eingefrorenem v7. Der öffentliche Katalog bindet
+die ganze Quelle „Der Tod ist groß“ S10E13 an S00E02/E03. Die beiden Einzel-
+suchen liefern denselben Release; unbekannte oder inkonsistente Teile sperren
+den ganzen Kandidaten. Der vorhandene Nachlieferowner erhält eine Discovery
+auch für ein allein überwachtes fehlendes zweites Ziel, ohne neue Persistenz
+oder eine weitere Queue. Die GUI erhält Gesamtumfang und Gesamtlaufzeit vom
+Server; Quellzeile und Sonarr-TBA bleiben unverändert.
+
+Der vorhandene native Harness ergänzt genau diesen Paarumfang für beide
+Backends und Transportwege, einschließlich Leser-Rückweg nach Jobannahme,
+einer Datei mit derselben FileId für beide Ziele und einzeln gepaarter History.
+Ein zusätzlicher isolierter Fall verlangt einen tatsächlich beobachteten
+TBA-Importblock und anschließend Sonarrs ausdrücklich bestätigten nativen
+Zweizielimport. Der Harness behauptet keinen heutigen TBA-Blocker allein aus
+einem alten Befund und automatisiert keinen Live-Import. Diese native Abnahme
+und das neue Container-/Live-Ergebnis bleiben offen.
+
+Lokaler Producerstand: 1.847 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle getrennt;
+Lint, Typecheck, Format, Build,
+Katalog-/Schemasichtung und Scriptprüfung erfolgreich. Der Volltest deckt eine
+bestehende Fixture-Race auf: Datei-Existenz wurde vor vollständiger
+PID-JSON-Publikation beobachtet. Atomare Veröffentlichung des synthetischen
+Prozessbelegs beseitigt diese Testursache; gezielter Runtimegate und erneuter
+Volltest bestehen, Produktlogik und Ownership-Assertions bleiben erhalten.
+Ohne den Paarmatcher oder den vollständigen Suchfilter scheitern jeweils drei
+tatsächliche Match-/Newznab-Consumer. Nur die erste Folge auf Überwachung zu
+prüfen lässt zwei Discovery-/RSS-Consumer scheitern. Die kontrollierten
+Rückbauten sind restauriert; kein abgeschwächter Unknown-/Konfliktschutz.
+
+Der Abschlussreview belegt zusätzlich einen tatsächlich offenen alten
+Einzelfolgenpfad: E04–E05, E04E05 und E04–E06 konnten über Regex-Capture E04 als
+kanonische E04 veröffentlicht werden. Drei Newznab-Routen sind vor der Korrektur
+rot, jeweils nach einem warmen positiven Einzelquellenkontrollfall. Der gemeinsame
+Regelowner sperrt ungebundene Mehrfolgenbereiche vor seinen Einzelstrategien;
+explizite Programmbindungen bleiben davor zuständig. Ein alter
+Charakterisierungstest prüfte nur die vorhandene Mehrfolgen-URL. Er schützt nun
+den tatsächlichen verbleibenden Einzelumfang samt Titel, NZB-Titel und
+Pagination; ungebundene Bereiche werden nicht als erste Folge ausgegeben.
+Ungebundene Quellanzeige und vollständiger Quellbereich bleiben erhalten.
+
+Der erste native Lauf belegt einen Diagnosefehler nach bereits erfolgreichem
+Einzelimport: Sonarr liefert optionale History-Metadaten wie `imdbId` als `null`.
+Der bisherige pauschale String-Record verwirft damit auch gültige Datei-/
+Episodenbelege. Der vorhandene Parser validiert jetzt die tatsächlich
+konsumierten `fileId`-/`importedPath`-Felder; vollständige gepaarte History und
+aktuelle Datei-/Episodenidentität bleiben Pflicht. Eine synthetische Regression
+scheitert mit dem alten Parser. Die Korrektur ist auch im kompatiblen
+v7-Leser `c45a497d72ead6540d7ac5f606bfbd9fce16660e` enthalten; dessen
+1.835 Tests mit Coverage sowie Lint, Typecheck, Format und Build bestehen.
+Die native Gesamtqualifikation dieses Rückwegs mit dem Producer bleibt offen.
+
+Die erste Qualifikation des korrigierten Rückwegs wird vor den Arr-Tests durch
+ein wiederholtes Registry-Rate-Limit am LSCR-Abruf unterbrochen; die realen
+Medienprüfungen beider Backends bestehen bereits. Ein begrenzter Wiederanlauf
+ist dokumentiert. Der Vergleich der festgelegten Sonarr-/Radarr-/Prowlarr-
+Versionen bestätigt identische Manifestdigests bei LSCR und GHCR. Die CI
+verwendet deshalb den [von LinuxServer dokumentierten GHCR-Direktweg](https://docs.linuxserver.io/FAQ/#what-is-lscrio);
+Versionen, Tests, Rechte und Laufzeitcode bleiben gleich. Der neue native
+Lauf muss diesen Abrufweg und die vollständige Produktabnahme bestätigen.
+
+Der Direktabruf passiert anschließend die Registrygrenze. Der nächste Lauf
+belegt ein Runner-Speicherlimit beim Rückwegbau: Die Hauptimages verwenden
+den eingerichteten Buildx-Builder, die archivierten Checkpoints dagegen den
+separaten Docker-Standardbuilder. Trotz identischer Medienwerkzeug-/Dependency-
+Buildinputs für Producer und v7-Leser werden große Schichten erneut gebaut.
+Die CI weist nun allen Builds denselben expliziten jobeigenen Builder zu und
+lädt dessen Einplattform-Ergebnisse für die unveränderten nativen Tests.
+Keine gemeinsamen Caches/Volumes werden bereinigt, kein Image oder Prüfschritt
+entfernt und kein kostenpflichtiger Runner ergänzt. Die neue vollständige
+native Abnahme muss Speicherpfad und Produktvertrag bestätigen.
+
+Die unterschiedliche Standardbuilderauswahl und der benötigte lokale Load
+sind in der [Docker-Builderdokumentation](https://docs.docker.com/build/builders/#difference-between-docker-build-and-docker-buildx-build)
+beschrieben; der CI-Log belegt beide tatsächlich verwendeten Builder.
+
+Die anschließende native Diagnose zeigt vier Grab-Historyereignisse für zwei
+Ziele: Sonarr verarbeitet die Mitglieder einer EpisodeSearch-Liste einzeln.
+Der vorhandene SAB-/Queue-Owner bestätigt deshalb für dasselbe aktive v7-
+Gesamtprogramm denselben Auftrag, statt eine zweite Datei anzulegen. SQLite
+verwendet seinen vorhandenen Schreibzugang, PostgreSQL eine transaktionsgebundene
+Sperre derselben Absicht. Alte Einzelaufträge und explizite Enqueue-Schlüssel
+behalten ihren Vertrag. Der bestehende native Fall prüft die wiederholte
+NZB-Annahme; Importdiagnose und Rückweg erlauben wiederholte Bestätigungen
+derselben beiden Ziele, weiterhin keine fremden Ziele oder Dateien.
+
+Identische Push-/Pull-Request-Prüfungen laufen nicht mehr doppelt: Die vorhandenen
+Produktgates bleiben auf jedem Branch-Push und erneut auf Main aktiv, PR-Metadaten
+werden weiter im PR geprüft. Keine neue Testdatei oder zusätzliche Matrix.
+
+Alle acht regulären Direkt-/Prowlarr-Importwege auf SQLite/PG18 einschließlich
+Bestandserhalt und kompatiblem Rückweg bestehen anschließend. Der zusätzliche
+TBA-Fall scheitert an seiner pauschal vorausgesetzten Sperre. Sonarrs
+`EpisodeTitleSpecification` verlangt diese nur bei entsprechender Titel-/
+Benennungspolitik. Der bestehende Fall behandelt deshalb eine tatsächlich
+gemeldete Sperre; ohne sie bleiben beide realen Datei-/Historybindungen Pflicht.
+Es wird weder eine Sperre noch eine erfolgreiche Zuordnung bloß angenommen und
+keine native globale Einstellung umgeschrieben.

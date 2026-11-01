@@ -6,6 +6,7 @@ import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { publicDownloadCategory } from "@/lib/download-paths";
 import { cacheContextEpoch } from "@/lib/cache";
 import type { ImportDiagnosis } from "@/lib/job-diagnostics";
+import type { MediathekProgrammePairIdentity } from "@/lib/mediathek-programme";
 
 const positiveId = z.number().int().positive().max(2_147_483_647);
 const historyRow = z.object({
@@ -14,7 +15,12 @@ const historyRow = z.object({
   episodeId: positiveId.optional(),
   seriesId: positiveId.optional(),
   movieId: positiveId.optional(),
-  data: z.record(z.string(), z.string().max(16_384)),
+  // Native history may carry null optional metadata (for example imdbId).
+  // Only consumed file facts are a contract; import requires both below.
+  data: z.object({
+    fileId: z.string().max(16_384).optional(),
+    importedPath: z.string().max(16_384).optional(),
+  }),
 });
 const paging = z
   .object({
@@ -34,7 +40,8 @@ const idMatches = (left: string | null, right: string) =>
 /** API evidence only. Never infer import from Completed, a title or an unrelated hasFile. */
 export async function diagnoseArrImport(
   downloadId: string,
-  category: string
+  category: string,
+  expectedProgramme?: MediathekProgrammePairIdentity
 ): Promise<ImportDiagnosis> {
   const publicCategory = publicDownloadCategory(category);
   const app = ["sonarr", "tv"].includes(publicCategory)
@@ -43,6 +50,8 @@ export async function diagnoseArrImport(
       ? "radarr"
       : null;
   if (!app) return unknown("category_unknown");
+  if (expectedProgramme && app !== "sonarr")
+    return { state: "conflicting", reason: "file_mismatch" };
   const epoch = cacheContextEpoch();
   if ((await getSetting(`integration.${app}.enabled`)) !== "true")
     return unknown("integration_disabled");
@@ -85,6 +94,31 @@ export async function diagnoseArrImport(
     const imported = history.filter((row) => row.eventType === "downloadFolderImported");
     if (imported.length) {
       if (imported.length > 4) return unknown("window_limited");
+      // A whole-programme job is imported only when both frozen targets share
+      // the same current file and each has its own paired native history.
+      if (expectedProgramme) {
+        const grabs = history.filter((row) => row.eventType === "grabbed");
+        if (imported.length < 2) return unknown("not_associated");
+        if (
+          imported.length !== 2 ||
+          grabs.length < 2 ||
+          new Set(imported.map((row) => row.episodeId)).size !== 2 ||
+          new Set(grabs.map((row) => row.episodeId)).size !== 2 ||
+          grabs.some(
+            (row) =>
+              row.seriesId !== imported[0].seriesId ||
+              !imported.some((entry) => entry.episodeId === row.episodeId)
+          ) ||
+          imported.some(
+            (row) =>
+              row.data.fileId !== imported[0].data.fileId ||
+              row.data.importedPath !== imported[0].data.importedPath ||
+              row.seriesId !== imported[0].seriesId
+          )
+        )
+          return { state: "conflicting", reason: "file_mismatch" };
+      }
+      const coordinates = new Set<string>();
       for (const row of imported) {
         const fileId = Number(row.data.fileId),
           importedPath = row.data.importedPath;
@@ -118,6 +152,8 @@ export async function diagnoseArrImport(
               seriesId: positiveId,
               hasFile: z.boolean(),
               episodeFileId: positiveId,
+              seasonNumber: z.number().int().nonnegative().optional(),
+              episodeNumber: positiveId.optional(),
             })
             .parse(await read(`api/v3/episode/${row.episodeId}`));
           if (
@@ -127,6 +163,16 @@ export async function diagnoseArrImport(
             episode.episodeFileId !== fileId
           )
             return { state: "conflicting", reason: "file_mismatch" };
+          if (expectedProgramme) {
+            const coordinate = `${episode.seasonNumber}:${episode.episodeNumber}`;
+            if (
+              !expectedProgramme.targets.some(
+                (target) => `${target.season}:${target.episode}` === coordinate
+              )
+            )
+              return { state: "conflicting", reason: "file_mismatch" };
+            coordinates.add(coordinate);
+          }
         } else {
           if (!row.movieId || file.movieId !== row.movieId)
             return { state: "conflicting", reason: "file_mismatch" };
@@ -150,6 +196,17 @@ export async function diagnoseArrImport(
           )
             return { state: "conflicting", reason: "file_mismatch" };
         }
+      }
+      if (expectedProgramme) {
+        const series = z
+          .object({ id: positiveId, tvdbId: positiveId })
+          .parse(await read(`api/v3/series/${imported[0].seriesId}`));
+        if (
+          coordinates.size !== 2 ||
+          series.id !== imported[0].seriesId ||
+          series.tvdbId !== expectedProgramme.tvdbId
+        )
+          return { state: "conflicting", reason: "file_mismatch" };
       }
       return { state: "reported_import", reason: "api_file_associated" };
     }

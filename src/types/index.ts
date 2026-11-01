@@ -211,13 +211,15 @@ export enum TitleRegexRuleType {
 // Matched Episode Info
 export interface MatchedEpisodeInfo {
   episode: TvdbEpisode;
+  /** Complete scope of an explicitly verified whole programme; episode is its first member. */
+  pairedEpisodes?: [TvdbEpisode, TvdbEpisode];
   item: ApiResultItem;
   showName: string;
   releaseShowName?: string;
   matchedTitle: string;
   tvdbId: number;
   /** Explicit Mediathek match context, separate from the untouched catalogue row. */
-  mediathekProgramme?: import("@/lib/mediathek-programme").MediathekProgrammeIdentity;
+  mediathekProgramme?: import("@/lib/mediathek-programme").MediathekProgrammeMatch;
   /** Visible explicit-search review, not permission to enqueue. */
   runtimeConflict?: boolean;
   runtimeTolerancePercent?: number;

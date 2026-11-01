@@ -11,6 +11,7 @@ vi.mock("@/server/runtime-readiness", () => ({
 }));
 import { getJobDiagnosis } from "./job-diagnostics";
 import { jobDirectoryName, safeReleaseName } from "@/lib/download-paths";
+import { pairedProgrammeExpectations } from "@/lib/__fixtures__/mediathek-programme";
 let root: string, row: Record<string, unknown>;
 beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "pingufunk-job-diagnosis-"));
@@ -52,7 +53,7 @@ it("requires real regular owned file and exact persisted size, returns no privat
   row.size = BigInt(10);
   expect((await getJobDiagnosis(String(row.id)))?.file).toBe("unsafe");
 });
-it.each([1, 2, 3, 4, 5, 6])(
+it.each([1, 2, 3, 4, 5, 6, 7])(
   "reads completed media facts v%s without rewriting the job",
   async (version) => {
     row.mediaValidation = JSON.stringify({ ...JSON.parse(String(row.mediaValidation)), version });
@@ -60,6 +61,20 @@ it.each([1, 2, 3, 4, 5, 6])(
     expect(JSON.parse(String(row.mediaValidation)).version).toBe(version);
   }
 );
+it("passes the persisted complete v7 target scope to the native import consumer", async () => {
+  row.mediaExpectations = JSON.stringify(pairedProgrammeExpectations);
+  await getJobDiagnosis(String(row.id));
+  expect(arr).toHaveBeenLastCalledWith(
+    row.id,
+    row.category,
+    pairedProgrammeExpectations.sourceProgramme
+  );
+  row.mediaExpectations = JSON.stringify({ ...pairedProgrammeExpectations, episodeDurations: [] });
+  expect((await getJobDiagnosis(String(row.id)))?.import).toEqual({
+    state: "conflicting",
+    reason: "file_mismatch",
+  });
+});
 it("unknown future media fact versions cannot become a verified file", async () => {
   row.mediaValidation = JSON.stringify({ ...JSON.parse(String(row.mediaValidation)), version: 99 });
   expect((await getJobDiagnosis(String(row.id)))?.file).toBe("unverified");

@@ -7,7 +7,7 @@ import {
   assertLocalFileSafeForRemoval,
   UnsafeDownloadPathError,
 } from "@/lib/download-paths";
-import { sourceAudioSchema } from "@/lib/media-expectations";
+import { sourceAudioSchema, readPersistedMediaExpectations } from "@/lib/media-expectations";
 import { parseDecisionEvent } from "@/lib/decision-diagnostics";
 import { jobDiagnosisSchema, type JobDiagnosis } from "@/lib/job-diagnostics";
 import { boundedRuntimeRead } from "@/server/runtime-readiness";
@@ -22,6 +22,7 @@ const factsSchema = z.object({
     z.literal(4),
     z.literal(5),
     z.literal(6),
+    z.literal(7),
   ]),
   durationSeconds: z.number().finite().positive(),
   video: z
@@ -46,6 +47,7 @@ async function inspectJob(id: string): Promise<JobDiagnosis | null> {
         size: true,
         filePath: true,
         mediaValidation: true,
+        mediaExpectations: true,
         error: true,
       },
     })
@@ -107,7 +109,18 @@ async function inspectJob(id: string): Promise<JobDiagnosis | null> {
     } else diagnosis.file = "missing";
   }
   // Import is independent: a native Arr move can legitimately remove our local file.
-  diagnosis.import = await diagnoseArrImport(id, row.category);
+  let expected;
+  try {
+    expected = readPersistedMediaExpectations(row.mediaExpectations);
+  } catch {
+    diagnosis.import = { state: "conflicting", reason: "file_mismatch" };
+    return jobDiagnosisSchema.parse(diagnosis);
+  }
+  diagnosis.import = await diagnoseArrImport(
+    id,
+    row.category,
+    expected?.version === 7 ? expected.sourceProgramme : undefined
+  );
   diagnosis.checkedAt = Date.now();
   return jobDiagnosisSchema.parse(diagnosis);
 }

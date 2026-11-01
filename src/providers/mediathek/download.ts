@@ -32,7 +32,7 @@ export const mediathekDownloadAdapter: SourceDownloadAdapter = {
   async transfer(source, context) {
     if (source.family !== "mediathek") throw new SourceDownloadError("Wrong download source");
     context.signal.throwIfAborted();
-    if (context.expectations?.version === 6) {
+    if (context.expectations?.version === 6 || context.expectations?.version === 7) {
       const { revalidateMediathekProgramme } = await import("@/services/source-programme");
       try {
         await revalidateMediathekProgramme(

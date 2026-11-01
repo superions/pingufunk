@@ -3339,7 +3339,7 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
 
 - [ ] **P19.3 — Eine bestätigte Langfassung nativ zwei Episoden zuordnen.**
       Abhängigkeit P19.2. Owner: dessen Quellenbindung,
-      `source-programme.ts`, `types/index.ts::MatchedEpisodeInfo`, `newznab.ts`, `nzb-release.ts`,
+      `source-programme.ts`, `ruleset-matcher.ts`, `types/index.ts::MatchedEpisodeInfo`, `newznab.ts`, `nzb-release.ts`,
       `release-media-expectations.ts`, `lib/media-expectations.ts`,
       `tv-source-review.ts`, Queue-/Completion-/Arr-Diagnoseconsumer und
       vorhandener nativer Sonarr-Harness. Referenz „Der Tod ist groß“:
@@ -3356,9 +3356,11 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Nummerierungs-/Mehrfolgenfreigabe werden. Abnahme direkt/via Prowlarr auf
       SQLite/PG18: genau ein Grab/Job/eine physische Datei, native Bindung beider
       Episoden an dieselbe FileId mit exakt gepaarter Download-/Importhistory,
-      kein zweiter Grab über Einzelsuche/RSS/Restart. TBA-Consumerblocker separat
-      belegen; dessen native ausdrücklich bestätigte Zuordnung in der isolierten
-      Abnahme prüfen, ohne Sonarr-Metadaten oder globale Profile umzuschreiben.
+      kein zweiter Grab über Einzelsuche/RSS/Restart. Eine tatsächlich vorliegende
+      native TBA-Sperre separat belegen und deren ausdrücklich bestätigte Zuordnung
+      isoliert prüfen; ohne Sperre den tatsächlichen nativen Import nachweisen.
+      Keine Sperre aus einem Altbefund im Test voraussetzen und dafür weder
+      Sonarr-Metadaten noch globale Profile umschreiben.
       Bestehenden TV-/Job-/Diagnosevertrag und kompatiblen Rückweg mitpflegen.
 
 - [ ] **P19.4 — ARTE-Belegausfall von fehlender Fassung und Rechtefenster trennen.**

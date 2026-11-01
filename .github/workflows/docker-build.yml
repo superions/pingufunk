@@ -3,10 +3,13 @@ name: Docker build validation
 on:
   push:
     branches: ["**"]
-  pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -18,7 +21,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # All images share this job-owned builder, including archived checkpoints.
+      # A second default builder duplicates the large media-tool/dependency layers.
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Setup Node.js for disposable SQLite fixture
@@ -32,6 +38,7 @@ jobs:
       - name: Build application image without publishing
         uses: docker/build-push-action@v7
         with:
+          builder: ${{ steps.buildx.outputs.name }}
           context: .
           target: runner
           platforms: linux/amd64
@@ -45,6 +52,7 @@ jobs:
       - name: Build migration image without publishing
         uses: docker/build-push-action@v7
         with:
+          builder: ${{ steps.buildx.outputs.name }}
           context: .
           target: migrator
           platforms: linux/amd64
@@ -60,41 +68,46 @@ jobs:
           docker pull postgres:18-alpine
           bash scripts/media-container-smoke.sh
 
+      # LinuxServer documents GHCR as the direct registry behind LSCR.
+      # Keep the same versioned images without the additional redirector.
       - name: Prepare pinned source-contract rollback and Arr fixtures
         env:
-          SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           docker pull "$SONARR_IMAGE"
           docker pull "$RADARR_IMAGE"
           docker pull "$PROWLARR_IMAGE"
-          git archive c2ae58d8f1741b2657638ff4500f5eea19023e23 | docker build --target runner -t pingufunk-youtube-source-rollback-qa -
+          git archive c2ae58d8f1741b2657638ff4500f5eea19023e23 | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner -t pingufunk-youtube-source-rollback-qa -
 
       - name: Build the compatible Mediathek programme receiver without publishing
         run: |
-          git archive e7abb560d28cbaa53192e989c519d3324643262c | docker build --target runner --label org.opencontainers.image.revision=e7abb560d28cbaa53192e989c519d3324643262c -t pingufunk-programme-receiver-qa -
+          git archive 2e72a284e17d4a31031012c5acce64f0cfe623aa | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner --label org.opencontainers.image.revision=2e72a284e17d4a31031012c5acce64f0cfe623aa -t pingufunk-programme-receiver-qa -
 
       - name: Verify bound Mediathek programmes through native Arr on both backends
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           for provider in sqlite postgresql; do
+            node scripts/programme-arr-smoke.mjs direct "$provider" pair
+            node scripts/programme-arr-smoke.mjs forwarded "$provider" pair
             node scripts/programme-arr-smoke.mjs direct "$provider"
             node scripts/programme-arr-smoke.mjs forwarded "$provider"
           done
+          node scripts/programme-arr-smoke.mjs direct sqlite pair-tba
 
       - name: Verify YouTube cold delivery and rollback through native Arr on both backends
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           for provider in sqlite postgresql; do
             node scripts/youtube-arr-smoke.mjs direct "$provider"
@@ -105,9 +118,9 @@ jobs:
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           bash scripts/rendition-quality-arr-smoke.sh
 
@@ -115,17 +128,17 @@ jobs:
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           node scripts/tv-delivery-arr-smoke.mjs direct
           node scripts/tv-delivery-arr-smoke.mjs forwarded
 
       - name: Build pinned rollback checkpoints without publishing
         run: |
-          git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker build --target runner -t pingufunk-sqlite-source-rollback-qa -
-          git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | docker build --target runner -t pingufunk-pg-maintenance-rollback-qa -
+          git archive e2e53b00746a57a96d2b361497f8dbdcaa490e95 | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner -t pingufunk-sqlite-source-rollback-qa -
+          git archive bfa93e219fd3ac2bacf05de4543dc569505fce1b | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner -t pingufunk-pg-maintenance-rollback-qa -
 
       - name: Verify runtime tooling without global package manager
         run: |
@@ -183,7 +196,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           mkdir -p receiver-artifact
-          receiver_image="pingufunk-homelab-runner:e7abb560d28cbaa53192e989c519d3324643262c"
+          receiver_image="pingufunk-homelab-runner:2e72a284e17d4a31031012c5acce64f0cfe623aa"
           docker tag pingufunk-programme-receiver-qa "$receiver_image"
           docker save -o receiver-artifact/runner-amd64.tar "$receiver_image"
           docker image inspect "$receiver_image" --format '{{json .}}' | node -e '
@@ -196,7 +209,7 @@ jobs:
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pingufunk-receiver-amd64-e7abb560d28cbaa53192e989c519d3324643262c
+          name: pingufunk-receiver-amd64-2e72a284e17d4a31031012c5acce64f0cfe623aa
           path: receiver-artifact/
           retention-days: 3
           compression-level: 1

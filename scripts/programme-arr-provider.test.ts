@@ -53,3 +53,30 @@ it("serves exact bounded bytes and records real transfer versus metadata reads",
     .map((line) => JSON.parse(line));
   expect(rows.map((row) => row.ranged)).toEqual([true, false]);
 });
+
+it("uses the same whole source for exactly two single-shaped catalogue targets", async () => {
+  await writeFile(
+    path.join(root, "programme-mode.json"),
+    JSON.stringify({ binding: true, source: "valid" })
+  );
+  const fetch = programmeFixture(root, "pair");
+  const catalogue = (
+    await fetch(
+      new URL("https://raw.githubusercontent.com/superions/pingufunk/main/data/shows.json"),
+      {}
+    )!.json()
+  )[0];
+  expect(catalogue.mediathekProgrammes).toHaveLength(2);
+  expect(
+    catalogue.mediathekProgrammes.map((binding: { target: unknown }) => binding.target)
+  ).toEqual([
+    { season: 0, episode: 2 },
+    { season: 0, episode: 3 },
+  ]);
+  expect(catalogue.mediathekProgrammes[0].source).toEqual(catalogue.mediathekProgrammes[1].source);
+  const response = await fetch(new URL("https://mediathekviewweb.de/api/query"), {
+    body: JSON.stringify({ queries: [{ fields: ["title"], query: "Whole Programme" }] }),
+  })!.json();
+  expect(response.result.results).toHaveLength(1);
+  expect(response.result.results[0].title).toBe("Whole Programme (S10/E13)");
+});

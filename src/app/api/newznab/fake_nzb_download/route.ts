@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       { status: 409 }
     );
   }
-  if (mediaExpectations?.version === 6) {
+  if (mediaExpectations?.version === 6 || mediaExpectations?.version === 7) {
     try {
       const { validateReleaseSource } = await import("@/services/source-enqueue");
       await validateReleaseSource(url, mediaExpectations);

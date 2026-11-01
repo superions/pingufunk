@@ -106,6 +106,43 @@ geführte native Abnahme auf SQLite/PG18 ist erfolgreich, einschließlich genau
 einer S08E01-Dateibindung und gepaarter History. P19.2 ist seit 01.11.2026 live;
 exakte Release-, Rückweg- und Erhaltungsbelege stehen im Strukturreview.
 
+## Ganze Programme für zwei Episoden (P19.3, Abnahme offen)
+
+Der vorbereitende v7-Leser erhält v1–v6 unverändert. Zwei Katalogzeilen mit
+derselben öffentlichen Programm-/Quellenidentität und verschiedenen Zielen
+beschreiben genau zwei benachbarte Episoden derselben Staffel. Die bestehende
+Katalogform bleibt erhalten; ein alter Einzelzielleser weist die Mehrdeutigkeit
+sicher zurück. Beide Ziele müssen unabhängig frisch validiert, nicht blockiert
+und mit positiver bekannter Laufzeit vorhanden sein. Quelllaufzeit und Summe der
+Ziellaufzeiten bleiben getrennt; jede einzelne Referenz wird im angenommenen
+Job eingefroren. Eine Laufzeiteinzelfreigabe erlaubt keine Mehrfolgenbindung.
+
+Der bestehende Bindungsowner prüft neue v7-Annahme, der Worker prüft die exakte
+eingefrorene ganze Quelle erneut. Es gibt keinen zweiten Job, keine Dateiteilung,
+keine SQL-Migration und keine spätere Umschreibung durch Katalog-/Metadatenwechsel.
+Die Importdiagnose verlangt beide exakten Zielkoordinaten derselben TVDB-Serie,
+dieselbe aktuelle FileId samt Pfad und jeweils gepaarte Grab-/Importhistory.
+Ein Teilimport bleibt unbestätigt. Der v7-fähige Lesercheckpoint
+`2e72a284e17d4a31031012c5acce64f0cfe623aa` ist vor dem Producer festgeschrieben;
+ein v6-only Image kann angenommene v7-Jobs nicht abarbeiten.
+
+Der Producer bindet „Der Tod ist groß“ von Quell-S10E13 an S00E02 und S00E03.
+Titel/GUID/NZB und Job tragen denselben vollständigen Umfang; beide Einzelsuchen
+liefern denselben einen Release. Die GUI verwendet dessen opakes NZB und zeigt
+die ganze Metadatenlaufzeit. Eine Quelle wird auch dann über den vorhandenen
+RSS-Nachlieferweg erhalten, wenn nur das zweite Ziel überwacht ist und noch
+fehlt; die gespeicherte Discoverykoordinate bleibt stabil. Sonarr entscheidet
+weiter selbst über Download und Import. Die isolierte native Abnahme prüft
+alte TBA-Metadaten getrennt von einem tatsächlichen Unknown-Date-TBA-Blocker
+und dessen ausdrücklich bestätigter nativer Zweizielzuordnung, ohne Metadaten
+oder globale Profile umzuschreiben. Native Abnahme und Live-Übernahme sind offen.
+
+Alte Einzelfolgenregeln dürfen einen ungebundenen Quellbereich nicht auf ihren
+ersten Regex-Capture verkürzen. Solche Bereiche erhalten darüber keine
+kanonische Einzelfolgenfreigabe; die ungebundene Quellanzeige behält weiterhin
+den vollständigen Bereich. Bestätigte ganze Programme verwenden den oben
+beschriebenen Bindungsowner statt einer Teilfreigabe durch alte Regeln.
+
 ## Laufzeitkonflikte sichtbar machen, nicht automatisch übergehen
 
 Nutzerentscheidung 10.10.2026: Eine konkrete Quelle darf bei gesicherter Serie,
