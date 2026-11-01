@@ -61,3 +61,49 @@ export const programmeExpectations = {
     renditionIdentity: mediaSourceIdentity(programmeItem.url_video),
   },
 };
+
+export const pairedProgrammeBindings: MediathekProgrammeBinding[] = [2, 3].map((episode) => ({
+  website: "https://example.invalid/programmes/whole",
+  source: { channel: "ZDF", title: "Whole Programme", season: 10, episode: 13 },
+  target: { season: 0, episode },
+}));
+export const pairedProgrammeItem: ApiResultItem = {
+  ...programmeItem,
+  title: "Whole Programme (S10/E13)",
+  url_website: pairedProgrammeBindings[0].website,
+  url_video: "https://example.invalid/whole.mp4",
+};
+export const pairedProgrammeShow: TvdbData = {
+  ...programmeShow,
+  mediathekProgrammes: pairedProgrammeBindings,
+  sonarrVerifiedCoordinates: ["0:2", "0:3"],
+  episodes: [2, 3].map((episodeNumber) => ({
+    ...programmeShow.episodes[0],
+    name: "TBA",
+    seasonNumber: 0,
+    episodeNumber,
+    runtime: 1,
+  })),
+};
+export const pairedProgrammeExpectations = {
+  ...programmeExpectations,
+  version: 7 as const,
+  sourceProgramme: {
+    website: pairedProgrammeBindings[0].website,
+    source: pairedProgrammeBindings[0].source,
+    tvdbId: 123,
+    topic: "Synthetic Series",
+    targets: [
+      { season: 0, episode: 2 },
+      { season: 0, episode: 3 },
+    ] as [{ season: number; episode: number }, { season: number; episode: number }],
+    renditionIdentity: mediaSourceIdentity(pairedProgrammeItem.url_video),
+  },
+  episodeDurations: [
+    { seconds: 60, provenance: "episode_metadata" as const },
+    { seconds: 60, provenance: "episode_metadata" as const },
+  ] as [
+    { seconds: number; provenance: "episode_metadata" },
+    { seconds: number; provenance: "episode_metadata" },
+  ],
+};

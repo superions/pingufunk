@@ -3,7 +3,10 @@ import { unknownMediaExpectations, unknownJobMediaExpectations } from "@/lib/med
 import { validateMediaProbe, MediaProbeError } from "./media-probe";
 import { withDecisionDiagnostics } from "./decision-diagnostics";
 import { mediaSourceIdentity } from "@/services/source-audio";
-import { programmeExpectations } from "@/lib/__fixtures__/mediathek-programme";
+import {
+  programmeExpectations,
+  pairedProgrammeExpectations,
+} from "@/lib/__fixtures__/mediathek-programme";
 
 interface TestStream {
   codec_type: string;
@@ -29,57 +32,60 @@ const media = (): { format: { format_name: string; duration: string }; streams: 
   ],
 });
 
-it("enforces every frozen v6 reference and rejects foreign or mixed audio before completion", () => {
-  const source = media();
-  source.streams[1].tags = { language: "deu" };
-  const facts = validateMediaProbe(source, programmeExpectations, 25);
-  expect(facts.durationChecks).toEqual([
-    { ...programmeExpectations.durations.source, result: "passed" },
-    { ...programmeExpectations.durations.metadata, result: "passed" },
-  ]);
-  expect(facts.expectedChecks).toEqual({
-    duration: "passed",
-    audio: "passed",
-    resolution: "passed",
-  });
-  expect(() =>
-    validateMediaProbe(
-      { ...source, format: { ...source.format, duration: "60" } },
-      programmeExpectations,
-      25
-    )
-  ).toThrow(MediaProbeError);
-  expect(() =>
-    validateMediaProbe(
-      {
-        ...source,
-        streams: [source.streams[0], { ...source.streams[1], tags: { language: "fra" } }],
-      },
-      programmeExpectations,
-      25
-    )
-  ).toThrow(MediaProbeError);
-  expect(() =>
-    validateMediaProbe(
-      {
-        ...source,
-        streams: [...source.streams, { ...source.streams[1], tags: { language: "eng" } }],
-      },
-      programmeExpectations,
-      25
-    )
-  ).toThrow(MediaProbeError);
-  expect(() =>
-    validateMediaProbe(
-      {
-        ...source,
-        streams: [{ ...source.streams[0], width: 640, height: 360 }, source.streams[1]],
-      },
-      programmeExpectations,
-      25
-    )
-  ).toThrow(MediaProbeError);
-});
+it.each([programmeExpectations, pairedProgrammeExpectations])(
+  "enforces every frozen programme reference v$version and rejects foreign or mixed audio before completion",
+  (expectations) => {
+    const source = media();
+    source.streams[1].tags = { language: "deu" };
+    const facts = validateMediaProbe(source, expectations, 25);
+    expect(facts.durationChecks).toEqual([
+      { ...expectations.durations.source, result: "passed" },
+      { ...expectations.durations.metadata, result: "passed" },
+    ]);
+    expect(facts.expectedChecks).toEqual({
+      duration: "passed",
+      audio: "passed",
+      resolution: "passed",
+    });
+    expect(() =>
+      validateMediaProbe(
+        { ...source, format: { ...source.format, duration: "60" } },
+        expectations,
+        25
+      )
+    ).toThrow(MediaProbeError);
+    expect(() =>
+      validateMediaProbe(
+        {
+          ...source,
+          streams: [source.streams[0], { ...source.streams[1], tags: { language: "fra" } }],
+        },
+        expectations,
+        25
+      )
+    ).toThrow(MediaProbeError);
+    expect(() =>
+      validateMediaProbe(
+        {
+          ...source,
+          streams: [...source.streams, { ...source.streams[1], tags: { language: "eng" } }],
+        },
+        expectations,
+        25
+      )
+    ).toThrow(MediaProbeError);
+    expect(() =>
+      validateMediaProbe(
+        {
+          ...source,
+          streams: [{ ...source.streams[0], width: 640, height: 360 }, source.streams[1]],
+        },
+        expectations,
+        25
+      )
+    ).toThrow(MediaProbeError);
+  }
+);
 
 it("preserves a closed causal media reason instead of flattening it in the exception boundary", async () => {
   const { report } = await withDecisionDiagnostics(async () => {

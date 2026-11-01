@@ -106,6 +106,25 @@ geführte native Abnahme auf SQLite/PG18 ist erfolgreich, einschließlich genau
 einer S08E01-Dateibindung und gepaarter History. P19.2 ist seit 01.11.2026 live;
 exakte Release-, Rückweg- und Erhaltungsbelege stehen im Strukturreview.
 
+## Ganze Programme für zwei Episoden (P19.3, Abnahme offen)
+
+Der vorbereitende v7-Leser erhält v1–v6 unverändert. Zwei Katalogzeilen mit
+derselben öffentlichen Programm-/Quellenidentität und verschiedenen Zielen
+beschreiben genau zwei benachbarte Episoden derselben Staffel. Die bestehende
+Katalogform bleibt erhalten; ein alter Einzelzielleser weist die Mehrdeutigkeit
+sicher zurück. Beide Ziele müssen unabhängig frisch validiert, nicht blockiert
+und mit positiver bekannter Laufzeit vorhanden sein. Quelllaufzeit und Summe der
+Ziellaufzeiten bleiben getrennt; jede einzelne Referenz wird im angenommenen
+Job eingefroren. Eine Laufzeiteinzelfreigabe erlaubt keine Mehrfolgenbindung.
+
+Der bestehende Bindungsowner prüft neue v7-Annahme, der Worker prüft die exakte
+eingefrorene ganze Quelle erneut. Es gibt keinen zweiten Job, keine Dateiteilung,
+keine SQL-Migration und keine spätere Umschreibung durch Katalog-/Metadatenwechsel.
+Die Importdiagnose verlangt beide exakten Zielkoordinaten derselben TVDB-Serie,
+dieselbe aktuelle FileId samt Pfad und jeweils gepaarte Grab-/Importhistory.
+Ein Teilimport bleibt unbestätigt. Dieser Lesercheckpoint veröffentlicht noch
+keine Zweifolgen-Releases; Producer, nativer Rückweg und Live-Abnahme stehen aus.
+
 ## Laufzeitkonflikte sichtbar machen, nicht automatisch übergehen
 
 Nutzerentscheidung 10.10.2026: Eine konkrete Quelle darf bei gesicherter Serie,

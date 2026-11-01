@@ -8,6 +8,9 @@ import {
   programmeItem,
   programmeShow,
   programmeExpectations,
+  pairedProgrammeItem,
+  pairedProgrammeShow,
+  pairedProgrammeExpectations,
 } from "@/lib/__fixtures__/mediathek-programme";
 import type { ApiResultItem, TvdbData } from "@/types";
 
@@ -219,5 +222,126 @@ it("cancels programme verification before provider or transfer work", async () =
     )
   ).rejects.toMatchObject({ name: "AbortError" });
   expect(state.query).not.toHaveBeenCalled();
+  expect(state.transfer).not.toHaveBeenCalled();
+});
+
+it("the compatible reader accepts a complete frozen pair without publishing a partial single", async () => {
+  state.query.mockResolvedValue([pairedProgrammeItem]);
+  state.merge.mockReturnValue(pairedProgrammeShow);
+  expect(matchBoundSourceEpisode(pairedProgrammeItem, pairedProgrammeShow, 0, 10)).toBeNull();
+  const admit = releaseSourceAdmission(pairedProgrammeItem.url_video, pairedProgrammeExpectations)!;
+  await expect(admit()).resolves.toBeUndefined();
+  // Same total with rewritten individual references is still a different intent.
+  state.merge.mockReturnValue({
+    ...pairedProgrammeShow,
+    episodes: pairedProgrammeShow.episodes.map((e, i) => ({ ...e, runtime: i ? 0.5 : 1.5 })),
+  });
+  await expect(admit()).rejects.toThrow("Source binding changed");
+});
+
+it.each([
+  "missing",
+  "unknown-runtime",
+  "unverified",
+  "blocked",
+  "nonadjacent",
+  "duplicate",
+  "different-source",
+])("new pair admission rejects %s target scope", async (kind) => {
+  state.query.mockResolvedValue([pairedProgrammeItem]);
+  const show = structuredClone(pairedProgrammeShow);
+  if (kind === "missing") show.episodes.pop();
+  if (kind === "unknown-runtime") show.episodes[1].runtime = null;
+  if (kind === "unverified") {
+    show.episodes[1].metadataSource = undefined;
+    show.sonarrVerifiedCoordinates = ["0:2"];
+  }
+  if (kind === "blocked") show.sonarrBlockedCoordinates = ["0:3"];
+  if (kind === "nonadjacent") show.mediathekProgrammes![1].target.episode = 4;
+  if (kind === "duplicate") show.mediathekProgrammes![1].target.episode = 2;
+  if (kind === "different-source") show.mediathekProgrammes![1].source.title = "Other source";
+  state.merge.mockReturnValue(show);
+  await expect(
+    releaseSourceAdmission(pairedProgrammeItem.url_video, pairedProgrammeExpectations)!()
+  ).rejects.toThrow();
+  expect(state.transfer).not.toHaveBeenCalled();
+});
+
+it("accepted v7 transfers the exact frozen whole source once without rereading mutable targets", async () => {
+  state.query.mockResolvedValue([pairedProgrammeItem]);
+  state.merge.mockReturnValue(null);
+  state.fresh.mockResolvedValue(null);
+  directory = await mkdtemp(path.join(os.tmpdir(), "pingufunk-whole-"));
+  const expected = structuredClone(pairedProgrammeExpectations);
+  await expect(
+    transferSource(downloadSource(pairedProgrammeItem.url_video, expected), {
+      stagingDirectory: directory,
+      filename: "whole",
+      expectations: expected,
+      signal: new AbortController().signal,
+      getContainer: async () => "mp4",
+      onProgress: async () => {},
+    })
+  ).resolves.toEqual({ path: path.join(directory, "whole.mp4"), extension: ".mp4" });
+  expect(state.transfer).toHaveBeenCalledOnce();
+  expect(state.fresh).not.toHaveBeenCalled();
+  expect(expected).toEqual(pairedProgrammeExpectations);
+  state.query.mockResolvedValue([{ ...pairedProgrammeItem, duration: 60 }]);
+  await expect(
+    revalidateMediathekProgramme(pairedProgrammeItem.url_video, expected)
+  ).rejects.toThrow("Programme source changed");
+  expect(state.transfer).toHaveBeenCalledOnce();
+});
+
+it.each(["missing", "changed", "ambiguous", "other-rendition"])(
+  "v7 worker rejects %s exact-source evidence before transferring bytes",
+  async (kind) => {
+    state.query.mockResolvedValue(
+      kind === "missing"
+        ? []
+        : kind === "changed"
+          ? [{ ...pairedProgrammeItem, duration: 60 }]
+          : kind === "ambiguous"
+            ? [pairedProgrammeItem, pairedProgrammeItem]
+            : [{ ...pairedProgrammeItem, url_video: programmeItem.url_video }]
+    );
+    directory = await mkdtemp(path.join(os.tmpdir(), "pingufunk-whole-negative-"));
+    await expect(
+      transferSource(downloadSource(pairedProgrammeItem.url_video, pairedProgrammeExpectations), {
+        stagingDirectory: directory,
+        filename: "whole",
+        expectations: pairedProgrammeExpectations,
+        signal: new AbortController().signal,
+        getContainer: async () => "mp4",
+        onProgress: async () => {},
+      })
+    ).rejects.toThrow("Programme source no longer verified");
+    expect(state.transfer).not.toHaveBeenCalled();
+  }
+);
+
+it("the v7 NZB consumer preserves both targets and rejects a changed current half", async () => {
+  state.query.mockResolvedValue([pairedProgrammeItem]);
+  state.merge.mockReturnValue(pairedProgrammeShow);
+  const request = new NextRequest(
+    new URL(
+      createFakeNzbDownloadUrl({
+        title: "Synthetic.Series.S00E02E03.Whole.Programme.GERMAN.720p",
+        url: pairedProgrammeItem.url_video,
+        mediaExpectations: pairedProgrammeExpectations,
+      }),
+      "http://localhost"
+    )
+  );
+  const response = await downloadNzb(request);
+  expect(response.status).toBe(200);
+  expect(parseNzbContent(await response.text())?.mediaExpectations).toEqual(
+    pairedProgrammeExpectations
+  );
+  state.merge.mockReturnValue({
+    ...pairedProgrammeShow,
+    episodes: pairedProgrammeShow.episodes.slice(0, 1),
+  });
+  expect((await downloadNzb(request)).status).toBe(409);
   expect(state.transfer).not.toHaveBeenCalled();
 });

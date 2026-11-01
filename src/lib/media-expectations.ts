@@ -1,7 +1,10 @@
 import { RENDITION_SELECTORS } from "./rendition-selector";
 import { z } from "zod";
 import { verifiedDurationCheck } from "./verified-duration";
-import { mediathekProgrammeReferenceSchema } from "./mediathek-programme";
+import {
+  mediathekProgrammeReferenceSchema,
+  mediathekProgrammePairReferenceSchema,
+} from "./mediathek-programme";
 import {
   youtubeSelectionSchema,
   youtubeSourceReferenceSchema,
@@ -160,7 +163,35 @@ const v6Schema = z
 export type NewMediaExpectations =
   | z.infer<typeof v3Schema>
   | z.infer<typeof v5Schema>
-  | z.infer<typeof v6Schema>;
+  | z.infer<typeof v6Schema>
+  | z.infer<typeof v7Schema>;
+/** Each runtime belongs to the target at the same tuple position; metadata is their sum. */
+const v7Schema = z
+  .object({
+    ...v6Schema.shape,
+    version: z.literal(7),
+    sourceProgramme: mediathekProgrammePairReferenceSchema,
+    episodeDurations: z.tuple([
+      durationSchema.extend({ provenance: z.literal("episode_metadata") }).strict(),
+      durationSchema.extend({ provenance: z.literal("episode_metadata") }).strict(),
+    ]),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    // Reuse all v6 media constraints without accepting pair fields as a v6 payload.
+    const { episodeDurations, sourceProgramme, ...facts } = value;
+    const { targets, ...source } = sourceProgramme;
+    if (
+      !v6Schema.safeParse({
+        ...facts,
+        version: 6,
+        sourceProgramme: { ...source, target: targets[0] },
+      }).success ||
+      value.durations.metadata?.seconds !==
+        episodeDurations[0].seconds + episodeDurations[1].seconds
+    )
+      context.addIssue({ code: "custom", message: "Conflicting whole-programme expectations" });
+  });
 /** Internal-only job decision. It is never accepted from an NZB or SAB upload. */
 const v4Schema = z
   .object({
@@ -234,6 +265,7 @@ export const mediaExpectationsSchema = z.discriminatedUnion("version", [
   v4Schema,
   v5Schema,
   v6Schema,
+  v7Schema,
 ]);
 export type SourceAudioEvidence = z.infer<typeof sourceAudioSchema>;
 export type MediaExpectations = z.infer<typeof mediaExpectationsSchema>;
@@ -246,7 +278,8 @@ export function sourceAudioExpectation(
     value?.version === 3 ||
     value?.version === 4 ||
     value?.version === 5 ||
-    value?.version === 6
+    value?.version === 6 ||
+    value?.version === 7
     ? value.sourceAudio
     : null;
 }
@@ -257,7 +290,7 @@ export function durationExpectations(value: MediaExpectations | null, legacyTole
   // exempted for this one job. Source duration is still enforced by the worker.
   return value?.version === 4
     ? [value.durations.source].filter((reference) => reference !== null)
-    : value?.version === 3 || value?.version === 5 || value?.version === 6
+    : value?.version === 3 || value?.version === 5 || value?.version === 6 || value?.version === 7
       ? [value.durations.source, value.durations.metadata].filter((reference) => reference !== null)
       : value?.duration
         ? [{ ...value.duration, tolerancePercent: legacyTolerance }]
@@ -289,7 +322,8 @@ export class MediaRuntimeConflictError extends Error {
 
 /** A visible review candidate must not turn into a download through NZB/SAB. */
 export function hasMediaRuntimeConflict(value: MediaExpectations | null | undefined): boolean {
-  if (value?.version !== 3 && value?.version !== 5 && value?.version !== 6) return false;
+  if (value?.version !== 3 && value?.version !== 5 && value?.version !== 6 && value?.version !== 7)
+    return false;
   const { source, metadata } = value.durations;
   return !!(
     source &&

@@ -10,7 +10,7 @@ import { classifyLanguageEdition } from "./language-editions";
 import { mediaSourceIdentity } from "./source-audio";
 import { renditionDimensions } from "./rendition-quality";
 import { youtubeSourceReferenceSchema, youtubeWatchUrl } from "@/lib/youtube-source";
-import type { MediathekProgrammeIdentity } from "@/lib/mediathek-programme";
+import type { MediathekProgrammeMatch } from "@/lib/mediathek-programme";
 
 /** Explicit bindings publish only the proved standard German rendition. Cold proof stays pending. */
 export function programmeRenditionVerified(item: ApiResultItem, url: string): boolean {
@@ -31,9 +31,10 @@ export function releaseMediaExpectations(
   episodeRuntimeMinutes: number | null = null,
   renditionUrl: string = item.url_video || item.url_video_hd || item.url_video_low,
   mediaKind: NewMediaExpectations["mediaKind"] = "unknown",
-  programme?: MediathekProgrammeIdentity
+  programme?: MediathekProgrammeMatch
 ): NewMediaExpectations {
   const expected = unknownJobMediaExpectations();
+  if (programme && "targets" in programme) throw Error("Whole-programme producer unavailable");
   const source = item.sourceRef ? youtubeSourceReferenceSchema.parse(item.sourceRef) : null;
   if (source && renditionUrl !== youtubeWatchUrl(source))
     throw Error("Typed source selector mismatch");
@@ -118,7 +119,7 @@ export function tvReviewMediaExpectations(
   runtimeMinutes: number,
   url: string,
   tolerancePercent: number,
-  programme?: MediathekProgrammeIdentity
+  programme?: MediathekProgrammeMatch
 ): NewMediaExpectations {
   const facts = releaseMediaExpectations(item, runtimeMinutes, url, "series", programme);
   return parseMediaExpectations({

@@ -39,6 +39,22 @@ export const mediathekProgrammeReferenceSchema = mediathekProgrammeIdentitySchem
   .extend({ renditionIdentity: z.string().regex(/^[a-f0-9]{64}$/) })
   .strict();
 
+/** A whole programme may bind exactly two adjacent episodes, never an open range. */
+export const mediathekProgrammePairIdentitySchema = mediathekProgrammeIdentitySchema
+  .omit({ target: true })
+  .extend({ targets: z.tuple([target, target]) })
+  .strict()
+  .refine(
+    ({ targets: [first, second] }) =>
+      first.season === second.season && second.episode === first.episode + 1,
+    "Programme requires two ordered adjacent targets"
+  );
+export const mediathekProgrammePairReferenceSchema = mediathekProgrammePairIdentitySchema
+  .safeExtend({ renditionIdentity: z.string().regex(/^[a-f0-9]{64}$/) })
+  .strict();
+
 export type MediathekProgrammeBinding = z.infer<typeof mediathekProgrammeBindingSchema>;
 export type MediathekProgrammeIdentity = z.infer<typeof mediathekProgrammeIdentitySchema>;
+export type MediathekProgrammePairIdentity = z.infer<typeof mediathekProgrammePairIdentitySchema>;
+export type MediathekProgrammeMatch = MediathekProgrammeIdentity | MediathekProgrammePairIdentity;
 export type MediathekProgrammeReference = z.infer<typeof mediathekProgrammeReferenceSchema>;

@@ -4481,3 +4481,31 @@ Transcode-/Gesundheitsprüfung belegen die externe Änderung einzeln. Ein erneut
 Vergleich nach dessen Abschluss bestätigt alle 155 Dateien stabil. Keine
 manuellen Live-Suchen, Grabs, Retries oder Imports. P19.2 ist abgeschlossen;
 P19.3–P19.6 bleiben offen.
+
+## P19.3 — Ganze Quelle für zwei Episoden (in Arbeit)
+
+Der vorbereitende Leser ergänzt v7 im bestehenden Erwartungsfeld, ohne v6 zu
+ändern. Genau zwei geordnete benachbarte Ziele, getrennte positive
+Teillaufzeiten und ihre Metadatensumme bleiben an die ganze exakte Quelle
+gebunden. Der vorhandene Programmowner gruppiert zwei gleichartige
+Katalogzeilen mit verschiedenen Einzelzielen; die ausgelieferte Katalogform
+bleibt dadurch lesbar. V6-only Matcher lehnen solche Mehrdeutigkeit ab.
+Neue Annahme prüft beide frischen unabhängigen Ziele, der Worker die
+eingefrorene Quelle. Der öffentliche Matcher/Formatter gibt im Lesercheckpoint
+noch keinen halben oder vollständigen Zweifolgen-Release aus.
+
+Die vorhandene Arr-Diagnose konsumiert beim v7-Job dessen eingefrorene Ziele:
+beide Koordinaten derselben TVDB-Serie, jeweils Grab-/Importhistory und eine
+gemeinsame aktuelle FileId samt Pfad. Ein Teilimport ist kein Gesamtimport;
+historische Jobformate behalten ihre bisherige Diagnose. Gezielte Prüfungen
+decken NZB-/Persistenztransport, fehlende/ungeprüfte/gesperrte/inkonsistente
+Teile, individuelle Referenzänderung bei gleicher Summe, genaue Workerquelle,
+Fremd-/Mischton und unvollständige native API-Bindung ab. Producer und native
+Abnahme sind noch offen; kein neuer Produktionsstand.
+
+Lokaler Lesercheckpoint: 1.831 Tests erfolgreich, 28 Opt-in-Fälle getrennt;
+Lint, Typecheck, Format und Build erfolgreich. Der vorangegangene Coveragelauf
+mit 1.826 Tests und die anschließenden 119 gezielten Fälle ergänzen diese
+Abnahme. Ohne v7-Workerrevalidierung scheitern vier tatsächliche
+Übertragungsgegenfälle; ohne Prüfung des vollständigen Imports scheitern fünf
+API-Consumerfälle. Beide kontrollierten Rückbauten wurden vollständig restauriert.

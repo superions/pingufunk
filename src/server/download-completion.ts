@@ -23,7 +23,8 @@ export async function completeValidatedDownload(
     expectations?.version === 3 ||
     expectations?.version === 4 ||
     expectations?.version === 5 ||
-    expectations?.version === 6
+    expectations?.version === 6 ||
+    expectations?.version === 7
       ? 0
       : Number(
           configuredSetting(
