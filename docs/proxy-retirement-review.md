@@ -4528,7 +4528,7 @@ Zweizielimport. Der Harness behauptet keinen heutigen TBA-Blocker allein aus
 einem alten Befund und automatisiert keinen Live-Import. Diese native Abnahme
 und das neue Container-/Live-Ergebnis bleiben offen.
 
-Lokaler Producerstand: 1.846 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle getrennt;
+Lokaler Producerstand: 1.847 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle getrennt;
 Lint, Typecheck, Format, Build,
 Katalog-/Schemasichtung und Scriptprüfung erfolgreich. Der Volltest deckt eine
 bestehende Fixture-Race auf: Datei-Existenz wurde vor vollständiger
@@ -4550,3 +4550,14 @@ Charakterisierungstest prüfte nur die vorhandene Mehrfolgen-URL. Er schützt nu
 den tatsächlichen verbleibenden Einzelumfang samt Titel, NZB-Titel und
 Pagination; ungebundene Bereiche werden nicht als erste Folge ausgegeben.
 Ungebundene Quellanzeige und vollständiger Quellbereich bleiben erhalten.
+
+Der erste native Lauf belegt einen Diagnosefehler nach bereits erfolgreichem
+Einzelimport: Sonarr liefert optionale History-Metadaten wie `imdbId` als `null`.
+Der bisherige pauschale String-Record verwirft damit auch gültige Datei-/
+Episodenbelege. Der vorhandene Parser validiert jetzt die tatsächlich
+konsumierten `fileId`-/`importedPath`-Felder; vollständige gepaarte History und
+aktuelle Datei-/Episodenidentität bleiben Pflicht. Eine synthetische Regression
+scheitert mit dem alten Parser. Die Korrektur ist auch im kompatiblen
+v7-Leser `c45a497d72ead6540d7ac5f606bfbd9fce16660e` enthalten; dessen
+1.835 Tests mit Coverage sowie Lint, Typecheck, Format und Build bestehen.
+Die native Gesamtqualifikation dieses Rückwegs mit dem Producer bleibt offen.
