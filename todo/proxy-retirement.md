@@ -3227,8 +3227,8 @@ Vergleich und dessen GitHub-Darstellungsabnahme offen.
 Ergebnis: die im [Strukturreview](../docs/proxy-retirement-review.md#strukturreview-der-importprobleme-31102026)
 benannten Restfälle kausal schließen, ohne erledigte Quellen-/Workerfunktionen
 neu zu bauen. Nutzerauftrag 31.10.2026: Probleme strukturell einordnen und ihren
-Ownern zuweisen. Dies ist der daraus abgeleitete Arbeitsvertrag, noch keine
-Implementierungs- oder Betriebsabnahme.
+Ownern zuweisen. Dies ist der daraus abgeleitete Arbeitsvertrag; die abgeschlossenen
+Implementierungs- und Betriebsabnahmen stehen an den einzelnen Punkten und im Review.
 
 Gemeinsam für P19: vorhandene Katalog-, Match-, Medien-, Queue-/Receipt- und
 Diagnoseowner verwenden. Sonarr/Radarr bleiben primäre Such-/Importoberflächen;
@@ -3391,7 +3391,7 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Live-Erhalt von vier Aufträgen und 156 Dateien samt Bindungen/History
       nachgewiesen; keine Bibliotheksaktion oder Schemamigration.
 
-- [ ] **P19.5 — Sprachentscheidung korrigieren und Arr-Import ermöglichen.**
+- [x] **P19.5 — Sprachentscheidung korrigieren und Arr-Import ermöglichen.**
       Unabhängig startbar. Owner: `source-audio.ts`, `media-probe.ts`,
       `providers/youtube/audio.ts`, `providers/youtube/resolve.ts`,
       `download-completion.ts`, gespeicherte `mediaValidation`, vorhandene Job-/Arr-Diagnose und
@@ -3425,8 +3425,12 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       vorhandenen Prüfungen; daraus keine unbelegte Erkennung gesprochenen Tons
       oder tatsächlichen neuen Import behaupten. Bestehende Datei-/Jobbindung und kompatiblen Rückweg erhalten und den
       allgemeinen Produktfix vom bereits erledigten manuellen Einzelfall trennen.
+      Abgenommen am 01.11.2026: bestehende native Film-/Serienimporte direkt
+      und via Prowlarr auf SQLite/PG18 mit falschem Container-Tag erfolgreich,
+      Originalerhalt bei Fehlern geprüft. PR #25 gemergt, exakt qualifiziertes
+      und gescanntes Image live; bestehende Aufträge und Dateien erhalten.
 
-- [ ] **P19.6 — Den konkreten WDR-/Protection-Belegfall abschließend einordnen.**
+- [x] **P19.6 — Den konkreten WDR-/Protection-Belegfall abschließend einordnen.**
       Unabhängig startbar. Owner: `ard-source-audio.ts`, `source-audio.ts`,
       bestehender Producer-/Worker-URL-Gate, `rendition-quality.ts` und
       Tonsprachen-/Auflösungsreferenz. Historisch fehlende Hostunterstützung
@@ -3444,3 +3448,7 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       negative URL-/Rechte-/Audio-/Qualitätsfälle samt nativem Arr-Consumer.
       Unbelegte Sprache/Qualität bleibt Unknown; tatsächlicher Download/Import
       benötigt weiterhin seinen eigenen freigegebenen Nachweis.
+      Abgenommen am 01.11.2026 als konkret belegter Quellenrest: exakte CRID
+      mit leerem 404, vollständige begrenzte Topicabfrage ohne Treffer und
+      abgelaufene Verfügbarkeit im alten offiziellen Seitenstand. Kein belegter
+      neuer Adapterfix und kein neuer tatsächlicher Import behauptet.

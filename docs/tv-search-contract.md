@@ -106,7 +106,7 @@ geführte native Abnahme auf SQLite/PG18 ist erfolgreich, einschließlich genau
 einer S08E01-Dateibindung und gepaarter History. P19.2 ist seit 01.11.2026 live;
 exakte Release-, Rückweg- und Erhaltungsbelege stehen im Strukturreview.
 
-## Ganze Programme für zwei Episoden (P19.3, Abnahme offen)
+## Ganze Programme für zwei Episoden (P19.3, abgenommen)
 
 Der vorbereitende v7-Leser erhält v1–v6 unverändert. Zwei Katalogzeilen mit
 derselben öffentlichen Programm-/Quellenidentität und verschiedenen Zielen
@@ -135,7 +135,8 @@ fehlt; die gespeicherte Discoverykoordinate bleibt stabil. Sonarr entscheidet
 weiter selbst über Download und Import. Die isolierte native Abnahme prüft
 alte TBA-Metadaten getrennt von einem tatsächlichen Unknown-Date-TBA-Blocker
 und dessen ausdrücklich bestätigter nativer Zweizielzuordnung, ohne Metadaten
-oder globale Profile umzuschreiben. Native Abnahme und Live-Übernahme sind offen.
+oder globale Profile umzuschreiben. Alle neun nativen Fälle auf SQLite/PG18
+bestehen; PR #23/#24 und die Live-Übernahme sind seit 01.11.2026 abgenommen.
 
 Alte Einzelfolgenregeln dürfen einen ungebundenen Quellbereich nicht auf ihren
 ersten Regex-Capture verkürzen. Solche Bereiche erhalten darüber keine
