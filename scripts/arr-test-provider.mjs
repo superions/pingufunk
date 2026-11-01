@@ -16,10 +16,14 @@ const programme = process.env.PINGUFUNK_ARR_QA_PROGRAMME === "1";
 const programmeResponse = programme
   ? (await import("/qa/programme-provider.mjs")).programmeFixture("/qa")
   : undefined;
-if (youtube) {
+if (youtube || programme) {
   const emit = Server.prototype.emit;
   Server.prototype.emit = function (event, request, response, ...rest) {
-    if (event === "request" && request?.url?.startsWith("/api/newznab/fake_nzb_download?")) {
+    if (
+      youtube &&
+      event === "request" &&
+      request?.url?.startsWith("/api/newznab/fake_nzb_download?")
+    ) {
       const url = new URL(request.url, "http://pingufunk:6767");
       const raw = url.searchParams.get("encodedExpectations");
       const expected = raw ? JSON.parse(Buffer.from(raw, "base64").toString("utf8")) : null;
@@ -46,7 +50,7 @@ if (youtube) {
     if (event === "request" && request?.url?.startsWith("/api/newznab")) {
       const query = new URL(request.url, "http://pingufunk:6767").searchParams;
       const fields = Object.fromEntries(
-        ["t", "cat", "tmdbid", "imdbid", "q"].flatMap((key) => {
+        ["t", "cat", "tmdbid", "imdbid", "tvdbid", "season", "ep", "q"].flatMap((key) => {
           const value = query.get(key);
           return value && (key !== "q" || /^Synthetic\b/.test(value))
             ? [[key, value.slice(0, 100)]]
@@ -55,7 +59,7 @@ if (youtube) {
       );
       response.once("finish", () =>
         appendFileSync(
-          "/qa/youtube-newznab.jsonl",
+          programme ? "/qa/programme-newznab.jsonl" : "/qa/youtube-newznab.jsonl",
           JSON.stringify({ ...fields, status: response.statusCode }) + "\n"
         )
       );

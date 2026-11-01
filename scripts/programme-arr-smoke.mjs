@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseStringPromise } from "xml2js";
@@ -417,6 +425,46 @@ try {
     if (grabs.length === targetIds.length) break;
     await command({ name: "RssSync" });
     await delay(250);
+  }
+  if (grabs.length !== targetIds.length) {
+    const source = await releases();
+    const native = await api(root, manifest, "sonarr", `/api/v3/release?episodeId=${target.id}`);
+    const reasons = [
+      ["tba", /TBA|does not have a title/i],
+      ["unmonitored", /unmonitored|not monitored/i],
+      ["size", /size|large|small/i],
+      ["quality", /quality|cutoff|upgrade/i],
+      ["language", /language/i],
+      ["episode", /episode|season/i],
+      ["series", /series|parse/i],
+      ["existing", /already|existing|download/i],
+    ];
+    console.error(
+      JSON.stringify({
+        scope,
+        backend,
+        transport,
+        expectedGrabs: targetIds.length,
+        actualGrabs: grabs.length,
+        canonicalCount: source.length,
+        native: native.map((row) => ({
+          canonicalTitle: row.title?.startsWith(`Synthetic.Series.${coordinate}.`),
+          season: row.seasonNumber,
+          episodes: row.episodeNumbers,
+          german: row.languages?.some((language) => language.name === "German"),
+          rejectionReasons: (row.rejections ?? []).map(
+            (reason) => reasons.find(([, pattern]) => pattern.test(reason))?.[0] ?? "other"
+          ),
+        })),
+        queries: existsSync(join(root, "pingufunk", "programme-newznab.jsonl"))
+          ? readFileSync(join(root, "pingufunk", "programme-newznab.jsonl"), "utf8")
+              .trim()
+              .split("\n")
+              .map(JSON.parse)
+              .slice(-30)
+          : [],
+      })
+    );
   }
   assert.equal(grabs.length, targetIds.length);
   assert.deepEqual(
