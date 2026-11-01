@@ -60,11 +60,13 @@ jobs:
           docker pull postgres:18-alpine
           bash scripts/media-container-smoke.sh
 
+      # LinuxServer documents GHCR as the direct registry behind LSCR.
+      # Keep the same versioned images without the additional redirector.
       - name: Prepare pinned source-contract rollback and Arr fixtures
         env:
-          SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           docker pull "$SONARR_IMAGE"
           docker pull "$RADARR_IMAGE"
@@ -79,9 +81,9 @@ jobs:
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           for provider in sqlite postgresql; do
             node scripts/programme-arr-smoke.mjs direct "$provider"
@@ -95,9 +97,9 @@ jobs:
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           for provider in sqlite postgresql; do
             node scripts/youtube-arr-smoke.mjs direct "$provider"
@@ -108,9 +110,9 @@ jobs:
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           bash scripts/rendition-quality-arr-smoke.sh
 
@@ -118,9 +120,9 @@ jobs:
         env:
           PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
           PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
-          PINGUFUNK_ARR_QA_SONARR_IMAGE: lscr.io/linuxserver/sonarr:version-4.0.20.3014
-          PINGUFUNK_ARR_QA_RADARR_IMAGE: lscr.io/linuxserver/radarr:version-6.4.4.10685
-          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: lscr.io/linuxserver/prowlarr:version-2.6.5.5623
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           node scripts/tv-delivery-arr-smoke.mjs direct
           node scripts/tv-delivery-arr-smoke.mjs forwarded

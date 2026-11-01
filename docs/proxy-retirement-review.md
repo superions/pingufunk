@@ -4561,3 +4561,12 @@ scheitert mit dem alten Parser. Die Korrektur ist auch im kompatiblen
 v7-Leser `c45a497d72ead6540d7ac5f606bfbd9fce16660e` enthalten; dessen
 1.835 Tests mit Coverage sowie Lint, Typecheck, Format und Build bestehen.
 Die native Gesamtqualifikation dieses Rückwegs mit dem Producer bleibt offen.
+
+Die erste Qualifikation des korrigierten Rückwegs wird vor den Arr-Tests durch
+ein wiederholtes Registry-Rate-Limit am LSCR-Abruf unterbrochen; die realen
+Medienprüfungen beider Backends bestehen bereits. Ein begrenzter Wiederanlauf
+ist dokumentiert. Der Vergleich der festgelegten Sonarr-/Radarr-/Prowlarr-
+Versionen bestätigt identische Manifestdigests bei LSCR und GHCR. Die CI
+verwendet deshalb den vom Imageanbieter dokumentierten GHCR-Direktweg;
+Versionen, Tests, Rechte und Laufzeitcode bleiben gleich. Der neue native
+Lauf muss diesen Abrufweg und die vollständige Produktabnahme bestätigen.
