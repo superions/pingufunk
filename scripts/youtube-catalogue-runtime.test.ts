@@ -85,7 +85,8 @@ const fs=require('node:fs');const {spawn}=require('node:child_process');
 const args=process.argv.slice(2);if(!args.includes('--simulate')||!args.includes('--skip-download')||!args.includes('--ignore-config'))process.exit(9);
 fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');
 const config=JSON.parse(fs.readFileSync(${JSON.stringify(fixture)},'utf8'));
-if(config.mode==='wait'){const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});fs.writeFileSync(${JSON.stringify(pids)},JSON.stringify({pid:process.pid,child:child.pid}));setInterval(()=>{},1000);}
+// Existence is the parent barrier: publish complete PID state atomically.
+if(config.mode==='wait'){const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});fs.writeFileSync(${JSON.stringify(pids + ".tmp")},JSON.stringify({pid:process.pid,child:child.pid}));fs.renameSync(${JSON.stringify(pids + ".tmp")},${JSON.stringify(pids)});setInterval(()=>{},1000);}
 else {
 const url=new URL(args.at(-1));const id=url.searchParams.get('list')||url.searchParams.get('v')||url.pathname.split('/').at(-1);
 const offset=Number(args[args.indexOf('--playlist-start')+1])-1;

@@ -95,8 +95,8 @@ const solstice: ApiResultItem = {
   url_video: "https://rodlzdf-a.akamaihd.net/synthetic/solstice-720.mp4",
 };
 
-function warmSolstice() {
-  sourceMediaFacts.remember(solstice.url_video, {
+function warmSolstice(item = solstice) {
+  sourceMediaFacts.remember(item.url_video, {
     facts: { audioLanguage: "de", videoDimensions: { width: 1280, height: 720 } },
     fingerprint: "a".repeat(64),
   });
@@ -108,6 +108,54 @@ let catalogueClock = Date.now();
 let selectedSeries = series;
 let selectedSonarrEpisodes = sonarrEpisodes;
 let selectedSources = sources;
+
+it.each(["S07/E04-E05", "S07/E04E05", "S07E04–E06"])(
+  "legacy rules never truncate an unbound whole range to its first episode: %s",
+  async (coordinates) => {
+    state.rules = [
+      {
+        id: 19,
+        mediaId: 19,
+        topic: series.name,
+        priority: 1,
+        filters: "[]",
+        titleRegexRules: "[]",
+        seasonRegex: "S(\\d+)",
+        episodeRegex: "E(\\d+)",
+        matchingStrategy: "SeasonAndEpisodeNumber" as Ruleset["matchingStrategy"],
+        media: {
+          media_id: 19,
+          media_name: series.name,
+          media_type: "tv",
+          media_tvdbId: 258535,
+          media_tmdbId: null,
+          media_imdbId: null,
+        },
+      },
+    ];
+    const source = {
+      ...sources[0],
+      title: "Entgleist (S07/E04)",
+      duration: 2700,
+      url_video: "https://rodlzdf-a.akamaihd.net/synthetic/unbound-range.mp4",
+    };
+    selectedSources = [source];
+    warmSolstice(source);
+    const request = () =>
+      GET(new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=258535&season=7&ep=4"));
+    const single = await request();
+    expect(single.status).toBe(200);
+    expect((await parseStringPromise(await single.text())).rss.channel[0].item).toHaveLength(1);
+    selectedSources = [{ ...source, title: `Entgleist (${coordinates})` }];
+    mediathekCache.clear();
+    warmSolstice(source);
+    const response = await request();
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel.item ?? []).toEqual([]);
+    expect(channel["newznab:response"][0].$.total).toBe("0");
+  }
+);
 
 beforeEach(() => {
   // The real catalogue owner refreshes hourly; each case must exercise its
