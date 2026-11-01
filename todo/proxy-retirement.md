@@ -3411,10 +3411,11 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Bibliothekskorrektur als Nebenwirkung. Identitäts-, Rendition-, Rechte- und
       Laufzeitprüfung bleiben unabhängig bestehen. Unklare, fremdsprachige oder
       widersprüchliche Inhaltsbelege dürfen keine deutsche Fassung vortäuschen.
-      Abnahme: kausale positive/negative Erkennungs-, Timeout-/Abbruch-, Dateiwechsel-
-      und Mischtrackfälle sowie echte isolierte Sonarr- und Radarr-Imports einer
-      falsch getaggten, inhaltlich passend erkannten Datei auf SQLite/PostgreSQL.
-      Bestehende Datei-/Jobbindung und kompatiblen Rückweg prüfen und den
+      Nutzerkorrektur vom 01.11.2026: keine zusätzliche Sprach-Teststrecke,
+      synthetischen Sprachharnesses oder neue CI-Matrix aufbauen. Abnahme am
+      vorhandenen Datei-/Abschluss-/Arr-Vertrag und mit bestehenden Prüfungen;
+      neue Produktfunktion nicht allein aus unveränderten Checks als abgenommen
+      behaupten. Bestehende Datei-/Jobbindung und kompatiblen Rückweg erhalten und den
       allgemeinen Produktfix vom bereits erledigten manuellen Einzelfall trennen.
 
 - [ ] **P19.6 — Den konkreten WDR-/Protection-Belegfall abschließend einordnen.**

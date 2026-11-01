@@ -2,7 +2,8 @@ import { getSetting } from "@/lib/settings";
 import { configuredSetting } from "@/lib/settings-schema";
 import { sourceAudioExpectation, type MediaExpectations } from "@/lib/media-expectations";
 import { ensureOwnedDirectory } from "@/lib/download-paths";
-import { probeJobMedia } from "./media-probe";
+import { probeJobMedia, MediaProbeError } from "./media-probe";
+import { correctJobAudioTag, SpokenLanguageError } from "./spoken-language";
 import type { WorkerLease } from "./worker-lease";
 import * as fs from "fs/promises";
 import { constants } from "fs";
@@ -32,9 +33,40 @@ export async function completeValidatedDownload(
             await getSetting("matching.sonarr.tolerancePercent")
           )
         );
-  const facts = sourceAudioExpectation(expectations)
-    ? await probeJobMedia(filePath, jobDirectory, expectations, tolerance, sourceUrl, lease.signal)
-    : await probeJobMedia(filePath, jobDirectory, expectations, tolerance, undefined, lease.signal);
+  const probe = (file: string, recognize = false) =>
+    probeJobMedia(
+      file,
+      jobDirectory,
+      expectations,
+      tolerance,
+      sourceAudioExpectation(expectations) ? sourceUrl : undefined,
+      lease.signal,
+      recognize
+    );
+  let facts = await probe(filePath, true);
+  if (facts.spokenAudioEvidence) {
+    try {
+      const corrected = await correctJobAudioTag(
+        filePath,
+        facts.spokenAudioEvidence,
+        (candidate, directory, signal) =>
+          probeJobMedia(
+            candidate,
+            directory,
+            expectations,
+            tolerance,
+            sourceAudioExpectation(expectations) ? sourceUrl : undefined,
+            signal
+          ),
+        lease.signal
+      );
+      facts = { ...corrected.facts, spokenAudioEvidence: corrected.evidence };
+    } catch (error) {
+      if (error instanceof MediaProbeError) throw error;
+      const reason = error instanceof SpokenLanguageError ? error.reason : "media_invalid";
+      throw new MediaProbeError(reason, reason === "file_changed" ? "conflicting" : "unavailable");
+    }
+  }
   lease.checkTransfer();
   const stats = await fs.lstat(filePath);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)

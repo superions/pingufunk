@@ -15,6 +15,11 @@ import { verifySourceAudio } from "@/services/source-audio";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { recordDecision } from "./decision-diagnostics";
 import {
+  recognizeJobAudio,
+  SpokenLanguageError,
+  type SpokenAudioEvidence,
+} from "./spoken-language";
+import {
   parseDecisionEvent,
   DecisionFailure,
   type DecisionReason,
@@ -68,6 +73,7 @@ export interface MediaProbeFacts {
   video: { width: number; height: number }[];
   audioLanguages: string[];
   sourceAudioEvidence?: SourceAudioEvidence;
+  spokenAudioEvidence?: SpokenAudioEvidence;
   durationChecks?: {
     provenance: "source_catalogue" | "episode_metadata";
     seconds: number;
@@ -234,7 +240,8 @@ export async function probeJobMedia(
   expected: MediaExpectations | null,
   tolerancePercent: number,
   sourceUrl?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  recognizeConflict = false
 ): Promise<MediaProbeFacts> {
   try {
     signal?.throwIfAborted();
@@ -283,6 +290,56 @@ export async function probeJobMedia(
         );
       }
     }
+    const parsed: unknown = JSON.parse(output);
+    let facts: MediaProbeFacts;
+    try {
+      facts = validateMediaProbe(parsed, expected, tolerancePercent, proof);
+    } catch (error) {
+      if (
+        !recognizeConflict ||
+        !(error instanceof MediaProbeError) ||
+        !["language_conflict", "language_unknown"].includes(error.reason)
+      )
+        throw error;
+      const probe = probeSchema.parse(parsed);
+      const audio = probe.streams.filter((stream) => stream.codec_type === "audio");
+      const wanted = expected?.audio?.language ?? sourceAudioExpectation(expected)?.language;
+      // A second track is an edition choice, not a wrong tag on this one track.
+      if (audio.length !== 1 || !wanted || !isGermanLanguageCode(wanted)) throw error;
+      let spoken: SpokenAudioEvidence | null;
+      try {
+        spoken = await recognizeJobAudio(file, Number(probe.format.duration), signal);
+      } catch (speechError) {
+        if (speechError instanceof SpokenLanguageError)
+          throw new MediaProbeError(
+            speechError.reason,
+            speechError.reason === "language_conflict" ? "conflicting" : "unavailable"
+          );
+        throw speechError;
+      }
+      if (!spoken) throw error;
+      // Validate all other contracts unchanged. Only this server-owned evidence
+      // may replace the measured tag for the language decision, never an NZB.
+      const corrected = {
+        ...probe,
+        streams: probe.streams.map((stream) =>
+          stream.codec_type === "audio"
+            ? { ...stream, tags: { ...stream.tags, language: "deu" } }
+            : stream
+        ),
+      };
+      facts = {
+        ...validateMediaProbe(corrected, expected, tolerancePercent, proof),
+        audioLanguages: [
+          ...new Set(
+            audio
+              .map((stream) => languageTag(stream.tags?.language))
+              .filter((tag): tag is string => tag !== null)
+          ),
+        ],
+        spokenAudioEvidence: spoken,
+      };
+    }
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);
     signal?.throwIfAborted();
@@ -295,7 +352,7 @@ export async function probeJobMedia(
       after.mtimeMs !== stat.mtimeMs
     )
       throw new MediaProbeError("file_changed", "conflicting");
-    return validateMediaProbe(JSON.parse(output), expected, tolerancePercent, proof);
+    return facts;
   } catch (error) {
     throw error instanceof MediaProbeError
       ? error
