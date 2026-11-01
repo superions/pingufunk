@@ -1,4 +1,5 @@
 import { RENDITION_SELECTORS } from "@/lib/rendition-selector";
+import { matchedEpisodeScope, matchedRuntimeMinutes } from "@/lib/episode-scope";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -154,9 +155,13 @@ function summary(
       sourceId: sourceId(info.item),
       rendition,
     },
-    title: `${info.showName} S${String(info.episode.seasonNumber).padStart(2, "0")}E${String(info.episode.episodeNumber).padStart(2, "0")} — ${info.item.title}`,
+    title: `${info.showName} S${String(info.episode.seasonNumber).padStart(2, "0")}${matchedEpisodeScope(
+      info
+    )
+      .map((part) => `E${String(part.episodeNumber).padStart(2, "0")}`)
+      .join("")} — ${info.item.title}`,
     sourceSeconds: info.item.duration,
-    metadataSeconds: info.episode.runtime! * 60,
+    metadataSeconds: matchedRuntimeMinutes(info)! * 60,
     tolerancePercent: tolerance,
     runtimeConflict: !!info.runtimeConflict,
     availableRenditions: selectRenditions(info.item, "all", false).map(renditionSelector),
@@ -235,9 +240,10 @@ async function prepare(selector: TvReviewSelector): Promise<PreparedSource> {
   const { found, tolerance } = await matches(selector.tvdbId, budget, selector);
   const exact = found.filter(
     (info) =>
-      info.episode.seasonNumber === selector.season &&
-      info.episode.episodeNumber === selector.episode &&
-      sourceId(info.item) === selector.sourceId
+      matchedEpisodeScope(info).some(
+        (episode) =>
+          episode.seasonNumber === selector.season && episode.episodeNumber === selector.episode
+      ) && sourceId(info.item) === selector.sourceId
   );
   const unique = [...new Map(exact.map((info) => [JSON.stringify(info.item), info])).values()];
   if (unique.length !== 1) throw new TvSourceReviewError();
@@ -262,7 +268,7 @@ async function prepare(selector: TvReviewSelector): Promise<PreparedSource> {
     info.episode.runtime!,
     url,
     tolerance,
-    info.mediathekProgramme
+    info
   );
   const language = expectations.audio?.language ?? expectations.sourceAudio?.language;
   if (
@@ -284,6 +290,7 @@ async function prepare(selector: TvReviewSelector): Promise<PreparedSource> {
       info.showName,
       info.episode.name,
       info.episode.aired,
+      ...(info.pairedEpisodes ? [info.pairedEpisodes] : []),
       classifyLanguageEdition(enriched[0]),
       enriched[0].sourceAssetFingerprint ?? null,
     ]),

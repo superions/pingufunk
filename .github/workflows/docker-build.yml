@@ -73,7 +73,7 @@ jobs:
 
       - name: Build the compatible Mediathek programme receiver without publishing
         run: |
-          git archive e7abb560d28cbaa53192e989c519d3324643262c | docker build --target runner --label org.opencontainers.image.revision=e7abb560d28cbaa53192e989c519d3324643262c -t pingufunk-programme-receiver-qa -
+          git archive 9620eabe753fbc6bc5d3ba68d419d17dfb3e3680 | docker build --target runner --label org.opencontainers.image.revision=9620eabe753fbc6bc5d3ba68d419d17dfb3e3680 -t pingufunk-programme-receiver-qa -
 
       - name: Verify bound Mediathek programmes through native Arr on both backends
         env:
@@ -86,7 +86,10 @@ jobs:
           for provider in sqlite postgresql; do
             node scripts/programme-arr-smoke.mjs direct "$provider"
             node scripts/programme-arr-smoke.mjs forwarded "$provider"
+            node scripts/programme-arr-smoke.mjs direct "$provider" pair
+            node scripts/programme-arr-smoke.mjs forwarded "$provider" pair
           done
+          node scripts/programme-arr-smoke.mjs direct sqlite pair-tba
 
       - name: Verify YouTube cold delivery and rollback through native Arr on both backends
         env:
@@ -183,7 +186,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           mkdir -p receiver-artifact
-          receiver_image="pingufunk-homelab-runner:e7abb560d28cbaa53192e989c519d3324643262c"
+          receiver_image="pingufunk-homelab-runner:9620eabe753fbc6bc5d3ba68d419d17dfb3e3680"
           docker tag pingufunk-programme-receiver-qa "$receiver_image"
           docker save -o receiver-artifact/runner-amd64.tar "$receiver_image"
           docker image inspect "$receiver_image" --format '{{json .}}' | node -e '
@@ -196,7 +199,7 @@ jobs:
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pingufunk-receiver-amd64-e7abb560d28cbaa53192e989c519d3324643262c
+          name: pingufunk-receiver-amd64-9620eabe753fbc6bc5d3ba68d419d17dfb3e3680
           path: receiver-artifact/
           retention-days: 3
           compression-level: 1

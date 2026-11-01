@@ -3,6 +3,8 @@ import { TvSearchDeliveryJournal } from "./tv-search-delivery";
 import { SourceMediaFactsStore } from "./source-media-facts";
 import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
 import type { MatchedEpisodeInfo, TvdbData } from "@/types";
+import { pairedProgrammeItem, pairedProgrammeShow } from "@/lib/__fixtures__/mediathek-programme";
+import { matchSonarrEpisodes } from "./sonarr-matcher";
 
 vi.mock("@/lib/db", () => ({ prisma: { config: {} } }));
 const scope = "a".repeat(64);
@@ -83,6 +85,18 @@ it("persists bounded discovery, not media facts; first readiness and identity do
   await journal.register(scope, show(), [changed]);
   expect(await journal.current(scope)).toEqual([ready]);
   expect(ready.expiresAt).toBe(first.createdAt + 7_200_000);
+});
+
+it("retains one whole-programme discovery when only its second target is monitored", async () => {
+  const current = { ...pairedProgrammeShow, sonarrMonitoredCoordinates: ["0:3"] };
+  const item = { ...pairedProgrammeItem, url_video: url() };
+  const matches = matchSonarrEpisodes(current, [item], 0, 10, undefined, false, true);
+  expect(matches).toHaveLength(1);
+  await journal.register(scope, current, matches);
+  expect(await journal.current(scope)).toHaveLength(1);
+  expect((await journal.current(scope))[0]).toMatchObject({ season: 0, episode: 2 });
+  await journal.register(scope, current, matches);
+  expect(await journal.current(scope)).toHaveLength(1);
 });
 
 it("recovers discovery after a cold restart but obtains fresh range proof instead of trusting persisted readiness", async () => {

@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { programmeItem, programmeShow } from "@/lib/__fixtures__/mediathek-programme";
+import {
+  programmeItem,
+  programmeShow,
+  pairedProgrammeItem,
+  pairedProgrammeShow,
+} from "@/lib/__fixtures__/mediathek-programme";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { generateGenericRssItems, generateRssItems } from "./newznab";
 import { createUiNzbDownloads } from "./ui-nzb";
 import { decodeMediaExpectations, parseNzbContent } from "./nzb-release";
 import type { ApiResultItem } from "@/types";
+import { applyDesiredEpisodeFilter, getDesiredEpisodes } from "./tv-search-matcher";
+import { tvReviewMediaExpectations } from "./release-media-expectations";
 
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 const proved: ApiResultItem = {
@@ -118,3 +125,69 @@ it("requires fresh independently verified target coordinates and cannot choose t
   ])
     expect(matchSonarrEpisodes(show, [proved], 300, 10)).toEqual([]);
 });
+
+it("both member searches publish one identical whole-programme GUID, filename and frozen v7 NZB", () => {
+  const source = {
+    ...pairedProgrammeItem,
+    audioLanguage: "de",
+    sourceVideoDimensions: [{ url: pairedProgrammeItem.url_video, width: 1280, height: 720 }],
+  };
+  const [match] = matchSonarrEpisodes(pairedProgrammeShow, [source], 0, 10);
+  expect(match.pairedEpisodes).toEqual(pairedProgrammeShow.episodes);
+  const byMember = [2, 3].map((episode) => {
+    const context = { query: null, tvdbId: 123, season: "0", episode: String(episode) };
+    const desired = getDesiredEpisodes(pairedProgrammeShow, context);
+    const matched = applyDesiredEpisodeFilter([match], desired, context);
+    expect(matched).toHaveLength(1);
+    return generateRssItems(matched[0]);
+  });
+  expect(byMember[0]).toEqual(byMember[1]);
+  expect(byMember[0]).toHaveLength(1);
+  const release = byMember[0][0];
+  expect(release.title).toMatch(/^Synthetic\.Series\.S00E02E03\.Whole\.Programme\.GERMAN\.720p\./);
+  const expected = decodeMediaExpectations(
+    new URL(release.enclosure.url, "http://localhost").searchParams.get("encodedExpectations")!
+  );
+  expect(expected).toMatchObject({
+    version: 7,
+    sourceProgramme: {
+      source: { season: 10, episode: 13 },
+      targets: [
+        { season: 0, episode: 2 },
+        { season: 0, episode: 3 },
+      ],
+    },
+    episodeDurations: [{ seconds: 60 }, { seconds: 60 }],
+    durations: { source: { seconds: 120 }, metadata: { seconds: 120 } },
+  });
+  expect(
+    parseNzbContent(createUiNzbDownloads(match.item, false, match.episode, match).sd!)
+  ).toEqual({ title: release.title, url: release.link, mediaExpectations: expected });
+  expect(
+    tvReviewMediaExpectations(match.item, match.episode.runtime!, release.link, 10, match)
+  ).toEqual(expected);
+  for (const [season, episode] of [
+    ["10", "13"],
+    ["0", "1"],
+    ["0", "4"],
+  ]) {
+    const context = { query: null, tvdbId: 123, season, episode };
+    expect(applyDesiredEpisodeFilter([match], null, context)).toEqual([]);
+  }
+  expect(source.title).toBe(pairedProgrammeItem.title);
+});
+
+it.each(["missing", "unknown", "blocked", "duplicate", "duration", "source-scope"])(
+  "never publishes an incomplete or inconsistent pair: %s",
+  (kind) => {
+    const show = structuredClone(pairedProgrammeShow),
+      item = { ...pairedProgrammeItem, audioLanguage: "de" };
+    if (kind === "missing") show.episodes.pop();
+    if (kind === "unknown") show.episodes[1].runtime = null;
+    if (kind === "blocked") show.sonarrBlockedCoordinates = ["0:3"];
+    if (kind === "duplicate") show.episodes.push(show.episodes[1]);
+    if (kind === "duration") item.duration = 60;
+    if (kind === "source-scope") item.title = "Whole Programme (S10/E13-E14)";
+    expect(matchSonarrEpisodes(show, [item], 0, 10, undefined, false, true, [], true)).toEqual([]);
+  }
+);

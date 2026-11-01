@@ -122,8 +122,20 @@ eingefrorene ganze Quelle erneut. Es gibt keinen zweiten Job, keine Dateiteilung
 keine SQL-Migration und keine spätere Umschreibung durch Katalog-/Metadatenwechsel.
 Die Importdiagnose verlangt beide exakten Zielkoordinaten derselben TVDB-Serie,
 dieselbe aktuelle FileId samt Pfad und jeweils gepaarte Grab-/Importhistory.
-Ein Teilimport bleibt unbestätigt. Dieser Lesercheckpoint veröffentlicht noch
-keine Zweifolgen-Releases; Producer, nativer Rückweg und Live-Abnahme stehen aus.
+Ein Teilimport bleibt unbestätigt. Der v7-fähige Lesercheckpoint
+`9620eabe753fbc6bc5d3ba68d419d17dfb3e3680` ist vor dem Producer festgeschrieben;
+ein v6-only Image kann angenommene v7-Jobs nicht abarbeiten.
+
+Der Producer bindet „Der Tod ist groß“ von Quell-S10E13 an S00E02 und S00E03.
+Titel/GUID/NZB und Job tragen denselben vollständigen Umfang; beide Einzelsuchen
+liefern denselben einen Release. Die GUI verwendet dessen opakes NZB und zeigt
+die ganze Metadatenlaufzeit. Eine Quelle wird auch dann über den vorhandenen
+RSS-Nachlieferweg erhalten, wenn nur das zweite Ziel überwacht ist und noch
+fehlt; die gespeicherte Discoverykoordinate bleibt stabil. Sonarr entscheidet
+weiter selbst über Download und Import. Die isolierte native Abnahme prüft
+alte TBA-Metadaten getrennt von einem tatsächlichen Unknown-Date-TBA-Blocker
+und dessen ausdrücklich bestätigter nativer Zweizielzuordnung, ohne Metadaten
+oder globale Profile umzuschreiben. Native Abnahme und Live-Übernahme sind offen.
 
 ## Laufzeitkonflikte sichtbar machen, nicht automatisch übergehen
 

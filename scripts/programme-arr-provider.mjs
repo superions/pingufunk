@@ -3,18 +3,24 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 
 /** Called only after the common fixture validates its disposable DB and network owner. */
-export function programmeFixture(root) {
+export function programmeFixture(
+  root,
+  scope = process.env.PINGUFUNK_ARR_QA_PROGRAMME_SCOPE ?? "single"
+) {
+  if (!["single", "pair", "pair-tba"].includes(scope))
+    throw Error("Owned programme scope required");
+  const paired = scope !== "single";
   return (url, init) => {
     const path = join(root, "programme-mode.json");
     const mode = existsSync(path)
       ? JSON.parse(readFileSync(path, "utf8"))
       : { binding: false, source: "valid" };
-    const website = "https://example.invalid/programmes/solstice";
+    const website = "https://example.invalid/programmes/" + (paired ? "whole" : "solstice");
     const source = {
       channel: "ZDF",
       topic: "Synthetic Series",
-      title: "Source Solstice (S2019/E01)",
-      description: "Owned synthetic single-target programme",
+      title: paired ? "Whole Programme (S10/E13)" : "Source Solstice (S2019/E01)",
+      description: "Owned synthetic explicitly bound programme",
       filmlisteTimestamp: 1700000000,
       duration: 120,
       size: 0,
@@ -38,13 +44,22 @@ export function programmeFixture(root) {
           aliases: [],
           episodes: [],
           mediathekProgrammes: mode.binding
-            ? [
-                {
+            ? paired
+              ? [2, 3].map((episode) => ({
                   website,
-                  source: { channel: "ZDF", title: "Source Solstice", season: 2019, episode: 1 },
-                  target: { season: 8, episode: mode.unverifiedTarget ? 99 : 1 },
-                },
-              ]
+                  source: { channel: "ZDF", title: "Whole Programme", season: 10, episode: 13 },
+                  target: {
+                    season: 0,
+                    episode: mode.unverifiedTarget && episode === 3 ? 99 : episode,
+                  },
+                }))
+              : [
+                  {
+                    website,
+                    source: { channel: "ZDF", title: "Source Solstice", season: 2019, episode: 1 },
+                    target: { season: 8, episode: mode.unverifiedTarget ? 99 : 1 },
+                  },
+                ]
             : [],
         },
       ]);

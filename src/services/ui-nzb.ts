@@ -75,7 +75,7 @@ export function createUiNzbDownloads(
         episode?.runtime ?? null,
         url,
         episode ? "series" : "unknown",
-        match?.mediathekProgramme
+        match
       ),
     });
   }

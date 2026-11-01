@@ -1,3 +1,4 @@
+import { matchedEpisodeScope } from "@/lib/episode-scope";
 import type {
   ApiResultItem,
   TvSearchContext,
@@ -153,16 +154,20 @@ export function applyDesiredEpisodeFilter(
     if (!hasCoordinates) return true;
     if (desiredEpisodes?.length === 0) return false;
 
-    if (matchesTvdbEpisode(matched.episode, context)) {
+    const canonical = matchedEpisodeScope(matched).filter((episode) =>
+      matchesTvdbEpisode(episode, context)
+    );
+    if (canonical.length)
       return (
         desiredEpisodes === null ||
-        desiredEpisodes.some(
-          (desired) =>
-            desired.seasonNumber === matched.episode.seasonNumber &&
-            desired.episodeNumber === matched.episode.episodeNumber
+        canonical.some((episode) =>
+          desiredEpisodes.some(
+            (desired) =>
+              desired.seasonNumber === episode.seasonNumber &&
+              desired.episodeNumber === episode.episodeNumber
+          )
         )
       );
-    }
 
     // Explicit bindings declare canonical intent. Publisher coordinates only
     // verify their source and cannot re-admit a different target after filtering.

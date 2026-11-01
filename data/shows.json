@@ -115,6 +115,26 @@
           "episode": 1
         },
         "target": { "season": 8, "episode": 1 }
+      },
+      {
+        "website": "https://www.zdf.de/video/serien/letzte-spur-berlin-106/der-tod-ist-gross-102",
+        "source": {
+          "channel": "ZDF",
+          "title": "Der Tod ist groß",
+          "season": 10,
+          "episode": 13
+        },
+        "target": { "season": 0, "episode": 2 }
+      },
+      {
+        "website": "https://www.zdf.de/video/serien/letzte-spur-berlin-106/der-tod-ist-gross-102",
+        "source": {
+          "channel": "ZDF",
+          "title": "Der Tod ist groß",
+          "season": 10,
+          "episode": 13
+        },
+        "target": { "season": 0, "episode": 3 }
       }
     ],
     "episodes": [

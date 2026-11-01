@@ -1,6 +1,7 @@
 import { PRODUCT_NAME } from "@/lib/brand";
 import { createHash } from "node:crypto";
 import { isPlaceholderEpisodeTitle } from "@/lib/episode-title";
+import { matchedEpisodeScope, matchedRuntimeMinutes } from "@/lib/episode-scope";
 import { Builder } from "xml2js";
 import { selectRenditions, itemForRendition, type QualityPreference } from "./rendition-quality";
 export type { QualityPreference } from "./rendition-quality";
@@ -321,11 +322,13 @@ export function generateTitle(
   const episode = info.episode;
   const showName = withoutSourceResolution(info.releaseShowName ?? info.showName);
   // Render the actual source title for placeholders; never mutate stored metadata.
-  const episodeTitle = isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber)
-    ? parseEpisodeFromTitle(info.item.title).episodeName || episode.name
-    : episode.name;
+  const episodeTitle = info.pairedEpisodes
+    ? parseEpisodeFromTitle(info.item.title).episodeName
+    : isPlaceholderEpisodeTitle(episode.name, episode.episodeNumber)
+      ? parseEpisodeFromTitle(info.item.title).episodeName || episode.name
+      : episode.name;
 
-  if (episodeType === "daily") {
+  if (episodeType === "daily" && !info.pairedEpisodes) {
     const aired = episode.aired ? new Date(episode.aired) : new Date();
     const dateStr = aired.toISOString().split("T")[0]; // yyyy-MM-dd
     return applyLanguageEdition(
@@ -335,7 +338,9 @@ export function generateTitle(
   }
 
   return applyLanguageEdition(
-    `${showName}.S${getPaddedSeason(episode)}E${getPaddedEpisode(episode)}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
+    `${showName}.S${getPaddedSeason(episode)}${matchedEpisodeScope(info)
+      .map((part) => `E${getPaddedEpisode(part)}`)
+      .join("")}.${withoutSourceResolution(episodeTitle)}.${renditionSuffix(quality)}`,
     info.item
   ).replace(/ /g, ".");
 }
@@ -360,15 +365,9 @@ function createRssItem(
         info.episode.runtime!,
         url,
         info.runtimeTolerancePercent ?? 10,
-        info.mediathekProgramme
+        info
       )
-    : releaseMediaExpectations(
-        info.item,
-        info.episode.runtime,
-        url,
-        "series",
-        info.mediathekProgramme
-      );
+    : releaseMediaExpectations(info.item, info.episode.runtime, url, "series", info);
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
@@ -384,7 +383,9 @@ function createRssItem(
         item,
         qualityIdentity,
         url,
-        `tvdb:${info.tvdbId}:S${info.episode.seasonNumber}E${info.episode.episodeNumber}:${episodeType}`
+        `tvdb:${info.tvdbId}:S${info.episode.seasonNumber}${matchedEpisodeScope(info)
+          .map((part) => `E${part.episodeNumber}`)
+          .join("")}:${episodeType}`
       ),
     },
     link: url,
@@ -393,7 +394,7 @@ function createRssItem(
     pubDate: new Date(item.filmlisteTimestamp * 1000).toUTCString(),
     category: category,
     description: info.runtimeConflict
-      ? `Laufzeitkonflikt: Quelle ${item.duration} s, Episodenmetadaten ${info.episode.runtime! * 60} s, Toleranz ±${info.runtimeTolerancePercent ?? 10} %. Automatischer Download gesperrt; Einzelquelle in Pingufunk prüfen.\n${item.description}`
+      ? `Laufzeitkonflikt: Quelle ${item.duration} s, Episodenmetadaten ${matchedRuntimeMinutes(info)! * 60} s, Toleranz ±${info.runtimeTolerancePercent ?? 10} %. Automatischer Download gesperrt; Einzelquelle in Pingufunk prüfen.\n${item.description}`
       : item.description,
     enclosure: {
       url: fakeDownloadUrl,
@@ -427,7 +428,7 @@ function createRssItems(
   ];
 
   // Also create daily type if season is a year
-  if (info.episode.seasonNumber > 1950) {
+  if (info.episode.seasonNumber > 1950 && !info.pairedEpisodes) {
     items.push(
       createRssItem(
         info,

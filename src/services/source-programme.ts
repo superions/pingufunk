@@ -135,9 +135,7 @@ export function matchBoundSourceEpisode(
   includeRuntimeConflicts = false
 ): MatchedEpisodeInfo | null {
   if (!item.sourceRef) {
-    const match = matchMediathekEpisode(item, show, minimum, tolerance);
-    // Receiver checkpoint understands accepted pairs before any formatter emits them.
-    return match?.pairedEpisodes ? null : match;
+    return matchMediathekEpisode(item, show, minimum, tolerance);
   }
   const parsed = youtubeSourceIdentitySchema.strip().safeParse(item.sourceRef);
   if (!parsed.success) return null;

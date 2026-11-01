@@ -8,6 +8,7 @@ import { mergeSonarrShow } from "./sonarr-provider";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { enrichTvMatches } from "./source-audio";
 import { generateRssItems } from "./newznab";
+import { pairedProgrammeItem, pairedProgrammeShow } from "@/lib/__fixtures__/mediathek-programme";
 
 const state = vi.hoisted(() => ({
   value: null as string | null,
@@ -207,6 +208,59 @@ it("delivers old cold discoveries only with fresh complete proof/current monitor
     );
     state.episodes.pop();
     state.epoch++;
+    // Only the second member needs a file. The discovery keeps its stable
+    // first coordinate while the shared binding owner proves the whole scope.
+    state.episodes = pairedProgrammeShow.episodes.map((episode, index) => ({
+      sonarrId: 100 + index,
+      seriesId: 1,
+      seasonNumber: 0,
+      episodeNumber: episode.episodeNumber,
+      title: episode.name,
+      aired: episode.aired!,
+      expectedRuntimeSeconds: 60,
+      monitored: index === 1,
+      hasFile: false,
+    }));
+    const pairedShow = mergeSonarrShow(pairedProgrammeShow, {
+      series: { sonarrId: 1, tvdbId: 123, title: "Synthetic Series", monitored: true },
+      episodes: state.episodes,
+    })!;
+    const pairUrl = "https://rodlzdf-a.akamaihd.net/synthetic/whole-feed.mp4";
+    const pairMatches = matchSonarrEpisodes(
+      pairedShow,
+      [{ ...pairedProgrammeItem, url_video: pairUrl }],
+      0,
+      15,
+      DEFAULT_LANGUAGE_POLICY,
+      false,
+      true
+    );
+    expect(pairMatches).toHaveLength(1);
+    sourceMediaFacts.remember(pairUrl, {
+      facts: { audioLanguage: "de", videoDimensions: { width: 1920, height: 1080 } },
+      fingerprint: "c".repeat(64),
+    });
+    await tvSearchDelivery.register(state.scope, pairedShow, pairMatches);
+    state.epoch++;
+    const pairedFeed = await getTvSearchDeliveryItems(
+      async () => pairedProgrammeShow,
+      new HttpRequestBudget(),
+      "best",
+      false
+    );
+    expect(pairedFeed).toHaveLength(1);
+    expect(pairedFeed[0].title).toContain("S00E02E03");
+    expect(await tvSearchDelivery.current(state.scope)).toHaveLength(1);
+    state.episodes[1].hasFile = true;
+    state.epoch++;
+    expect(
+      await getTvSearchDeliveryItems(
+        async () => pairedProgrammeShow,
+        new HttpRequestBudget(),
+        "best",
+        false
+      )
+    ).toEqual([]);
     state.scope = "b".repeat(64);
     state.epoch++;
     expect(await feed()).toEqual([]); // New credentials/instance cannot consume old discovery.

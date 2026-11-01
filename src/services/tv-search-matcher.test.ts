@@ -56,3 +56,21 @@ it.each([
     ).toEqual([match]);
   }
 );
+
+it("preserves the legacy canonical rejection before any unbound publisher fallback", () => {
+  const bound = matchBoundSourceEpisode(programmeItem, programmeShow, 0, 10)!;
+  const ordinary = {
+    ...bound,
+    mediathekProgramme: undefined,
+    item: { ...programmeItem, title: "Other (S07/E02)" },
+  };
+  const unrelated = { ...ordinary.episode, seasonNumber: 7, episodeNumber: 2 };
+  expect(
+    applyDesiredEpisodeFilter([ordinary], [unrelated], {
+      tvdbId: 123,
+      query: null,
+      season: "8",
+      episode: "1",
+    })
+  ).toEqual([]);
+});

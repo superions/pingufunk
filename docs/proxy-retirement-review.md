@@ -4509,3 +4509,33 @@ mit 1.826 Tests und die anschließenden 119 gezielten Fälle ergänzen diese
 Abnahme. Ohne v7-Workerrevalidierung scheitern vier tatsächliche
 Übertragungsgegenfälle; ohne Prüfung des vollständigen Imports scheitern fünf
 API-Consumerfälle. Beide kontrollierten Rückbauten wurden vollständig restauriert.
+
+Der anschließende Producer verwendet denselben vollständigen Umfang in Titel,
+GUID, RSS/NZB, GUI-Payload und eingefrorenem v7. Der öffentliche Katalog bindet
+die ganze Quelle „Der Tod ist groß“ S10E13 an S00E02/E03. Die beiden Einzel-
+suchen liefern denselben Release; unbekannte oder inkonsistente Teile sperren
+den ganzen Kandidaten. Der vorhandene Nachlieferowner erhält eine Discovery
+auch für ein allein überwachtes fehlendes zweites Ziel, ohne neue Persistenz
+oder eine weitere Queue. Die GUI erhält Gesamtumfang und Gesamtlaufzeit vom
+Server; Quellzeile und Sonarr-TBA bleiben unverändert.
+
+Der vorhandene native Harness ergänzt genau diesen Paarumfang für beide
+Backends und Transportwege, einschließlich Leser-Rückweg nach Jobannahme,
+einer Datei mit derselben FileId für beide Ziele und einzeln gepaarter History.
+Ein zusätzlicher isolierter Fall verlangt einen tatsächlich beobachteten
+TBA-Importblock und anschließend Sonarrs ausdrücklich bestätigten nativen
+Zweizielimport. Der Harness behauptet keinen heutigen TBA-Blocker allein aus
+einem alten Befund und automatisiert keinen Live-Import. Diese native Abnahme
+und das neue Container-/Live-Ergebnis bleiben offen.
+
+Lokaler Producerstand: 1.843 Tests erfolgreich, 28 Opt-in-Fälle getrennt;
+vorangegangene Coverage mit 1.842 Tests sowie Lint, Typecheck, Format, Build,
+Katalog-/Schemasichtung und Scriptprüfung erfolgreich. Der Volltest deckt eine
+bestehende Fixture-Race auf: Datei-Existenz wurde vor vollständiger
+PID-JSON-Publikation beobachtet. Atomare Veröffentlichung des synthetischen
+Prozessbelegs beseitigt diese Testursache; gezielter Runtimegate und erneuter
+Volltest bestehen, Produktlogik und Ownership-Assertions bleiben erhalten.
+Ohne den Paarmatcher oder den vollständigen Suchfilter scheitern jeweils drei
+tatsächliche Match-/Newznab-Consumer. Nur die erste Folge auf Überwachung zu
+prüfen lässt zwei Discovery-/RSS-Consumer scheitern. Die kontrollierten
+Rückbauten sind restauriert; kein abgeschwächter Unknown-/Konfliktschutz.

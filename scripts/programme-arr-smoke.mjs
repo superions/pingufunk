@@ -17,6 +17,14 @@ import {
 
 const transport = process.argv[2],
   backend = process.argv[3];
+const scope = process.argv[4] ?? "single";
+assert(["single", "pair", "pair-tba"].includes(scope));
+const paired = scope !== "single",
+  tba = scope === "pair-tba";
+const season = paired ? 0 : 8,
+  numbers = paired ? [2, 3] : [1];
+const coordinate = paired ? "S00E02E03" : "S08E01";
+const version = paired ? 7 : 6;
 assert(["direct", "forwarded"].includes(transport));
 assert(["sqlite", "postgresql"].includes(backend));
 const candidateTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE;
@@ -26,6 +34,7 @@ const candidateImage = docker(["image", "inspect", candidateTag, "--format", "{{
 const receiverImage = docker(["image", "inspect", receiverTag, "--format", "{{.Id}}"]);
 process.env.PINGUFUNK_ARR_QA_TV_DELIVERY = "1";
 process.env.PINGUFUNK_ARR_QA_PROGRAMME = "1";
+process.env.PINGUFUNK_ARR_QA_PROGRAMME_SCOPE = scope;
 process.env.PINGUFUNK_ARR_QA_DATABASE = backend;
 process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE = receiverTag;
 let root, manifest;
@@ -82,7 +91,7 @@ function jobs() {
   const code = String.raw`const fs=require('node:fs'),crypto=require('node:crypto'),{PrismaClient}=require(process.env.DATABASE_PROVIDER==='postgresql'?'@prisma/client':'./generated/sqlite');
 if(process.env.PINGUFUNK_ARR_QA_PROGRAMME!=='1'||!/^\d+-\d+$/.test(process.env.PINGUFUNK_MEDIA_QA_OWNER??''))throw Error('Owned programme runtime required');
 const db=new PrismaClient({log:[]}),json=x=>JSON.stringify(x,(_k,v)=>typeof v==='bigint'?String(v):v),hash=x=>crypto.createHash('sha256').update(json(x)).digest('hex');
-(async()=>{try{const rows=await db.download.findMany({orderBy:{id:'asc'}}),config=await db.config.findMany({where:{NOT:{key:{startsWith:'internal.'}}},orderBy:{key:'asc'}}),receipts=await db.enqueueIntent.findMany({orderBy:{id:'asc'}});console.log(json({jobs:rows.map(row=>{let file=null;if(row.filePath&&fs.existsSync(row.filePath)){const s=fs.lstatSync(row.filePath);file={regular:s.isFile(),size:s.size,inode:s.ino,mtime:s.mtimeMs,hash:crypto.createHash('sha256').update(fs.readFileSync(row.filePath)).digest('hex')}}return {id:row.id,status:row.status,category:row.category,title:row.title,expected:row.mediaExpectations&&JSON.parse(row.mediaExpectations),rowHash:hash(row),file,inputHash:hash([row.id,row.createdAt,row.url,row.title,row.category,row.mediaExpectations])}}),settingsHash:hash(config),receiptsHash:hash(receipts),receipts:receipts.length}));}finally{await db.$disconnect()}})().catch(()=>process.exitCode=1);`;
+(async()=>{try{const rows=await db.download.findMany({orderBy:{id:'asc'}}),config=await db.config.findMany({where:{NOT:{key:{startsWith:'internal.'}}},orderBy:{key:'asc'}}),receipts=await db.enqueueIntent.findMany({orderBy:{id:'asc'}});console.log(json({jobs:rows.map(row=>{let file=null;if(row.filePath&&fs.existsSync(row.filePath)){const s=fs.lstatSync(row.filePath);file={regular:s.isFile(),size:s.size,inode:s.ino,mtime:s.mtimeMs,hash:crypto.createHash('sha256').update(fs.readFileSync(row.filePath)).digest('hex')}}return {id:row.id,status:row.status,category:row.category,title:row.title,filePath:row.filePath,expected:row.mediaExpectations&&JSON.parse(row.mediaExpectations),rowHash:hash(row),file,inputHash:hash([row.id,row.createdAt,row.url,row.title,row.category,row.mediaExpectations])}}),settingsHash:hash(config),receiptsHash:hash(receipts),receipts:receipts.length}));}finally{await db.$disconnect()}})().catch(()=>process.exitCode=1);`;
   return JSON.parse(docker(["exec", manifest.apps.pingufunk.name, "node", "-e", code]));
 }
 async function replaceRuntime(image) {
@@ -123,6 +132,8 @@ async function replaceRuntime(image) {
     "-e",
     "PINGUFUNK_ARR_QA_PROGRAMME=1",
     "-e",
+    `PINGUFUNK_ARR_QA_PROGRAMME_SCOPE=${scope}`,
+    "-e",
     "PINGUFUNK_ARR_QA_TV_DELIVERY=1",
     "-e",
     "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key",
@@ -148,8 +159,10 @@ async function replaceRuntime(image) {
 }
 const history = async () =>
   (await api(root, manifest, "sonarr", "/api/v3/history?page=1&pageSize=100")).records;
-async function releases() {
-  const response = request("/api/newznab?t=tvsearch&tvdbid=2147483002&season=8&ep=1");
+async function releases(episode = numbers[0]) {
+  const response = request(
+    `/api/newznab?t=tvsearch&tvdbid=2147483002&season=${season}&ep=${episode}`
+  );
   assert.equal(response.status, 200);
   return (await parseStringPromise(response.text)).rss.channel[0].item ?? [];
 }
@@ -224,9 +237,19 @@ try {
     "sonarr",
     `/api/v3/episode?seriesId=${series.id}`
   );
-  const target = initialEpisodes.find((row) => row.seasonNumber === 8 && row.episodeNumber === 1);
-  assert(target && target.runtime === 2 && !target.hasFile);
-  assert.equal(initialEpisodes.length, 3);
+  const targets = numbers.map((number) =>
+    initialEpisodes.find((row) => row.seasonNumber === season && row.episodeNumber === number)
+  );
+  assert(targets.every((row) => row && row.runtime === (paired ? 1 : 2) && !row.hasFile));
+  const target = targets[0],
+    targetIds = targets.map((row) => row.id);
+  if (paired)
+    assert(
+      targets.every(
+        (row) => row.title === "TBA" && (tba ? !row.airDateUtc : row.airDate.startsWith("2021-"))
+      )
+    );
+  assert.equal(initialEpisodes.length, paired ? 6 : 3);
   assert(initialEpisodes.some((row) => row.seasonNumber === 2019 && !row.monitored));
   const definitions = await api(root, manifest, "sonarr", "/api/v3/qualitydefinition");
   await api(
@@ -250,7 +273,7 @@ try {
         ...row,
         enableRss: row.id === selected.id,
         enableAutomaticSearch: row.id === selected.id,
-        enableInteractiveSearch: false,
+        enableInteractiveSearch: tba && row.id === selected.id,
       },
       "PUT"
     );
@@ -314,12 +337,14 @@ try {
   assert.equal(before.jobs[0].status, "completed");
   assert(before.jobs[0].file?.regular && before.jobs[0].file.size > 0);
   assert.equal(before.receipts, 1);
-  const neutralResponse = request("/api/newznab?t=search&q=Source%20Solstice");
+  const neutralResponse = request(
+    "/api/newznab?t=search&q=" + encodeURIComponent(paired ? "Whole Programme" : "Source Solstice")
+  );
   assert.equal(neutralResponse.status, 200);
   const neutralItems = (await parseStringPromise(neutralResponse.text)).rss.channel[0].item ?? [];
   assert(neutralItems.length > 0);
   const neutralGuids = neutralItems.map((row) => row.guid[0]._);
-  await command({ name: "EpisodeSearch", episodeIds: [target.id] });
+  await command({ name: "EpisodeSearch", episodeIds: targetIds });
   assert.equal((await history()).filter((row) => row.eventType === "grabbed").length, 0);
   assert.equal(jobs().jobs.length, 1);
 
@@ -361,49 +386,109 @@ try {
     await delay(250);
   }
   assert(drained);
-  await command({ name: "EpisodeSearch", episodeIds: [target.id] });
+  let manualRelease;
+  if (tba) {
+    // The isolated test supplies the explicit operator decision; product code
+    // never bypasses a native consumer rejection or rewrites its metadata.
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const rows = await api(root, manifest, "sonarr", `/api/v3/release?episodeId=${target.id}`);
+      manualRelease = rows.find((row) => row.title.startsWith(`Synthetic.Series.${coordinate}.`));
+      if (manualRelease) break;
+      await delay(250);
+    }
+    assert(
+      manualRelease?.guid &&
+        manualRelease.indexerId &&
+        manualRelease.quality &&
+        manualRelease.languages
+    );
+    assert.deepEqual(manualRelease.episodeNumbers, [2, 3]);
+    await api(root, manifest, "sonarr", "/api/v3/release", {
+      ...manualRelease,
+      shouldOverride: true,
+      seriesId: series.id,
+      episodeIds: targetIds,
+    });
+  } else await command({ name: "EpisodeSearch", episodeIds: targetIds });
   let grabs;
   const admissionDeadline = Date.now() + 90000;
   for (let attempt = 0; attempt < 30 && Date.now() < admissionDeadline; attempt++) {
     grabs = (await history()).filter((row) => row.eventType === "grabbed");
-    if (grabs.length === 1) break;
+    if (grabs.length === targetIds.length) break;
     await command({ name: "RssSync" });
     await delay(250);
   }
-  assert.equal(grabs.length, 1);
-  assert.equal(grabs[0].episodeId, target.id);
-  assert.match(
-    grabs[0].sourceTitle,
-    /^Synthetic\.Series\.S08E01\.Canonical\.Solstice\.GERMAN\.720p\./
+  assert.equal(grabs.length, targetIds.length);
+  assert.deepEqual(
+    grabs.map((row) => row.episodeId).sort((a, b) => a - b),
+    [...targetIds].sort((a, b) => a - b)
   );
-  assert.equal(grabs[0].data.seriesMatchType === "Id", false);
+  assert.equal(
+    new Set(grabs.map((row) => row.downloadId.toLowerCase())).size,
+    1,
+    "one native download, one history row per episode"
+  );
+  for (const grab of grabs) {
+    assert(
+      grab.sourceTitle.startsWith(
+        `Synthetic.Series.${coordinate}.${paired ? "Whole.Programme" : "Canonical.Solstice"}.GERMAN.720p.`
+      )
+    );
+    if (!tba) assert.equal(grab.data.seriesMatchType === "Id", false);
+  }
   const frozen = jobs();
   assert.equal(frozen.jobs.length, 2);
   const pending = frozen.jobs.find((row) => row.id !== legacyId);
   assert.equal(pending.status, "queued");
   assert.equal(pending.id.toLowerCase(), grabs[0].downloadId.toLowerCase());
-  assert.equal(pending.expected.version, 6);
-  assert.deepEqual(pending.expected.sourceProgramme.source, {
-    channel: "ZDF",
-    title: "Source Solstice",
-    season: 2019,
-    episode: 1,
-  });
-  assert.deepEqual(pending.expected.sourceProgramme.target, { season: 8, episode: 1 });
+  assert.equal(pending.expected.version, version);
+  assert.deepEqual(
+    pending.expected.sourceProgramme.source,
+    paired
+      ? { channel: "ZDF", title: "Whole Programme", season: 10, episode: 13 }
+      : {
+          channel: "ZDF",
+          title: "Source Solstice",
+          season: 2019,
+          episode: 1,
+        }
+  );
+  if (paired) {
+    assert.deepEqual(pending.expected.sourceProgramme.targets, [
+      { season: 0, episode: 2 },
+      { season: 0, episode: 3 },
+    ]);
+    assert.deepEqual(pending.expected.episodeDurations, [
+      { seconds: 60, provenance: "episode_metadata" },
+      { seconds: 60, provenance: "episode_metadata" },
+    ]);
+    assert.equal(pending.expected.durations.metadata.seconds, 120);
+  } else assert.deepEqual(pending.expected.sourceProgramme.target, { season: 8, episode: 1 });
   const canonical = await releases();
   assert.equal(canonical.length, 1);
   assert(!neutralGuids.includes(canonical[0].guid[0]._));
+  if (paired) {
+    const second = await releases(3);
+    assert.equal(second.length, 1);
+    assert.deepEqual(second[0].guid, canonical[0].guid);
+    assert.equal(second[0].title[0], canonical[0].title[0]);
+    assert.equal(second[0].enclosure[0].$.url, canonical[0].enclosure[0].$.url);
+  }
   // The canonical positive proves warm media facts, so empty publisher results
   // cannot pass merely because a cold rendition is still awaiting its proof.
-  const publisherSearch = request("/api/newznab?t=tvsearch&tvdbid=2147483002&season=2019&ep=1");
+  const publisherSearch = request(
+    paired
+      ? "/api/newznab?t=tvsearch&tvdbid=2147483002&season=10&ep=13"
+      : "/api/newznab?t=tvsearch&tvdbid=2147483002&season=2019&ep=1"
+  );
   assert.equal(publisherSearch.status, 200);
   assert.deepEqual(
     (await parseStringPromise(publisherSearch.text)).rss.channel[0].item ?? [],
     [],
-    "publisher coordinates must not re-admit the canonical S08E01 binding"
+    "publisher coordinates must not re-admit a rejected canonical scope"
   );
   assertPreserved(before, frozen, legacyId);
-  // The fallback receiver processes the already accepted v6 without consulting
+  // The fallback receiver processes the already accepted frozen scope without consulting
   // a later catalogue binding. It must still revalidate the exact source itself.
   mode({ binding: false });
   await replaceRuntime(receiverImage);
@@ -411,7 +496,7 @@ try {
   for (let attempt = 0; attempt < 100; attempt++) {
     completed = jobs();
     const row = completed.jobs.find((row) => row.id === pending.id);
-    if (row?.status === "failed") fail("compatible receiver failed accepted v6");
+    if (row?.status === "failed") fail("compatible receiver failed accepted v" + version);
     if (row?.status === "completed") break;
     await delay(250);
   }
@@ -429,17 +514,66 @@ try {
   assert.deepEqual(diagnosis.checks, { duration: "passed", audio: "passed", resolution: "passed" });
   assert.equal(diagnosis.reason, null);
   await command({ name: "CheckForFinishedDownload" });
+  if (tba) {
+    let blocked;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const page = await api(
+        root,
+        manifest,
+        "sonarr",
+        "/api/v3/queue?page=1&pageSize=100&includeUnknownSeriesItems=true"
+      );
+      blocked = page.records.find(
+        (row) =>
+          row.downloadId?.toLowerCase() === pending.id.toLowerCase() &&
+          row.trackedDownloadState === "importBlocked"
+      );
+      if (blocked) break;
+      await delay(250);
+    }
+    assert(blocked, "unknown-date TBA must be proven blocked, never assumed from an old incident");
+    assert.match(JSON.stringify(blocked.statusMessages), /TBA|does not have a title/i);
+    const beforeManual = await api(
+      root,
+      manifest,
+      "pingufunk",
+      `/api/downloads/${pending.id}/diagnostics`
+    );
+    assert.equal(beforeManual.import.state, "blocked");
+    assert(finished.filePath.startsWith("/downloads/sonarr/"));
+    await command({
+      name: "ManualImport",
+      importMode: "move",
+      files: [
+        {
+          path: finished.filePath.replace(/^\/downloads\//, "/qa-downloads/"),
+          folderName: finished.title,
+          seriesId: series.id,
+          episodeIds: targetIds,
+          quality: manualRelease.quality,
+          languages: manualRelease.languages,
+          downloadId: grabs[0].downloadId,
+          releaseGroup: "Pingufunk",
+        },
+      ],
+    });
+  }
   let episodes;
   for (let attempt = 0; attempt < 100; attempt++) {
     episodes = await api(root, manifest, "sonarr", `/api/v3/episode?seriesId=${series.id}`);
-    if (episodes.find((row) => row.id === target.id)?.hasFile) break;
+    if (targetIds.every((id) => episodes.find((row) => row.id === id)?.hasFile)) break;
     await delay(250);
   }
   const imported = episodes.find((row) => row.id === target.id);
   assert(imported.hasFile && imported.episodeFileId > 0);
   assert(
+    targetIds.every(
+      (id) => episodes.find((row) => row.id === id)?.episodeFileId === imported.episodeFileId
+    )
+  );
+  assert(
     episodes
-      .filter((row) => row.id !== target.id)
+      .filter((row) => !targetIds.includes(row.id))
       .every((row) => !row.hasFile && row.episodeFileId === 0)
   );
   const file = await api(root, manifest, "sonarr", `/api/v3/episodefile/${imported.episodeFileId}`);
@@ -453,9 +587,42 @@ try {
   docker(["exec", manifest.apps.sonarr.name, "test", "!", "-L", file.path]);
   const importedHistory = await history();
   const imports = importedHistory.filter((row) => row.eventType === "downloadFolderImported");
-  assert.equal(imports.length, 1);
-  assert.equal(imports[0].downloadId, grabs[0].downloadId);
-  assert.equal(imports[0].episodeId, target.id);
+  assert.equal(imports.length, targetIds.length);
+  assert.deepEqual(
+    imports.map((row) => row.episodeId).sort((a, b) => a - b),
+    [...targetIds].sort((a, b) => a - b)
+  );
+  assert(
+    imports.every(
+      (row) =>
+        row.downloadId === grabs[0].downloadId &&
+        Number(row.data.fileId) === file.id &&
+        row.data.importedPath === file.path
+    )
+  );
+  const afterImport = await api(
+    root,
+    manifest,
+    "pingufunk",
+    `/api/downloads/${pending.id}/diagnostics`
+  );
+  assert.deepEqual(afterImport.import, { state: "reported_import", reason: "api_file_associated" });
+  if (paired) {
+    const unchanged = await api(root, manifest, "sonarr", `/api/v3/episode?seriesId=${series.id}`);
+    for (const initial of targets) {
+      const current = unchanged.find((row) => row.id === initial.id);
+      for (const field of [
+        "title",
+        "seasonNumber",
+        "episodeNumber",
+        "airDate",
+        "airDateUtc",
+        "runtime",
+        "monitored",
+      ])
+        assert.deepEqual(current[field], initial[field], "native metadata must not be rewritten");
+    }
+  }
   docker([
     "cp",
     `${manifest.apps.sonarr.name}:${file.path}`,
@@ -493,13 +660,16 @@ try {
   mode({});
   await replaceRuntime(candidateImage);
   await command({ name: "RssSync" });
-  await command({ name: "EpisodeSearch", episodeIds: [target.id] });
+  for (const id of targetIds) await command({ name: "EpisodeSearch", episodeIds: [id] });
   const replay = request("/api?mode=addfile&cat=Default", legacyNzb, {
     "X-Pingufunk-Enqueue-Key": legacyKey,
   });
   assert.equal(replay.status, 200);
   assert.equal(JSON.parse(replay.text).nzo_ids[0], legacyId);
-  assert.equal((await history()).filter((row) => row.eventType === "grabbed").length, 1);
+  assert.equal(
+    (await history()).filter((row) => row.eventType === "grabbed").length,
+    targetIds.length
+  );
   assert.equal(jobs().jobs.length, 2);
   assertPreserved(before, jobs(), legacyId);
   const requests = readFileSync(join(root, "pingufunk", "programme-requests.jsonl"), "utf8")
@@ -510,7 +680,7 @@ try {
   assert.equal(requests.filter((row) => !row.ranged && row.kind === "solstice").length, 1);
   assert.equal(requests.filter((row) => !row.ranged && row.kind === "french").length, 0);
   console.log(
-    `Owned programme ${backend} ${transport}: neutral -> canonical GUID, exactly one native S08E01 grab/file, paired history, v6 receiver rollback/return, preserved legacy job/file/receipt, no duplicate transfer`
+    `Owned programme ${scope} ${backend} ${transport}: neutral -> canonical GUID, exactly one native ${coordinate} download/file, complete paired history, v${version} receiver rollback/return, preserved legacy job/file/receipt, no duplicate transfer${tba ? ", proven TBA block and explicit native two-target import" : ""}`
   );
 } catch (error) {
   console.error(

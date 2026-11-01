@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { matchedEpisodeScope } from "@/lib/episode-scope";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { writesEnabled } from "@/lib/write-gate";
@@ -232,7 +233,9 @@ export class TvSearchDeliveryJournal {
         if (
           match.runtimeConflict ||
           match.tvdbId !== show.id ||
-          !monitored.has(`${episode.seasonNumber}:${episode.episodeNumber}`)
+          !matchedEpisodeScope(match).some((part) =>
+            monitored.has(`${part.seasonNumber}:${part.episodeNumber}`)
+          )
         )
           continue;
         const item = itemSchema.parse(
@@ -474,13 +477,37 @@ export async function getTvSearchDeliveryItems(
         .map((e) => `${e.seasonNumber}:${e.episodeNumber}`)
     );
     const show = mergeSonarrShow(await loadBase(id), supplemental)!;
-    await tvSearchDelivery.remove(
+    const allowedEntries = new Set(
       entries
-        .filter((e) => e.tvdbId === id && !allowed.has(`${e.season}:${e.episode}`))
-        .map((e) => e.id)
+        .filter(
+          (entry) =>
+            entry.tvdbId === id &&
+            (allowed.has(`${entry.season}:${entry.episode}`) ||
+              matchSonarrEpisodes(
+                show,
+                [entry.item],
+                minimum,
+                tolerance,
+                policy,
+                hlsEnabled,
+                true,
+                verifiedRuleTopics(show)
+              ).some(
+                (match) =>
+                  match.episode.seasonNumber === entry.season &&
+                  match.episode.episodeNumber === entry.episode &&
+                  matchedEpisodeScope(match).some((part) =>
+                    allowed.has(`${part.seasonNumber}:${part.episodeNumber}`)
+                  )
+              ))
+        )
+        .map((entry) => entry.id)
+    );
+    await tvSearchDelivery.remove(
+      entries.filter((e) => e.tvdbId === id && !allowedEntries.has(e.id)).map((e) => e.id)
     );
     const candidates = entries.filter(
-      (e) => e.tvdbId === id && e.readyAt !== null && allowed.has(`${e.season}:${e.episode}`)
+      (e) => e.tvdbId === id && e.readyAt !== null && allowedEntries.has(e.id)
     );
     for (const entry of candidates) {
       const item: ApiResultItem = { ...entry.item };

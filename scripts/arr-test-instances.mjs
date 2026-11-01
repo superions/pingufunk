@@ -150,9 +150,12 @@ async function up(onAllocated) {
   const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
   const youtube = process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
   const programme = process.env.PINGUFUNK_ARR_QA_PROGRAMME === "1";
+  const programmeScope = process.env.PINGUFUNK_ARR_QA_PROGRAMME_SCOPE ?? "single";
   const backend = process.env.PINGUFUNK_ARR_QA_DATABASE ?? "sqlite";
   if (
     !["sqlite", "postgresql"].includes(backend) ||
+    !["single", "pair", "pair-tba"].includes(programmeScope) ||
+    (!programme && programmeScope !== "single") ||
     ((youtube || programme) && !tvDelivery) ||
     (backend === "postgresql" && !youtube && !programme) ||
     (youtube && programme)
@@ -197,6 +200,7 @@ async function up(onAllocated) {
     tvDelivery,
     youtube,
     programme,
+    ...(programme ? { programmeScope } : {}),
     apps: {},
   };
   save(root, manifest);
@@ -345,7 +349,14 @@ async function up(onAllocated) {
     "NODE_OPTIONS=--import /qa/provider.mjs",
     ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
     ...(youtube ? ["-e", "PINGUFUNK_ARR_QA_YOUTUBE=1"] : []),
-    ...(programme ? ["-e", "PINGUFUNK_ARR_QA_PROGRAMME=1"] : []),
+    ...(programme
+      ? [
+          "-e",
+          "PINGUFUNK_ARR_QA_PROGRAMME=1",
+          "-e",
+          `PINGUFUNK_ARR_QA_PROGRAMME_SCOPE=${programmeScope}`,
+        ]
+      : []),
     ...(placeholderEpisode || localizedEpisode || tvDelivery
       ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"]
       : []),
@@ -773,21 +784,42 @@ async function seriesFixture(root, manifest) {
         }
       }
       if (manifest.programme) {
+        const paired = ["pair", "pair-tba"].includes(manifest.programmeScope);
         db.prepare("UPDATE Series SET Monitored=1, Runtime=2, Seasons=? WHERE Id=?").run(
           JSON.stringify([
-            { seasonNumber: 0, monitored: false },
-            { seasonNumber: 8, monitored: true },
+            { seasonNumber: 0, monitored: paired },
+            { seasonNumber: 8, monitored: !paired },
             { seasonNumber: 2019, monitored: false },
+            ...(paired ? [{ seasonNumber: 10, monitored: false }] : []),
           ]),
           series.Id
         );
         db.prepare(
-          "UPDATE Episodes SET SeasonNumber=8,EpisodeNumber=1,Title='Canonical Solstice',Runtime=2,Monitored=1,AirDateUtc='2019-03-01 20:15:00',AirDate='2019-03-01' WHERE SeriesId=? AND TvdbId=?"
-        ).run(series.Id, 2147483003);
+          "UPDATE Episodes SET SeasonNumber=8,EpisodeNumber=1,Title='Canonical Solstice',Runtime=2,Monitored=?,AirDateUtc='2019-03-01 20:15:00',AirDate='2019-03-01' WHERE SeriesId=? AND TvdbId=?"
+        ).run(paired ? 0 : 1, series.Id, 2147483003);
         db.prepare(
           `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
           VALUES (?,0,1,'Short Solstice',0,0,'2019-03-01 20:15:00','2019-03-01',0,2147483004,1,'[]')`
         ).run(series.Id);
+        if (paired) {
+          for (const episode of [2, 3]) {
+            const aired = manifest.programmeScope === "pair-tba" ? null : "2021-03-01";
+            db.prepare(
+              `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
+              VALUES (?,0,?,'TBA',0,1,?,?,0,?,1,'[]')`
+            ).run(
+              series.Id,
+              episode,
+              aired ? aired + " 20:15:00" : null,
+              aired,
+              2147483006 + episode
+            );
+          }
+          db.prepare(
+            `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
+            VALUES (?,10,13,'Whole Programme',0,0,'2021-03-02 20:15:00','2021-03-02',0,2147483010,2,'[]')`
+          ).run(series.Id);
+        }
         db.prepare(
           `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
           VALUES (?,2019,1,'Source Solstice',0,0,'2019-03-02 20:15:00','2019-03-02',0,2147483005,2,'[]')`

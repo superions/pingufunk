@@ -225,10 +225,12 @@ it("cancels programme verification before provider or transfer work", async () =
   expect(state.transfer).not.toHaveBeenCalled();
 });
 
-it("the compatible reader accepts a complete frozen pair without publishing a partial single", async () => {
+it("the shared owner accepts a complete pair and freezes each target reference", async () => {
   state.query.mockResolvedValue([pairedProgrammeItem]);
   state.merge.mockReturnValue(pairedProgrammeShow);
-  expect(matchBoundSourceEpisode(pairedProgrammeItem, pairedProgrammeShow, 0, 10)).toBeNull();
+  expect(
+    matchBoundSourceEpisode(pairedProgrammeItem, pairedProgrammeShow, 0, 10)?.pairedEpisodes
+  ).toEqual(pairedProgrammeShow.episodes);
   const admit = releaseSourceAdmission(pairedProgrammeItem.url_video, pairedProgrammeExpectations)!;
   await expect(admit()).resolves.toBeUndefined();
   // Same total with rewritten individual references is still a different intent.

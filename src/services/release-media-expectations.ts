@@ -1,4 +1,4 @@
-import type { ApiResultItem } from "@/types";
+import type { ApiResultItem, MatchedEpisodeInfo } from "@/types";
 import {
   unknownJobMediaExpectations,
   parseMediaExpectations,
@@ -10,7 +10,7 @@ import { classifyLanguageEdition } from "./language-editions";
 import { mediaSourceIdentity } from "./source-audio";
 import { renditionDimensions } from "./rendition-quality";
 import { youtubeSourceReferenceSchema, youtubeWatchUrl } from "@/lib/youtube-source";
-import type { MediathekProgrammeMatch } from "@/lib/mediathek-programme";
+import { matchedRuntimeMinutes } from "@/lib/episode-scope";
 
 /** Explicit bindings publish only the proved standard German rendition. Cold proof stays pending. */
 export function programmeRenditionVerified(item: ApiResultItem, url: string): boolean {
@@ -31,10 +31,23 @@ export function releaseMediaExpectations(
   episodeRuntimeMinutes: number | null = null,
   renditionUrl: string = item.url_video || item.url_video_hd || item.url_video_low,
   mediaKind: NewMediaExpectations["mediaKind"] = "unknown",
-  programme?: MediathekProgrammeMatch
+  match?: MatchedEpisodeInfo
 ): NewMediaExpectations {
   const expected = unknownJobMediaExpectations();
-  if (programme && "targets" in programme) throw Error("Whole-programme producer unavailable");
+  const programme = match?.mediathekProgramme;
+  const pair = programme && "targets" in programme;
+  if (pair) {
+    if (
+      !match?.pairedEpisodes ||
+      programme.targets.some(
+        (target, i) =>
+          target.season !== match.pairedEpisodes![i].seasonNumber ||
+          target.episode !== match.pairedEpisodes![i].episodeNumber
+      )
+    )
+      throw Error("Whole-programme scope incomplete");
+    episodeRuntimeMinutes = matchedRuntimeMinutes(match);
+  } else if (match?.pairedEpisodes) throw Error("Whole-programme binding missing");
   const source = item.sourceRef ? youtubeSourceReferenceSchema.parse(item.sourceRef) : null;
   if (source && renditionUrl !== youtubeWatchUrl(source))
     throw Error("Typed source selector mismatch");
@@ -42,11 +55,19 @@ export function releaseMediaExpectations(
     throw Error("Programme rendition unverified");
   const programmeFields = programme
     ? {
-        version: 6,
+        version: pair ? 7 : 6,
         sourceProgramme: {
           ...programme,
           renditionIdentity: mediaSourceIdentity(renditionUrl),
         },
+        ...(pair
+          ? {
+              episodeDurations: match!.pairedEpisodes!.map((episode) => ({
+                seconds: episode.runtime === null ? null : episode.runtime * 60,
+                provenance: "episode_metadata",
+              })),
+            }
+          : {}),
       }
     : {};
   expected.mediaKind = mediaKind;
@@ -119,9 +140,10 @@ export function tvReviewMediaExpectations(
   runtimeMinutes: number,
   url: string,
   tolerancePercent: number,
-  programme?: MediathekProgrammeMatch
+  match?: MatchedEpisodeInfo
 ): NewMediaExpectations {
-  const facts = releaseMediaExpectations(item, runtimeMinutes, url, "series", programme);
+  if (match?.pairedEpisodes) runtimeMinutes = matchedRuntimeMinutes(match)!;
+  const facts = releaseMediaExpectations(item, runtimeMinutes, url, "series", match);
   return parseMediaExpectations({
     ...facts,
     mediaKind: "series",
