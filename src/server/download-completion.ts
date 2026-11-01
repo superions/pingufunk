@@ -32,9 +32,45 @@ export async function completeValidatedDownload(
             await getSetting("matching.sonarr.tolerancePercent")
           )
         );
-  const facts = sourceAudioExpectation(expectations)
+  const original = await fs.lstat(filePath);
+  let facts = sourceAudioExpectation(expectations)
     ? await probeJobMedia(filePath, jobDirectory, expectations, tolerance, sourceUrl, lease.signal)
     : await probeJobMedia(filePath, jobDirectory, expectations, tolerance, undefined, lease.signal);
+  if (facts.audioLanguageCorrection) {
+    const { correctGermanAudioTag } = await import("./ffmpeg");
+    // Arr reads the actual file tags. Publish only the re-probed copy, keeping
+    // the newly downloaded original intact until the replacement is ready.
+    const correction = facts.audioLanguageCorrection;
+    const temporary = await fs.mkdtemp(path.join(jobDirectory, ".audio-language-"));
+    try {
+      const candidate = path.join(temporary, "media" + path.extname(filePath));
+      await correctGermanAudioTag(filePath, candidate, lease.signal);
+      const verified = await probeJobMedia(
+        candidate,
+        temporary,
+        expectations,
+        tolerance,
+        sourceUrl,
+        lease.signal
+      );
+      if (verified.audioLanguageCorrection) throw new Error("Audio metadata correction failed");
+      const current = await fs.lstat(filePath);
+      if (
+        !current.isFile() ||
+        current.isSymbolicLink() ||
+        current.dev !== original.dev ||
+        current.ino !== original.ino ||
+        current.size !== original.size ||
+        current.mtimeMs !== original.mtimeMs
+      )
+        throw new Error("Completed media file changed");
+      lease.checkTransfer();
+      await fs.rename(candidate, filePath);
+      facts = { ...verified, audioLanguageCorrection: correction };
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  }
   lease.checkTransfer();
   const stats = await fs.lstat(filePath);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)

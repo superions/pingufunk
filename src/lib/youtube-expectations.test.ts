@@ -107,7 +107,7 @@ it("retains runtime conflict until the internal once-only decision and never acc
   ).toThrow();
 });
 it.each(["foreign", "extra-unknown", "extra-video", "duration", "dimensions"])(
-  "rejects actual completed media with %s",
+  "checks actual media against the frozen source contract with %s",
   (kind) => {
     const expected = syntheticYoutubeExpectations();
     const actual = probe();
@@ -116,6 +116,14 @@ it.each(["foreign", "extra-unknown", "extra-video", "duration", "dimensions"])(
     if (kind === "extra-video") actual.streams.push({ ...actual.streams[0] });
     if (kind === "duration") actual.format.duration = "180";
     if (kind === "dimensions") actual.streams[0].height = 1080;
+    if (kind === "foreign") {
+      expect(
+        validateMediaProbe(actual, parseMediaExpectations(expected), 0, expected.sourceAudio)
+          .audioLanguageCorrection
+      ).toEqual({ language: "de", originalLanguages: ["fr"] });
+      expect(() => validateMediaProbe(actual, parseMediaExpectations(expected), 0)).toThrow();
+      return;
+    }
     expect(() =>
       validateMediaProbe(actual, parseMediaExpectations(expected), 0, expected.sourceAudio)
     ).toThrow();

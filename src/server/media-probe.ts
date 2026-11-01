@@ -68,6 +68,7 @@ export interface MediaProbeFacts {
   video: { width: number; height: number }[];
   audioLanguages: string[];
   sourceAudioEvidence?: SourceAudioEvidence;
+  audioLanguageCorrection?: { language: "de"; originalLanguages: string[] };
   durationChecks?: {
     provenance: "source_catalogue" | "episode_metadata";
     seconds: number;
@@ -177,9 +178,12 @@ export function validateMediaProbe(
         sourceAudioEvidence.language !== providerExpectation.language
       )
         throw new MediaProbeError("source_evidence_mismatch", "missing");
-      // Independent provider evidence can fill absent tags, never contradict a
-      // known foreign track or relabel the probed track list as German.
-      if (audioLanguages.some((language) => language !== languageTag(sourceAudioEvidence.language)))
+      // Exact, freshly revalidated source evidence outranks a container tag for
+      // one audio track. Multiple tracks still need their own unambiguous tags.
+      if (
+        (audio.length !== 1 || sourceAudioEvidence.language !== "de") &&
+        audioLanguages.some((language) => language !== languageTag(sourceAudioEvidence.language))
+      )
         throw new MediaProbeError("language_conflict", "conflicting");
     }
     if (
@@ -197,6 +201,13 @@ export function validateMediaProbe(
       video,
       audioLanguages,
       ...(providerExpectation ? { sourceAudioEvidence } : {}),
+      ...(providerExpectation?.language === "de" &&
+      audio.length === 1 &&
+      !audioLanguages.includes("de")
+        ? {
+            audioLanguageCorrection: { language: "de" as const, originalLanguages: audioLanguages },
+          }
+        : {}),
       ...(contract?.version === 3 ||
       contract?.version === 5 ||
       contract?.version === 6 ||

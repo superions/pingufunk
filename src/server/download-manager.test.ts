@@ -26,6 +26,7 @@ const {
   downloadUpdateMany,
   ffmpegModuleLoaded,
   convertMp4ToMkv,
+  correctGermanAudioTag,
   downloadHlsStream,
   probeJobMedia,
 } = vi.hoisted(() => ({
@@ -38,6 +39,7 @@ const {
   downloadUpdateMany: vi.fn(),
   ffmpegModuleLoaded: vi.fn(),
   convertMp4ToMkv: vi.fn(),
+  correctGermanAudioTag: vi.fn(),
   downloadHlsStream: vi.fn(),
   probeJobMedia: vi.fn(),
 }));
@@ -81,7 +83,7 @@ vi.mock("./worker-lease", async (importOriginal) => {
 
 vi.mock("./ffmpeg", () => {
   ffmpegModuleLoaded();
-  return { convertMp4ToMkv };
+  return { convertMp4ToMkv, correctGermanAudioTag };
 });
 
 vi.mock("./ytdlp", () => ({ downloadHlsStream }));
@@ -522,40 +524,87 @@ it("does not report legacy completion until the probe resolves and persists unkn
   );
 });
 
-it("passes v2 source URL to the media owner and persists separate evidence without invented track tags", async () => {
-  const url = "https://fixture.akamaized.net/movie.mp4";
-  const sourceAudio = {
-    provider: "arte_hbbtv" as const,
-    videoId: "123456-001-A",
-    language: "de",
-    mediaIdentity: mediaSourceIdentity(url),
-  };
-  const expected = { ...unknownMediaExpectations(), version: 2, sourceAudio };
-  const job = progressiveJob("v2-source", JSON.stringify(expected));
-  job.url = url;
-  probeJobMedia.mockResolvedValue({
-    ...basicFacts,
-    sourceAudioEvidence: sourceAudio,
-    expectedChecks: { ...basicFacts.expectedChecks, audio: "passed_provider" },
-  });
-  await processDownload(job.id);
-  expect(probeJobMedia).toHaveBeenCalledWith(
-    expect.any(String),
-    expect.any(String),
-    expected,
-    10,
-    url,
-    expect.any(AbortSignal)
-  );
-  const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
-    .data;
-  expect(JSON.parse(completed.mediaValidation)).toMatchObject({
-    version: 2,
-    audioLanguages: [],
-    sourceAudioEvidence: sourceAudio,
-    expectedChecks: { audio: "passed_provider" },
-  });
-});
+it.each(["success", "mux-failure", "proof-failure"])(
+  "keeps source-bound completion and original-file preservation on %s",
+  async (outcome) => {
+    const url = "https://fixture.akamaized.net/movie.mp4";
+    const sourceAudio = {
+      provider: "arte_hbbtv" as const,
+      videoId: "123456-001-A",
+      language: "de",
+      mediaIdentity: mediaSourceIdentity(url),
+    };
+    const expected = { ...unknownMediaExpectations(), version: 2, sourceAudio };
+    const job = progressiveJob("v2-source", JSON.stringify(expected));
+    job.url = url;
+    probeJobMedia
+      .mockResolvedValueOnce({
+        ...basicFacts,
+        sourceAudioEvidence: sourceAudio,
+        audioLanguages: ["en"],
+        audioLanguageCorrection: { language: "de", originalLanguages: ["en"] },
+        expectedChecks: { ...basicFacts.expectedChecks, audio: "passed_provider" },
+      })
+      .mockResolvedValueOnce({
+        ...basicFacts,
+        sourceAudioEvidence: sourceAudio,
+        audioLanguages: ["de"],
+        expectedChecks: { ...basicFacts.expectedChecks, audio: "passed_provider" },
+      });
+    correctGermanAudioTag.mockImplementation(async (input, output) => {
+      await fsp.copyFile(input, output);
+      if (outcome === "mux-failure") throw new Error("synthetic remux failure");
+    });
+    if (outcome === "proof-failure") {
+      probeJobMedia
+        .mockReset()
+        .mockResolvedValueOnce({
+          ...basicFacts,
+          sourceAudioEvidence: sourceAudio,
+          audioLanguageCorrection: { language: "de", originalLanguages: ["en"] },
+        })
+        .mockRejectedValueOnce(new MediaProbeError("source_evidence_mismatch", "conflicting"));
+    }
+    await processDownload(job.id);
+    expect(probeJobMedia).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expected,
+      10,
+      url,
+      expect.any(AbortSignal)
+    );
+    if (outcome !== "success") {
+      expect(downloadUpdate.mock.calls.some(([call]) => call.data.status === "completed")).toBe(
+        false
+      );
+      const target = path.join(
+        testRoot,
+        job.category,
+        jobDirectoryName(job.title, job.id),
+        `${job.title}.mp4`
+      );
+      expect(await readFile(target)).toEqual(Buffer.from([1, 2, 3, 4]));
+      expect(await fsp.readdir(path.dirname(target))).toEqual([path.basename(target)]);
+      return;
+    }
+    const completed = downloadUpdate.mock.calls.find(
+      ([call]) => call.data.status === "completed"
+    )![0].data;
+    expect(JSON.parse(completed.mediaValidation)).toMatchObject({
+      version: 2,
+      audioLanguages: ["de"],
+      audioLanguageCorrection: { language: "de", originalLanguages: ["en"] },
+      sourceAudioEvidence: sourceAudio,
+      expectedChecks: { audio: "passed_provider" },
+    });
+    expect(correctGermanAudioTag).toHaveBeenCalledTimes(1);
+    expect(probeJobMedia).toHaveBeenCalledTimes(2);
+    expect(await fsp.readdir(path.dirname(completed.filePath))).toEqual([
+      path.basename(completed.filePath),
+    ]);
+  }
+);
 
 it.each(["missing-audio", "html", "sample", "probe-timeout"])(
   "rejects %s before completion and continues the next queued job",
@@ -979,6 +1028,8 @@ beforeEach(async () => {
   downloadUpdateMany.mockReset();
   downloadUpdateMany.mockResolvedValue({ count: 0 });
   convertMp4ToMkv.mockReset();
+  correctGermanAudioTag.mockReset();
+  ffmpegModuleLoaded.mockClear();
   probeJobMedia.mockReset().mockResolvedValue(basicFacts);
 
   testRoot = await mkdtemp(path.join(tmpdir(), "rundfunkarr-download-manager-"));

@@ -274,7 +274,7 @@ it("rejects HTML, absent audio, cover-only video and invalid codecs", () => {
 });
 
 it.each(["arte_hbbtv", "ard_media"] as const)(
-  "accepts fresh %s proof with unknown tracks, never fabricating track tags",
+  "prioritizes fresh exact %s proof and requests correction only for one non-German-tagged track",
   (provider) => {
     const proof = {
       provider,
@@ -295,6 +295,7 @@ it.each(["arte_hbbtv", "ard_media"] as const)(
     const facts = validateMediaProbe(media(), expected, 10, proof);
     expect(facts.audioLanguages).toEqual([]);
     expect(facts.sourceAudioEvidence).toEqual(proof);
+    expect(facts.audioLanguageCorrection).toEqual({ language: "de", originalLanguages: [] });
     expect(facts.expectedChecks.audio).toBe("passed_provider");
     expect(facts.expectedChecks.resolution).toBe("passed");
     for (const dimensions of [
@@ -309,7 +310,22 @@ it.each(["arte_hbbtv", "ard_media"] as const)(
     expect(() => validateMediaProbe(media(), expected, 10, { ...proof, language: "fr" })).toThrow();
     const foreign = media();
     foreign.streams[1].tags = { language: "fra" };
-    expect(() => validateMediaProbe(foreign, expected, 10, proof)).toThrow();
+    expect(validateMediaProbe(foreign, expected, 10, proof).audioLanguageCorrection).toEqual({
+      language: "de",
+      originalLanguages: ["fr"],
+    });
+    const german = media();
+    german.streams[1].tags = { language: "deu" };
+    expect(validateMediaProbe(german, expected, 10, proof).audioLanguageCorrection).toBeUndefined();
+    expect(() => validateMediaProbe(foreign, expected, 10)).toThrow();
+    expect(() =>
+      validateMediaProbe(
+        { ...foreign, streams: [...foreign.streams, german.streams[1]] },
+        expected,
+        10,
+        proof
+      )
+    ).toThrow();
     const noAudio = { ...media(), streams: [media().streams[0]] };
     expect(() => validateMediaProbe(noAudio, expected, 10, proof)).toThrow();
   }

@@ -3337,7 +3337,7 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       sind getrennt belegt. Erneuter Vergleich aller 155 Dateien stabil.
       Keine neuen manuellen Live-Suchen, Grabs, Retries oder Imports.
 
-- [ ] **P19.3 — Eine bestätigte Langfassung nativ zwei Episoden zuordnen.**
+- [x] **P19.3 — Eine bestätigte Langfassung nativ zwei Episoden zuordnen.**
       Abhängigkeit P19.2. Owner: dessen Quellenbindung,
       `source-programme.ts`, `ruleset-matcher.ts`, `types/index.ts::MatchedEpisodeInfo`, `newznab.ts`, `nzb-release.ts`,
       `release-media-expectations.ts`, `lib/media-expectations.ts`,
@@ -3362,8 +3362,11 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Keine Sperre aus einem Altbefund im Test voraussetzen und dafür weder
       Sonarr-Metadaten noch globale Profile umschreiben.
       Bestehenden TV-/Job-/Diagnosevertrag und kompatiblen Rückweg mitpflegen.
+      Abgenommen am 01.11.2026: native Direkt-/Prowlarr-Wege auf SQLite/PG18,
+      wiederholte NZB-Annahme, beide EpisodeFile-Bindungen, RSS/Restart und
+      kompatibler v7-Rückweg. PR #23 und #24 gemergt, geprüftes Image live.
 
-- [ ] **P19.4 — ARTE-Belegausfall von fehlender Fassung und Rechtefenster trennen.**
+- [x] **P19.4 — ARTE-Belegausfall von fehlender Fassung und Rechtefenster trennen.**
       Unabhängig startbar. Owner: `source-audio.ts::getArteStreams`,
       `arte-editions.ts`, `rendition-quality.ts`, `lib/decision-diagnostics.ts`,
       bestehende Quelltests sowie Tonsprachen-/Qualitäts-/Diagnosereferenzen.
@@ -3383,30 +3386,45 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Arr-Sprach-/Qualitätsentscheidung, keine Raw-URLs in Diagnose, unveränderte
       Unknown-/Konfliktsperren und frische Revalidation. Eine auslaufende einzelne
       Sendung darf keinen unbestimmten allgemeinen ARTE-Ausbauauftrag erzeugen.
+      Abgenommen am 01.11.2026: vorhandene native Qualitätsfälle einschließlich
+      fehlendem/leeren ARTE-Beleg grün, Desktopnachweis vorhanden, Imagescan grün.
+      Live-Erhalt von vier Aufträgen und 156 Dateien samt Bindungen/History
+      nachgewiesen; keine Bibliotheksaktion oder Schemamigration.
 
-- [ ] **P19.5 — Den konkreten Anbieter-/Track-Sprachwiderspruch fachlich schließen.**
+- [ ] **P19.5 — Sprachentscheidung korrigieren und Arr-Import ermöglichen.**
       Unabhängig startbar. Owner: `source-audio.ts`, `media-probe.ts`,
       `providers/youtube/audio.ts`, `providers/youtube/resolve.ts`,
-      gespeicherte `mediaValidation`, vorhandene Job-/Arr-Diagnose und
+      `download-completion.ts`, gespeicherte `mediaValidation`, vorhandene Job-/Arr-Diagnose und
       `docs/source-audio-contract.md`. Historischer La-La-Land-Fall: Anbieter
-      Deutsch, lokale Tags `eng`; private erfolgreiche Rettung getrennt von
-      einem allgemeinen Produktfix bewerten. Zusätzlich den im aktuellen
+      Deutsch, lokale Tags `eng`; der manuelle Download/Import ist bereits erledigt.
+      Offen ist die automatische Verarbeitung über Sonarr und Radarr. Zusätzlich den im aktuellen
       Kommissar-Audit belegten Sprachfehler von S06E10 exakt seiner Quelle,
       Auswahl, Fehlerstufe und Auftragsgeneration zuordnen; nicht allein aus
       derselben Fehlerklasse dieselbe Ursache folgern. Vorhandene Inhalts-/Dateibelege
       auswerten und Ursache genau zuordnen: falsches Tag, falscher Quellbeleg,
       andere Rendition oder tatsächlich andere Sprache. Fehlende Belege konkret
-      benennen, keine neue automatische Spracherkennungsinfrastruktur einführen.
-      Ein belegter Producer-/Renditionfehler erhält seinen kausalen Fix samt
-      Consumerregression. Für einen verbleibenden echten Tag-/Inhaltswiderspruch
-      vor einer Produktänderung den eng an exakte Datei/Quelle gebundenen
-      Korrekturvertrag und dessen Nutzerentscheidung vorlegen; der heutige
-      Unknown-/Konfliktschutz bleibt bis dahin gültig. Keine globale Vorrangregel
-      „Anbieter gewinnt“, kein stilles Umtaggen oder Completed trotz Konflikt.
-      Abnahme: konkreter Ursachen-/Korrekturbeleg oder ausdrücklich benannter
-      offener Entscheidungsstopp; ein ungeklärter Fall bleibt ungeklärt und
-      ungecheckt. Produktkorrektur erst mit unverändert negativen Fremdsprachen-/
-      Mischtrackfällen und durchgängiger Datei-/Importbindung schließen.
+      benennen; die vom Nutzer als nicht strukturell lösbar ausgeklammerten
+      Kommissar-Quellfälle getrennt von der allgemeinen Sprachentscheidung ausweisen.
+      Nutzerentscheidung vom 01.11.2026: exakt zugeordnete vorhandene Quellenbefunde
+      erhalten Vorrang vor widersprüchlichen Tags, wenn derselbe Inhalt nicht bereits
+      mit gewünschtem Sprachtag vorliegt. Entscheidend ist die korrekte Zuordnung
+      und Übergabe der neuen Datei an Sonarr und Radarr. Keine Einzelbestätigung und keine
+      dauerhafte Sperre allein wegen eines widerlegten Tags. Keine NPU- oder
+      Homelab-Spracherkennungsdienst-Anbindung und keine zusätzliche Sprach-
+      Teststrecke oder CI-Matrix einführen. Den vorhandenen Sprach-/Datei-/Abschlusspfad
+      verwenden; keine akustische Transkription entwickeln.
+      Sprachbeleg an exakte Quelle/Fassung, Datei, Audiotrack und Auftrag
+      binden; geänderte Bytes benötigen eine neue Prüfung. Nur nach passendem
+      Beleg die Metadaten der neuen Auftragsdatei für den nativen Arr-Import
+      berichtigen, Audio/Video nicht neu kodieren. Bereits bestehende Aufträge,
+      Dateien, Tags und Bibliothekseinträge erhalten; keine nachträgliche
+      Bibliothekskorrektur als Nebenwirkung. Identitäts-, Rendition-, Rechte- und
+      Laufzeitprüfung bleiben unabhängig bestehen. Unklare, fremdsprachige oder
+      widersprüchliche Inhaltsbelege dürfen keine deutsche Fassung vortäuschen.
+      Abnahme am bestehenden Sprach-/Datei-/Abschluss-/Arr-Vertrag und mit
+      vorhandenen Prüfungen; daraus keine unbelegte Erkennung gesprochenen Tons
+      oder tatsächlichen neuen Import behaupten. Bestehende Datei-/Jobbindung und kompatiblen Rückweg erhalten und den
+      allgemeinen Produktfix vom bereits erledigten manuellen Einzelfall trennen.
 
 - [ ] **P19.6 — Den konkreten WDR-/Protection-Belegfall abschließend einordnen.**
       Unabhängig startbar. Owner: `ard-source-audio.ts`, `source-audio.ts`,
