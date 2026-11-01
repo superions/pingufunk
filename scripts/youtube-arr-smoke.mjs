@@ -145,7 +145,9 @@ try {
         "-c:a",
         "aac",
         "-metadata:s:a:0",
-        "language=deu",
+        // Source metadata declares German; exercise the existing native film
+        // and series imports with the conflicting container tag from P19.5.
+        "language=eng",
       ],
     ],
   ])
@@ -497,6 +499,17 @@ try {
       ])
     );
   const before = readJobs(controller);
+  if (
+    before.some((job) => {
+      const facts = JSON.parse(job.mediaValidation);
+      return (
+        facts.audioLanguages?.join() !== "de" ||
+        facts.audioLanguageCorrection?.originalLanguages?.join() !== "en" ||
+        facts.sourceAudioEvidence?.provider !== "youtube"
+      );
+    })
+  )
+    fail("source evidence did not correct the file tags before native film/series import");
   const legacyNames = readFileSync(join(root, "pingufunk", "youtube-legacy-names.jsonl"), "utf8")
     .trim()
     .split("\n")

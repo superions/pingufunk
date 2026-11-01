@@ -101,8 +101,8 @@ Quellen- und Episodendauer. Keine neue Sprachheuristik; der Abnahmescope von
 P03.4 steht im Phasenvertrag und erweitert nicht diese Quellen-/Budgetgrenzen.
 P19.2 verwendet für eine explizit gebundene einzelne Mediathek-Standardfassung
 v6 mit denselben unabhängigen Audio-/Dauer-/Pixelbelegen. Die Quellenbindung
-selbst beweist keine Sprache und erlaubt keine AD-/OV-Umdeutung. Alle bekannten
-fremden oder gemischten Tracks bleiben vor Completed gesperrt; der genaue
+selbst beweist keine Sprache und erlaubt keine AD-/OV-Umdeutung. Ohne unabhängigen exakten Quellenbefund bleiben bekannte fremde oder
+gemischte Tracks vor Completed gesperrt; der genaue
 [Programm-/Rückwegvertrag](tv-search-contract.md#explizite-einzelne-mediathek-programme-p192)
 ersetzt keine Medienprobe. P19.2 ist nativ abgenommen und live. P19.3 erweitert
 den eingefrorenen Umfang auf genau zwei bestätigte Ziele; Audio-/Pixelbelege
@@ -131,21 +131,34 @@ HTML-Fallback, Sendercrawler, Token-/Accountdienst oder Alters-/Geoblocking-Bypa
 `MediaExpectations` v1 bleibt für vorhandene Jobs unverändert. Bei MP4-Sprach-
 Tags wird weiterhin der strenge v1-Trackvertrag geprüft. ARTE-/ARD-Providerbelege
 verwenden v2: `audio` bleibt null, `sourceAudio` enthält Provider, Programm-ID,
-SHA-256 der stabilen URL-Identität und Sprache. Es werden keine fehlenden
-Container-Tracktags erfunden. RSS, NZB, Queue, Retry und Persistenz tragen den
+SHA-256 der stabilen URL-Identität und Sprache. Ein exakt gebundener und frisch bestätigter deutscher Quellenbefund kann gemäß
+P19.5 das Tag genau eines Audiotracks der neuen Auftragsdatei berichtigen. RSS, NZB, Queue, Retry und Persistenz tragen den
 versionierten Vertrag mit; keine Datenbankschemaänderung ist nötig.
 
 Der Worker prüft die lokale Datei mit ffprobe und holt den ARTE-Beleg frisch
 gegen die tatsächlich heruntergeladene URL (Dispatcher für `arte_hbbtv` und
 `ard_media`). Andere URL, fehlende/veränderte
-Sprache, fremder Programmbeleg oder bekannte widersprechende lokale Audiotracks
-verhindern `Completed`. Bei belegtem Provider und unbekannten Tracktags bleibt
-`audioLanguages` leer; separat steht `expectedChecks.audio=passed_provider`.
-Das ist Provider-Evidenz, kein akustischer Hörtest. Dateiidentität wird auch
-nach dem Providerabruf erneut geprüft.
+Sprache oder fremder Programmbeleg verhindern `Completed`. Ein frischer deutscher
+Quellenbefund erhält bei genau einem Audiotrack Vorrang vor dessen falschem oder
+fehlendem Container-Tag. Bereits deutsch getaggte Dateien werden unverändert
+übergeben. Bei einer Korrektur kopiert der vorhandene FFmpeg verlustfrei alle
+Streams in eine private temporäre Datei und setzt ausschließlich das Audio-
+Sprachtag auf `deu`. Die ursprüngliche neue Auftragsdatei bleibt bis zur erneuten
+Medienprobe samt frischer Quellenprüfung erhalten; erst danach wird sie atomar
+ersetzt und der Auftrag abgeschlossen. Abbruch, Remux- oder Prüfungsfehler erhalten
+das Original. Mehrere widersprüchliche Tracks sowie reine MP4-Tagbelege erhalten
+keine solche Freigabe.
 
-Der frische Workerbeleg hat ein eigenes begrenztes Budget von einem Versuch
-und höchstens 15 Sekunden. Ist die Fassung inzwischen ausgelistet oder der
+`mediaValidation.audioLanguages` enthält danach die gemessenen Dateitags;
+`audioLanguageCorrection` bewahrt die ursprünglichen Sprachwerte. Separat bleiben
+`sourceAudioEvidence` und `expectedChecks.audio=passed_provider` erhalten. Das ist
+Quellenbefund, keine akustische Spracherkennung. Alte Aufträge, bestehende Dateien
+und Bibliothekseinträge werden nicht nachträglich geändert. Identität, Fassung,
+Rechte, Laufzeit und Pixel bleiben eigenständige Prüfungen.
+
+Jede frische Workerprüfung hat ein begrenztes Budget von einem Versuch und
+höchstens 15 Sekunden. Nur eine notwendige Tagkorrektur führt zu einer zweiten
+solchen Prüfung der korrigierten Datei; keine Retries oder Providerwechsel. Ist die Fassung inzwischen ausgelistet oder der
 Provider unerreichbar, darf auch eine technisch lesbare Datei mit unbekannten
 Tracktags nicht als sprachgeprüft fertig gemeldet werden. Ein solcher Fehler
 verlangt Diagnose/Retry; keine automatische Umgehung des Belegs.

@@ -4482,7 +4482,7 @@ Vergleich nach dessen Abschluss bestätigt alle 155 Dateien stabil. Keine
 manuellen Live-Suchen, Grabs, Retries oder Imports. P19.2 ist abgeschlossen;
 P19.3–P19.6 bleiben offen.
 
-## P19.3 — Ganze Quelle für zwei Episoden (in Arbeit)
+## P19.3 — Ganze Quelle für zwei Episoden (abgenommen)
 
 Der vorbereitende Leser ergänzt v7 im bestehenden Erwartungsfeld, ohne v6 zu
 ändern. Genau zwei geordnete benachbarte Ziele, getrennte positive
@@ -4609,7 +4609,7 @@ gemeldete Sperre; ohne sie bleiben beide realen Datei-/Historybindungen Pflicht.
 Es wird weder eine Sperre noch eine erfolgreiche Zuordnung bloß angenommen und
 keine native globale Einstellung umgeschrieben.
 
-## P19.4 — ARTE-Belegzustände getrennt halten (in Arbeit)
+## P19.4 — ARTE-Belegzustände getrennt halten (abgenommen)
 
 Der begrenzte Metadatenabruf vom 01.11.2026 um 03:03 UTC bestätigt für
 „Misericordia“ `128673-000-A` einen HbbTV-404, keine gültige leere Streamantwort.
@@ -4642,3 +4642,51 @@ JavaScript-Exception. Die vorhandene native Qualitätsmatrix ergänzt zwei
 Fälle für fehlenden/leeren ARTE-Beleg: direkt und über Prowlarr ein neutraler
 Release, native Qualität Unknown und keine erfundene deutsche Audiosprache.
 Diese native Abnahme, Imagescan und Live-Übernahme stehen noch aus.
+
+Die vollständige native Qualifikation von P19.3/P19.4 ist abgeschlossen:
+[CI 41301143613](https://github.com/superions/pingufunk/actions/runs/41301143613)
+besteht alle neun Programmfälle, die bestehenden YouTube-Importwege und die
+Qualitätsmatrix einschließlich fehlendem/leeren ARTE-Beleg. PR #23/#24 sind
+gemergt. Der qualifizierte Quellstand 6a2f727 (identischer Main-Mergebaum)
+ist am 01.11.2026 um 14:06 UTC über GitOps ausgerollt; das OCI-Image und der
+kompatible v7-Rückweg 2e72a28 haben frische Scans ohne blockierende Funde.
+Die Live-Abnahme um 14:07 UTC bestätigt healthy/idle sowie den unveränderten
+Erhalt aller vier Aufträge, 156 physischen Dateien und EpisodeFile-Bindungen,
+428 Historyzeilen, Einstellungen, Profile, Mounts und fünf Migrationen.
+Keine neue Bibliotheksaktion, keine Schemamigration und keine Arr-Aktualisierung.
+
+## P19.5 — Quellenbefund vor falschem Dateitag (in Arbeit)
+
+Die Nutzerentscheidung vom 01.11.2026 bezieht sich auf die vorhandenen exakt
+zugeordneten Quellenbefunde und die korrekte Übergabe an Sonarr/Radarr. Eine
+bereits deutsch belegte Fassung bleibt bevorzugt. Die manuelle La-La-Land-
+Rettung ist abgeschlossen und wird weder wiederholt noch als allgemeine
+Produktabnahme ausgegeben. Die vier historischen Kommissar-S06E10-Versuche
+enthalten getrennte Transfer- und Sprachfehler; die damaligen vollständigen
+Dateimessungen fehlen. Diese konkreten Quellenreste bleiben ausgeklammert.
+
+Der gemeinsame Medien-/Abschlussowner lässt einen frischen, exakt gebundenen
+deutschen Quellenbefund bei genau einem Audiotrack dessen falsches oder fehlendes
+Tag überstimmen. Eine bereits deutsch getaggte Datei braucht keine Bearbeitung.
+Die notwendige Korrektur erfolgt verlustfrei mit dem vorhandenen FFmpeg in einer
+privaten temporären Datei. Nach erneuter Medien- und Quellenprüfung ersetzt sie
+die neue Auftragsdatei atomar, bevor Completed an Arr sichtbar wird.
+Ursprüngliche Tagwerte und Quellenprovenienz bleiben im bestehenden
+mediaValidation-JSON erhalten. Fehler vor der Übernahme erhalten das Original.
+Keine DB-/Protokollmigration, bestehende Bibliotheksdateien oder nachträglichen
+Auftragsänderungen, keine Einzelbestätigung, Tonerkennung oder neue Infrastruktur.
+Ungebundene, fremde oder widersprüchliche Quellen bleiben gesperrt; Tag-only-
+Verträge und unabhängige Identitäts-/Rechte-/Laufzeit-/Pixelprüfungen gelten weiter.
+
+Die vorhandenen Probe-/Abschluss-/FFmpeg-Regressionen schützen die Priorität,
+fehlenden Quellenbeleg und Originalerhalt bei Remux-/Revalidierungsfehlern. Der
+bereits bestehende YouTube-Arr-Fall verwendet nun ein englisches Container-Tag
+bei deutscher Quellenmetadaten-Auswahl; seine realen Film-/Serienimporte und
+unabhängigen Datei-Proben müssen die Korrektur bestätigen. Keine zusätzliche
+Testdatei, Teststrecke oder CI-Matrix; native Qualifikation und Live-Abnahme
+stehen für diese Änderung noch aus.
+
+Die lokale Abnahme besteht mit 1.861 Tests und Coverage (28 unverändert
+opt-in), Lint, Typecheck, Format und Build. Der vollständige Audit einschließlich
+Dev-Abhängigkeiten meldet null Befunde. Produktive Bibliotheksimporte werden
+für die Abnahme nicht ausgelöst.

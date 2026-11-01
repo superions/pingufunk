@@ -32,7 +32,12 @@ vi.mock("fs/promises", () => ({
   unlink: vi.fn(async () => undefined),
 }));
 
-import { convertMp4ToMkv, ensureFfmpegExists, mergeVideoAudio } from "./ffmpeg";
+import {
+  convertMp4ToMkv,
+  correctGermanAudioTag,
+  ensureFfmpegExists,
+  mergeVideoAudio,
+} from "./ffmpeg";
 
 beforeEach(() => {
   state.calls.length = 0;
@@ -107,5 +112,19 @@ describe("FFmpeg language metadata", () => {
     );
     expect(state.calls[0]).not.toContain("-metadata:s:a:0");
     expect(state.calls[0]).not.toContain("language=ger");
+    await correctGermanAudioTag("/synthetic/new.mp4", "/synthetic/private/corrected.mp4");
+    expect(state.calls[1]).toEqual(
+      expect.arrayContaining([
+        "-protocol_whitelist",
+        "file",
+        "-map",
+        "0",
+        "-c",
+        "copy",
+        "-metadata:s:a:0",
+        "language=deu",
+        "-n",
+      ])
+    );
   });
 });
