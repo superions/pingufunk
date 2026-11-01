@@ -4567,6 +4567,21 @@ ein wiederholtes Registry-Rate-Limit am LSCR-Abruf unterbrochen; die realen
 Medienprüfungen beider Backends bestehen bereits. Ein begrenzter Wiederanlauf
 ist dokumentiert. Der Vergleich der festgelegten Sonarr-/Radarr-/Prowlarr-
 Versionen bestätigt identische Manifestdigests bei LSCR und GHCR. Die CI
-verwendet deshalb den vom Imageanbieter dokumentierten GHCR-Direktweg;
+verwendet deshalb den [von LinuxServer dokumentierten GHCR-Direktweg](https://docs.linuxserver.io/FAQ/#what-is-lscrio);
 Versionen, Tests, Rechte und Laufzeitcode bleiben gleich. Der neue native
 Lauf muss diesen Abrufweg und die vollständige Produktabnahme bestätigen.
+
+Der Direktabruf passiert anschließend die Registrygrenze. Der nächste Lauf
+belegt ein Runner-Speicherlimit beim Rückwegbau: Die Hauptimages verwenden
+den eingerichteten Buildx-Builder, die archivierten Checkpoints dagegen den
+separaten Docker-Standardbuilder. Trotz identischer Medienwerkzeug-/Dependency-
+Buildinputs für Producer und v7-Leser werden große Schichten erneut gebaut.
+Die CI weist nun allen Builds denselben expliziten jobeigenen Builder zu und
+lädt dessen Einplattform-Ergebnisse für die unveränderten nativen Tests.
+Keine gemeinsamen Caches/Volumes werden bereinigt, kein Image oder Prüfschritt
+entfernt und kein kostenpflichtiger Runner ergänzt. Die neue vollständige
+native Abnahme muss Speicherpfad und Produktvertrag bestätigen.
+
+Die unterschiedliche Standardbuilderauswahl und der benötigte lokale Load
+sind in der [Docker-Builderdokumentation](https://docs.docker.com/build/builders/#difference-between-docker-build-and-docker-buildx-build)
+beschrieben; der CI-Log belegt beide tatsächlich verwendeten Builder.
