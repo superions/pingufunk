@@ -4585,3 +4585,17 @@ native Abnahme muss Speicherpfad und Produktvertrag bestätigen.
 Die unterschiedliche Standardbuilderauswahl und der benötigte lokale Load
 sind in der [Docker-Builderdokumentation](https://docs.docker.com/build/builders/#difference-between-docker-build-and-docker-buildx-build)
 beschrieben; der CI-Log belegt beide tatsächlich verwendeten Builder.
+
+Die anschließende native Diagnose zeigt vier Grab-Historyereignisse für zwei
+Ziele: Sonarr verarbeitet die Mitglieder einer EpisodeSearch-Liste einzeln.
+Der vorhandene SAB-/Queue-Owner bestätigt deshalb für dasselbe aktive v7-
+Gesamtprogramm denselben Auftrag, statt eine zweite Datei anzulegen. SQLite
+verwendet seinen vorhandenen Schreibzugang, PostgreSQL eine transaktionsgebundene
+Sperre derselben Absicht. Alte Einzelaufträge und explizite Enqueue-Schlüssel
+behalten ihren Vertrag. Der bestehende native Fall prüft die wiederholte
+NZB-Annahme; Importdiagnose und Rückweg erlauben wiederholte Bestätigungen
+derselben beiden Ziele, weiterhin keine fremden Ziele oder Dateien.
+
+Identische Push-/Pull-Request-Prüfungen laufen nicht mehr doppelt: Die vorhandenen
+Produktgates bleiben auf jedem Branch-Push und erneut auf Main aktiv, PR-Metadaten
+werden weiter im PR geprüft. Keine neue Testdatei oder zusätzliche Matrix.
