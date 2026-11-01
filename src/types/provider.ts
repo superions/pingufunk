@@ -193,6 +193,8 @@ export interface ContentQueryField {
 }
 
 export interface ContentSearchOptions {
+  /** Worker-owned cancellation also bounds fresh programme revalidation. */
+  signal?: AbortSignal;
   mediaType?: "all" | "movie" | "series";
   sortBy?: string;
   sortOrder?: "asc" | "desc";

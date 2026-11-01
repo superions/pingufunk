@@ -14,7 +14,8 @@ import {
 } from "./rulesets";
 import { shouldSkipItem } from "./mediathek-release";
 import { recordDecision } from "@/server/decision-diagnostics";
-import { matchBoundSourceEpisode } from "./source-programme";
+import { hasMediathekProgrammeBinding, matchBoundSourceEpisode } from "./source-programme";
+import { matchSonarrEpisodes } from "./sonarr-matcher";
 import type {
   ApiResultItem,
   TvdbData,
@@ -513,6 +514,34 @@ export async function applyRulesetFilters(
         continue;
       }
 
+      const targetId = ruleset.media.media_tvdbId;
+      if (targetId === null || !Number.isSafeInteger(targetId) || targetId < 1) continue;
+      const show =
+        tvdbData?.id === targetId ? tvdbData : await getBaseShowInfoByTvdbId(targetId, budget);
+      if (!show) continue;
+      if (hasMediathekProgrammeBinding(item, show)) {
+        matchedEpisodes.push(
+          ...matchSonarrEpisodes(
+            show,
+            [item],
+            minDuration,
+            Number(
+              configuredSetting(
+                "matching.sonarr.tolerancePercent",
+                await getSetting("matching.sonarr.tolerancePercent")
+              )
+            ),
+            undefined,
+            hlsEnabled,
+            true
+          )
+        );
+        // Explicit programme ownership is exclusive even when current facts reject it.
+        const index = unmatchedItems.indexOf(item);
+        if (index >= 0) unmatchedItems.splice(index, 1);
+        break;
+      }
+
       let matchInfo: MatchedEpisodeInfo | null = null;
 
       // Apply matching with threshold from settings
@@ -520,19 +549,19 @@ export async function applyRulesetFilters(
 
       switch (ruleset.matchingStrategy) {
         case "SeasonAndEpisodeNumber" as MatchingStrategy:
-          matchInfo = await matchesSeasonAndEpisode(item, ruleset, tvdbData, budget);
+          matchInfo = await matchesSeasonAndEpisode(item, ruleset, show, budget);
           break;
         case "ItemTitleIncludes" as MatchingStrategy:
-          matchInfo = await matchesItemTitleIncludes(item, ruleset, threshold, tvdbData, budget);
+          matchInfo = await matchesItemTitleIncludes(item, ruleset, threshold, show, budget);
           break;
         case "ItemTitleExact" as MatchingStrategy:
           // For strict strategy, require higher threshold
           const exactThreshold =
             matchingSettings.strategy === "strict" ? Math.max(threshold, 0.95) : threshold;
-          matchInfo = await matchesItemTitleExact(item, ruleset, exactThreshold, tvdbData, budget);
+          matchInfo = await matchesItemTitleExact(item, ruleset, exactThreshold, show, budget);
           break;
         case "ItemTitleEqualsAirdate" as MatchingStrategy:
-          matchInfo = await matchesItemTitleEqualsAirdate(item, ruleset, tvdbData, budget);
+          matchInfo = await matchesItemTitleEqualsAirdate(item, ruleset, show, budget);
           break;
       }
 

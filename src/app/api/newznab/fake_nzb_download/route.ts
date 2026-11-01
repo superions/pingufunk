@@ -33,6 +33,17 @@ export async function GET(request: NextRequest) {
       { status: 409 }
     );
   }
+  if (mediaExpectations?.version === 6) {
+    try {
+      const { validateReleaseSource } = await import("@/services/source-enqueue");
+      await validateReleaseSource(url, mediaExpectations);
+    } catch {
+      return NextResponse.json(
+        { error: "Source binding changed; search and verify the source again" },
+        { status: 409 }
+      );
+    }
+  }
   const nzbContent = generateFakeNzb({ title, url, mediaExpectations });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);

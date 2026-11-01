@@ -118,3 +118,26 @@ it("does not invent coverage when a bound owner omits its retrieval evidence", a
   expect(response.status).toBe(502);
   expect(mocks.query).not.toHaveBeenCalled();
 });
+
+it("preserves a programme owner's opaque NZBs and fingerprints without rebuilding them as legacy", async () => {
+  const downloads = { sd: "synthetic-frozen-v6-nzb" };
+  mocks.bound.mockImplementation(async (_query, reportCoverage) => {
+    reportCoverage({
+      complete: true,
+      candidateWindowLimited: false,
+      sources: [{ providerId: "mediathekview", state: "complete", candidateCount: 1 }],
+    });
+    return [
+      { ...bound, review: { ...bound.review, runtimeConflict: false }, nzbDownloads: downloads },
+    ];
+  });
+  mocks.fingerprints.mockReturnValue({ sd: "c".repeat(64) });
+  const response = await GET(new NextRequest("http://localhost/api/search?q=Synthetic%20Series"));
+  expect(response.status).toBe(200);
+  expect((await response.json()).results[0]).toMatchObject({
+    nzbDownloads: downloads,
+    nzbFingerprints: { sd: "c".repeat(64) },
+  });
+  expect(mocks.fingerprints).toHaveBeenCalledExactlyOnceWith(downloads);
+  expect(mocks.nzb).not.toHaveBeenCalled();
+});

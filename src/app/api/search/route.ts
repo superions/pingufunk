@@ -166,30 +166,34 @@ async function handleSearchRequest(request: NextRequest) {
             return NextResponse.json(
               {
                 coverage,
-                results: bound.slice(0, Math.min(limit, 100)).map(({ info, review }) => {
-                  const nzbDownloads = review.runtimeConflict
-                    ? {}
-                    : createUiNzbDownloads(info.item, false, info.episode);
-                  return {
-                    id: review.selector.sourceId,
-                    channel: info.item.channel,
-                    topic: info.item.topic,
-                    title: info.item.title,
-                    description: info.item.description,
-                    timestamp: info.item.filmlisteTimestamp,
-                    duration: info.item.duration,
-                    size: info.item.size,
-                    url_video: info.item.url_video,
-                    url_video_hd: info.item.url_video_hd,
-                    url_video_low: info.item.url_video_low,
-                    url_website: info.item.url_website,
-                    ...catalogueMetadata(info.item),
-                    category: "tv",
-                    tvReview: review,
-                    nzbDownloads,
-                    nzbFingerprints: review.runtimeConflict ? {} : uiNzbFingerprints(nzbDownloads),
-                  };
-                }),
+                results: bound
+                  .slice(0, Math.min(limit, 100))
+                  .map(({ info, review, nzbDownloads: preparedDownloads }) => {
+                    const nzbDownloads = review.runtimeConflict
+                      ? {}
+                      : (preparedDownloads ?? createUiNzbDownloads(info.item, false, info.episode));
+                    return {
+                      id: review.selector.sourceId,
+                      channel: info.item.channel,
+                      topic: info.item.topic,
+                      title: info.item.title,
+                      description: info.item.description,
+                      timestamp: info.item.filmlisteTimestamp,
+                      duration: info.item.duration,
+                      size: info.item.size,
+                      url_video: info.item.url_video,
+                      url_video_hd: info.item.url_video_hd,
+                      url_video_low: info.item.url_video_low,
+                      url_website: info.item.url_website,
+                      ...catalogueMetadata(info.item),
+                      category: "tv",
+                      tvReview: review,
+                      nzbDownloads,
+                      nzbFingerprints: review.runtimeConflict
+                        ? {}
+                        : uiNzbFingerprints(nzbDownloads),
+                    };
+                  }),
               },
               { headers: { "Cache-Control": "no-store" } }
             );

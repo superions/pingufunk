@@ -137,7 +137,7 @@ async function api(root, manifest, app, path, body, method, expectedStatus, cred
   }
   return result.data;
 }
-async function up() {
+async function up(onAllocated) {
   const runnerTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE ?? "pingufunk-p10-arr-qa";
   const migratorTag =
     process.env.PINGUFUNK_ARR_QA_MIGRATOR_IMAGE ?? "pingufunk-p10-arr-migrator-qa";
@@ -149,13 +149,15 @@ async function up() {
   const localizedEpisode = process.env.PINGUFUNK_ARR_QA_LOCALIZED_EPISODE === "1";
   const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
   const youtube = process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
+  const programme = process.env.PINGUFUNK_ARR_QA_PROGRAMME === "1";
   const backend = process.env.PINGUFUNK_ARR_QA_DATABASE ?? "sqlite";
   if (
     !["sqlite", "postgresql"].includes(backend) ||
-    (youtube && !tvDelivery) ||
-    (backend === "postgresql" && !youtube)
+    ((youtube || programme) && !tvDelivery) ||
+    (backend === "postgresql" && !youtube && !programme) ||
+    (youtube && programme)
   )
-    throw new Error("Owned YouTube backend selection required");
+    throw new Error("Owned source backend selection required");
   const runtimeConflict = process.env.PINGUFUNK_ARR_QA_RUNTIME_CONFLICT === "1";
   if (runtimeConflict && !placeholderEpisode)
     throw new Error("Runtime conflict requires the owned TBA fixture");
@@ -194,9 +196,12 @@ async function up() {
     renditionQuality,
     tvDelivery,
     youtube,
+    programme,
     apps: {},
   };
   save(root, manifest);
+  // The owning test can retain cleanup ownership even if later startup fails.
+  onAllocated?.(root, manifest);
   if (tvDelivery) mkdirSync(join(root, "shared-downloads"), { mode: 0o700 });
   docker(["network", "create", "--internal", "--label", `${label}=${owner}`, manifest.network]);
   let databaseUrl = "file:/qa/database.sqlite";
@@ -340,6 +345,7 @@ async function up() {
     "NODE_OPTIONS=--import /qa/provider.mjs",
     ...(sourceAudio ? ["-e", "PINGUFUNK_ARR_QA_SOURCE_AUDIO=1"] : []),
     ...(youtube ? ["-e", "PINGUFUNK_ARR_QA_YOUTUBE=1"] : []),
+    ...(programme ? ["-e", "PINGUFUNK_ARR_QA_PROGRAMME=1"] : []),
     ...(placeholderEpisode || localizedEpisode || tvDelivery
       ? ["-e", "PINGUFUNK_SONARR_API_KEY_FILE=/qa/sonarr-api-key"]
       : []),
@@ -368,6 +374,12 @@ async function up() {
     `type=bind,src=${dir},dst=/qa`,
     "--mount",
     `type=bind,src=${resolve("scripts/arr-test-provider.mjs")},dst=/qa/provider.mjs,readonly`,
+    ...(programme
+      ? [
+          "--mount",
+          `type=bind,src=${resolve("scripts/programme-arr-provider.mjs")},dst=/qa/programme-provider.mjs,readonly`,
+        ]
+      : []),
     "--mount",
     `type=bind,src=${resolve("scripts/media-container-provider.mjs")},dst=/qa/media-provider.mjs,readonly`,
     image,
@@ -725,7 +737,7 @@ async function seriesFixture(root, manifest) {
           series.Id,
           2147483003
         );
-      if (manifest.tvDelivery) {
+      if (manifest.tvDelivery && !manifest.programme) {
         db.prepare("UPDATE Series SET Monitored=1, Runtime=1, Seasons=? WHERE Id=?").run(
           JSON.stringify([1, 2].map((seasonNumber) => ({ seasonNumber, monitored: true }))),
           series.Id
@@ -760,6 +772,27 @@ async function seriesFixture(root, manifest) {
             );
         }
       }
+      if (manifest.programme) {
+        db.prepare("UPDATE Series SET Monitored=1, Runtime=2, Seasons=? WHERE Id=?").run(
+          JSON.stringify([
+            { seasonNumber: 0, monitored: false },
+            { seasonNumber: 8, monitored: true },
+            { seasonNumber: 2019, monitored: false },
+          ]),
+          series.Id
+        );
+        db.prepare(
+          "UPDATE Episodes SET SeasonNumber=8,EpisodeNumber=1,Title='Canonical Solstice',Runtime=2,Monitored=1,AirDateUtc='2019-03-01 20:15:00',AirDate='2019-03-01' WHERE SeriesId=? AND TvdbId=?"
+        ).run(series.Id, 2147483003);
+        db.prepare(
+          `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
+          VALUES (?,0,1,'Short Solstice',0,0,'2019-03-01 20:15:00','2019-03-01',0,2147483004,1,'[]')`
+        ).run(series.Id);
+        db.prepare(
+          `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
+          VALUES (?,2019,1,'Source Solstice',0,0,'2019-03-02 20:15:00','2019-03-02',0,2147483005,2,'[]')`
+        ).run(series.Id);
+      }
       if (manifest.runtimeConflict)
         db.prepare(
           "UPDATE Episodes SET Runtime=50,AirDateUtc='2099-01-01 20:00:00',AirDate='2099-01-01' WHERE SeriesId=? AND TvdbId=?"
@@ -774,7 +807,7 @@ async function seriesFixture(root, manifest) {
     docker(["start", name]);
   }
   console.log(
-    "sonarr: unmonitored offline synthetic series/episode seeded; backup retained; no external metadata or automatic grab"
+    "sonarr: offline synthetic series/episodes seeded; backup retained; no external metadata or automatic grab"
   );
   await fixtureRuntimeReady(root, manifest, "sonarr");
 }

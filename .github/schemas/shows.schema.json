@@ -30,6 +30,44 @@
           "type": "string"
         }
       },
+      "mediathekProgrammes": {
+        "type": "array",
+        "description": "Explicit standard-programme bindings; publisher and canonical coordinates remain distinct",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["website", "source", "target"],
+          "properties": {
+            "website": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048,
+              "pattern": "^https://[^?#]+$"
+            },
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "title", "season", "episode"],
+              "properties": {
+                "channel": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "season": { "type": "integer", "minimum": 0, "maximum": 10000 },
+                "episode": { "type": "integer", "minimum": 1, "maximum": 100000 }
+              }
+            },
+            "target": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["season", "episode"],
+              "properties": {
+                "season": { "type": "integer", "minimum": 0, "maximum": 10000 },
+                "episode": { "type": "integer", "minimum": 1, "maximum": 100000 }
+              }
+            }
+          }
+        }
+      },
       "episodes": {
         "type": "array",
         "description": "List of episodes",

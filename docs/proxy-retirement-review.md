@@ -4404,3 +4404,75 @@ die ursprüngliche Einordnung als echte Inhaltskonflikte ist damit korrigiert.
 Quellenverfügbarkeit, Medienfreigabe und tatsächlicher Import bleiben getrennte
 Nachweise. P19.1 ist abgeschlossen; P19.2–P19.6 und die getrennten Bestands-
 und Transferabnahmen bleiben offen.
+
+## P19.2 — Explizite Mediathek-Programmbindung (in Arbeit)
+
+Der ergänzende Katalog erhält eine optionale Bindung aus öffentlicher
+Programmseite, erwarteter Sender-/Titel-/Quellkoordinate und getrenntem
+Einzelziel. Der vorhandene `source-programme.ts`-Consumer prüft diese Bindung;
+er erfindet keine YouTube-Referenz und ersetzt weder Serien- noch Medienowner.
+Der lesende Metadatenabgleich bestätigt für „Sommersonnenwende“ weiterhin das
+90-minütige Sonarr-Ziel S08E01; die kurze Specialfassung ist kein Ersatzziel.
+Keine neue Bibliothekssuche, Übertragung oder Bestandsänderung durch diese Prüfung.
+
+Der vorbereitende Leser-/Workerstand unterstützt das strikte Joberwartungsformat
+v6, bevor ein Producer es ausgibt. Publisher und kanonisches Ziel bleiben
+getrennt; Quelllaufzeit, Episodenlaufzeit, deutscher Ton und genaue Auflösung
+bleiben Pflicht. NZB-Abruf und neue Annahme prüfen aktuelle Quellenbindung,
+frischen Instanzbestand und geltende Toleranz. Der Worker verwendet dagegen
+die eingefrorene angenommene Bindung und validiert vor der Übertragung erneut
+das exakte Programm samt Rendition. Spätere Katalogänderungen schreiben
+angenommene Jobs nicht um. Historische v1–v5, Schema, Queue- und Dateipfade
+bleiben erhalten; der bestehende Diagnoseconsumer liest auch v6-Medienfakten.
+
+Lokaler Lesercheckpoint: 1.772 Tests erfolgreich, 28 Opt-in-Fälle getrennt;
+Lint, Typecheck, Format und Build erfolgreich. 155 gezielte Consumerfälle umfassen
+NZB-/Persistenztransport, Quell-/Ziel-/Fassungs-/Laufzeitnegative, eingefrorene
+Workerabsicht und tatsächliche Cancellation eines gehaltenen HTTP-Bodys.
+Beim kontrollierten Entfernen allein der Worker-Revalidierung scheitern genau
+fünf Übertragungsgegenfälle. Katalogeintrag, neue Releaseausgabe, nativer
+Einzelzielimport und kompatibler Container-Rückweg sind noch nicht abgenommen;
+P19.2 bleibt offen. Dies ist kein neuer Produktionsstand.
+
+Der folgende Producerstand ergänzt nun den konkreten öffentlichen
+Sommersonnenwende-Eintrag und konsumiert dieselbe Bindung in Einzel-/Staffel-
+Suche, RSS, GUI-NZB und Quellenprüfung. Der kanonische S08E01-Release enthält
+v6; rohe Providerzeilen bleiben unverändert. Kalte/unvollständige Medienbelege
+erzeugen keinen gebundenen Download. Die GUI erhält ihre opaken Rendition-NZBs
+vom bestehenden serverseitigen Owner und behält eine Quellzeile; andere
+GUI-/v1–v5-Verträge bleiben erhalten.
+
+Eine neue Gegenprobe belegt einen sonst offenen Legacy-Regelpfad: Wird eine
+registrierte Quelle später als eine andere bekannte Episode deklariert,
+kann die alte Regel nach dem geschlossenen Bindungsversuch erneut einen v3-
+Release erzeugen. Der bestehende Regelowner leitet solche Programme nun
+exklusiv durch den gemeinsamen Matcher. Beim Rückbau allein dieser Sperre
+scheitern die beiden tatsächlichen Einzel-/RSS-Consumernegative. Ohne den
+neuen Bindungszweig scheitern drei positive Quellen-/Katalog-/RSS-/GUI-Fälle.
+Keine weitere Fuzzy-Regel, pauschale Jahresumrechnung oder Profiländerung.
+
+Der Anschlussreview belegt außerdem eine Filterlücke: Ein korrekt gebundener
+Release konnte nach Ablehnung seiner kanonischen Episode über die ursprüngliche
+Publishernummer wieder in eine andere ID-/Textsuche gelangen. Der gemeinsame
+Suchfilter sperrt diesen Rückfall für Mediathek- und YouTube-Bindungen; die
+Suche nach kanonischem Ausstrahlungsjahr bleibt erhalten. Beim Entfernen allein
+dieser Sperre scheitern sechs Fälle: vier gebundene Match-/Filterconsumer sowie
+zwei tatsächliche Newznab-Routen mit Remote- und gebündeltem Katalog.
+Die native Fixture hält dafür zusätzlich eine ungegriffene unabhängige
+Publisherfolge. Erst nach einem warm belegten kanonischen Positivrelease wird
+die Publisher-Einzelsuche negativ geprüft; fehlender kalter Medienbeleg kann
+diese Gegenprobe nicht erfüllen.
+
+Lokaler Producerstand: 1.795 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle
+getrennt; Lint, Typecheck, Format, Build, Daten-/Schemasichtung und die
+geänderten Scriptgates erfolgreich. Dependencyinputs sind unverändert;
+befundfreie Audit-/Installationsnachweise werden wiederverwendet und von der
+frischen CI erneut ausgeführt. Der native Harness verwendet ausschließlich
+disposable SQLite/PG18 und intern isolierte echte Arr-Instanzen. Er verlangt
+direkt/via Prowlarr: neutraler Kandidat ohne Grab → exakt ein kanonischer v6-
+Auftrag → native S08E01-Dateibindung mit gepaarter History, erhaltenen alten
+Aufträgen/Dateien/Receipts und keinem Doppelgrab nach RSS/Neustart. Der vorher
+festgeschriebene Leser `e7abb560d28cbaa53192e989c519d3324643262c` muss den
+angenommenen wartenden v6-Auftrag nach Rücknahme der Katalogbindung abarbeiten
+und wird als exaktes qualifiziertes Rückwegimage exportiert. Diese native
+Abnahme sowie Imagescans, Merge und Live-Übernahme stehen noch aus.

@@ -6,7 +6,63 @@ import {
   unknownMediaExpectations,
   unknownJobMediaExpectations,
   hasMediaRuntimeConflict,
+  assertMediaRuntimeCompatible,
 } from "./media-expectations";
+import { programmeExpectations } from "./__fixtures__/mediathek-programme";
+import { generateFakeNzb, parseNzbContent } from "@/services/nzb-release";
+
+it("preserves a bound Mediathek programme through NZB and persisted v6 without rewriting coordinates", () => {
+  const expected = readPersistedMediaExpectations(
+    serializeMediaExpectations(programmeExpectations)
+  );
+  expect(expected).toEqual(programmeExpectations);
+  expect(
+    parseNzbContent(
+      generateFakeNzb({
+        title: "Synthetic.Series.S08E01.Midsummer.GERMAN.720p.WEB.h264-Pingufunk",
+        url: "https://example.invalid/solstice.mp4",
+        mediaExpectations: programmeExpectations,
+      })
+    )?.mediaExpectations
+  ).toEqual(programmeExpectations);
+  expect(programmeExpectations.sourceProgramme.source.season).toBe(2019);
+  expect(programmeExpectations.sourceProgramme.target.season).toBe(8);
+  const conflict = {
+    ...programmeExpectations,
+    durations: {
+      ...programmeExpectations.durations,
+      metadata: { ...programmeExpectations.durations.metadata, seconds: 60 },
+    },
+  };
+  expect(hasMediaRuntimeConflict(conflict)).toBe(true);
+  expect(() => assertMediaRuntimeCompatible(conflict)).toThrow("Source duration conflicts");
+});
+
+it.each([
+  { audio: null },
+  { audio: { language: "fr", provenance: "provider_audio" } },
+  { resolution: null },
+  { durations: { ...programmeExpectations.durations, source: null } },
+  { durations: { ...programmeExpectations.durations, metadata: null } },
+  { mediaKind: "movie" },
+  { sourceRef: {} },
+  {
+    sourceProgramme: {
+      ...programmeExpectations.sourceProgramme,
+      website: "https://example.invalid/video?token=secret",
+    },
+  },
+  {
+    sourceProgramme: {
+      ...programmeExpectations.sourceProgramme,
+      target: { season: 8, episode: 0 },
+    },
+  },
+])("rejects incomplete or contradictory v6 declarations: %j", (changes) => {
+  expect(() => parseMediaExpectations({ ...programmeExpectations, ...changes })).toThrow(
+    "Invalid media expectations"
+  );
+});
 
 it.each([
   [3000, 3450, 15, false],

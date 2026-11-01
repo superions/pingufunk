@@ -1,6 +1,7 @@
 import { RENDITION_SELECTORS } from "./rendition-selector";
 import { z } from "zod";
 import { verifiedDurationCheck } from "./verified-duration";
+import { mediathekProgrammeReferenceSchema } from "./mediathek-programme";
 import {
   youtubeSelectionSchema,
   youtubeSourceReferenceSchema,
@@ -133,7 +134,33 @@ const v5Schema = z
     )
       context.addIssue({ code: "custom", message: "Conflicting typed source expectations" });
   });
-export type NewMediaExpectations = z.infer<typeof v3Schema> | z.infer<typeof v5Schema>;
+/** A curated Mediathek programme keeps publisher and target coordinates distinct. */
+const v6Schema = z
+  .object({
+    ...v3Schema.shape,
+    version: z.literal(6),
+    mediaKind: z.literal("series"),
+    sourceProgramme: mediathekProgrammeReferenceSchema,
+    resolution: resolutionSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const language = value.audio?.language ?? value.sourceAudio?.language;
+    if (
+      !value.durations.source ||
+      !value.durations.metadata ||
+      !!value.audio === !!value.sourceAudio ||
+      language !== "de" ||
+      value.sourceAudio?.provider === "youtube" ||
+      (value.sourceAudio &&
+        value.sourceAudio.mediaIdentity !== value.sourceProgramme.renditionIdentity)
+    )
+      context.addIssue({ code: "custom", message: "Conflicting programme expectations" });
+  });
+export type NewMediaExpectations =
+  | z.infer<typeof v3Schema>
+  | z.infer<typeof v5Schema>
+  | z.infer<typeof v6Schema>;
 /** Internal-only job decision. It is never accepted from an NZB or SAB upload. */
 const v4Schema = z
   .object({
@@ -206,6 +233,7 @@ export const mediaExpectationsSchema = z.discriminatedUnion("version", [
   v3Schema,
   v4Schema,
   v5Schema,
+  v6Schema,
 ]);
 export type SourceAudioEvidence = z.infer<typeof sourceAudioSchema>;
 export type MediaExpectations = z.infer<typeof mediaExpectationsSchema>;
@@ -217,7 +245,8 @@ export function sourceAudioExpectation(
   return value?.version === 2 ||
     value?.version === 3 ||
     value?.version === 4 ||
-    value?.version === 5
+    value?.version === 5 ||
+    value?.version === 6
     ? value.sourceAudio
     : null;
 }
@@ -228,7 +257,7 @@ export function durationExpectations(value: MediaExpectations | null, legacyTole
   // exempted for this one job. Source duration is still enforced by the worker.
   return value?.version === 4
     ? [value.durations.source].filter((reference) => reference !== null)
-    : value?.version === 3 || value?.version === 5
+    : value?.version === 3 || value?.version === 5 || value?.version === 6
       ? [value.durations.source, value.durations.metadata].filter((reference) => reference !== null)
       : value?.duration
         ? [{ ...value.duration, tolerancePercent: legacyTolerance }]
@@ -260,7 +289,7 @@ export class MediaRuntimeConflictError extends Error {
 
 /** A visible review candidate must not turn into a download through NZB/SAB. */
 export function hasMediaRuntimeConflict(value: MediaExpectations | null | undefined): boolean {
-  if (value?.version !== 3 && value?.version !== 5) return false;
+  if (value?.version !== 3 && value?.version !== 5 && value?.version !== 6) return false;
   const { source, metadata } = value.durations;
   return !!(
     source &&

@@ -8,7 +8,7 @@ import { hasSharedTopicSeriesEvidence, isSharedSeriesTopic } from "./ruleset-ide
 import { arteVideoId } from "./arte-editions";
 import { verifiedDurationCheck as sonarrDurationCheck } from "@/lib/verified-duration";
 import { recordDecision } from "@/server/decision-diagnostics";
-import { matchBoundSourceEpisode } from "./source-programme";
+import { hasMediathekProgrammeBinding, matchBoundSourceEpisode } from "./source-programme";
 
 function normalized(value: string): string {
   return value
@@ -115,6 +115,17 @@ export function matchSonarrEpisodes(
     };
     if (![item.url_video, item.url_video_low, item.url_video_hd].some(Boolean)) {
       recordDecision("rendition", "rendition_unavailable", "unavailable");
+      continue;
+    }
+    if (hasMediathekProgrammeBinding(item, show)) {
+      const match = matchBoundSourceEpisode(
+        item,
+        { ...show, episodes },
+        minimumSeconds,
+        tolerancePercent
+      );
+      if (match) matches.push(match);
+      // A changed registered programme cannot escape through ordinary coordinates.
       continue;
     }
     const parsed = parseEpisodeFromTitle(item.title);

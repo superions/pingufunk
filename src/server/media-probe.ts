@@ -144,6 +144,7 @@ export function validateMediaProbe(
       (contract?.version !== 3 &&
         contract?.version !== 4 &&
         contract?.version !== 5 &&
+        contract?.version !== 6 &&
         !verifiedDurationCheck(durationSeconds, null, 0, tolerancePercent).accepted) ||
       references.some(
         (reference) =>
@@ -158,7 +159,7 @@ export function validateMediaProbe(
         audioLanguages.length ? "conflicting" : "missing"
       );
     if (
-      contract?.version === 4 &&
+      (contract?.version === 4 || contract?.version === 6) &&
       contract.audio &&
       audio.some(
         (stream) => languageTag(stream.tags?.language) !== languageTag(contract.audio!.language)
@@ -195,7 +196,7 @@ export function validateMediaProbe(
       video,
       audioLanguages,
       ...(providerExpectation ? { sourceAudioEvidence } : {}),
-      ...(contract?.version === 3 || contract?.version === 5
+      ...(contract?.version === 3 || contract?.version === 5 || contract?.version === 6
         ? {
             durationChecks: references.map((reference) => ({
               ...reference,
