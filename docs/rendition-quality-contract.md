@@ -96,12 +96,14 @@ bleiben ohne passenden bestehenden Providerbeleg unbekannt. Diese Grenzen sind
 Teil des abgenommenen begrenzten Vertrags, keine Zusage vollständiger Abdeckung
 beliebiger anderer Quellen oder zukünftiger Metadatenlayouts.
 
-Ergänzung 08.10.2026: Der vorhandene ARD-JSON-Belegowner akzeptiert zusätzlich
-den exakt bestätigten RBB-CDN. Producer und Worker benutzen denselben URL-Gate.
-Maße bleiben pro exakter Player-/Medien-URL geprüft, nicht aus dem Sendernamen
-oder dem CDN-Dateinamen abgeleitet. Die separate MP4-Range-Whitelist bleibt
-unverändert. Der native Qualitätsgate enthält eine synthetische ARD-/RBB-
-1080p-Fassung mit englischer Filmoriginalsprache und konkret deutschem Ton.
+Korrektur 01.11.2026: Producer und Worker prüfen den offiziellen ARD-JSON-Beleg
+unabhängig vom Auslieferungshost. Maße bleiben pro exakter Player-/Medien-URL
+geprüft, nicht aus Sendernamen oder CDN-Dateinamen abgeleitet. HTTPS-/MP4-Syntax,
+Programmidentität, Rechte und kohärente Sprach-/Fassungsdeklaration bleiben
+verbindlich. Die separate MP4-Range-Whitelist bleibt unverändert. Der bestehende
+native Qualitätsfall verwendet eine synthetische, im ARD-Datensatz deklarierte
+1080p-URL auf einem beliebigen CDN mit englischer Filmoriginalsprache und
+konkret deutschem Ton.
 
 ## NZB, Worker und historische Identität
 

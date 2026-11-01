@@ -70,7 +70,7 @@ if (youtube || programme) {
 const germanUrl = "https://fixture.akamaized.net/german.mp4";
 const frenchUrl = "https://fixture.akamaized.net/french.mp4";
 const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString("base64url");
-const ardUrl = "https://rbb-progressive.ard-mcdn.de/synthetic/film-1080.mp4?edition=standard";
+const ardUrl = "https://media.example.invalid/synthetic/film-1080.mp4?edition=standard";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
   if (programmeResponse) {

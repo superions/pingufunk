@@ -26,13 +26,14 @@ denselben `/api/newznab`-Vertrag; es gibt keinen zweiten Sprach-Endpunkt.
   `meta.ovLanguageCode` ist nur Originalsprachenkontext, kein Tonsprachbeleg.
   Fremde/unklare Auxiliary-Streams werden nicht als normale Fassung ausgegeben.
   Kein HTML, Senderseiten-Abgrasen, Login oder zusätzliches Medieninventar.
-  Der gemeinsame Producer-/Worker-URL-Gate erlaubt exakt
-  `ctv-videos.daserste.de` und `rbb-progressive.ard-mcdn.de` über HTTPS, ohne
-  Credentials, Fremdport oder Fragment. Queryselektoren bleiben exakt gebunden.
-  Keine `ard-mcdn.de`-Wildcard: Hostmitgliedschaft ist nur Eignung für den
-  vorhandenen JSON-Beleg, nicht selbst Beweis. Der RBB-CDN erweitert nicht die
-  separate Range-Probe-Whitelist; fehlende CRID-/URL-/Audio-/Maßdeklarationen
-  bleiben unbestätigt. Neue CDNs benötigen geprüfte Verträge und Regressionen.
+  Producer und Worker akzeptieren für diesen JSON-Beleg syntaktisch gültige
+  HTTPS-MP4-URLs ohne Credentials, Fremdport oder Fragment. Queryselektoren
+  bleiben exakt gebunden. Der Auslieferungshost ist kein Inhaltsbeleg und keine
+  Voraussetzung: Entscheidend ist die exakte URL-Deklaration im offiziellen
+  Datensatz der kanonischen ARD-Sendung. Es wird ausschließlich der feste
+  ARD-Page-Gateway-Endpunkt abgefragt, keine beliebige Medien-URL. Fehlende
+  CRID-/URL-/Audio-/Maßdeklarationen bleiben unbestätigt. Die separate
+  Range-Probe-Whitelist bleibt unverändert.
 - MP4: ISO-BMFF-`mdhd` ausschließlich auf Sound-Tracks vorhandener MP4-URLs der
   beiden explizit erlaubten ZDF-CDN-Hosts sowie `ctv-videos.daserste.de`.
   Höchstens vier Bereiche mit jeweils
@@ -173,10 +174,10 @@ Vor Aufnahme von v2-Jobs das neue Image isoliert prüfen. Laufende produktive
 Downloads nicht durch einen ungeprüften Imagewechsel unterbrechen.
 **Ein älteres Image ohne v2-Unterstützung ist nach neuen v2-Writes kein sicherer
 Rollback. Auch bisherige v2-Images ohne `ard_media` verstehen neue ARD-Jobs nicht.**
-Ebenso kann ein bisheriger ARD-Worker mit ausschließlich `ctv-videos.daserste.de`
-neue RBB-Erwartungen nicht revalidieren. Ein Rückfallimage muss den erweiterten
-exakten ARD-URL-Gate im Worker behalten, auch wenn sein Producer noch keine neuen
-RBB-Belege veröffentlicht.
+Ebenso können bisherige ARD-Worker mit einer CDN-Hostliste neue Erwartungen
+anderer Auslieferungshosts nicht revalidieren. Ein Rückfallimage muss die
+CDN-unabhängige Prüfung des offiziellen, exakt gebundenen ARD-Belegs und die
+bereits veröffentlichte Quellenpriorität aus P19.5 im Worker behalten.
 Aufnahme pausieren, Queue/History abgleichen und einen provider-kompatiblen
 Rollback verwenden. Alte Sicherungen nicht über neue Jobs/History schreiben;
 Erwartungen nicht entfernen oder auf v1 umetikettieren. Keine automatische
