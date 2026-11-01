@@ -3339,7 +3339,7 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
 
 - [ ] **P19.3 — Eine bestätigte Langfassung nativ zwei Episoden zuordnen.**
       Abhängigkeit P19.2. Owner: dessen Quellenbindung,
-      `source-programme.ts`, `types/index.ts::MatchedEpisodeInfo`, `newznab.ts`, `nzb-release.ts`,
+      `source-programme.ts`, `ruleset-matcher.ts`, `types/index.ts::MatchedEpisodeInfo`, `newznab.ts`, `nzb-release.ts`,
       `release-media-expectations.ts`, `lib/media-expectations.ts`,
       `tv-source-review.ts`, Queue-/Completion-/Arr-Diagnoseconsumer und
       vorhandener nativer Sonarr-Harness. Referenz „Der Tod ist groß“:

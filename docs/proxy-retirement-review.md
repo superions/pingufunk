@@ -4528,8 +4528,8 @@ Zweizielimport. Der Harness behauptet keinen heutigen TBA-Blocker allein aus
 einem alten Befund und automatisiert keinen Live-Import. Diese native Abnahme
 und das neue Container-/Live-Ergebnis bleiben offen.
 
-Lokaler Producerstand: 1.843 Tests erfolgreich, 28 Opt-in-Fälle getrennt;
-vorangegangene Coverage mit 1.842 Tests sowie Lint, Typecheck, Format, Build,
+Lokaler Producerstand: 1.846 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle getrennt;
+Lint, Typecheck, Format, Build,
 Katalog-/Schemasichtung und Scriptprüfung erfolgreich. Der Volltest deckt eine
 bestehende Fixture-Race auf: Datei-Existenz wurde vor vollständiger
 PID-JSON-Publikation beobachtet. Atomare Veröffentlichung des synthetischen
@@ -4539,3 +4539,14 @@ Ohne den Paarmatcher oder den vollständigen Suchfilter scheitern jeweils drei
 tatsächliche Match-/Newznab-Consumer. Nur die erste Folge auf Überwachung zu
 prüfen lässt zwei Discovery-/RSS-Consumer scheitern. Die kontrollierten
 Rückbauten sind restauriert; kein abgeschwächter Unknown-/Konfliktschutz.
+
+Der Abschlussreview belegt zusätzlich einen tatsächlich offenen alten
+Einzelfolgenpfad: E04–E05, E04E05 und E04–E06 konnten über Regex-Capture E04 als
+kanonische E04 veröffentlicht werden. Drei Newznab-Routen sind vor der Korrektur
+rot, jeweils nach einem warmen positiven Einzelquellenkontrollfall. Der gemeinsame
+Regelowner sperrt ungebundene Mehrfolgenbereiche vor seinen Einzelstrategien;
+explizite Programmbindungen bleiben davor zuständig. Ein alter
+Charakterisierungstest prüfte nur die vorhandene Mehrfolgen-URL. Er schützt nun
+den tatsächlichen verbleibenden Einzelumfang samt Titel, NZB-Titel und
+Pagination; ungebundene Bereiche werden nicht als erste Folge ausgegeben.
+Ungebundene Quellanzeige und vollständiger Quellbereich bleiben erhalten.

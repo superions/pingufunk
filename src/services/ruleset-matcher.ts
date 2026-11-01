@@ -16,6 +16,7 @@ import { shouldSkipItem } from "./mediathek-release";
 import { recordDecision } from "@/server/decision-diagnostics";
 import { hasMediathekProgrammeBinding, matchBoundSourceEpisode } from "./source-programme";
 import { matchSonarrEpisodes } from "./sonarr-matcher";
+import { parseEpisodeFromTitle } from "./newznab";
 import type {
   ApiResultItem,
   TvdbData,
@@ -543,6 +544,13 @@ export async function applyRulesetFilters(
       }
 
       let matchInfo: MatchedEpisodeInfo | null = null;
+
+      // A legacy rule returns one episode. Explicit whole-programme bindings
+      // above own complete scopes; regex captures must never truncate a range.
+      if (parseEpisodeFromTitle(item.title).episodes.length > 1) {
+        recordDecision("identity", "coordinate_conflict", "conflicting");
+        continue;
+      }
 
       // Apply matching with threshold from settings
       const threshold = matchingSettings.threshold;

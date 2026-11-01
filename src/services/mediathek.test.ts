@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { parseStringPromise } from "xml2js";
 import { sourceMediaFacts } from "./source-media-facts";
 import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
 import { NextRequest } from "next/server";
@@ -931,7 +932,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(secondPage).not.toContain("<item>");
   });
 
-  it("returns the same exact ID and text episode while retaining an explicit multi-episode release", async () => {
+  it("returns the same exact ID and text single while keeping unbound multi-episode scope closed", async () => {
     const tvdbData: TvdbData = {
       id: 12345,
       name: "Example Show",
@@ -1028,9 +1029,16 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     const textXml = await fetchSearchResultsByString(context, 100, 0);
 
     for (const xml of [idXml, textXml]) {
-      expect(xml).toContain('total="2"');
-      expect(xml).toContain("episode-13.mp4");
-      expect(xml).toContain("episode-12-13.mp4");
+      const channel = (await parseStringPromise(xml)).rss.channel[0];
+      expect(channel["newznab:response"][0].$).toEqual({ offset: "0", total: "1" });
+      expect(channel.item).toHaveLength(1);
+      expect(channel.item[0].title[0]).toMatch(/^Example\.Show\.S02E13\./);
+      expect(channel.item[0].link[0]).toBe("https://example.org/episode-13.mp4");
+      const nzbUrl = new URL(channel.item[0].enclosure[0].$.url, "http://localhost");
+      expect(Buffer.from(nzbUrl.searchParams.get("encodedTitle")!, "base64").toString()).toBe(
+        channel.item[0].title[0]
+      );
+      expect(xml).not.toContain("episode-12-13.mp4");
       expect(xml).not.toContain("episode-12.mp4");
       expect(xml).not.toContain("episode-130.mp4");
       expect(xml).not.toContain("season-3-episode-13.mp4");

@@ -137,6 +137,12 @@ alte TBA-Metadaten getrennt von einem tatsächlichen Unknown-Date-TBA-Blocker
 und dessen ausdrücklich bestätigter nativer Zweizielzuordnung, ohne Metadaten
 oder globale Profile umzuschreiben. Native Abnahme und Live-Übernahme sind offen.
 
+Alte Einzelfolgenregeln dürfen einen ungebundenen Quellbereich nicht auf ihren
+ersten Regex-Capture verkürzen. Solche Bereiche erhalten darüber keine
+kanonische Einzelfolgenfreigabe; die ungebundene Quellanzeige behält weiterhin
+den vollständigen Bereich. Bestätigte ganze Programme verwenden den oben
+beschriebenen Bindungsowner statt einer Teilfreigabe durch alte Regeln.
+
 ## Laufzeitkonflikte sichtbar machen, nicht automatisch übergehen
 
 Nutzerentscheidung 10.10.2026: Eine konkrete Quelle darf bei gesicherter Serie,
