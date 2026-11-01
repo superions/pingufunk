@@ -777,6 +777,7 @@ async function seriesFixture(root, manifest) {
           JSON.stringify([
             { seasonNumber: 0, monitored: false },
             { seasonNumber: 8, monitored: true },
+            { seasonNumber: 2019, monitored: false },
           ]),
           series.Id
         );
@@ -786,6 +787,10 @@ async function seriesFixture(root, manifest) {
         db.prepare(
           `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
           VALUES (?,0,1,'Short Solstice',0,0,'2019-03-01 20:15:00','2019-03-01',0,2147483004,1,'[]')`
+        ).run(series.Id);
+        db.prepare(
+          `INSERT INTO Episodes (SeriesId,SeasonNumber,EpisodeNumber,Title,EpisodeFileId,Monitored,AirDateUtc,AirDate,UnverifiedSceneNumbering,TvdbId,Runtime,Images)
+          VALUES (?,2019,1,'Source Solstice',0,0,'2019-03-02 20:15:00','2019-03-02',0,2147483005,2,'[]')`
         ).run(series.Id);
       }
       if (manifest.runtimeConflict)

@@ -78,6 +78,12 @@ darf nicht nach einem fehlgeschlagenen Bindungsversuch über normale Koordinaten
 zurückkehren. Ohne frischen sicheren Zielbestand erscheint kein gebundener
 Release. Quelle und kanonischer Metadatentitel bleiben unverändert gespeichert.
 
+Nach einer expliziten Mediathek- oder YouTube-Bindung filtern ID- und Textsuche
+die kanonische Episode. Publisherkoordinaten dürfen einen dabei abgelehnten
+Release nicht erneut zulassen, selbst wenn dieselben Nummern als eigene
+Instanzfolge vorhanden sind. Die bestehende Suche nach Ausstrahlungsjahr bleibt
+erhalten; sie prüft das kanonische Ausstrahlungsdatum.
+
 Nur die belegte deutsche Standardrendition mit gemessenen Pixeln erhält das
 strikte v6-Payload im vorhandenen Joberwartungsfeld. Kalte Medienbelege bleiben
 ausstehend und nutzen den bestehenden Hintergrund-/RSS-Nachlieferweg. GUI und

@@ -320,6 +320,43 @@ it.each([false, true])(
 );
 
 it.each([false, true])(
+  "bound programmes never fall back to publisher episode coordinates, local fallback=%s",
+  async (localFallback) => {
+    fallback = localFallback;
+    selectedSources = [solstice];
+    selectedSonarrEpisodes = [
+      {
+        ...sonarrEpisodes[0],
+        seasonNumber: 8,
+        episodeNumber: 1,
+        title: "Midsummer",
+        runtime: 90,
+        airDateUtc: "2019-03-01T20:15:00Z",
+        hasFile: false,
+      },
+      {
+        ...sonarrEpisodes[0],
+        id: 103,
+        seasonNumber: 2019,
+        episodeNumber: 1,
+        title: "Sommersonnenwende",
+        runtime: 90,
+        airDateUtc: "2019-03-02T20:15:00Z",
+        hasFile: false,
+      },
+    ];
+    warmSolstice();
+    const response = await GET(
+      new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=258535&season=2019&ep=1")
+    );
+    expect(response.status).toBe(200);
+    const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+    expect(channel.item ?? []).toEqual([]);
+    expect(state.forbiddenWrite).not.toHaveBeenCalled();
+  }
+);
+
+it.each([false, true])(
   "a legacy rule cannot reinterpret a changed registered programme, scoped=%s",
   async (scoped) => {
     selectedSources = [{ ...solstice, title: "Entgleist (S07/E04)", duration: 2700 }];

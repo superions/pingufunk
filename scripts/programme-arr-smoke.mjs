@@ -226,7 +226,8 @@ try {
   );
   const target = initialEpisodes.find((row) => row.seasonNumber === 8 && row.episodeNumber === 1);
   assert(target && target.runtime === 2 && !target.hasFile);
-  assert.equal(initialEpisodes.length, 2);
+  assert.equal(initialEpisodes.length, 3);
+  assert(initialEpisodes.some((row) => row.seasonNumber === 2019 && !row.monitored));
   const definitions = await api(root, manifest, "sonarr", "/api/v3/qualitydefinition");
   await api(
     root,
@@ -392,6 +393,15 @@ try {
   const canonical = await releases();
   assert.equal(canonical.length, 1);
   assert(!neutralGuids.includes(canonical[0].guid[0]._));
+  // The canonical positive proves warm media facts, so empty publisher results
+  // cannot pass merely because a cold rendition is still awaiting its proof.
+  const publisherSearch = request("/api/newznab?t=tvsearch&tvdbid=2147483002&season=2019&ep=1");
+  assert.equal(publisherSearch.status, 200);
+  assert.deepEqual(
+    (await parseStringPromise(publisherSearch.text)).rss.channel[0].item ?? [],
+    [],
+    "publisher coordinates must not re-admit the canonical S08E01 binding"
+  );
   assertPreserved(before, frozen, legacyId);
   // The fallback receiver processes the already accepted v6 without consulting
   // a later catalogue binding. It must still revalidate the exact source itself.

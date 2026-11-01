@@ -4451,7 +4451,19 @@ scheitern die beiden tatsächlichen Einzel-/RSS-Consumernegative. Ohne den
 neuen Bindungszweig scheitern drei positive Quellen-/Katalog-/RSS-/GUI-Fälle.
 Keine weitere Fuzzy-Regel, pauschale Jahresumrechnung oder Profiländerung.
 
-Lokaler Producerstand: 1.789 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle
+Der Anschlussreview belegt außerdem eine Filterlücke: Ein korrekt gebundener
+Release konnte nach Ablehnung seiner kanonischen Episode über die ursprüngliche
+Publishernummer wieder in eine andere ID-/Textsuche gelangen. Der gemeinsame
+Suchfilter sperrt diesen Rückfall für Mediathek- und YouTube-Bindungen; die
+Suche nach kanonischem Ausstrahlungsjahr bleibt erhalten. Beim Entfernen allein
+dieser Sperre scheitern sechs Fälle: vier gebundene Match-/Filterconsumer sowie
+zwei tatsächliche Newznab-Routen mit Remote- und gebündeltem Katalog.
+Die native Fixture hält dafür zusätzlich eine ungegriffene unabhängige
+Publisherfolge. Erst nach einem warm belegten kanonischen Positivrelease wird
+die Publisher-Einzelsuche negativ geprüft; fehlender kalter Medienbeleg kann
+diese Gegenprobe nicht erfüllen.
+
+Lokaler Producerstand: 1.795 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle
 getrennt; Lint, Typecheck, Format, Build, Daten-/Schemasichtung und die
 geänderten Scriptgates erfolgreich. Dependencyinputs sind unverändert;
 befundfreie Audit-/Installationsnachweise werden wiederverwendet und von der

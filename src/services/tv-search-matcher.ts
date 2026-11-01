@@ -164,6 +164,9 @@ export function applyDesiredEpisodeFilter(
       );
     }
 
+    // Explicit bindings declare canonical intent. Publisher coordinates only
+    // verify their source and cannot re-admit a different target after filtering.
+    if (matched.mediathekProgramme || matched.item.sourceRef) return false;
     if (desiredEpisodes === null) return matchesSourceCoordinates(matched.item, context);
     const parsed = parseEpisodeFromTitle(matched.item.title);
     return desiredEpisodes.some(
