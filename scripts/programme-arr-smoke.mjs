@@ -606,6 +606,53 @@ try {
     "pingufunk",
     `/api/downloads/${pending.id}/diagnostics`
   );
+  if (afterImport.import.state !== "reported_import") {
+    // Closed diagnostics only: retain the native failure cause without leaking
+    // credentials, download URLs, file paths or free provider payloads.
+    const filtered = await api(
+      root,
+      manifest,
+      "sonarr",
+      `/api/v3/history?downloadId=${encodeURIComponent(pending.id)}&page=1&pageSize=100&sortKey=date&sortDirection=descending`
+    );
+    console.error(
+      JSON.stringify({
+        scope,
+        backend,
+        transport,
+        diagnosis: afterImport.import,
+        historyPage: {
+          page: filtered.page,
+          pageSize: filtered.pageSize,
+          totalRecords: filtered.totalRecords,
+          records: filtered.records.map((row) => ({
+            eventType: row.eventType,
+            downloadIdMatch: row.downloadId?.toLowerCase() === pending.id.toLowerCase(),
+            exactDownloadId: row.downloadId === pending.id,
+            episodeIdType: typeof row.episodeId,
+            seriesIdType: typeof row.seriesId,
+            dataTypes: Object.fromEntries(
+              Object.entries(row.data ?? {}).map(([key, value]) => [
+                key,
+                value === null ? "null" : typeof value,
+              ])
+            ),
+          })),
+        },
+        apiFile: {
+          idType: typeof file.id,
+          seriesIdType: typeof file.seriesId,
+          sizeType: typeof file.size,
+        },
+        apiEpisode: {
+          idType: typeof imported.id,
+          seriesIdType: typeof imported.seriesId,
+          hasFileType: typeof imported.hasFile,
+          episodeFileIdType: typeof imported.episodeFileId,
+        },
+      })
+    );
+  }
   assert.deepEqual(afterImport.import, { state: "reported_import", reason: "api_file_associated" });
   if (paired) {
     const unchanged = await api(root, manifest, "sonarr", `/api/v3/episode?seriesId=${series.id}`);
