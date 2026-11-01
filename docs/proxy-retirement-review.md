@@ -4433,3 +4433,34 @@ Beim kontrollierten Entfernen allein der Worker-Revalidierung scheitern genau
 fünf Übertragungsgegenfälle. Katalogeintrag, neue Releaseausgabe, nativer
 Einzelzielimport und kompatibler Container-Rückweg sind noch nicht abgenommen;
 P19.2 bleibt offen. Dies ist kein neuer Produktionsstand.
+
+Der folgende Producerstand ergänzt nun den konkreten öffentlichen
+Sommersonnenwende-Eintrag und konsumiert dieselbe Bindung in Einzel-/Staffel-
+Suche, RSS, GUI-NZB und Quellenprüfung. Der kanonische S08E01-Release enthält
+v6; rohe Providerzeilen bleiben unverändert. Kalte/unvollständige Medienbelege
+erzeugen keinen gebundenen Download. Die GUI erhält ihre opaken Rendition-NZBs
+vom bestehenden serverseitigen Owner und behält eine Quellzeile; andere
+GUI-/v1–v5-Verträge bleiben erhalten.
+
+Eine neue Gegenprobe belegt einen sonst offenen Legacy-Regelpfad: Wird eine
+registrierte Quelle später als eine andere bekannte Episode deklariert,
+kann die alte Regel nach dem geschlossenen Bindungsversuch erneut einen v3-
+Release erzeugen. Der bestehende Regelowner leitet solche Programme nun
+exklusiv durch den gemeinsamen Matcher. Beim Rückbau allein dieser Sperre
+scheitern die beiden tatsächlichen Einzel-/RSS-Consumernegative. Ohne den
+neuen Bindungszweig scheitern drei positive Quellen-/Katalog-/RSS-/GUI-Fälle.
+Keine weitere Fuzzy-Regel, pauschale Jahresumrechnung oder Profiländerung.
+
+Lokaler Producerstand: 1.789 Tests mit Coverage erfolgreich, 28 Opt-in-Fälle
+getrennt; Lint, Typecheck, Format, Build, Daten-/Schemasichtung und die
+geänderten Scriptgates erfolgreich. Dependencyinputs sind unverändert;
+befundfreie Audit-/Installationsnachweise werden wiederverwendet und von der
+frischen CI erneut ausgeführt. Der native Harness verwendet ausschließlich
+disposable SQLite/PG18 und intern isolierte echte Arr-Instanzen. Er verlangt
+direkt/via Prowlarr: neutraler Kandidat ohne Grab → exakt ein kanonischer v6-
+Auftrag → native S08E01-Dateibindung mit gepaarter History, erhaltenen alten
+Aufträgen/Dateien/Receipts und keinem Doppelgrab nach RSS/Neustart. Der vorher
+festgeschriebene Leser `e7abb560d28cbaa53192e989c519d3324643262c` muss den
+angenommenen wartenden v6-Auftrag nach Rücknahme der Katalogbindung abarbeiten
+und wird als exaktes qualifiziertes Rückwegimage exportiert. Diese native
+Abnahme sowie Imagescans, Merge und Live-Übernahme stehen noch aus.

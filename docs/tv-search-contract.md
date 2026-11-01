@@ -1,7 +1,7 @@
 # Breite TV-Suche ohne erfundene Identität
 
-Stand: 30.10.2026. Technischer Vertrag; ausführbare Abnahme ausschließlich
-in [P06.4/P09.5](../todo/proxy-retirement.md). Entwicklungs-/native Abnahme und
+Stand: 01.11.2026. Technischer Vertrag; ausführbare Abnahme ausschließlich
+in [P06.4/P09.5/P19](../todo/proxy-retirement.md). Entwicklungs-/native Abnahme und
 der noch offene breite produktive Bestandsaudit bleiben getrennt. Ein neuer
 Produktionsrollout braucht weiterhin eine gesonderte, konkrete Freigabe.
 Instanzbezogene Rollout-Abnahme und Sicherungen bleiben im privaten Betriebsrunbook.
@@ -60,6 +60,43 @@ lichen Quelltitel und den belegten S/E-Koordinaten, nicht mit TBA. Keine Sonarr-
 Bibliotheksänderung, neuen Datenbankfelder oder Titel-Overrides. Die bisherigen
 engen ARTE-Bruchteilregeln bleiben bestehen; fehlende Metadaten werden nicht
 durch eine geratene Staffel ersetzt.
+
+## Explizite einzelne Mediathek-Programme (P19.2, native Abnahme offen)
+
+`mediathekProgrammes` ergänzt den bestehenden Showkatalog optional um eine
+öffentliche Programmseite, erwarteten Sender/Titel und Publisher-S/E sowie ein
+getrenntes kanonisches Einzelziel. „Sommersonnenwende“ behält Quell-S2019E01 und
+bindet ausschließlich das bestätigte lange Ziel S08E01. Ein unbekanntes Ziel,
+die kurze Specialfassung, geänderte Quelle, AD/OV/Sonderfassung oder ein Sprach-/
+Laufzeitkonflikt aktiviert keine Bindung. Es gibt keine allgemeine Umrechnung
+von Jahresstaffeln und keine Zuordnung allein anhand von Titel oder Dauer.
+
+Der gemeinsame Bindungsconsumer prüft die tatsächliche Quelle und validierte,
+nicht blockierte Instanzkoordinaten. Für registrierte Programme ist dieser Weg
+auch gegenüber alten Regeln exklusiv; eine widersprüchlich gewordene Quelle
+darf nicht nach einem fehlgeschlagenen Bindungsversuch über normale Koordinaten
+zurückkehren. Ohne frischen sicheren Zielbestand erscheint kein gebundener
+Release. Quelle und kanonischer Metadatentitel bleiben unverändert gespeichert.
+
+Nur die belegte deutsche Standardrendition mit gemessenen Pixeln erhält das
+strikte v6-Payload im vorhandenen Joberwartungsfeld. Kalte Medienbelege bleiben
+ausstehend und nutzen den bestehenden Hintergrund-/RSS-Nachlieferweg. GUI und
+Arr verwenden dieselbe kanonische Titel- und Erwartungsausgabe; mehrere
+Renditionbelege vervielfachen keine GUI-Quellzeile. NZB-Abruf und neue Annahme
+prüfen aktuelle Bindung, frische Instanzmetadaten und geltende Toleranz erneut.
+Der angenommene Job behält danach seine eingefrorene Quellen-/Zielbindung.
+Der Worker prüft frisch genau Programm und Rendition; eine spätere
+Katalogänderung schreibt den angenommenen Auftrag nicht um.
+
+Der erste kanonische Release hat eine ausdrücklich zielgebundene GUID; eine
+frühere neutrale GUID wird nicht rückwirkend umgeschrieben. Der vorhandene
+GUID-Algorithmus und alle anderen Identitäten bleiben unverändert. Die native
+Übergangsprüfung muss einen ungegriffenen neutralen Kandidaten von genau einem
+späteren kanonischen Grab unterscheiden und über RSS/Neustart erhalten.
+Der v6-fähige Lesercheckpoint wird vor dem Producer festgeschrieben und im
+isolierten nativen Post-Write-Rückweg geprüft. Ein v1–v5-only Image ist nach
+Annahme eines v6-Jobs kein kompatibler App-Rückweg. Native Freigabe und
+Produktionsstatus werden erst nach tatsächlicher Abnahme im TODO geschlossen.
 
 ## Laufzeitkonflikte sichtbar machen, nicht automatisch übergehen
 

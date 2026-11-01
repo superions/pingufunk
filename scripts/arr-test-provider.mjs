@@ -12,6 +12,10 @@ const sourceAudio = process.env.PINGUFUNK_ARR_QA_SOURCE_AUDIO === "1";
 const renditionQuality = process.env.PINGUFUNK_ARR_QA_RENDITION_QUALITY;
 const tvDelivery = process.env.PINGUFUNK_ARR_QA_TV_DELIVERY === "1";
 const youtube = process.env.PINGUFUNK_ARR_QA_YOUTUBE === "1";
+const programme = process.env.PINGUFUNK_ARR_QA_PROGRAMME === "1";
+const programmeResponse = programme
+  ? (await import("/qa/programme-provider.mjs")).programmeFixture("/qa")
+  : undefined;
 if (youtube) {
   const emit = Server.prototype.emit;
   Server.prototype.emit = function (event, request, response, ...rest) {
@@ -65,6 +69,10 @@ const ardId = Buffer.from("crid://example.invalid/synthetic/cdn-film").toString(
 const ardUrl = "https://rbb-progressive.ard-mcdn.de/synthetic/film-1080.mp4?edition=standard";
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (programmeResponse) {
+    const response = programmeResponse(url, init);
+    if (response) return response;
+  }
   if (
     youtube &&
     url.href === "https://raw.githubusercontent.com/superions/pingufunk/main/data/shows.json"

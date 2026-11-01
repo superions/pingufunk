@@ -10,6 +10,7 @@ import addFormats from "ajv-formats";
 import * as fs from "fs";
 import * as path from "path";
 import { youtubeRegistrySchema } from "../src/lib/youtube-catalogue";
+import { mediathekProgrammeBindingSchema } from "../src/lib/mediathek-programme";
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const DATA_DIR = path.join(ROOT_DIR, "data");
@@ -36,6 +37,7 @@ interface Ruleset {
 interface Show {
   tvdbId: number;
   name: string;
+  mediathekProgrammes?: unknown;
 }
 
 interface Filter {
@@ -204,6 +206,18 @@ async function main(): Promise<void> {
 
   if (fs.existsSync(showsPath)) {
     const shows = loadJson<Show[]>(showsPath);
+    for (const show of shows) {
+      if (
+        !mediathekProgrammeBindingSchema
+          .array()
+          .max(100)
+          .optional()
+          .safeParse(show.mediathekProgrammes).success
+      ) {
+        hasErrors = true;
+        allErrors.push(`shows.json: invalid programme binding for TVDB ${show.tvdbId}`);
+      }
+    }
 
     // Schema validation
     const showsSchemaResult = validateJsonSchema(shows, showsSchemaPath, "shows.json");

@@ -105,6 +105,18 @@
     "name": "Letzte Spur Berlin",
     "germanName": "Letzte Spur Berlin",
     "aliases": [],
+    "mediathekProgrammes": [
+      {
+        "website": "https://www.zdf.de/video/serien/letzte-spur-berlin-106/sommersonnenwende-134",
+        "source": {
+          "channel": "ZDF",
+          "title": "Sommersonnenwende",
+          "season": 2019,
+          "episode": 1
+        },
+        "target": { "season": 8, "episode": 1 }
+      }
+    ],
     "episodes": [
       {
         "name": "Entgleist",

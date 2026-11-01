@@ -21,7 +21,11 @@ import {
   stableUrlIdentity,
 } from "./language-editions";
 import { createFakeNzbDownloadUrl } from "./nzb-release";
-import { releaseMediaExpectations, tvReviewMediaExpectations } from "./release-media-expectations";
+import {
+  releaseMediaExpectations,
+  tvReviewMediaExpectations,
+  programmeRenditionVerified,
+} from "./release-media-expectations";
 
 export { generateFakeNzb } from "./nzb-release";
 
@@ -355,9 +359,16 @@ function createRssItem(
         info.item,
         info.episode.runtime!,
         url,
-        info.runtimeTolerancePercent ?? 10
+        info.runtimeTolerancePercent ?? 10,
+        info.mediathekProgramme
       )
-    : releaseMediaExpectations(info.item, info.episode.runtime, url, "series");
+    : releaseMediaExpectations(
+        info.item,
+        info.episode.runtime,
+        url,
+        "series",
+        info.mediathekProgramme
+      );
   const fakeDownloadUrl = createFakeNzbDownloadUrl({
     title: formattedTitle,
     url,
@@ -453,6 +464,7 @@ export function generateRssItems(
   const baseCategories = ["5000", "2000"];
 
   for (const rendition of selectRenditions(info.item, qualityPreference, hlsEnabled)) {
+    if (info.mediathekProgramme && !programmeRenditionVerified(info.item, rendition.url)) continue;
     const category = qualityCategory(rendition.quality, false, baseCategories);
     const movieCategory = qualityCategory(rendition.quality, true, []);
     items.push(

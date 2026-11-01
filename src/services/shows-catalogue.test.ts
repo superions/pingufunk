@@ -52,6 +52,7 @@ import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { mergeSonarrShow } from "./sonarr-provider";
 import { sourceMediaFacts } from "./source-media-facts";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { fetchSearchResultsForRssSync } from "./mediathek";
 import { GET as downloadNzb } from "@/app/api/newznab/fake_nzb_download/route";
 import { parseNzbContent } from "./nzb-release";
 
@@ -86,6 +87,20 @@ const sources: ApiResultItem[] = episodes.map((episode, index) => ({
   url_video_hd: "",
   url_website: `https://example.invalid/programme-${index}`,
 }));
+const solstice: ApiResultItem = {
+  ...sources[0],
+  title: "Sommersonnenwende (S2019/E01)",
+  duration: 5291,
+  url_website: "https://www.zdf.de/video/serien/letzte-spur-berlin-106/sommersonnenwende-134",
+  url_video: "https://rodlzdf-a.akamaihd.net/synthetic/solstice-720.mp4",
+};
+
+function warmSolstice() {
+  sourceMediaFacts.remember(solstice.url_video, {
+    facts: { audioLanguage: "de", videoDimensions: { width: 1280, height: 720 } },
+    fingerprint: "a".repeat(64),
+  });
+}
 let fallback = false;
 let extraSources: ApiResultItem[] = [];
 let fetchMock: ReturnType<typeof vi.fn<(input: string, init?: RequestInit) => Promise<Response>>>;
@@ -236,6 +251,115 @@ afterEach(async () => {
   clearMetadataCaches();
   mediathekCache.clear();
 });
+
+it.each([false, true])(
+  "loads the actual single-target programme binding through Newznab/NZB and GUI, local fallback=%s",
+  async (localFallback) => {
+    fallback = localFallback;
+    selectedSources = [solstice];
+    selectedSonarrEpisodes = [
+      {
+        ...sonarrEpisodes[0],
+        seasonNumber: 8,
+        episodeNumber: 1,
+        title: "Midsummer",
+        runtime: 90,
+        airDateUtc: "2019-03-01T20:15:00Z",
+        hasFile: false,
+      },
+    ];
+    const show = (await getShowInfoByTvdbId(258535))!;
+    expect(show.mediathekProgrammes).toEqual(series.mediathekProgrammes);
+    expect(matchSonarrEpisodes(show, selectedSources, 300, 10)).toMatchObject([
+      { episode: { seasonNumber: 8, episodeNumber: 1, runtime: 90 } },
+    ]);
+    warmSolstice();
+    let identity: string | undefined;
+    for (const scope of ["&season=8&ep=1", "&season=8"]) {
+      const response = await GET(
+        new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=258535" + scope)
+      );
+      expect(response.status).toBe(200);
+      const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+      expect(channel.item).toHaveLength(1);
+      const release = channel.item[0];
+      expect(release.title[0]).toContain("S08E01.Midsummer.GERMAN.720p");
+      if (identity) expect(release.guid[0]._).toBe(identity);
+      identity = release.guid[0]._;
+      const nzb = await downloadNzb(new NextRequest(release.enclosure[0].$.url));
+      expect(nzb.status).toBe(200);
+      expect(parseNzbContent(await nzb.text())).toMatchObject({
+        title: release.title[0],
+        url: solstice.url_video,
+        mediaExpectations: {
+          version: 6,
+          durations: { source: { seconds: 5291 }, metadata: { seconds: 5400 } },
+          sourceProgramme: {
+            tvdbId: 258535,
+            source: { season: 2019, episode: 1 },
+            target: { season: 8, episode: 1 },
+          },
+        },
+      });
+    }
+    const review = await search(
+      new NextRequest("http://localhost/api/search?q=Letzte%20Spur%20Berlin&type=series")
+    );
+    expect(review.status).toBe(200);
+    const rows = (await review.json()).results;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].tvReview.selector).toMatchObject({ season: 8, episode: 1 });
+    expect(parseNzbContent(rows[0].nzbDownloads.sd)).toMatchObject({
+      title: expect.stringContaining("S08E01.Midsummer"),
+      mediaExpectations: { version: 6 },
+    });
+    expect(selectedSonarrEpisodes[0].title).toBe("Midsummer");
+    expect(selectedSources[0].title).toBe("Sommersonnenwende (S2019/E01)");
+    expect(state.forbiddenWrite).not.toHaveBeenCalled();
+  }
+);
+
+it.each([false, true])(
+  "a legacy rule cannot reinterpret a changed registered programme, scoped=%s",
+  async (scoped) => {
+    selectedSources = [{ ...solstice, title: "Entgleist (S07/E04)", duration: 2700 }];
+    state.rules = [
+      {
+        id: 19,
+        mediaId: 1,
+        topic: series.name,
+        priority: 1,
+        filters: "[]",
+        titleRegexRules: "[]",
+        seasonRegex: "S(\\d+)",
+        episodeRegex: "E(\\d+)",
+        matchingStrategy: "SeasonAndEpisodeNumber" as Ruleset["matchingStrategy"],
+        media: {
+          media_id: 1,
+          media_name: series.name,
+          media_type: "tv",
+          media_tvdbId: 258535,
+          media_tmdbId: null,
+          media_imdbId: null,
+        },
+      },
+    ];
+    warmSolstice();
+    // Read the RSS owner directly: the empty-query HTTP indexer-test canary is
+    // a separate synthetic contract, not a source release for this programme.
+    let xml: string;
+    if (scoped) {
+      const response = await GET(
+        new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=258535&season=7&ep=4")
+      );
+      expect(response.status).toBe(200);
+      xml = await response.text();
+    } else xml = await fetchSearchResultsForRssSync(100, 0);
+    const channel = (await parseStringPromise(xml)).rss.channel[0];
+    expect(channel.item ?? []).toEqual([]);
+    expect(state.forbiddenWrite).not.toHaveBeenCalled();
+  }
+);
 
 it("contains exactly the two evidenced coordinates with minute-based reference durations", () => {
   expect(catalogue.filter((show) => show.tvdbId === 258535)).toHaveLength(1);

@@ -1,8 +1,15 @@
-import type { ApiResultItem, UiNzbDownloads, TvdbEpisode } from "@/types";
+import {
+  EpisodeType,
+  type ApiResultItem,
+  type UiNzbDownloads,
+  type TvdbEpisode,
+  type MatchedEpisodeInfo,
+} from "@/types";
 import { selectRenditions, itemForRendition, renditionSelector } from "./rendition-quality";
 import { mediaSourceIdentity } from "./source-audio";
 import { generateFakeNzb } from "./nzb-release";
-import { releaseMediaExpectations } from "./release-media-expectations";
+import { programmeRenditionVerified, releaseMediaExpectations } from "./release-media-expectations";
+import { formatTitle, generateTitle } from "./newznab";
 import { createHash } from "node:crypto";
 import { parseNzbContent } from "./nzb-release";
 import { serializeMediaExpectations } from "@/lib/media-expectations";
@@ -41,18 +48,22 @@ export function uiNzbFingerprints(downloads: UiNzbDownloads): UiNzbDownloads {
 export function createUiNzbDownloads(
   item: ApiResultItem,
   hlsEnabled: boolean,
-  episode?: Pick<TvdbEpisode, "runtime">
+  episode?: Pick<TvdbEpisode, "runtime">,
+  match?: MatchedEpisodeInfo
 ): UiNzbDownloads {
-  // Preserve the shipped UI filename convention, including replacement of XML/path punctuation.
+  // Unbound UI filenames retain their convention; explicit targets share the native title owner.
   const title = `${item.topic} - ${item.title}`.replace(/[<>:"/\\|?*]/g, "_");
   const downloads: UiNzbDownloads = {};
   for (const rendition of selectRenditions(item, "all", hlsEnabled)) {
     const { url } = rendition;
     const key = renditionSelector(rendition);
     if (downloads[key]) continue;
+    if (match?.mediathekProgramme && !programmeRenditionVerified(item, url)) continue;
     const selected = itemForRendition(item, rendition);
     downloads[key] = generateFakeNzb({
-      title,
+      title: match?.mediathekProgramme
+        ? formatTitle(generateTitle(match, rendition.quality, EpisodeType.Standard))
+        : title,
       url,
       mediaExpectations: releaseMediaExpectations(
         // A proof for one rendition must not become an expectation for another.
@@ -63,7 +74,8 @@ export function createUiNzbDownloads(
           : selected,
         episode?.runtime ?? null,
         url,
-        episode ? "series" : "unknown"
+        episode ? "series" : "unknown",
+        match?.mediathekProgramme
       ),
     });
   }

@@ -91,6 +91,23 @@ Legacy-Links ohne einen neuen Erwartungsblock bleiben kompatibel. Ungültige ode
 zukünftige Payloadversionen dürfen nicht als Legacy interpretiert werden.
 Retry erhält die gespeicherten Erwartungen bytegleich, nicht alte Probefakten.
 
+## Explizite Mediathek-Programme: MediaExpectations v6
+
+P19.2 ergänzt für belegte einzelne Programme v6 im selben Textfeld:
+`sourceProgramme` hält öffentliche Programmidentität, Publisherfakten,
+kanonisches Ziel und SHA-256 der gewählten stabilen Rendition. Beide positiven
+Dauerreferenzen, deutscher Ton und genaue Pixel sind Pflicht. Die v3-Dauer-
+und Medienowner prüfen weiterhin unabhängig; fremde/gemischte bekannte
+Audiotracks bleiben gesperrt. v4 bleibt ausschließlich die vorhandene interne
+Laufzeitentscheidung; v5 bleibt der typisierte YouTube-Vertrag. Historische
+Jobs werden nicht konvertiert, Erwartungen bei Retry nicht herabgestuft.
+
+Der Producer folgt einem zuvor festgeschriebenen v6-fähigen Leser-/Workerstand.
+Der native P19.2-Gate muss angenommene wartende v6-Jobs mit diesem Rückweg auf
+SQLite und PostgreSQL abarbeiten, dabei vorhandene Aufträge/Dateien/Receipts
+erhalten und nach Rückkehr zum Producer Doppelgrabs ausschließen. Die
+vollständige native Abnahme ist zum Implementierungsstand noch offen.
+
 ## Rollbackgrenze und Abnahme
 
 **Nach dem ersten v3-Job ist ein Image ohne v3-Unterstützung kein sicherer

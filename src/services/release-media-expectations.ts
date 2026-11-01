@@ -10,18 +10,44 @@ import { classifyLanguageEdition } from "./language-editions";
 import { mediaSourceIdentity } from "./source-audio";
 import { renditionDimensions } from "./rendition-quality";
 import { youtubeSourceReferenceSchema, youtubeWatchUrl } from "@/lib/youtube-source";
+import type { MediathekProgrammeIdentity } from "@/lib/mediathek-programme";
+
+/** Explicit bindings publish only the proved standard German rendition. Cold proof stays pending. */
+export function programmeRenditionVerified(item: ApiResultItem, url: string): boolean {
+  const edition = classifyLanguageEdition(item);
+  return (
+    edition.audioEvidence === "german" &&
+    !edition.audioDescription &&
+    !edition.signLanguage &&
+    !edition.clearSpeech &&
+    !edition.originalVersion &&
+    !!renditionDimensions(item, url)
+  );
+}
 
 /** Catalogue durations are seconds; verified episode metadata is minutes. */
 export function releaseMediaExpectations(
   item: ApiResultItem,
   episodeRuntimeMinutes: number | null = null,
   renditionUrl: string = item.url_video || item.url_video_hd || item.url_video_low,
-  mediaKind: NewMediaExpectations["mediaKind"] = "unknown"
+  mediaKind: NewMediaExpectations["mediaKind"] = "unknown",
+  programme?: MediathekProgrammeIdentity
 ): NewMediaExpectations {
   const expected = unknownJobMediaExpectations();
   const source = item.sourceRef ? youtubeSourceReferenceSchema.parse(item.sourceRef) : null;
   if (source && renditionUrl !== youtubeWatchUrl(source))
     throw Error("Typed source selector mismatch");
+  if (programme && (source || !programmeRenditionVerified(item, renditionUrl)))
+    throw Error("Programme rendition unverified");
+  const programmeFields = programme
+    ? {
+        version: 6,
+        sourceProgramme: {
+          ...programme,
+          renditionIdentity: mediaSourceIdentity(renditionUrl),
+        },
+      }
+    : {};
   expected.mediaKind = mediaKind;
   const dimensions = renditionDimensions(item, renditionUrl);
   if (dimensions) expected.resolution = { ...dimensions, provenance: "provider_dimensions" };
@@ -66,6 +92,7 @@ export function releaseMediaExpectations(
       ...expected,
       sourceAudio: item.sourceAudioEvidence,
       ...(source ? { version: 5, sourceRef: source, mediaKind: source.programme.kind } : {}),
+      ...programmeFields,
     }) as NewMediaExpectations;
   }
   if (edition.audioEvidence === "german")
@@ -82,7 +109,7 @@ export function releaseMediaExpectations(
   // Only exact-URL evidence above supplies dimensions, never a quality label.
   if (source || (item.sourceRef && renditionUrl !== youtubeWatchUrl(item.sourceRef)))
     throw new Error("Typed source requires verified audio");
-  return parseMediaExpectations(expected) as NewMediaExpectations;
+  return parseMediaExpectations({ ...expected, ...programmeFields }) as NewMediaExpectations;
 }
 
 /** Review carries both original references; legacy producers remain unchanged. */
@@ -90,19 +117,16 @@ export function tvReviewMediaExpectations(
   item: ApiResultItem,
   runtimeMinutes: number,
   url: string,
-  tolerancePercent: number
+  tolerancePercent: number,
+  programme?: MediathekProgrammeIdentity
 ): NewMediaExpectations {
-  const facts = releaseMediaExpectations(item, null, url);
+  const facts = releaseMediaExpectations(item, runtimeMinutes, url, "series", programme);
   return parseMediaExpectations({
-    version: facts.version,
-    ...("sourceRef" in facts ? { sourceRef: facts.sourceRef } : {}),
+    ...facts,
     mediaKind: "series",
     durations: {
       source: { seconds: item.duration, provenance: "source_catalogue", tolerancePercent: 10 },
       metadata: { seconds: runtimeMinutes * 60, provenance: "episode_metadata", tolerancePercent },
     },
-    audio: facts.audio,
-    sourceAudio: facts.sourceAudio,
-    resolution: facts.resolution,
   }) as NewMediaExpectations;
 }

@@ -24,7 +24,13 @@ import { stableUrlIdentity, classifyLanguageEdition } from "./language-editions"
 import { generateTitle, formatTitle } from "./newznab";
 import { validateReleaseTitle } from "@/lib/download-paths";
 import { triggerDownloadProcessing } from "./download";
-import { EpisodeType, type ApiResultItem, type MatchedEpisodeInfo } from "@/types";
+import {
+  EpisodeType,
+  type ApiResultItem,
+  type MatchedEpisodeInfo,
+  type UiNzbDownloads,
+} from "@/types";
+import { createUiNzbDownloads } from "./ui-nzb";
 import {
   selectRenditions,
   itemForRendition,
@@ -166,7 +172,11 @@ function summary(
 export async function searchTvSourceReviews(
   query: string,
   reportCoverage?: (coverage: ContentSearchWindow["coverage"]) => void
-): Promise<Array<{ info: MatchedEpisodeInfo; review: TvReviewSummary }> | null> {
+): Promise<Array<{
+  info: MatchedEpisodeInfo;
+  review: TvReviewSummary;
+  nzbDownloads?: UiNzbDownloads;
+}> | null> {
   const budget = new HttpRequestBudget(32);
   const session = await openSonarrSession();
   if (!session) return null;
@@ -183,12 +193,33 @@ export async function searchTvSourceReviews(
         : Object.values(fields).map((field) => info.item[field])
     )
   );
+  // Keep one review row per source while each opaque NZB retains its own proof.
+  // Reuse native rendition enrichment and keep language decisions on the server.
+  const bound = found.filter((info) => info.mediathekProgramme);
+  const editions = bound.length
+    ? await enrichSourceAudio(
+        bound.map((info) => info.item),
+        budget,
+        16,
+        true
+      )
+    : new Map<ApiResultItem, ApiResultItem[]>();
   return found
     .filter(
       (info) => info.episode.runtime !== null && info.episode.runtime > 0 && info.item.duration > 0
     )
     .map((info) => ({
       info,
+      ...(info.mediathekProgramme
+        ? {
+            nzbDownloads: Object.assign(
+              {},
+              ...(editions.get(info.item) ?? []).map((item) =>
+                createUiNzbDownloads(item, false, info.episode, { ...info, item })
+              )
+            ) as UiNzbDownloads,
+          }
+        : {}),
       review: summary(
         info,
         tolerance,
@@ -230,7 +261,8 @@ async function prepare(selector: TvReviewSelector): Promise<PreparedSource> {
     enriched[0],
     info.episode.runtime!,
     url,
-    tolerance
+    tolerance,
+    info.mediathekProgramme
   );
   const language = expectations.audio?.language ?? expectations.sourceAudio?.language;
   if (

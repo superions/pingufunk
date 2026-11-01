@@ -90,6 +90,12 @@ Die folgenden v1/v2-Ausführungen dokumentieren den erhaltenen Altvertrag.
 v3 behält denselben Audio-/Providerbelegschutz und trennt zusätzlich eingefrorene
 Quellen- und Episodendauer. Keine neue Sprachheuristik; der Abnahmescope von
 P03.4 steht im Phasenvertrag und erweitert nicht diese Quellen-/Budgetgrenzen.
+P19.2 verwendet für eine explizit gebundene einzelne Mediathek-Standardfassung
+v6 mit denselben unabhängigen Audio-/Dauer-/Pixelbelegen. Die Quellenbindung
+selbst beweist keine Sprache und erlaubt keine AD-/OV-Umdeutung. Alle bekannten
+fremden oder gemischten Tracks bleiben vor Completed gesperrt; der genaue
+[Programm-/Rückwegvertrag](tv-search-contract.md#explizite-einzelne-mediathek-programme-p192-native-abnahme-offen)
+ersetzt keine Medienprobe. Native Abnahme von P19.2 bleibt offen.
 
 `MediaExpectations` v1 bleibt für vorhandene Jobs unverändert. Bei MP4-Sprach-
 Tags wird weiterhin der strenge v1-Trackvertrag geprüft. ARTE-/ARD-Providerbelege
