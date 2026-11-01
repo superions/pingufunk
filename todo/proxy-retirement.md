@@ -3382,7 +3382,7 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Unknown-/Konfliktsperren und frische Revalidation. Eine auslaufende einzelne
       Sendung darf keinen unbestimmten allgemeinen ARTE-Ausbauauftrag erzeugen.
 
-- [ ] **P19.5 — Gesprochene Sprache automatisch prüfen und Arr-Import ermöglichen.**
+- [ ] **P19.5 — Sprachentscheidung korrigieren und Arr-Import ermöglichen.**
       Unabhängig startbar. Owner: `source-audio.ts`, `media-probe.ts`,
       `providers/youtube/audio.ts`, `providers/youtube/resolve.ts`,
       `download-completion.ts`, gespeicherte `mediaValidation`, vorhandene Job-/Arr-Diagnose und
@@ -3396,26 +3396,25 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       andere Rendition oder tatsächlich andere Sprache. Fehlende Belege konkret
       benennen; die vom Nutzer als nicht strukturell lösbar ausgeklammerten
       Kommissar-Quellfälle getrennt von der allgemeinen Spracherkennung ausweisen.
-      Nutzerentscheidung vom 01.11.2026: tatsächliche automatische Spracherkennung
+      Nutzerentscheidung vom 01.11.2026: die Erkennung
       erhält Vorrang vor widersprüchlichen Tags, wenn derselbe Inhalt nicht bereits
       mit gewünschtem Sprachtag vorliegt. Keine Einzelbestätigung und keine
-      dauerhafte Sperre allein wegen eines widerlegten Tags. Den vorhandenen
-      Spracherkennungsdienst im serverseitigen Dateiprüf-/Abschlusspfad verwenden;
-      keine zweite Inferenzinfrastruktur einführen. Begrenzt und abbrechbar aus
-      der tatsächlich übertragenen Datei erkennen, ohne gewünschte Sprache als
-      Erkennungsergebnis vorzugeben. Beleg an exakte Datei, Audiotrack und Auftrag
-      binden; geänderte Bytes benötigen eine neue Prüfung. Nur nach positivem
-      Inhaltsbeleg die Metadaten der neuen Auftragsdatei für den nativen Arr-Import
+      dauerhafte Sperre allein wegen eines widerlegten Tags. Keine NPU- oder
+      Homelab-Spracherkennungsdienst-Anbindung und keine zusätzliche Sprach-
+      Teststrecke oder CI-Matrix einführen. Die Bedeutung der Erkennung nach
+      dieser Nutzerkorrektur am vorhandenen Sprach-/Datei-/Abschlusspfad klären;
+      keine akustische Transkription als bereits beauftragte Infrastruktur auslegen.
+      Sprachbeleg an exakte Quelle/Fassung, Datei, Audiotrack und Auftrag
+      binden; geänderte Bytes benötigen eine neue Prüfung. Nur nach passendem
+      Beleg die Metadaten der neuen Auftragsdatei für den nativen Arr-Import
       berichtigen, Audio/Video nicht neu kodieren. Bereits bestehende Aufträge,
       Dateien, Tags und Bibliothekseinträge erhalten; keine nachträgliche
       Bibliothekskorrektur als Nebenwirkung. Identitäts-, Rendition-, Rechte- und
       Laufzeitprüfung bleiben unabhängig bestehen. Unklare, fremdsprachige oder
       widersprüchliche Inhaltsbelege dürfen keine deutsche Fassung vortäuschen.
-      Nutzerkorrektur vom 01.11.2026: keine zusätzliche Sprach-Teststrecke,
-      synthetischen Sprachharnesses oder neue CI-Matrix aufbauen. Abnahme am
-      vorhandenen Datei-/Abschluss-/Arr-Vertrag und mit bestehenden Prüfungen;
-      neue Produktfunktion nicht allein aus unveränderten Checks als abgenommen
-      behaupten. Bestehende Datei-/Jobbindung und kompatiblen Rückweg erhalten und den
+      Abnahme am bestehenden Sprach-/Datei-/Abschluss-/Arr-Vertrag und mit
+      vorhandenen Prüfungen; daraus keine unbelegte Erkennung gesprochenen Tons
+      oder tatsächlichen neuen Import behaupten. Bestehende Datei-/Jobbindung und kompatiblen Rückweg erhalten und den
       allgemeinen Produktfix vom bereits erledigten manuellen Einzelfall trennen.
 
 - [ ] **P19.6 — Den konkreten WDR-/Protection-Belegfall abschließend einordnen.**

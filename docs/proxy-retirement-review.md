@@ -4619,38 +4619,3 @@ JavaScript-Exception. Die vorhandene native Qualitätsmatrix ergänzt zwei
 Fälle für fehlenden/leeren ARTE-Beleg: direkt und über Prowlarr ein neutraler
 Release, native Qualität Unknown und keine erfundene deutsche Audiosprache.
 Diese native Abnahme, Imagescan und Live-Übernahme stehen noch aus.
-
-## P19.5 — Automatischer Inhaltsbeleg für falsche Sprachtags (in Arbeit)
-
-Die Nutzerentscheidung vom 01.11.2026 ersetzt den vorgeschlagenen
-dateigebundenen Einzelentscheid: Sonarr und Radarr bleiben die Bedienoberfläche;
-passender erkannter Ton soll einen widersprechenden Container-Tag überstimmen.
-Der manuelle La-La-Land-Import ist bereits erledigt. Er ist der konkrete
-Ursachenbeleg für falsche Tags, keine noch ausstehende Downloadaufgabe und
-keine allgemeine Produktabnahme. Die Kommissar-Quellfälle sind vom Nutzer als
-nicht strukturell lösbarer Rest ausgeklammert. Zwei Sprachkonfliktversuche und
-zwei getrennte Transferfehler dürfen nicht aus späteren Metadaten derselben
-Video-ID zu einem einzigen Sprachbefund zusammengezogen werden; die damaligen
-Dateimessungen der Sprachkonfliktversuche fehlen.
-
-Der vorhandene Spracherkennungsdienst unterscheidet im begrenzten Test
-synthetischen deutschen und englischen Dialog ohne vorgegebene Sprache.
-Seine konstanten Nullfelder für Konfidenz liefern keine belastbare
-Erkennungswahrscheinlichkeit. Der Downloadabschluss nutzt deshalb einen
-expliziten Stichprobenvertrag am vorhandenen Dateiprüfowner statt einer
-unbelegten Konfidenzschwelle: drei verteilte lokale Tonproben, deutsche Mehrheit,
-keine gespeicherten Transkripte, feste Prozess-/HTTP-Grenzen und Dateihashbindung.
-Unklare/fremdsprachige Mehrheiten und die bestehenden strengen Mischtrackfälle
-erhalten keine deutsche Freigabe. Bereits passende Tags benötigen keine neue
-Erkennung. Die unabhängigen Quell-/Identitäts-/Dauer-/Pixelprüfungen bleiben bestehen.
-
-Nach positivem Inhaltsbeleg korrigiert ausschließlich der neue Auftragsabschluss
-den Tag per Stream-Copy in einem eigenen temporären Verzeichnis und validiert
-das Ergebnis erneut. SHA-256 verbindet die Erkennung mit Eingang und Ergebnis;
-die erwartete Sprache aus dem NZB kann keinen akustischen Beleg vortäuschen.
-Abgeschlossene Aufträge und vorhandene Bibliotheksdateien werden nicht umgeschrieben.
-Der Nutzer hat die zusätzlich aufgebaute Sprach-Teststrecke ausdrücklich
-verworfen. Ihre neuen Harnesses, Testdateien und CI-/Fixture-Erweiterungen sind
-entfernt; vorhandene Tests bleiben erhalten. Bestehende Prüfungen ersetzen
-keinen tatsächlichen Funktionsbeleg für die neue Sprachkorrektur. Produktabnahme,
-Imagescan und konfigurierte Live-Übernahme bleiben bis zum tatsächlichen Erfolg offen.

@@ -199,8 +199,7 @@ it("consumes an interchangeable source artifact through the same progress, file 
       expectations,
       0,
       undefined,
-      expect.any(AbortSignal),
-      true
+      expect.any(AbortSignal)
     );
     expect(source).toHaveBeenCalledOnce();
     expect(fetch).not.toHaveBeenCalled();
@@ -511,8 +510,7 @@ it("does not report legacy completion until the probe resolves and persists unkn
     null,
     10,
     undefined,
-    expect.any(AbortSignal),
-    true
+    expect.any(AbortSignal)
   );
   finishProbe(basicFacts);
   await work;
@@ -547,8 +545,7 @@ it("passes v2 source URL to the media owner and persists separate evidence witho
     expected,
     10,
     url,
-    expect.any(AbortSignal),
-    true
+    expect.any(AbortSignal)
   );
   const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
     .data;
@@ -860,8 +857,7 @@ it("passes the persisted v1 expectations and configured P06 tolerance to the com
     expectations,
     0,
     undefined,
-    expect.any(AbortSignal),
-    true
+    expect.any(AbortSignal)
   );
   const completed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")![0]
     .data;
@@ -905,8 +901,7 @@ it("uses frozen v3 references without reading or repairing current series policy
     expectations,
     0,
     undefined,
-    expect.any(AbortSignal),
-    true
+    expect.any(AbortSignal)
   );
   expect(
     downloadUpdate.mock.calls.find(([call]) => call.data.status === "completed")?.[0].data

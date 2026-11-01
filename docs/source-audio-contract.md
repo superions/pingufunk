@@ -102,65 +102,11 @@ P03.4 steht im Phasenvertrag und erweitert nicht diese Quellen-/Budgetgrenzen.
 P19.2 verwendet für eine explizit gebundene einzelne Mediathek-Standardfassung
 v6 mit denselben unabhängigen Audio-/Dauer-/Pixelbelegen. Die Quellenbindung
 selbst beweist keine Sprache und erlaubt keine AD-/OV-Umdeutung. Alle bekannten
-fremden oder gemischten Tracks bleiben ohne passenden Inhaltsbeleg vor Completed gesperrt; der genaue
+fremden oder gemischten Tracks bleiben vor Completed gesperrt; der genaue
 [Programm-/Rückwegvertrag](tv-search-contract.md#explizite-einzelne-mediathek-programme-p192)
 ersetzt keine Medienprobe. P19.2 ist nativ abgenommen und live. P19.3 erweitert
 den eingefrorenen Umfang auf genau zwei bestätigte Ziele; Audio-/Pixelbelege
 bleiben davon unabhängig.
-
-## Automatische Sprachkorrektur P19.5
-
-Der manuelle La-La-Land-Import ist erledigt. Die Nutzerentscheidung vom
-01.11.2026 verlangt einen automatischen Download-/Importpfad über Sonarr und
-Radarr, ohne Einzelbestätigung. `media-probe.ts` und `download-completion.ts`
-verwenden dafür `spoken-language.ts`: Wenn ein einzelner lokaler Audiotrack
-einer erwarteten deutschen Fassung einen widersprechenden oder fehlenden Tag
-hat, darf der konfigurierte vorhandene Spracherkennungsdienst den Inhalt prüfen.
-Bereits passende Tags benötigen keine zusätzliche Erkennung. Mehrere Tracks
-werden dadurch weder ausgewählt, entfernt noch pauschal umetikettiert.
-
-Die serverseitige Deploymentkonfiguration besteht aus
-`PINGUFUNK_SPEECH_API_URL` mit dem Basis-Pfad `/v1` und
-`PINGUFUNK_SPEECH_API_KEY_FILE` bzw. dessen direkter Umgebungsvariable. URL und
-Schlüssel gehören nicht in NZB, Suchpayload oder Browser. Ohne Konfiguration
-bleibt der bisherige Dateivertrag erhalten; unvollständige Konfiguration ist
-ein Fehler. Verwendet wird die vorhandene Whisper-kompatible Transkriptions-API
-mit `whisper-large-v3-turbo`, ohne Sprachvorgabe oder Prompt, ohne Redirect und
-ohne Retries. Kein neues Modell, Container oder Inferenzsystem wird installiert.
-
-Drei lokale Mono-PCM-Proben von höchstens je 25 Sekunden liegen um 20, 50 und
-80 Prozent der Datei. Bei kurzen Dateien werden ihre Fenster verkürzt. Stille
-unter dem festgelegten PCM-RMS-Gate wird nicht transkribiert. Mindestens zwei
-unabhängig als Deutsch erkannte, zeitlich zur Probe passende Antworten mit
-nichtleerem Dialog bilden den positiven Mehrheitsbeleg. Ein gelegentliches
-fremdsprachiges Lied oder ein Satz widerlegt damit nicht die sonst deutsche
-Dialogfassung. Eine fremdsprachige Mehrheit oder fehlende Mehrheit genügt nicht.
-Dies ist eine Stichprobe der gesprochenen Sprache, kein Nachweis jeder Szene
-und keine verlässliche Aussage über beliebige Mischfassungen. Die im vorhandenen
-Dienst beobachteten konstanten Nullwerte für Konfidenz werden nicht als
-gemessene Erkennungswahrscheinlichkeit ausgegeben.
-
-Das gesamte Erkennen ist auf 180 Sekunden begrenzt, jeder HTTP-Aufruf auf
-55 Sekunden und 128 KiB Antwort. FFmpeg dekodiert ausschließlich die lokale
-Auftragsdatei mit Dateiprotokoll; Lease-Abbruch beendet genau seinen eigenen
-Prozessbaum. Audiosamples und Transkripte werden nicht gespeichert oder geloggt.
-Der Beleg in `mediaValidation.spokenAudioEvidence` hält Modell, Track, Zeitfenster,
-geschlossene Sprachergebnisse und SHA-256 der geprüften Datei fest.
-
-Erst nach positivem Inhaltsbeleg wird die neu übertragene Auftragsdatei in einem
-eigenen temporären Verzeichnis per Stream-Copy mit deutschem Audiotag versehen.
-Die vollständige unabhängige Medien-/Quellprüfung muss für die neue Datei erneut
-bestehen, bevor sie den neuen Auftragspfad ersetzt und als Completed erscheint.
-Original- und Ergebnis-SHA-256 bleiben im Beleg verbunden. Fehler und geänderte
-Eingabebytes verhindern den Austausch. Laufzeit, Pixel, Quelle, Rechte und
-Zielidentität werden durch Spracherkennung nicht überstimmt. Bereits abgeschlossene
-Aufträge und Bibliotheksdateien werden nicht nachträglich korrigiert.
-
-Auf Nutzerkorrektur wird keine zusätzliche Sprach-Teststrecke oder CI-Matrix
-eingeführt. Die bestehenden Prüfungen und der vorhandene Datei-/Abschluss-/Arr-
-Vertrag bleiben zuständig. Unveränderte bestehende Tests belegen allein keine
-erfolgreiche automatische Sprachkorrektur oder einen tatsächlichen neuen Import.
-Der Umsetzungs-/Rolloutstatus bleibt im Phasen-TODO ausdrücklich offen.
 
 ## Konkreter ARTE-Befund P19.4
 
@@ -192,9 +138,8 @@ versionierten Vertrag mit; keine Datenbankschemaänderung ist nötig.
 Der Worker prüft die lokale Datei mit ffprobe und holt den ARTE-Beleg frisch
 gegen die tatsächlich heruntergeladene URL (Dispatcher für `arte_hbbtv` und
 `ard_media`). Andere URL, fehlende/veränderte
-Sprache oder fremder Programmbeleg verhindern `Completed`. Bekannte widersprechende
-lokale Audiotracks benötigen die oben beschriebene positive Inhaltsprüfung;
-ein Anbieterbeleg allein überstimmt sie nicht. Bei belegtem Provider und unbekannten Tracktags bleibt
+Sprache, fremder Programmbeleg oder bekannte widersprechende lokale Audiotracks
+verhindern `Completed`. Bei belegtem Provider und unbekannten Tracktags bleibt
 `audioLanguages` leer; separat steht `expectedChecks.audio=passed_provider`.
 Das ist Provider-Evidenz, kein akustischer Hörtest. Dateiidentität wird auch
 nach dem Providerabruf erneut geprüft.
