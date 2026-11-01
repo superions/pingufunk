@@ -61,7 +61,7 @@ Bibliotheksänderung, neuen Datenbankfelder oder Titel-Overrides. Die bisherigen
 engen ARTE-Bruchteilregeln bleiben bestehen; fehlende Metadaten werden nicht
 durch eine geratene Staffel ersetzt.
 
-## Explizite einzelne Mediathek-Programme (P19.2, native Abnahme offen)
+## Explizite einzelne Mediathek-Programme (P19.2)
 
 `mediathekProgrammes` ergänzt den bestehenden Showkatalog optional um eine
 öffentliche Programmseite, erwarteten Sender/Titel und Publisher-S/E sowie ein
@@ -97,12 +97,14 @@ Katalogänderung schreibt den angenommenen Auftrag nicht um.
 Der erste kanonische Release hat eine ausdrücklich zielgebundene GUID; eine
 frühere neutrale GUID wird nicht rückwirkend umgeschrieben. Der vorhandene
 GUID-Algorithmus und alle anderen Identitäten bleiben unverändert. Die native
-Übergangsprüfung muss einen ungegriffenen neutralen Kandidaten von genau einem
-späteren kanonischen Grab unterscheiden und über RSS/Neustart erhalten.
+Übergangsprüfung unterscheidet einen ungegriffenen neutralen Kandidaten von genau
+einem späteren kanonischen Grab und erhält diese Trennung über RSS/Neustart.
 Der v6-fähige Lesercheckpoint wird vor dem Producer festgeschrieben und im
 isolierten nativen Post-Write-Rückweg geprüft. Ein v1–v5-only Image ist nach
-Annahme eines v6-Jobs kein kompatibler App-Rückweg. Native Freigabe und
-Produktionsstatus werden erst nach tatsächlicher Abnahme im TODO geschlossen.
+Annahme eines v6-Jobs kein kompatibler App-Rückweg. Die direkte und via Prowlarr
+geführte native Abnahme auf SQLite/PG18 ist erfolgreich, einschließlich genau
+einer S08E01-Dateibindung und gepaarter History. P19.2 ist seit 01.11.2026 live;
+exakte Release-, Rückweg- und Erhaltungsbelege stehen im Strukturreview.
 
 ## Laufzeitkonflikte sichtbar machen, nicht automatisch übergehen
 

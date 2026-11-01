@@ -3292,7 +3292,7 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Der eingefrorene Quellenbericht bestätigt 93 sichere Bindungen und vier
       getrennte Quellenlücken; dies behauptet keine 97/97-Verfügbarkeit.
 
-- [ ] **P19.2 — Belegte abweichende Mediatheknummerierung an ein Einzelziel binden.**
+- [x] **P19.2 — Belegte abweichende Mediatheknummerierung an ein Einzelziel binden.**
       Unabhängig von P19.1/P19.4–P19.6. Owner: `data/shows.json` und dessen
       Schema in `shows.ts`, `types/index.ts`, `sonarr-matcher.ts`,
       `source-programme.ts::matchBoundSourceEpisode`, `tv-source-review.ts`,
@@ -3322,6 +3322,20 @@ Containernachweise und einen erneuten Scan des tatsächlich auszurollenden Image
       Erstmals kanonisch gebundene frühere neutrale Kandidaten erhalten eine
       ausdrücklich geprüfte zielgebundene Releaseidentität; Altjobs/History
       nicht umschreiben und Übergang gegen Doppelgrab prüfen.
+      Abgenommen am 01.11.2026: PR #21 mit exakt qualifiziertem Main-Dateibaum,
+      vollständigen Produktgates und nativen Direkt-/Prowlarr-Importwegen auf
+      SQLite/PG18. Der v6-Leser ist als kompatibler Rückweg vor dem Producer
+      festgeschrieben und post-write geprüft. Beide exakten CI-Images sind
+      befundfrei gescannt und auf allen zulässigen Nodes vorhanden; der Producer
+      ist über GitOps live und gesund. Vier bestehende Aufträge, alle 155
+      Dateizuordnungen, Episodenbindungen, 426 Historyeinträge sowie
+      Einstellungen, Mounts und Schema bleiben erhalten. Alle 151 Dateien vom
+      Aufgabenbeginn behalten ihre Dateifakten. Von vier zwischenzeitlich durch
+      bestehende andere Bibliotheksaktivität hinzugekommenen Dateien wurde eine
+      durch einen bereits vor dem Rollout gestarteten Tdarr-Auftrag erfolgreich
+      umkodiert; exakte Ein-/Ausgabefakten und erfolgreiche Gesundheitsprüfung
+      sind getrennt belegt. Erneuter Vergleich aller 155 Dateien stabil.
+      Keine neuen manuellen Live-Suchen, Grabs, Retries oder Imports.
 
 - [ ] **P19.3 — Eine bestätigte Langfassung nativ zwei Episoden zuordnen.**
       Abhängigkeit P19.2. Owner: dessen Quellenbindung,
