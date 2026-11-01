@@ -1,7 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import type { ApiResultItem } from "@/types";
-import { ardEdition, ardVideoId, getArdMedia, getArdSource } from "./ard-source-audio";
+import {
+  ardEdition,
+  ardVideoId,
+  getArdMedia,
+  getArdSource,
+  isArdProgressiveMp4,
+} from "./ard-source-audio";
 import { enrichSourceAudio, mediaSourceIdentity, verifySourceAudio } from "./source-audio";
 import { classifyLanguageEdition } from "./language-editions";
 import { generateGenericRssItems } from "./newznab";
@@ -162,48 +168,62 @@ it.each(["selector", "mixed", "unknown", "no-audio", "unknown-kind", "hls", "aux
   }
 );
 
-it("carries exact rendition evidence through RSS/NZB and requires fresh worker verification", async () => {
-  const fetch = mock();
-  const enriched = (await enrichSourceAudio([item], new HttpRequestBudget())).get(item)!;
-  expect(enriched).toHaveLength(1);
-  expect(classifyLanguageEdition(enriched[0])).toMatchObject({
-    audioLanguage: "de",
-    originalVersion: false,
-  });
-  expect(item).not.toHaveProperty("audioLanguage");
-  const [rss] = generateGenericRssItems(enriched[0], "best", false, "tv");
-  expect(rss.title).toContain("GERMAN.720p");
-  const query = new URL(rss.enclosure.url, "http://localhost").searchParams;
-  const { decodeMediaExpectations } = await import("./nzb-release");
-  const expected = decodeMediaExpectations(query.get("encodedExpectations")!);
-  expect(expected).toMatchObject({
-    version: 3,
-    audio: null,
-    sourceAudio: {
-      provider: "ard_media",
-      videoId: id,
-      language: "de",
-      mediaIdentity: mediaSourceIdentity(url),
-    },
-    resolution: { width: 1280, height: 720 },
-  });
-  const nzb = generateFakeNzb({ title: rss.title, url, mediaExpectations: expected });
-  expect(parseNzbContent(nzb)).toEqual({ title: rss.title, url, mediaExpectations: expected });
-  if (expected.version !== 3 || !expected.sourceAudio) throw new Error("Expected source evidence");
-  await expect(
-    verifySourceAudio(expected.sourceAudio, url, new HttpRequestBudget())
-  ).resolves.toEqual(expected.sourceAudio);
-  expect(fetch).toHaveBeenCalledTimes(2);
-  await expect(
-    verifySourceAudio(expected.sourceAudio, `${url}&audio=fr`, new HttpRequestBudget())
-  ).rejects.toThrow("Source evidence mismatch");
-  const foreign = page();
-  foreign.widgets[0].mediaCollection.embedded.streams[0].media[0].audios[0].languageCode = "fra";
-  mock(foreign);
-  await expect(
-    verifySourceAudio(expected.sourceAudio, url, new HttpRequestBudget())
-  ).rejects.toThrow("Source evidence mismatch");
-});
+it.each(["ndr-progressive.ard-mcdn.de", "cdn-storage.br.de", "media.example.invalid"])(
+  "carries exact %s rendition evidence through RSS/NZB and fresh worker verification",
+  async (host) => {
+    const url = `https://${host}/synthetic/one.mp4?quality=hd`;
+    const candidate = { ...item, url_video: url };
+    const value = page();
+    value.widgets[0].mediaCollection.embedded.streams[0].media[0].url = url;
+    const fetch = mock(value);
+    expect(isArdProgressiveMp4(url)).toBe(true);
+    for (const invalid of [url.replace("https:", "http:"), `${url}#other`])
+      expect(isArdProgressiveMp4(invalid)).toBe(false);
+    const enriched = (await enrichSourceAudio([candidate], new HttpRequestBudget())).get(
+      candidate
+    )!;
+    expect(enriched).toHaveLength(1);
+    expect(classifyLanguageEdition(enriched[0])).toMatchObject({
+      audioLanguage: "de",
+      originalVersion: false,
+    });
+    expect(candidate).not.toHaveProperty("audioLanguage");
+    const [rss] = generateGenericRssItems(enriched[0], "best", false, "tv");
+    expect(rss.title).toContain("GERMAN.720p");
+    const query = new URL(rss.enclosure.url, "http://localhost").searchParams;
+    const { decodeMediaExpectations } = await import("./nzb-release");
+    const expected = decodeMediaExpectations(query.get("encodedExpectations")!);
+    expect(expected).toMatchObject({
+      version: 3,
+      audio: null,
+      sourceAudio: {
+        provider: "ard_media",
+        videoId: id,
+        language: "de",
+        mediaIdentity: mediaSourceIdentity(url),
+      },
+      resolution: { width: 1280, height: 720 },
+    });
+    const nzb = generateFakeNzb({ title: rss.title, url, mediaExpectations: expected });
+    expect(parseNzbContent(nzb)).toEqual({ title: rss.title, url, mediaExpectations: expected });
+    if (expected.version !== 3 || !expected.sourceAudio)
+      throw new Error("Expected source evidence");
+    await expect(
+      verifySourceAudio(expected.sourceAudio, url, new HttpRequestBudget())
+    ).resolves.toEqual(expected.sourceAudio);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await expect(
+      verifySourceAudio(expected.sourceAudio, `${url}&audio=fr`, new HttpRequestBudget())
+    ).rejects.toThrow("Source evidence mismatch");
+    const foreign = page();
+    foreign.widgets[0].mediaCollection.embedded.streams[0].media[0].url = url;
+    foreign.widgets[0].mediaCollection.embedded.streams[0].media[0].audios[0].languageCode = "fra";
+    mock(foreign);
+    await expect(
+      verifySourceAudio(expected.sourceAudio, url, new HttpRequestBudget())
+    ).rejects.toThrow("Source evidence mismatch");
+  }
+);
 
 it.each(["audio-description", "speech-optimized"])(
   "retains provider-declared edition kind %s",

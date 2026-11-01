@@ -348,7 +348,7 @@ B05/B07, A2/A3, R4.
       Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
-- [x] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+- [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
       Owner: `source-audio.ts`, `ard-source-audio.ts`,
       `mp4-audio-language.ts`, Film-RSS/NZB und frische Workerprüfung.
       ARTE-/ARD-Belege verlangen identische Programm-ID und exakte Medien-URL;
@@ -357,7 +357,8 @@ B05/B07, A2/A3, R4.
       Unterschiedliche Fassungen bleiben vor Selektion/Dedupe/Pagination getrennt;
       Providerbeleg und tatsächliche Tracktags werden nicht gleichgesetzt.
       Alte Jobversionen/IDs bleiben unverändert, Producer und Worker verwenden
-      denselben präzisen URL-Gate einschließlich des bestätigten RBB-CDN.
+      denselben CDN-unabhängigen Gate für die im offiziellen ARD-JSON exakt
+      deklarierte HTTPS-MP4-URL. Der Auslieferungshost ist kein Inhaltsbeleg.
       Der Quellenvertrag, Body-/Deadline-/Host-/ETag-/Konfliktgrenzen und
       v1/v2-/Folgeverträge bleiben in `docs/source-audio-contract.md` erhalten.
       Abschlussabgleich 30.10.2026: Die konkrete große Sampletabellen-/Trailerlücke
@@ -368,9 +369,16 @@ B05/B07, A2/A3, R4.
       beauftragten ARD-Imports bestätigen zusätzlich den tatsächlichen
       Standard-/Deutsch-Beleg bei fehlenden Tracktags, keine Filmvollabdeckung.
       Verworfen ist die pauschale Restforderung „allgemeine Sprachabdeckung“
-      ohne konkrete Quelle oder Fehlerhypothese. Neue CDNs, unbekannte Sprachen,
+      ohne konkrete Quelle oder Fehlerhypothese. Unbekannte Sprachen,
       unvollständige oder erst in einem fünften Fenster erreichbare Fakten
       bleiben dokumentierte Unknown-Grenzen; kein implizites Erweiterungsprojekt.
+      Wieder geöffnet am 01.11.2026: Tatort S2026E20–E22 stehen im
+      MediathekView-Katalog und besitzen exakte deutsche ARD-MP4-Belege mit
+      Bildmaßen. Die alte CDN-Hostliste verwirft diese Fakten und Sonarr lehnt
+      die korrekt zugeordneten Treffer als Unknown ab. Abschluss verlangt den
+      bestehenden nativen Qualitätsgate und die lesende Sonarr-Abnahme der
+      drei kanonischen Folgen nach dem autorisierten Rollout. Keine Profil-,
+      Bibliotheks-, Auftrags- oder Schemaänderung, keine Medienprobe auf neuen Hosts.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 

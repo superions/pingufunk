@@ -7,12 +7,10 @@ import {
   type SourceAvailability,
 } from "@/lib/content-dates";
 
-const progressiveHosts = new Set(["ctv-videos.daserste.de", "rbb-progressive.ard-mcdn.de"]);
-
 /**
- * Indexed assets eligible for exact-URL ARD JSON evidence, not arbitrary MP4
- * probing. Producer and worker share this boundary; CDN membership alone never
- * proves language or dimensions. New hosts require verified provider contracts.
+ * Syntax eligibility only: an ARD player must declare this exact URL, language
+ * and rendition before either producer or worker can trust it. The delivery
+ * hostname is not programme evidence. This never probes the media URL.
  */
 export function isArdProgressiveMp4(raw: string): boolean {
   try {
@@ -23,7 +21,6 @@ export function isArdProgressiveMp4(raw: string): boolean {
       !url.username &&
       !url.password &&
       !url.hash &&
-      progressiveHosts.has(url.hostname) &&
       /\.mp4$/i.test(url.pathname)
     );
   } catch {
