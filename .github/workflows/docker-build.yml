@@ -91,10 +91,10 @@ jobs:
           PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
         run: |
           for provider in sqlite postgresql; do
-            node scripts/programme-arr-smoke.mjs direct "$provider"
-            node scripts/programme-arr-smoke.mjs forwarded "$provider"
             node scripts/programme-arr-smoke.mjs direct "$provider" pair
             node scripts/programme-arr-smoke.mjs forwarded "$provider" pair
+            node scripts/programme-arr-smoke.mjs direct "$provider"
+            node scripts/programme-arr-smoke.mjs forwarded "$provider"
           done
           node scripts/programme-arr-smoke.mjs direct sqlite pair-tba
 
