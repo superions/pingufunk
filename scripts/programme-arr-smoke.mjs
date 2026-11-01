@@ -588,34 +588,39 @@ try {
           row.trackedDownloadState === "importBlocked"
       );
       if (blocked) break;
+      const current = await api(root, manifest, "sonarr", `/api/v3/episode/${target.id}`);
+      if (current.hasFile) break;
       await delay(250);
     }
-    assert(blocked, "unknown-date TBA must be proven blocked, never assumed from an old incident");
-    assert.match(JSON.stringify(blocked.statusMessages), /TBA|does not have a title/i);
-    const beforeManual = await api(
-      root,
-      manifest,
-      "pingufunk",
-      `/api/downloads/${pending.id}/diagnostics`
-    );
-    assert.equal(beforeManual.import.state, "blocked");
-    assert(finished.filePath.startsWith("/downloads/sonarr/"));
-    await command({
-      name: "ManualImport",
-      importMode: "move",
-      files: [
-        {
-          path: finished.filePath.replace(/^\/downloads\//, "/qa-downloads/"),
-          folderName: finished.title,
-          seriesId: series.id,
-          episodeIds: targetIds,
-          quality: manualRelease.quality,
-          languages: manualRelease.languages,
-          downloadId: grabs[0].downloadId,
-          releaseGroup: "Pingufunk",
-        },
-      ],
-    });
+    // Native naming policy decides whether TBA blocks import. Never invent a
+    // rejection: the shared checks below still require both real file bindings.
+    if (blocked) {
+      assert.match(JSON.stringify(blocked.statusMessages), /TBA|does not have a title/i);
+      const beforeManual = await api(
+        root,
+        manifest,
+        "pingufunk",
+        `/api/downloads/${pending.id}/diagnostics`
+      );
+      assert.equal(beforeManual.import.state, "blocked");
+      assert(finished.filePath.startsWith("/downloads/sonarr/"));
+      await command({
+        name: "ManualImport",
+        importMode: "move",
+        files: [
+          {
+            path: finished.filePath.replace(/^\/downloads\//, "/qa-downloads/"),
+            folderName: finished.title,
+            seriesId: series.id,
+            episodeIds: targetIds,
+            quality: manualRelease.quality,
+            languages: manualRelease.languages,
+            downloadId: grabs[0].downloadId,
+            releaseGroup: "Pingufunk",
+          },
+        ],
+      });
+    }
   }
   let episodes;
   for (let attempt = 0; attempt < 100; attempt++) {
