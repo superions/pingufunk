@@ -139,21 +139,25 @@ it("binds RBB German audio and dimensions per rendition through film RSS/NZB and
 });
 
 it.each([
-  "http://rbb-progressive.ard-mcdn.de/film.mp4",
-  "https://rbb-progressive.ard-mcdn.de.evil.invalid/film.mp4",
-  "https://other.ard-mcdn.de/film.mp4",
-  "https://rbb-progressive.ard-mcdn.de:8443/film.mp4",
-  "https://private:secret@rbb-progressive.ard-mcdn.de/film.mp4",
-  "https://rbb-progressive.ard-mcdn.de/film.m3u8",
-  `${urls[0]}#other`,
-  "not-a-url",
-])("rejects untrusted ARD asset %s without a provider request", async (url) => {
+  ["http://rbb-progressive.ard-mcdn.de/film.mp4", 0],
+  ["https://rbb-progressive.ard-mcdn.de.evil.invalid/film.mp4", 2],
+  ["https://other.ard-mcdn.de/film.mp4", 2],
+  ["https://rbb-progressive.ard-mcdn.de:8443/film.mp4", 0],
+  ["https://private:secret@rbb-progressive.ard-mcdn.de/film.mp4", 0],
+  ["https://rbb-progressive.ard-mcdn.de/film.m3u8", 0],
+  [`${urls[0]}#other`, 0],
+  ["not-a-url", 0],
+])("does not grant evidence to an undeclared or invalid ARD asset %s", async (url, requests) => {
   const fetch = mock();
-  expect(isArdProgressiveMp4(url)).toBe(false);
+  expect(isArdProgressiveMp4(url)).toBe(requests > 0);
   const candidate = { ...item, url_video: url, url_video_hd: "", url_video_low: "" };
-  expect((await enrichSourceAudio([candidate], new HttpRequestBudget())).get(candidate)).toEqual([
-    candidate,
-  ]);
+  const enriched = (await enrichSourceAudio([candidate], new HttpRequestBudget())).get(candidate)!;
+  expect(
+    enriched.every(
+      (item) =>
+        !item.audioLanguage && !item.sourceAudioEvidence && !item.sourceVideoDimensions?.length
+    )
+  ).toBe(true);
   await expect(
     verifySourceAudio(
       {
@@ -166,7 +170,11 @@ it.each([
       new HttpRequestBudget()
     )
   ).rejects.toThrow("Source evidence mismatch");
-  expect(fetch).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledTimes(requests);
+  for (const [target] of fetch.mock.calls)
+    expect(target).toBe(
+      `https://api.ardmediathek.de/page-gateway/pages/ard/item/${id}?embedded=true`
+    );
 });
 
 it.each([
