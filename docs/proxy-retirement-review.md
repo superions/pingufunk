@@ -4779,3 +4779,19 @@ native ARD-Fall verwendet Deutsch als Originalsprache und verlangt einen deutsch
 Release ohne `OV`. Keine neue Testdatei oder Matrix. Der bereits qualifizierte
 kompatible Leser bleibt geeignet, da sich kein Auftrags-/Quellenvertrag ändert.
 P03.4 bleibt bis zur tatsächlichen Freigabe auch der dritten Folge offen.
+
+Die Tagesnachprüfung nach PR #29 findet einen weiteren konkreten ARD-Vertrag:
+„Ein guter Tag ∙ Schwarzer Schnee (Fassung ab 16)“ meldet `blockedByFsk: true`
+und `mediaCollection: null`. Der bisherige Parser prüft den Streamkörper vor
+der Zugangssperre und bricht dadurch auch die Suche nach den drei verfügbaren
+Folgen ab. Die gemeinsame ARD-Auslegung prüft jetzt Programm-ID und Login-/FSK-/
+Geo-Sperren zuerst. Ein gesperrter oder fremder Player liefert keinen Beleg;
+freigegebene Player benötigen weiterhin den vollständigen gültigen Streamkörper.
+Es gibt keine Freigabe der gesperrten Fassung und keinen FSK-Bypass.
+
+Die vier vorhandenen Negativfälle verwenden jetzt den tatsächlich möglichen
+nullwertigen Streamkörper; sie sind vor der Korrektur kausal rot. Die begrenzte
+Wiedergabe der tatsächlichen Quellenkandidaten scheitert vorher genau an diesem
+gesperrten Player und läuft mit der geänderten Reihenfolge vollständig durch.
+Neue Testdateien oder eine zusätzliche native Matrix sind dafür nicht nötig.
+Die tatsächliche dreifache Sonarr-Freigabe bleibt bis zum korrigierten Rollout offen.

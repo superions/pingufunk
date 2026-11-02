@@ -62,12 +62,14 @@ const mediaSchema = z.object({
   maxVResolutionPx: z.unknown().optional(),
 });
 type ArdMedia = z.infer<typeof mediaSchema> & { originalLanguage: string | null };
-const widgetSchema = z.object({
+const playerAccessSchema = z.object({
   id: z.string().max(2048),
   type: z.literal("player_ondemand"),
   blockedByLoginOnly: z.boolean(),
   blockedByFsk: z.boolean(),
   geoblocked: z.boolean(),
+});
+const widgetSchema = playerAccessSchema.extend({
   availableTo: z.string().nullish(),
   mediaCollection: z.object({
     embedded: z.object({
@@ -116,10 +118,12 @@ export async function getArdSource(
         widget && typeof widget === "object" && Reflect.get(widget, "type") === "player_ondemand"
     );
     if (players.length !== 1) return null;
-    const player = widgetSchema.parse(players[0]);
     // Page IDs can differ; the player widget's identity must equal the requested video.
-    if (player.id !== id || player.blockedByLoginOnly || player.blockedByFsk || player.geoblocked)
+    // A denied player can legitimately omit its streams; check access before payload shape.
+    const access = playerAccessSchema.parse(players[0]);
+    if (access.id !== id || access.blockedByLoginOnly || access.blockedByFsk || access.geoblocked)
       return null;
+    const player = widgetSchema.parse(players[0]);
     const until = sourceInstant(player.availableTo);
     if (player.availableTo != null && until === null) throw new Error("Invalid source validity");
     const originalLanguage = language(player.mediaCollection.embedded.meta.ovLanguageCode);

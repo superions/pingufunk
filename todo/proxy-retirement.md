@@ -386,6 +386,11 @@ B05/B07, A2/A3, R4.
       deutscher Ton darf im gemeinsamen Titelowner kein zusätzliches `OV`
       erhalten; interner Fassungsstatus, IDs und Quellenbindung bleiben erhalten.
       Abschluss weiterhin erst nach der tatsächlichen Freigabe aller drei Folgen.
+      Die Tagesprüfung erkennt zusätzlich einen FSK-gesperrten fremden Treffer mit
+      nullwertigem Streamkörper. Die gemeinsame ARD-Prüfung muss Programm-ID und
+      Login-/FSK-/Geo-Sperren vor dem Streamkörper prüfen; gesperrte Treffer bleiben
+      ausgeschlossen und dürfen andere verfügbare Programme nicht blockieren.
+      Freigegebene Player behalten die vollständige Medien-/Rechteprüfung.
       Keine Profil-, Bibliotheks-, Auftrags- oder Schemaänderung,
       keine Medienprobe auf neuen Hosts.
 

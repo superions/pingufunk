@@ -147,6 +147,8 @@ it.each(["foreign-id", "expired", "login", "fsk", "geoblocked", "multiple-player
     if (kind === "login") player.blockedByLoginOnly = true;
     if (kind === "fsk") player.blockedByFsk = true;
     if (kind === "geoblocked") player.geoblocked = true;
+    if (["foreign-id", "login", "fsk", "geoblocked"].includes(kind))
+      Reflect.set(player, "mediaCollection", null);
     if (kind === "multiple-players") value.widgets.push(player);
     mock(value);
     expect(await getArdMedia(id, new HttpRequestBudget())).toEqual([]);

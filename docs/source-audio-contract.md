@@ -24,6 +24,10 @@ denselben `/api/newznab`-Vertrag; es gibt keinen zweiten Sprach-Endpunkt.
   und exakt dieselbe MP4-URL in einem `main`-Stream sind nötig. Alle `audios`
   müssen Sprache und bekannten Fassungsstatus übereinstimmend deklarieren.
   `meta.ovLanguageCode` ist nur Originalsprachenkontext, kein Tonsprachbeleg.
+  Programm-ID und Login-/FSK-/Geo-Sperren werden vor dem Streamkörper geprüft.
+  Ein gesperrter Player darf `mediaCollection: null` liefern und bleibt ausgeschlossen;
+  er darf die Suche nach anderen verfügbaren Programmen nicht abbrechen.
+  Bei freigegebenen Playern bleibt die vollständige Medienprüfung erforderlich.
   Fremde/unklare Auxiliary-Streams werden nicht als normale Fassung ausgegeben.
   Kein HTML, Senderseiten-Abgrasen, Login oder zusätzliches Medieninventar.
   Producer und Worker akzeptieren für diesen JSON-Beleg syntaktisch gültige
