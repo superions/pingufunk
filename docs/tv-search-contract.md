@@ -127,7 +127,7 @@ Ein Teilimport bleibt unbestätigt. Der v7-fähige Lesercheckpoint
 ein v6-only Image kann angenommene v7-Jobs nicht abarbeiten. Für neue
 CDN-unabhängige ARD-Belege und die Quellenpriorität aus P19.5 ist der
 fortgeschriebene kompatible Lesercheckpoint
-`cb2b66bc2077cde868cf46794a5756c31db286b0` erforderlich; die bestehende native
+`3e13fd7363641e342f7cdc4498ab47d347baeee0` erforderlich; die bestehende native
 Rückwegstrecke qualifiziert ihn gemeinsam mit dem Producer.
 
 Der Producer bindet „Der Tod ist groß“ von Quell-S10E13 an S00E02 und S00E03.

@@ -86,14 +86,17 @@ it("preserves explicit ARD expiry through enrichment and the serializer rather t
   expect(generateGenericRssItems(enriched[0], "all", false)).toEqual([]);
   expect(await getArdMedia(id, new HttpRequestBudget())).toEqual([]);
 });
-it("does not invent ARD expiry when the verified response contains no rights date", async () => {
-  const value = page();
-  Reflect.deleteProperty(value.widgets[0], "availableTo");
-  mock(value);
-  const source = await getArdSource(id, new HttpRequestBudget());
-  expect(source?.availability).toEqual({ state: "unknown" });
-  expect(ardEdition(source!.media, url)?.audioLanguage).toBe("de");
-});
+it.each([undefined, null])(
+  "does not invent ARD expiry for an absent rights date: %s",
+  async (availableTo) => {
+    const value = page();
+    Reflect.set(value.widgets[0], "availableTo", availableTo);
+    mock(value);
+    const source = await getArdSource(id, new HttpRequestBudget());
+    expect(source?.availability).toEqual({ state: "unknown" });
+    expect(ardEdition(source!.media, url)?.audioLanguage).toBe("de");
+  }
+);
 it("rejects an impossible ARD rights instant instead of Date.parse normalization", async () => {
   const value = page();
   value.widgets[0].availableTo = "2099-02-30T00:00:00Z";

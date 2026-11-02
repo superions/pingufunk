@@ -83,7 +83,7 @@ jobs:
 
       - name: Build the compatible Mediathek programme receiver without publishing
         run: |
-          git archive cb2b66bc2077cde868cf46794a5756c31db286b0 | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner --label org.opencontainers.image.revision=cb2b66bc2077cde868cf46794a5756c31db286b0 -t pingufunk-programme-receiver-qa -
+          git archive 3e13fd7363641e342f7cdc4498ab47d347baeee0 | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner --label org.opencontainers.image.revision=3e13fd7363641e342f7cdc4498ab47d347baeee0 -t pingufunk-programme-receiver-qa -
 
       - name: Verify bound Mediathek programmes through native Arr on both backends
         env:
@@ -196,7 +196,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           mkdir -p receiver-artifact
-          receiver_image="pingufunk-homelab-runner:cb2b66bc2077cde868cf46794a5756c31db286b0"
+          receiver_image="pingufunk-homelab-runner:3e13fd7363641e342f7cdc4498ab47d347baeee0"
           docker tag pingufunk-programme-receiver-qa "$receiver_image"
           docker save -o receiver-artifact/runner-amd64.tar "$receiver_image"
           docker image inspect "$receiver_image" --format '{{json .}}' | node -e '
@@ -209,7 +209,7 @@ jobs:
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pingufunk-receiver-amd64-cb2b66bc2077cde868cf46794a5756c31db286b0
+          name: pingufunk-receiver-amd64-3e13fd7363641e342f7cdc4498ab47d347baeee0
           path: receiver-artifact/
           retention-days: 3
           compression-level: 1
