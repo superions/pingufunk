@@ -110,9 +110,11 @@ export function classifyLanguageEdition(item: ApiResultItem): LanguageEdition {
     ...(signLanguage ? ["SIGN"] : []),
     ...(clearSpeech ? ["CLEAR"] : []),
   ];
+  // Preserve original-version identity below without triggering OV exclusions
+  // for a release whose actual audio is already proved German.
   const titleTokens = [
     ...(audioEvidence === "german" ? ["GERMAN"] : []),
-    ...(originalVersion ? ["OV"] : []),
+    ...(originalVersion && audioEvidence !== "german" ? ["OV"] : []),
     ...(germanSubtitles ? ["SUBBED"] : []),
     ...(audioEvidence === "german" ? featureTokens : []),
   ];

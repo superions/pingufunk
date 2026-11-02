@@ -4758,3 +4758,24 @@ nullwertige Rechte bei exakt belegtem deutschem Ton und Pixeln. Keine neue
 Testdatei oder Matrix. Der kompatible Leser behält dieselbe Normalisierung.
 Die tatsächliche Sonarr-Abnahme der drei Folgen bleibt bis zum korrigierten
 Rollout offen; HTTP 200 allein schließt diesen Befund nicht.
+
+PR #27/#28 sind gemergt. Die vollständige native Qualifikation
+[CI 41367587201](https://github.com/superions/pingufunk/actions/runs/41367587201)
+und die reguläre CI sind grün. Der korrigierte Quellstand `04c54a3` ist am
+02.11.2026 über GitOps live. Die tatsächliche lesende Sonarr-Nachprüfung findet
+S2026E20 und E21 als Deutsch/WEB-1080p und gibt sie im unveränderten Profil frei.
+Auch die ältere S2026E19 wird mit korrekter Folge, Sprache und Qualität gefunden;
+Sonarr lehnt dort ausschließlich wegen der bereits vorhandenen Datei am Cutoff ab.
+
+S2026E22 wird ebenfalls korrekt gefunden, trägt jedoch `GERMAN.OV`. ARD nennt
+Deutsch sowohl als tatsächlichen Ton als auch als Originalsprache. Der gemeinsame
+Titelowner ergänzt daraus zusätzlich `OV`; der vorhandene Sonarr-Ausschlussfilter
+lehnt den deutschen Treffer ab. Der Titelowner unterdrückt jetzt dieses redundante
+Kennzeichen ausschließlich bei belegtem deutschem Ton. Der interne
+Originalfassungsstatus, Variantenschlüssel, Quellenbefunde und persistierten
+Aufträge bleiben unverändert. Fremder/unbekannter Originalton behält `OV`.
+Der bestehende Sprachklassifikationsfall schützt dies kausal; der vorhandene
+native ARD-Fall verwendet Deutsch als Originalsprache und verlangt einen deutschen
+Release ohne `OV`. Keine neue Testdatei oder Matrix. Der bereits qualifizierte
+kompatible Leser bleibt geeignet, da sich kein Auftrags-/Quellenvertrag ändert.
+P03.4 bleibt bis zur tatsächlichen Freigabe auch der dritten Folge offen.

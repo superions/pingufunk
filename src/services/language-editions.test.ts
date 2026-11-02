@@ -32,10 +32,16 @@ describe("language edition evidence", () => {
   });
 
   it("adds GERMAN only for explicit German audio evidence", () => {
-    const edition = classifyLanguageEdition({ ...base, audioLanguage: "de-DE" });
+    const edition = classifyLanguageEdition({
+      ...base,
+      audioLanguage: "de-DE",
+      originalVersion: true,
+    });
 
     expect(edition.audioEvidence).toBe("german");
     expect(edition.titleTokens).toContain("GERMAN");
+    expect(edition.originalVersion).toBe(true);
+    expect(edition.titleTokens).not.toContain("OV");
   });
 
   it("keeps an explicitly foreign singleton out of the German feed", () => {

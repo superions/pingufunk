@@ -51,8 +51,11 @@ Die drei Qualitäts-URLs einer Quellzeile werden getrennt behandelt. Deutsch in
 HD beweist weder die Sprache der Standard- noch der Low-Fassung. Rohdaten aus
 dem Katalogcache bleiben unverändert. Belegte deutsche Fassungen erhalten den
 von Radarr parsebaren `GERMAN`-Titel; unbekannte bleiben nach der bestehenden
-konfigurierbaren Politik neutral. OV mit deutschen Untertiteln ist nicht
-deutscher Ton. Fassungs-GUIDs ändern sich nicht bloß durch einen besseren
+konfigurierbaren Politik neutral. Eine belegte deutsche Originalfassung bleibt
+im Release-Titel ausschließlich `GERMAN`, ohne zusätzliches `OV`. Der interne
+Originalfassungsstatus und die Fassungsidentität bleiben erhalten; fremder oder
+unbekannter Originalton behält sein `OV`-Kennzeichen. OV mit deutschen Untertiteln
+ist nicht deutscher Ton. Fassungs-GUIDs ändern sich nicht bloß durch einen besseren
 Sprachbeleg; aktuelle Download-URLs bleiben erhalten.
 
 ## Grenzen und Fehler

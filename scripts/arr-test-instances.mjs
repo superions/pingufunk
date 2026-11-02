@@ -1079,6 +1079,7 @@ async function movieSearch(root, manifest, app = "radarr") {
         manifest.sourceAudio &&
         !missingArteEvidence &&
         (!candidates[0].title.includes(".GERMAN.") ||
+          candidates[0].title.includes(".OV.") ||
           candidates[0].languages.length !== 1 ||
           candidates[0].languages[0].name !== "German")
       )

@@ -380,8 +380,14 @@ B05/B07, A2/A3, R4.
       drei kanonischen Folgen nach dem autorisierten Rollout. Ein nullwertiges
       ARD-Ablaufdatum gilt wie eine fehlende Angabe als unbekannt, nicht als
       Parserfehler für die gesamte Suche. Ungültige Datumswerte bleiben Fehler.
-      Keine Profil-,
-      Bibliotheks-, Auftrags- oder Schemaänderung, keine Medienprobe auf neuen Hosts.
+      Die Live-Nachprüfung vom 02.11.2026 findet alle drei Folgen als Deutsch/
+      WEB-1080p. S2026E20/E21 sind freigegeben; S2026E22 trägt zusätzlich `OV`
+      und scheitert dadurch am bestehenden Sonarr-Ausschlussfilter. Belegter
+      deutscher Ton darf im gemeinsamen Titelowner kein zusätzliches `OV`
+      erhalten; interner Fassungsstatus, IDs und Quellenbindung bleiben erhalten.
+      Abschluss weiterhin erst nach der tatsächlichen Freigabe aller drei Folgen.
+      Keine Profil-, Bibliotheks-, Auftrags- oder Schemaänderung,
+      keine Medienprobe auf neuen Hosts.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
