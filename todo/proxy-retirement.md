@@ -348,9 +348,9 @@ B05/B07, A2/A3, R4.
       Sprachbeleg. FFmpeg-/Provider-/HLS-Regressionen und voller Reviewpfad grün;
       keine Tracksprach-Behauptung wird aus Titel, Kanal oder Locale abgeleitet.
 
-- [ ] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
+- [x] **P03.4 — Konkrete Filmrendition statt Originalsprachen-Fallback belegen.**
       Owner: `source-audio.ts`, `ard-source-audio.ts`,
-      `mp4-audio-language.ts`, Film-RSS/NZB und frische Workerprüfung.
+      `mp4-audio-language.ts`, `language-editions.ts`, Film-RSS/NZB und frische Workerprüfung.
       ARTE-/ARD-Belege verlangen identische Programm-ID und exakte Medien-URL;
       MP4-Proben prüfen alle Audiotracks innerhalb höchstens vier 1-MiB-Fenstern.
       Sender, Titel, Locale und Filmoriginalsprache ersetzen keinen Audiobeleg.
@@ -372,27 +372,30 @@ B05/B07, A2/A3, R4.
       ohne konkrete Quelle oder Fehlerhypothese. Unbekannte Sprachen,
       unvollständige oder erst in einem fünften Fenster erreichbare Fakten
       bleiben dokumentierte Unknown-Grenzen; kein implizites Erweiterungsprojekt.
-      Wieder geöffnet am 01.11.2026: Tatort S2026E20–E22 stehen im
+      Ergänzende Abnahme 02.11.2026: Tatort S2026E20–E22 stehen im
       MediathekView-Katalog und besitzen exakte deutsche ARD-MP4-Belege mit
-      Bildmaßen. Die alte CDN-Hostliste verwirft diese Fakten und Sonarr lehnt
-      die korrekt zugeordneten Treffer als Unknown ab. Abschluss verlangt den
-      bestehenden nativen Qualitätsgate und die lesende Sonarr-Abnahme der
-      drei kanonischen Folgen nach dem autorisierten Rollout. Ein nullwertiges
-      ARD-Ablaufdatum gilt wie eine fehlende Angabe als unbekannt, nicht als
-      Parserfehler für die gesamte Suche. Ungültige Datumswerte bleiben Fehler.
-      Die Live-Nachprüfung vom 02.11.2026 findet alle drei Folgen als Deutsch/
-      WEB-1080p. S2026E20/E21 sind freigegeben; S2026E22 trägt zusätzlich `OV`
-      und scheitert dadurch am bestehenden Sonarr-Ausschlussfilter. Belegter
-      deutscher Ton darf im gemeinsamen Titelowner kein zusätzliches `OV`
-      erhalten; interner Fassungsstatus, IDs und Quellenbindung bleiben erhalten.
-      Abschluss weiterhin erst nach der tatsächlichen Freigabe aller drei Folgen.
-      Die Tagesprüfung erkennt zusätzlich einen FSK-gesperrten fremden Treffer mit
-      nullwertigem Streamkörper. Die gemeinsame ARD-Prüfung muss Programm-ID und
-      Login-/FSK-/Geo-Sperren vor dem Streamkörper prüfen; gesperrte Treffer bleiben
-      ausgeschlossen und dürfen andere verfügbare Programme nicht blockieren.
-      Freigegebene Player behalten die vollständige Medien-/Rechteprüfung.
-      Keine Profil-, Bibliotheks-, Auftrags- oder Schemaänderung,
-      keine Medienprobe auf neuen Hosts.
+      Bildmaßen. Die CDN-Hostliste ist entfernt; Producer und frischer Worker
+      verwenden weiterhin denselben exakt gebundenen ARD-Quellenbefund.
+      Programm-ID und Login-/FSK-/Geo-Sperren werden vor dem Streamkörper geprüft;
+      gesperrte Player dürfen nullwertige Streams liefern und bleiben ausgeschlossen.
+      Freigegebene Player behalten die vollständige Medienprüfung.
+      Ein fehlendes/nullwertiges Ablaufdatum bedeutet unbekannte Gültigkeit,
+      keinen Parserfehler für die gesamte Suche. Ungültige/abgelaufene Werte
+      und unabhängige Zugangs-/Identitäts-/Fassungsgrenzen bleiben gesperrt.
+      Belegter deutscher Ton erhält im gemeinsamen Titelowner kein zusätzliches
+      OV; interner Originalfassungsstatus, Variantenschlüssel, IDs und
+      Quellenbindung bleiben erhalten. Fremder/unbekannter Originalton behält OV.
+      PR #27/#28/#29/#30 sind gemergt. Die vollständige native CI 41409864228 besteht
+      einschließlich ARD-Qualitätsfall direkt/via Prowlarr sowie SQLite/PG.
+      Die lesende Live-Abnahme vom 2026-11-02 bestätigt alle drei
+      kanonischen Folgen als Deutsch/WEB-1080p, approved und downloadAllowed,
+      ohne Ablehnung im unveränderten Sonarr-Profil. Auch die ältere S2026E19
+      wird korrekt gefunden; dort greift ausschließlich der vorhandene Cutoff.
+      4 bestehende Aufträge, 156 Dateien und Episodenbindungen sowie
+      428 Historyeinträge, Profile/Einstellungen, Mounts und Schema bleiben
+      erhalten. Keine manuellen Grabs/Imports, Profil- oder Bibliotheksänderung,
+      keine Medienprobe auf neuen Hosts. Konkreter Umfang und Nachweise stehen
+      im Tatort-Abschnitt von docs/proxy-retirement-review.md.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch
 
