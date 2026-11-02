@@ -68,7 +68,7 @@ const widgetSchema = z.object({
   blockedByLoginOnly: z.boolean(),
   blockedByFsk: z.boolean(),
   geoblocked: z.boolean(),
-  availableTo: z.string().optional(),
+  availableTo: z.string().nullish(),
   mediaCollection: z.object({
     embedded: z.object({
       meta: z.object({ ovLanguageCode: z.string().max(35).optional() }),
@@ -121,8 +121,7 @@ export async function getArdSource(
     if (player.id !== id || player.blockedByLoginOnly || player.blockedByFsk || player.geoblocked)
       return null;
     const until = sourceInstant(player.availableTo);
-    if (player.availableTo !== undefined && until === null)
-      throw new Error("Invalid source validity");
+    if (player.availableTo != null && until === null) throw new Error("Invalid source validity");
     const originalLanguage = language(player.mediaCollection.embedded.meta.ovLanguageCode);
     const media = player.mediaCollection.embedded.streams
       // Unrecognized auxiliary/sign-language streams need their own edition

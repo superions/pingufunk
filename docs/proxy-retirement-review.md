@@ -4741,3 +4741,20 @@ Lokal bestehen 1.863 Tests mit Coverage (28 unverändert opt-in), Lint, Typechec
 Format und Build. Vor der Korrektur scheitern die NDR-/BR-Fälle kausal; danach
 bestehen sie. Native Qualifikation, kompatibler Rückweg und Live-Abnahme stehen
 noch aus. Vorhandene Aufträge und Dateien bleiben erhalten.
+
+Die erste Live-Nachprüfung am 02.11.2026 bestätigt den Erhalt der vier Aufträge
+und 156 Dateien, deckt jedoch einen zweiten Parserfehler auf: Ein unabhängiger
+Tatort-Begleitclip hat im offiziellen ARD-JSON `availableTo: null`. Die bisherige
+Schemaauslegung akzeptiert nur einen String oder einen fehlenden Schlüssel und
+verwirft deshalb die gesamte Newznab-Suche mit HTTP 503. Eine direkte begrenzte
+Wiedergabe derselben 83 neutralen Katalogkandidaten scheitert kausal an diesem
+Clip; die drei angefragten Hauptfilme besitzen gültige Quellenbelege.
+
+Die gemeinsame ARD-Auslegung normalisiert fehlendes und nullwertiges Ablaufdatum
+zu unbekannter Gültigkeit. Ungültige, abgelaufene oder widersprüchliche Angaben
+bleiben unverändert gesperrt. Der bestehende Abwesenheitsfall erhält die
+JSON-null-Variante; der vorhandene native ARD-Qualitätsfall verwendet jetzt
+nullwertige Rechte bei exakt belegtem deutschem Ton und Pixeln. Keine neue
+Testdatei oder Matrix. Der kompatible Leser behält dieselbe Normalisierung.
+Die tatsächliche Sonarr-Abnahme der drei Folgen bleibt bis zum korrigierten
+Rollout offen; HTTP 200 allein schließt diesen Befund nicht.

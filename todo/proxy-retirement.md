@@ -377,7 +377,10 @@ B05/B07, A2/A3, R4.
       Bildmaßen. Die alte CDN-Hostliste verwirft diese Fakten und Sonarr lehnt
       die korrekt zugeordneten Treffer als Unknown ab. Abschluss verlangt den
       bestehenden nativen Qualitätsgate und die lesende Sonarr-Abnahme der
-      drei kanonischen Folgen nach dem autorisierten Rollout. Keine Profil-,
+      drei kanonischen Folgen nach dem autorisierten Rollout. Ein nullwertiges
+      ARD-Ablaufdatum gilt wie eine fehlende Angabe als unbekannt, nicht als
+      Parserfehler für die gesamte Suche. Ungültige Datumswerte bleiben Fehler.
+      Keine Profil-,
       Bibliotheks-, Auftrags- oder Schemaänderung, keine Medienprobe auf neuen Hosts.
 
 ## Phase P04 — Job-Isolation ohne Kategoriebruch

@@ -200,7 +200,7 @@ globalThis.fetch = async (input, init) => {
           blockedByLoginOnly: false,
           blockedByFsk: false,
           geoblocked: false,
-          availableTo: "2099-01-01T00:00:00Z",
+          availableTo: null,
           mediaCollection: {
             embedded: {
               meta: { ovLanguageCode: "eng" },

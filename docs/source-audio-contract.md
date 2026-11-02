@@ -33,7 +33,9 @@ denselben `/api/newznab`-Vertrag; es gibt keinen zweiten Sprach-Endpunkt.
   Datensatz der kanonischen ARD-Sendung. Es wird ausschließlich der feste
   ARD-Page-Gateway-Endpunkt abgefragt, keine beliebige Medien-URL. Fehlende
   CRID-/URL-/Audio-/Maßdeklarationen bleiben unbestätigt. Die separate
-  Range-Probe-Whitelist bleibt unverändert.
+  Range-Probe-Whitelist bleibt unverändert. Ein fehlendes oder explizit
+  nullwertiges `availableTo` bedeutet unbekannte Gültigkeit. Ein nichtleerer
+  ungültiger Datumswert bleibt ein Fehler; es wird kein Ablaufdatum erfunden.
 - MP4: ISO-BMFF-`mdhd` ausschließlich auf Sound-Tracks vorhandener MP4-URLs der
   beiden explizit erlaubten ZDF-CDN-Hosts sowie `ctv-videos.daserste.de`.
   Höchstens vier Bereiche mit jeweils
