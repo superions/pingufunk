@@ -4713,85 +4713,68 @@ P19.1–P19.6 sind im genehmigten Umfang geschlossen: Titelvarianten, explizite 
 
 Die Abschlussänderung betrifft ausschließlich Dokumentation. Produkt-/Container-/Backendnachweise vom qualifizierten Quellstand werden wiederverwendet; frisch geprüft sind Format, Links, Checkboxen und Diff. Keine weitere Teststrecke oder CI-Matrix.
 
-## Tatort: CDN-Abhängigkeit des ARD-Belegowners (P03.4 wieder geöffnet)
+## Tatort: strukturelle Quellen- und Titelkorrektur (P03.4 abgenommen)
 
-Die lesende Diagnose vom 01.11.2026 findet „Unter Freunden“, „Unter Feinden“
-und „Gottesgarten“ im MediathekView-Katalog. Die kanonischen Newznab-Treffer
-tragen die richtigen Sonarr-Koordinaten S2026E20–E22, aber UNKNOWN. Der reale
-Sonarr-Verbraucher weist den korrekt zugeordneten Treffer deshalb mit
-„Unknown is not wanted in profile“ zurück. Das Qualitätsprofil wird nicht geändert.
+Die tatsächliche Sonarr-Diagnose trennte vier Fehler im gemeinsamen Quellen- und
+Releaseweg. Die drei aktuellen Folgen waren im MediathekView-Katalog vorhanden;
+die Episodenidentität war bereits korrekt. Das Qualitätsprofil bleibt unverändert.
 
-Die offiziellen ARD-Player deklarieren für dieselben Sendungen die exakten
-indexierten MP4-URLs, deutschen Standardton und 1920×1080, 1280×720 beziehungsweise
-640×360 Pixel. NDR- und BR-Auslieferungshosts scheitern allein an der bisherigen
-Zwei-Host-Liste vor der vorhandenen Belegauswertung. Dies ist eine strukturelle
-Kopplung im gemeinsamen Quellenowner, kein fehlender Katalogtreffer. Die frühere
-P19-Abnahme beweist diese zusätzliche Quellenabdeckung nicht.
+- Die ARD-CDN-Hostliste verwarf exakt deklarierte deutsche Sprach- und Bildmaße
+  auf NDR-/BR-Auslieferungshosts. Sonarr erhielt UNKNOWN und lehnte die Treffer ab.
+  PR #27 entfernt diese Kopplung. Kanonische Programm-ID, exakte HTTPS-MP4-URL
+  einschließlich Query, Ton/Fassung, Rechte und Pixel bleiben gebunden; Abrufe
+  gehen weiterhin ausschließlich an den festen ARD-Metadatenendpunkt. Die separate
+  MP4-Range-Whitelist bleibt unverändert.
+- Ein unabhängiger Begleitclip meldet `availableTo: null`. Der bisherige Parser
+  brach deshalb die gesamte Newznab-Suche mit HTTP 503 ab. PR #28 behandelt null
+  wie eine fehlende Angabe als unbekannte Gültigkeit. Ungültige/abgelaufene Werte
+  und Zugangssperren bleiben Fehler. Die erste Live-Nachprüfung deckte diese
+  zusätzliche Lücke auf; während der Qualifikation wurde kontrolliert auf den
+  vorherigen stabilen Stand zurückgesetzt. Aufträge und Dateien blieben erhalten.
+- FSK-gesperrte Player dürfen einen nullwertigen Streamkörper liefern. Die Tagesprüfung
+  scheiterte konkret an einer anderen Fassung mit `blockedByFsk: true` und
+  `mediaCollection: null`. PR #30 prüft Programm-ID und Login-/FSK-/Geo-Sperren
+  vor der Streamauslegung. Gesperrte/fremde Player bleiben ausgeschlossen;
+  verfügbare Player behalten die vollständige Medienprüfung. Kein FSK-Bypass.
+- Bei Gottesgarten nennt ARD Deutsch zugleich als tatsächlichen Ton und als
+  Originalsprache. Der Titelowner ergänzte `GERMAN.OV`, worauf Sonarr den Treffer
+  am vorhandenen OV-Filter ablehnte. PR #29 entfernt das zusätzliche Titelkennzeichen
+  ausschließlich bei belegtem Deutsch. Originalfassungsstatus, Variantenschlüssel,
+  GUIDs und Quellenbindung bleiben unverändert; fremder/unbekannter Originalton
+  behält OV. Keine Tatort-Sonderbehandlung und keine Profilabschwächung.
 
-Die Korrektur entfernt die CDN-Hostliste für den offiziellen ARD-JSON-Beleg.
-Kanonische Programm-ID, exakte Medien-URL einschließlich Query, HTTPS-/MP4-Syntax,
-Fassung, Sprache und Rechte bleiben erforderlich. Requests gehen weiterhin nur
-an den festen ARD-Metadatenendpunkt. Die separate MP4-Range-Whitelist bleibt
-unverändert. Bestehende Regressionen prüfen NDR, BR und einen beliebigen
-synthetischen CDN sowie nicht deklarierte URLs und fremde Sprache. Der vorhandene
-native Qualitätsfall verwendet jetzt ebenfalls eine deklarierte URL auf einem
-beliebigen CDN; keine neue Testdatei, Strecke oder Matrix.
+Vorhandene Regressionen schützen die CDN-/URL-Bindung, fehlendes/nullwertiges
+Ablaufdatum und den deutschen Originalton. Der vorhandene native ARD-Qualitätsfall
+verwendet einen beliebigen CDN, nullwertiges Ablaufdatum und Deutsch als
+Originalsprache; native Radarr-/Sonarr-Auswertung verlangt Deutsch/WEB-1080p ohne
+OV. Keine neue Testdatei oder Matrix. 105 fokussierte Prüfungen, volle Coverage-
+Suite, Lint, Typecheck, Format und Build sind lokal grün. Die reguläre
+[CI 41409864276](https://github.com/superions/pingufunk/actions/runs/41409864276)
+und vollständige native
+[CI 41409864228](https://github.com/superions/pingufunk/actions/runs/41409864228)
+bestehen einschließlich der vorhandenen Mediathek-/YouTube-, SQLite-/PG-,
+Persistenz- und Rückweggates.
 
-Lokal bestehen 1.863 Tests mit Coverage (28 unverändert opt-in), Lint, Typecheck,
-Format und Build. Vor der Korrektur scheitern die NDR-/BR-Fälle kausal; danach
-bestehen sie. Native Qualifikation, kompatibler Rückweg und Live-Abnahme stehen
-noch aus. Vorhandene Aufträge und Dateien bleiben erhalten.
+PR #27/#28/#29/#30 sind gemergt. Quellstand 3087ac5f8b91327bffd2ae8a0359e8d2b99ecf90 und
+Mainmerge e2d8a53da2e2c6748a26e6c724393736e173e072 haben denselben qualifizierten Dateibaum.
+Die exakte Linux/amd64-Imageconfig sha256:597fe62f9fc5183eb299250a7517a4e9f11f3b68c32956be2f6de4578d3deb41 ist nach frischem
+befundfreiem Imagescan über GitOps live. Der zuvor qualifizierte kompatible Leser
+3e13fd7363641e342f7cdc4498ab47d347baeee0 bleibt erhalten; der Titelzusatz ändert
+keinen Auftrags-/Quellenvertrag.
 
-Die erste Live-Nachprüfung am 02.11.2026 bestätigt den Erhalt der vier Aufträge
-und 156 Dateien, deckt jedoch einen zweiten Parserfehler auf: Ein unabhängiger
-Tatort-Begleitclip hat im offiziellen ARD-JSON `availableTo: null`. Die bisherige
-Schemaauslegung akzeptiert nur einen String oder einen fehlenden Schlüssel und
-verwirft deshalb die gesamte Newznab-Suche mit HTTP 503. Eine direkte begrenzte
-Wiedergabe derselben 83 neutralen Katalogkandidaten scheitert kausal an diesem
-Clip; die drei angefragten Hauptfilme besitzen gültige Quellenbelege.
+Die lesende Live-Abnahme 2026-11-02T09:36:27.054Z bestätigt in tatsächlichem Sonarr:
+Unter Freunden (S2026E20), Unter Feinden (S2026E21) und Gottesgarten (S2026E22)
+werden korrekt als Deutsch/WEB-1080p gefunden, sind approved und downloadAllowed
+und haben keine Ablehnung im unveränderten Profil. Die ältere S2026E19 wird
+mit korrekter Folge, Sprache und Qualität gefunden; dort verhindert ausschließlich
+die bereits vorhandene Datei am Cutoff eine erneute Freigabe.
+4 bestehende Aufträge, 156 physische Dateien und Episodenbindungen,
+428 Historyeinträge, Profile/Einstellungen, Mounts und fünf Migrationen sind
+unverändert; healthy/idle und keine Sonarr-Healthwarnung. Keine manuellen Grabs,
+Downloads, Retries oder Bibliotheksimporte ausgelöst. Kein allgemeiner Nachweis
+für beliebige zukünftige Quellen oder Fassungen.
 
-Die gemeinsame ARD-Auslegung normalisiert fehlendes und nullwertiges Ablaufdatum
-zu unbekannter Gültigkeit. Ungültige, abgelaufene oder widersprüchliche Angaben
-bleiben unverändert gesperrt. Der bestehende Abwesenheitsfall erhält die
-JSON-null-Variante; der vorhandene native ARD-Qualitätsfall verwendet jetzt
-nullwertige Rechte bei exakt belegtem deutschem Ton und Pixeln. Keine neue
-Testdatei oder Matrix. Der kompatible Leser behält dieselbe Normalisierung.
-Die tatsächliche Sonarr-Abnahme der drei Folgen bleibt bis zum korrigierten
-Rollout offen; HTTP 200 allein schließt diesen Befund nicht.
-
-PR #27/#28 sind gemergt. Die vollständige native Qualifikation
-[CI 41367587201](https://github.com/superions/pingufunk/actions/runs/41367587201)
-und die reguläre CI sind grün. Der korrigierte Quellstand `04c54a3` ist am
-02.11.2026 über GitOps live. Die tatsächliche lesende Sonarr-Nachprüfung findet
-S2026E20 und E21 als Deutsch/WEB-1080p und gibt sie im unveränderten Profil frei.
-Auch die ältere S2026E19 wird mit korrekter Folge, Sprache und Qualität gefunden;
-Sonarr lehnt dort ausschließlich wegen der bereits vorhandenen Datei am Cutoff ab.
-
-S2026E22 wird ebenfalls korrekt gefunden, trägt jedoch `GERMAN.OV`. ARD nennt
-Deutsch sowohl als tatsächlichen Ton als auch als Originalsprache. Der gemeinsame
-Titelowner ergänzt daraus zusätzlich `OV`; der vorhandene Sonarr-Ausschlussfilter
-lehnt den deutschen Treffer ab. Der Titelowner unterdrückt jetzt dieses redundante
-Kennzeichen ausschließlich bei belegtem deutschem Ton. Der interne
-Originalfassungsstatus, Variantenschlüssel, Quellenbefunde und persistierten
-Aufträge bleiben unverändert. Fremder/unbekannter Originalton behält `OV`.
-Der bestehende Sprachklassifikationsfall schützt dies kausal; der vorhandene
-native ARD-Fall verwendet Deutsch als Originalsprache und verlangt einen deutschen
-Release ohne `OV`. Keine neue Testdatei oder Matrix. Der bereits qualifizierte
-kompatible Leser bleibt geeignet, da sich kein Auftrags-/Quellenvertrag ändert.
-P03.4 bleibt bis zur tatsächlichen Freigabe auch der dritten Folge offen.
-
-Die Tagesnachprüfung nach PR #29 findet einen weiteren konkreten ARD-Vertrag:
-„Ein guter Tag ∙ Schwarzer Schnee (Fassung ab 16)“ meldet `blockedByFsk: true`
-und `mediaCollection: null`. Der bisherige Parser prüft den Streamkörper vor
-der Zugangssperre und bricht dadurch auch die Suche nach den drei verfügbaren
-Folgen ab. Die gemeinsame ARD-Auslegung prüft jetzt Programm-ID und Login-/FSK-/
-Geo-Sperren zuerst. Ein gesperrter oder fremder Player liefert keinen Beleg;
-freigegebene Player benötigen weiterhin den vollständigen gültigen Streamkörper.
-Es gibt keine Freigabe der gesperrten Fassung und keinen FSK-Bypass.
-
-Die vier vorhandenen Negativfälle verwenden jetzt den tatsächlich möglichen
-nullwertigen Streamkörper; sie sind vor der Korrektur kausal rot. Die begrenzte
-Wiedergabe der tatsächlichen Quellenkandidaten scheitert vorher genau an diesem
-gesperrten Player und läuft mit der geänderten Reihenfolge vollständig durch.
-Neue Testdateien oder eine zusätzliche native Matrix sind dafür nicht nötig.
-Die tatsächliche dreifache Sonarr-Freigabe bleibt bis zum korrigierten Rollout offen.
+Produktive Arr-Kanäle bleiben ungepinnt auf latest. Radarr wurde auf das aktuelle
+Image aktualisiert; der Nutzer hat dieses konkrete Update trotz der dokumentierten
+Findings ausdrücklich freigegeben. Diese Ausnahme ist kein befundfreier Scan und
+keine Freigabe anderer Images. Sonarr/Prowlarr wurden aktuell verifiziert.
