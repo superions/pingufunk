@@ -36,7 +36,7 @@ const version = paired ? 7 : 6;
 assert(["direct", "forwarded"].includes(transport));
 assert(["sqlite", "postgresql"].includes(backend));
 const candidateTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE;
-const receiverTag = "pingufunk-programme-receiver-qa";
+const receiverTag = process.env.PINGUFUNK_ARR_QA_RECEIVER_IMAGE ?? "pingufunk-programme-receiver-qa";
 assert(candidateTag);
 const candidateImage = docker(["image", "inspect", candidateTag, "--format", "{{.Id}}"]);
 const receiverImage = docker(["image", "inspect", receiverTag, "--format", "{{.Id}}"]);

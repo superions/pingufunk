@@ -534,7 +534,8 @@ try {
   docker(["stop", controller]);
   // Roll back this source extension to its immediately preceding, v1-v4-aware
   // checkpoint; unrelated pre-protocol DB-cutover images cannot reject v5.
-  const rollbackTag = "pingufunk-youtube-source-rollback-qa";
+  const rollbackTag =
+    process.env.PINGUFUNK_ARR_QA_YOUTUBE_ROLLBACK_IMAGE ?? "pingufunk-youtube-source-rollback-qa";
   const rollbackImage = docker(["image", "inspect", rollbackTag, "--format", "{{.Id}}"]);
   rollbackContainer = `pingufunk-arr-youtube-rollback-${manifest.owner}`;
   const databaseUrl =

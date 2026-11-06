@@ -7,9 +7,10 @@ case "$CI_PG_IMAGE" in
   *) echo "Only reviewed disposable PostgreSQL test images are allowed" >&2; exit 1 ;;
 esac
 
-# Disposable, loopback-only PostgreSQL for fork CI and local development gates.
-# Trust auth is safe only inside this short-lived local container; never reuse
-# this setup for a shared host or production endpoint.
+# Disposable, loopback-only PostgreSQL with a per-run password. Never use
+# these synthetic credentials or this container for a production endpoint.
+CI_PG_PASSWORD="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+export POSTGRES_PASSWORD="$CI_PG_PASSWORD"
 CI_PG_CONTAINER="pingufunk-ci-pg-${RANDOM}-${RANDOM}"
 CI_PG_NETWORK="${CI_PG_CONTAINER}-net"
 CI_PG_STARTED=0
@@ -30,7 +31,7 @@ trap cleanup EXIT
 docker network create "$CI_PG_NETWORK" >/dev/null
 CI_PG_NETWORK_CREATED=1
 docker run --rm -d --name "$CI_PG_CONTAINER" --network "$CI_PG_NETWORK" \
-  -e POSTGRES_HOST_AUTH_METHOD=trust \
+  -e POSTGRES_PASSWORD \
   -p 127.0.0.1::5432 "$CI_PG_IMAGE" >/dev/null
 CI_PG_STARTED=1
 
@@ -55,22 +56,21 @@ if [[ ! "$port" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
-  -c 'CREATE ROLE pingufunk_qa_import LOGIN' >/dev/null
-docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
-  -c 'CREATE ROLE pingufunk_qa_runtime LOGIN' >/dev/null
-docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
-  -c 'CREATE ROLE pingufunk_qa_denied LOGIN' >/dev/null
+# Pass synthetic passwords through stdin, not process arguments or logs.
+printf "CREATE ROLE pingufunk_qa_import LOGIN PASSWORD '%s';\nCREATE ROLE pingufunk_qa_runtime LOGIN PASSWORD '%s';\nCREATE ROLE pingufunk_qa_denied LOGIN PASSWORD '%s';\n" \
+  "$CI_PG_PASSWORD" "$CI_PG_PASSWORD" "$CI_PG_PASSWORD" |
+  docker exec -i "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null
+unset POSTGRES_PASSWORD
 for database in pingufunk_qa pingufunk_qa_fresh; do
   docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
     -c "CREATE DATABASE ${database}" >/dev/null
-  DATABASE_URL="postgresql://postgres@127.0.0.1:${port}/${database}" \
+  DATABASE_URL="postgresql://postgres:${CI_PG_PASSWORD}@127.0.0.1:${port}/${database}" \
     npx prisma migrate deploy
 done
 
 docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa_fresh \
   -c 'CREATE SCHEMA p11_other_target' >/dev/null
-DATABASE_URL="postgresql://postgres@127.0.0.1:${port}/pingufunk_qa_fresh?schema=p11_other_target" \
+DATABASE_URL="postgresql://postgres:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa_fresh?schema=p11_other_target" \
   npx prisma migrate deploy
 docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_qa_fresh \
   -c 'GRANT USAGE ON SCHEMA p11_other_target TO pingufunk_qa_import' \
@@ -111,40 +111,40 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   >/dev/null
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
-  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
   npx vitest run src/lib/db-schema.test.ts scripts/postgresql-runtime.test.ts scripts/postgresql-rule-identity.test.ts scripts/postgresql-prepare.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
-  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
   npx vitest run scripts/media-expectations-runtime.test.ts scripts/tv-source-review-runtime.test.ts scripts/tv-delivery-runtime.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
-  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
   npx vitest run scripts/settings-runtime.test.ts scripts/youtube-catalogue-runtime.test.ts scripts/youtube-mapping-runtime.test.ts scripts/source-admission-runtime.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
-  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
-  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
   npx vitest run scripts/download-read-runtime.test.ts scripts/enqueue-runtime.test.ts scripts/worker-lease-runtime.test.ts scripts/source-workers-runtime.test.ts
 
 # Pause only this harness-owned container, after the parallel CRUD suites finish.
-DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
+DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
   npx prisma migrate deploy
 PINGUFUNK_REQUIRE_PG_RECONNECT_TESTS=1 \
   PINGUFUNK_TEST_RECONNECT_CONTAINER="$CI_PG_CONTAINER" \
-  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
-  DATABASE_URL="postgresql://pingufunk_qa_runtime@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
+  PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
+  DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \
   npx vitest run scripts/postgresql-reconnect.test.ts
 
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
-  PINGUFUNK_TEST_DENIED_URL="postgresql://pingufunk_qa_denied@127.0.0.1:${port}/pingufunk_qa" \
-  DATABASE_URL="postgresql://pingufunk_qa_denied@127.0.0.1:${port}/pingufunk_qa" \
+  PINGUFUNK_TEST_DENIED_URL="postgresql://pingufunk_qa_denied:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
+  DATABASE_URL="postgresql://pingufunk_qa_denied:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
   npx vitest run scripts/postgresql-write-boundary.test.ts
 
 PINGUFUNK_REQUIRE_PG_IMPORT_TESTS=1 \
-  PINGUFUNK_TEST_IMPORT_URL="postgresql://pingufunk_qa_import@127.0.0.1:${port}/pingufunk_qa_fresh" \
-  DATABASE_URL="postgresql://pingufunk_qa_import@127.0.0.1:${port}/pingufunk_qa_fresh" \
+  PINGUFUNK_TEST_IMPORT_URL="postgresql://pingufunk_qa_import:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa_fresh" \
+  DATABASE_URL="postgresql://pingufunk_qa_import:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa_fresh" \
   npx vitest run scripts/postgresql-import.test.ts
