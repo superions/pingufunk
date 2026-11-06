@@ -3,8 +3,19 @@
 Das eigene Forgejo-Repository ist die Entwicklungsquelle; GitHub enthält den
 öffentlichen Quellcode. Themenzweige laufen durch die Forgejo-CI, ohne GitHub
 oder GHCR zu verändern. Der Runner verwendet einen Build-Cache und ausschließlich
-eigene Testcontainer, synthetische Dateien und temporäre Datenbanken. SQLite und
-PostgreSQL sowie die nativen Arr-Fixtures bleiben Teil der Prüfung.
+eigene Testcontainer, synthetische Dateien und temporäre Datenbanken. Die
+Codeprüfung, PostgreSQL-Tests und der Image-Build laufen parallel. Der Image-Build
+enthält den Produktbuild; ein zweiter Build außerhalb des Containers entfällt.
+Vor einer Veröffentlichung prüfen isolierte Tests SQLite und PostgreSQL sowie
+die Wiederentdeckung alter Folgen direkt und über Prowlarr.
+
+Die ausführlichen nativen Import-, Qualitäts-, Migrations- und Rollbackprüfungen
+bleiben als manuell startbarer Forgejo-Workflow `Pingufunk extended integration`
+erhalten. Sie laufen nicht bei jedem Push und blockieren den schnellen
+Veröffentlichungsweg nicht. Bei Änderungen an den jeweils betroffenen Verträgen
+müssen sie gezielt ausgeführt und ihre Ergebnisse geprüft werden. Der private
+Forgejo-Tag `ci/programme-receiver-3e13fd7` hält den bereits öffentlich
+vorhandenen historischen Teststand dafür erreichbar; er ist kein Produktrelease.
 
 Nach erfolgreichem Lauf eines aktuellen `main`-Commits führt die CI zwei Schritte
 aus:
