@@ -60,8 +60,11 @@ Jobs hineingeschrieben, keine DDL oder neue Jobversion.
 Eine bereits gelistete Quelle mit sicherer Serien-/Episodenidentität bleibt bei
 zukünftigem Airdate in exakter oder Staffelsuche nutzbar. Kein Warten auf RSS
 oder TV-Termin; Quelle und Metadaten beschreiben verschiedene Ereignisse.
-Sonarr-RSS behält seine inklusive UTC-Vergangenheitsgrenze und schließt
-future/missing/invalid Airdates weiterhin aus. Der native Endpoint behält bei
+Der reguläre Sonarr-RSS-Abgleich behält sein jüngeres UTC-Zeitfenster. Daneben
+meldet die begrenzte Katalogsuche erneut verfügbare, überwachte und noch fehlende
+ältere Folgen an das bestehende Readiness-Journal. Dessen Nachlieferung verlangt
+ein gültiges, bereits vergangenes Sonarr-Airdate; future/missing/invalid bleiben
+ausgeschlossen. Der native Endpoint behält bei
 wirklich leerem TV-RSS sein bestehendes synthetisches Validationitem; dies ist
 kein Grab einer Vorabfolge. Versuchs-/Zeit-/Bytebudgets bleiben unverändert.
 

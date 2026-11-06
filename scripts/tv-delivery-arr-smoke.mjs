@@ -12,8 +12,10 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 const transport = process.argv[2];
+const republished = process.argv[3] === "republished";
 if (!["direct", "forwarded"].includes(transport))
   throw new Error("Owned direct/forwarded selection required");
+if (process.argv[3] && !republished) throw new Error("Unknown TV delivery scenario");
 process.env.PINGUFUNK_ARR_QA_TV_DELIVERY = "1";
 let root, manifest;
 const fail = (message) => {
@@ -80,14 +82,6 @@ try {
     "+faststart",
     "/qa/delivery.mp4",
   ]);
-  await api(root, manifest, "pingufunk", "/api/settings", {
-    "integration.sonarr.enabled": "true",
-    "integration.sonarr.url": "http://sonarr:8989",
-    "matching.minDuration": "0",
-    "download.quality": "best",
-    "download.convertToMkv": "false",
-    "download.path": "/downloads",
-  });
   const series = (await api(root, manifest, "sonarr", "/api/v3/series")).find(
     (row) => row.tvdbId === 2147483002
   );
@@ -148,6 +142,16 @@ try {
     localPath: "/qa-downloads/",
   });
   mkdirSync(join(root, "sonarr", "synthetic-library", "Synthetic Series"), { recursive: true });
+  // Bootstrap's connection probes must not discover the old fixture before
+  // the test starts its deliberately cold search or RSS poll.
+  await api(root, manifest, "pingufunk", "/api/settings", {
+    "integration.sonarr.enabled": "true",
+    "integration.sonarr.url": "http://sonarr:8989",
+    "matching.minDuration": "0",
+    "download.quality": "best",
+    "download.convertToMkv": "false",
+    "download.path": "/downloads",
+  });
   docker(["restart", controller]); // Real cold process, not just a neutral RSS string assertion.
   for (let attempt = 0; attempt < 30; attempt++) {
     try {
@@ -164,14 +168,17 @@ try {
   const setupStats = JSON.parse(
     readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
   );
-  await command({ name: "MissingEpisodeSearch", seriesId: series.id });
+  await command(
+    republished ? { name: "RssSync" } : { name: "MissingEpisodeSearch", seriesId: series.id }
+  );
   const cold = (await histories()).filter((row) => row.eventType === "grabbed");
   console.log(
     `Owned ${transport}: cold bulk command completed; initial native grabs=${cold.length}/80`
   );
   if (cold.length >= 80) fail("fixture did not exercise deferred delivery");
+  if (republished && cold.length !== 0) fail("cold RSS grabbed before source proof");
   const initial = journal();
-  if (initial?.entries.length !== 81)
+  if (initial?.entries.length !== (republished ? 16 : 81))
     fail("cold discovery incomplete (including expired alternative)");
   const unprocessed = (row) =>
     row.readyAt === null &&
@@ -188,30 +195,31 @@ try {
   const firstPollStats = JSON.parse(
     readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
   );
-  if (firstPollStats.cataloguePages - (setupStats.cataloguePages ?? 0) !== 5)
+  if (firstPollStats.cataloguePages - (setupStats.cataloguePages ?? 0) !== (republished ? 10 : 5))
     fail("cold primary source window did not fetch exactly five complete pages");
   console.log(`Owned ${transport}: native RSS delivery completed; awaiting physical imports`);
+  const expected = republished ? 15 : 80;
   for (let attempt = 0; attempt < 180; attempt++) {
     const slots = (await api(root, manifest, "pingufunk", "/api/download?mode=history&limit=100"))
       .history.slots;
     if (slots.some((row) => row.status === "Failed")) fail("synthetic transfer failed");
-    if (slots.length === 80 && slots.every((row) => row.status === "Completed")) break;
+    if (slots.length === expected && slots.every((row) => row.status === "Completed")) break;
     await delay(500);
   }
   await command({ name: "CheckForFinishedDownload" });
   let episodes;
   for (let attempt = 0; attempt < 120; attempt++) {
     episodes = await api(root, manifest, "sonarr", `/api/v3/episode?seriesId=${series.id}`);
-    if (episodes.length === 80 && episodes.every((row) => row.hasFile)) break;
+    if (episodes.length === 80 && episodes.filter((row) => row.hasFile).length === expected) break;
     await delay(500);
   }
-  if (episodes?.length !== 80 || episodes.some((row) => !row.hasFile))
+  if (episodes?.length !== 80 || episodes.filter((row) => row.hasFile).length !== expected)
     fail("native physical import incomplete");
   const history = await histories();
   const grabs = history.filter((row) => row.eventType === "grabbed");
-  if (grabs.length !== 80 || new Set(grabs.map((row) => row.downloadId)).size !== 80)
+  if (grabs.length !== expected || new Set(grabs.map((row) => row.downloadId)).size !== expected)
     fail("duplicate/missing native grabs");
-  for (const episode of episodes) {
+  for (const episode of episodes.filter((row) => row.hasFile)) {
     const file = await api(
       root,
       manifest,
@@ -241,15 +249,15 @@ try {
     docker(["exec", manifest.apps.sonarr.name, "test", "!", "-L", file.path]);
   }
   await command({ name: "RssSync" });
-  if ((await histories()).filter((row) => row.eventType === "grabbed").length !== 80)
+  if ((await histories()).filter((row) => row.eventType === "grabbed").length !== expected)
     fail("repeat RSS caused a duplicate");
   const stats = JSON.parse(
     readFileSync(join(root, "pingufunk", "delivery-source-stats.json"), "utf8")
   );
-  if (stats.transfers !== 80 || stats.ranges < 80 || stats.expiredProbes !== 1)
+  if (stats.transfers !== expected || stats.ranges < expected || stats.expiredProbes !== 1)
     fail("bounded proof/full-transfer cardinality mismatch");
   console.log(
-    `Owned ${transport}: one cold bulk search (${cold.length}/80 initial grabs), background -> RSS -> 80/80 real native imports; repeat RSS produced no duplicate`
+    `Owned ${transport}: ${republished ? "republished RSS discovery" : "one cold bulk search"} (${cold.length}/80 initial grabs), background -> RSS -> ${expected} real native imports; repeat RSS produced no duplicate`
   );
 } catch (error) {
   console.error(

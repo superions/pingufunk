@@ -7,6 +7,7 @@ import { openSonarrSession, mergeSonarrShow, SonarrUnavailableError } from "./so
 import { matchSonarrEpisodes } from "./sonarr-matcher";
 import { tvSearchQueries, verifiedRuleTopics } from "./tv-search-terms";
 import { getRulesetContext } from "./rulesets";
+import { registerTvSearchDelivery } from "./tv-search-delivery";
 import {
   queryContent,
   searchCacheContext,
@@ -16,11 +17,18 @@ import {
 import type { MatchedEpisodeInfo, TvdbData } from "@/types";
 
 interface Snapshot {
-  shows: TvdbData[];
+  shows: Array<{
+    recent: TvdbData;
+    complete: TvdbData;
+    missingAirings: Array<{ coordinate: string; aired: Date }>;
+  }>;
   expiresAt: number;
 }
 const snapshots = new LRUCache<string, Snapshot>({ max: 16 });
 const cursors = new LRUCache<string, number>({ max: 16 });
+const historicalCursors = new LRUCache<string, number>({ max: 256 });
+const historicalOwners = new LRUCache<string, number>({ max: 16 });
+const HISTORICAL_DISCOVERY_BATCH = 16;
 
 /** Pagination reuses 60s metadata goals, never media URLs/proof. A successful cold build advances its cursor. */
 export async function getSonarrRssMatches(
@@ -73,7 +81,13 @@ export async function getSonarrRssMatches(
           .sort((a, b) => a.tvdbId - b.tvdbId);
     const start = inventory.length ? (cursors.get(key) ?? 0) % inventory.length : 0;
     const matches: MatchedEpisodeInfo[] = [];
-    const shows: TvdbData[] = [];
+    const shows: Snapshot["shows"] = [];
+    const pendingHistorical: Array<{
+      key: string;
+      show: TvdbData;
+      batch: MatchedEpisodeInfo[];
+      next: number;
+    }> = [];
     let examined = 0;
     let episodeCount = 0;
     // Reserve one episode lookup and one source attempt per selected series.
@@ -86,8 +100,10 @@ export async function getSonarrRssMatches(
       : Math.min(5, inventory.length, Math.floor(available / 2));
     for (let index = 0; index < count && episodeCount < 50; index++) {
       let show: TvdbData;
+      let complete: TvdbData;
+      let missingAirings: Snapshot["shows"][number]["missingAirings"];
       if (reusable) {
-        show = structuredClone(reusable.shows[index]);
+        ({ recent: show, complete, missingAirings } = structuredClone(reusable.shows[index]));
         show.episodes = show.episodes.filter(
           (episode) =>
             episode.metadataSource !== "sonarr" ||
@@ -108,12 +124,31 @@ export async function getSonarrRssMatches(
               a.episodeNumber - b.episodeNumber
           )
           .slice(0, 50 - episodeCount);
-        show = mergeSonarrShow(await loadBase(series.tvdbId), { ...supplemental, episodes })!;
+        const base = await loadBase(series.tvdbId);
+        show = mergeSonarrShow(base, { ...supplemental, episodes })!;
+        complete = mergeSonarrShow(base, supplemental)!;
+        missingAirings = supplemental.episodes.flatMap((episode) =>
+          episode.monitored && !episode.hasFile && episode.aired
+            ? [
+                {
+                  coordinate: `${episode.seasonNumber}:${episode.episodeNumber}`,
+                  aired: episode.aired,
+                },
+              ]
+            : []
+        );
       }
-      shows.push(show);
+      shows.push({ recent: show, complete, missingAirings });
       examined++;
       episodeCount += show.episodes.filter((episode) => episode.metadataSource === "sonarr").length;
-      if (!show.episodes.some((episode) => episode.metadataSource === "sonarr")) continue;
+      const historicalCoordinates = new Set(
+        missingAirings
+          .filter(({ aired }) => aired.getTime() < cutoff)
+          .map(({ coordinate }) => coordinate)
+      );
+      const oldMissing = historicalCoordinates.size > 0;
+      if (!show.episodes.some((episode) => episode.metadataSource === "sonarr") && !oldMissing)
+        continue;
       const candidates = [];
       // Reserve the remaining series lookups and primary RSS window. Broader
       // retrieval never resets the ten-attempt budget or starves its cursor.
@@ -136,10 +171,13 @@ export async function getSonarrRssMatches(
         if (page === null) throw new SonarrUnavailableError();
         candidates.push(...page);
       }
+      const uniqueCandidates = [
+        ...new Map(candidates.map((item) => [JSON.stringify(item), item])).values(),
+      ];
       matches.push(
         ...matchSonarrEpisodes(
           show,
-          [...new Map(candidates.map((item) => [JSON.stringify(item), item])).values()],
+          uniqueCandidates,
           minimum,
           tolerance,
           languagePolicy,
@@ -148,6 +186,36 @@ export async function getSonarrRssMatches(
           verifiedRuleTopics(show)
         )
       );
+      if (oldMissing && budget.remainingAttempts > 0) {
+        // Match against the complete series before selecting missing episodes:
+        // a repeated title elsewhere must remain ambiguous, even if it has a file.
+        const historical = matchSonarrEpisodes(
+          complete,
+          uniqueCandidates,
+          minimum,
+          tolerance,
+          languagePolicy,
+          hlsEnabled,
+          true,
+          verifiedRuleTopics(complete)
+        ).filter((match) =>
+          historicalCoordinates.has(`${match.episode.seasonNumber}:${match.episode.episodeNumber}`)
+        );
+        if (historical.length) {
+          const cursorKey = JSON.stringify([key, complete.id]);
+          const start = (historicalCursors.get(cursorKey) ?? 0) % historical.length;
+          const batch = [...historical.slice(start), ...historical.slice(0, start)].slice(
+            0,
+            HISTORICAL_DISCOVERY_BATCH
+          );
+          pendingHistorical.push({
+            key: cursorKey,
+            show: complete,
+            batch,
+            next: (start + batch.length) % historical.length,
+          });
+        }
+      }
     }
     if (
       Date.now() >= budget.deadlineAt ||
@@ -155,7 +223,16 @@ export async function getSonarrRssMatches(
       rulesContext !== getRulesetContext()
     )
       throw new SonarrUnavailableError();
-    // No publication, cache write or cursor movement may precede this boundary.
+    // Register one owner atomically only after every source succeeded; failed
+    // batches retain their cursor and are retried by a later RSS poll.
+    if (pendingHistorical.length) {
+      const owner = (historicalOwners.get(key) ?? 0) % pendingHistorical.length;
+      const selected = pendingHistorical[owner];
+      await registerTvSearchDelivery(selected.show, selected.batch, budget);
+      historicalCursors.set(selected.key, selected.next);
+      historicalOwners.set(key, (owner + 1) % pendingHistorical.length);
+    }
+    // No response snapshot or series cursor movement precedes this boundary.
     if (!reusable)
       snapshots.set(key, { shows: structuredClone(shows), expiresAt: Date.now() + 60_000 });
     if (!reusable && inventory.length) cursors.set(key, (start + examined) % inventory.length);

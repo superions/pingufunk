@@ -134,6 +134,8 @@ jobs:
         run: |
           node scripts/tv-delivery-arr-smoke.mjs direct
           node scripts/tv-delivery-arr-smoke.mjs forwarded
+          node scripts/tv-delivery-arr-smoke.mjs direct republished
+          node scripts/tv-delivery-arr-smoke.mjs forwarded republished
 
       - name: Build pinned rollback checkpoints without publishing
         run: |

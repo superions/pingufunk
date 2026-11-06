@@ -158,7 +158,7 @@ try {
     { mode: 0o755 }
   );
   await api(root, manifest, "pingufunk", "/api/settings", {
-    "integration.sonarr.enabled": "true",
+    "integration.sonarr.enabled": "false",
     "integration.sonarr.url": "http://sonarr:8989",
     "matching.minDuration": "0",
     "download.quality": "best",
@@ -272,6 +272,10 @@ try {
     localPath: "/qa-downloads/",
   });
   mkdirSync(join(root, "sonarr", "synthetic-library", "Synthetic Series"), { recursive: true });
+  // Keep bootstrap validation separate from this test's cold discovery.
+  await api(root, manifest, "pingufunk", "/api/settings", {
+    "integration.sonarr.enabled": "true",
+  });
   console.log(`Owned YouTube ${backend} ${transport}: restarting cold process`);
   docker(["restart", controller]); // Real cold process, not just a neutral RSS string assertion.
   for (let attempt = 0; attempt < 30; attempt++) {

@@ -13,8 +13,11 @@ const state = vi.hoisted(() => ({
   settings: new Map<string, string>(),
   pending: new Map<string, Promise<unknown>>(),
   query: vi.fn(),
+  deliver: vi.fn(),
   rules: "initial-rules",
 }));
+vi.mock("./tv-search-delivery", () => ({ registerTvSearchDelivery: state.deliver }));
+vi.mock("@/lib/db", () => ({ prisma: { config: {} } }));
 vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn(async (key: string) => state.settings.get(key) ?? null),
   getMinDurationSeconds: async () => 300,
@@ -82,6 +85,7 @@ beforeEach(() => {
   });
   vi.stubGlobal("fetch", fetchMock);
   state.query.mockReset();
+  state.deliver.mockReset().mockResolvedValue(undefined);
   state.query.mockImplementation(
     async (queries: { query: string }[], _size: number, options: MediathekQueryOptions) => {
       options.requestBudget!.takeAttempt();
@@ -287,6 +291,190 @@ it("uses inclusive UTC boundaries and excludes future/missing/invalid dates", as
   );
   const matches = await getSonarrRssMatches(base);
   expect(matches.map((match) => match.episode.episodeNumber)).toEqual([1, 2]);
+});
+
+it("discovers old monitored episodes without guessing across duplicate titles or future airings", async () => {
+  episodes.set(1, [
+    {
+      id: 101,
+      seriesId: 1,
+      seasonNumber: 2010,
+      episodeNumber: 1,
+      title: "Old episode",
+      airDateUtc: "2010-01-01T12:00:00Z",
+      runtime: 2,
+      monitored: true,
+      hasFile: false,
+    },
+    {
+      id: 102,
+      seriesId: 1,
+      seasonNumber: 2010,
+      episodeNumber: 2,
+      title: "Repeated title",
+      airDateUtc: "2010-01-08T12:00:00Z",
+      runtime: 2,
+      monitored: true,
+      hasFile: false,
+    },
+    {
+      id: 103,
+      seriesId: 1,
+      seasonNumber: 2011,
+      episodeNumber: 1,
+      title: "Repeated title",
+      airDateUtc: "2011-01-01T12:00:00Z",
+      runtime: 2,
+      monitored: true,
+      hasFile: true,
+    },
+    {
+      id: 104,
+      seriesId: 1,
+      seasonNumber: 2027,
+      episodeNumber: 1,
+      title: "Future episode",
+      airDateUtc: "2027-01-01T12:00:00Z",
+      runtime: 2,
+      monitored: true,
+      hasFile: false,
+    },
+  ]);
+  state.query.mockImplementation(async (queries, _size, options: MediathekQueryOptions) => {
+    options.requestBudget!.takeAttempt();
+    return ["Old episode", "Repeated title", "Future episode"].map((title, index) => ({
+      channel: "ARD",
+      topic: queries[0].query,
+      title,
+      description: "",
+      filmlisteTimestamp: now / 1000,
+      duration: 120,
+      size: 123,
+      url_video: `https://example.invalid/${index}.mp4`,
+      url_video_hd: "",
+      url_video_low: "",
+      url_website: `https://example.invalid/${index}`,
+    }));
+  });
+  await getSonarrRssMatches(base, new HttpRequestBudget());
+  expect(state.deliver).toHaveBeenCalledTimes(1);
+  const [show, discovered] = state.deliver.mock.calls[0];
+  expect(show.id).toBe(101);
+  expect(
+    discovered.map((match: { episode: { episodeNumber: number } }) => match.episode.episodeNumber)
+  ).toEqual([1]);
+});
+
+it("fairly rotates bounded historical discoveries and retries a failed journal write", async () => {
+  episodes.set(
+    1,
+    Array.from({ length: 24 }, (_, index) => ({
+      id: 1000 + index,
+      seriesId: 1,
+      seasonNumber: 2010,
+      episodeNumber: index + 1,
+      title: `Historical ${index + 1}`,
+      airDateUtc: "2010-01-01T12:00:00Z",
+      runtime: 2,
+      monitored: true,
+      hasFile: false,
+    }))
+  );
+  state.query.mockImplementation(async (queries, _size, options: MediathekQueryOptions) => {
+    options.requestBudget!.takeAttempt();
+    return Array.from({ length: 24 }, (_, index) => ({
+      channel: "ARD",
+      topic: queries[0].query,
+      title: `Historical ${index + 1}`,
+      description: "",
+      filmlisteTimestamp: now / 1000,
+      duration: 120,
+      size: 123,
+      url_video: `https://example.invalid/${index}.mp4`,
+      url_video_hd: "",
+      url_video_low: "",
+      url_website: `https://example.invalid/${index}`,
+    }));
+  });
+  state.deliver.mockRejectedValueOnce(new Error("unavailable"));
+  await expect(getSonarrRssMatches(base, new HttpRequestBudget())).rejects.toThrow("unavailable");
+  await getSonarrRssMatches(base, new HttpRequestBudget());
+  await getSonarrRssMatches(base, new HttpRequestBudget());
+  const numbers = (call: number) =>
+    state.deliver.mock.calls[call][1].map(
+      (match: { episode: { episodeNumber: number } }) => match.episode.episodeNumber
+    );
+  expect(numbers(0)).toEqual(numbers(1));
+  expect(numbers(1)).toHaveLength(16);
+  expect(new Set([...numbers(1), ...numbers(2)]).size).toBe(24);
+});
+
+it("hands a rediscovered old episode to the existing readiness journal", async () => {
+  const { TvSearchDeliveryJournal } =
+    await vi.importActual<typeof import("./tv-search-delivery")>("./tv-search-delivery");
+  const { SourceMediaFactsStore } = await import("./source-media-facts");
+  const facts = new SourceMediaFactsStore();
+  let persisted: string | null = null;
+  const journal = new TvSearchDeliveryJournal(
+    {
+      read: async () => persisted,
+      write: async (value) => {
+        persisted = value;
+      },
+    },
+    facts
+  );
+  const scope = "a".repeat(64);
+  const source = "https://rodlzdf-a.akamaihd.net/synthetic/old.mp4";
+  episodes.set(1, [
+    {
+      id: 101,
+      seriesId: 1,
+      seasonNumber: 2010,
+      episodeNumber: 1,
+      title: "Old episode",
+      airDateUtc: "2010-01-01T12:00:00Z",
+      runtime: 2,
+      monitored: true,
+      hasFile: false,
+    },
+  ]);
+  state.query.mockImplementation(async (queries, _size, options: MediathekQueryOptions) => {
+    options.requestBudget!.takeAttempt();
+    return [
+      {
+        channel: "ZDF",
+        topic: queries[0].query,
+        title: "Old episode",
+        description: "",
+        filmlisteTimestamp: now / 1000,
+        duration: 120,
+        size: 123,
+        url_video: source,
+        url_video_hd: "",
+        url_video_low: "",
+        url_website: "https://example.invalid/old",
+      },
+    ];
+  });
+  state.deliver.mockImplementation(async (show, matches) => journal.register(scope, show, matches));
+  try {
+    await getSonarrRssMatches(base, new HttpRequestBudget());
+    const [entry] = await journal.current(scope);
+    expect(entry).toMatchObject({ tvdbId: 101, season: 2010, episode: 1, readyAt: null });
+    facts.remember(source, {
+      facts: { audioLanguage: "de", videoDimensions: { width: 1920, height: 1080 } },
+      fingerprint: "b".repeat(64),
+    });
+    await journal.idle();
+    expect((await journal.current(scope))[0].readyAt).toBe(now);
+    await getSonarrRssMatches(base, new HttpRequestBudget());
+    expect(await journal.current(scope)).toHaveLength(1);
+  } finally {
+    journal.dispose();
+    facts.clear();
+    await facts.idle();
+  }
 });
 
 it("does not publish a partial snapshot or advance the cursor after a later source failure", async () => {

@@ -284,11 +284,15 @@ Override sind dafür nicht nötig. Ein Indexer liefert Treffer auf Anfragen;
 er startet nicht selbständig Sonarr-Suchen oder Downloads. Ob Sonarr eine
 Suche auslöst und einen Treffer akzeptiert, bleibt Sonarrs Entscheidung.
 
-Das getrennte Sonarr-RSS-Fenster enthält weiterhin nur bereits ausgestrahlte
-Episoden mit gültigem UTC-Datum. Diese bestehende Fensterpolitik ist kein
-Blocker der expliziten Suche und wird durch diesen Rollout nicht verändert.
-Eine weitergehende RSS-Erweiterung wäre ein eigener Auftrag mit Regressionen,
-nicht Voraussetzung für bereits verfügbare Vorabfolgen in der Staffelsuche.
+Das reguläre Sonarr-RSS-Fenster behandelt jüngere, bereits ausgestrahlte
+Episoden. Die bestehende begrenzte Katalogabfrage gleicht zusätzlich ältere,
+überwachte und noch fehlende Folgen mit dem vollständigen Sonarr-Serienbestand
+ab. Nur eindeutige Treffer mit gültigem vergangenem Airdate gelangen in
+rotierenden Paketen zum vorhandenen Readiness-Journal; dieses prüft den aktuellen
+Bestand und die Quellenbelege vor der RSS-Nachlieferung erneut. Gleichnamige
+Folgen bleiben über den gesamten Bestand mehrdeutig. Die begrenzten Quellseiten,
+Journal-Kapazität und Frische-/Rechteprüfung sind keine Vollständigkeitsgarantie
+für den gesamten Mediathek-Katalog. Vorabfolgen bleiben im RSS ausgeschlossen.
 
 Entwicklungsprüfungen verwenden ausschließlich synthetische Metadaten und Medien.
 Echte Trefferprüfung, Produktivrollout, neue Grabs und Importabnahme sind eigene
