@@ -97,6 +97,7 @@ docker exec "$CI_PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d pingufunk_
   -c 'CREATE SCHEMA p15_workers AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p15_reconnect AUTHORIZATION pingufunk_qa_runtime' \
   -c 'CREATE SCHEMA p17_source_workers AUTHORIZATION pingufunk_qa_runtime' \
+  -c 'CREATE SCHEMA hls_progress AUTHORIZATION pingufunk_qa_runtime' \
   -c 'GRANT CONNECT ON DATABASE pingufunk_qa TO pingufunk_qa_runtime' \
   -c 'GRANT USAGE ON SCHEMA public TO pingufunk_qa_runtime' \
   -c 'GRANT SELECT ON TABLE "_prisma_migrations" TO pingufunk_qa_runtime' \
