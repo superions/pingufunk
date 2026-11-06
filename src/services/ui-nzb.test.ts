@@ -104,9 +104,9 @@ it("retains explicit provider audio evidence without inferring it from the title
       ?.mediaExpectations?.audio
   ).toBeNull();
 });
-it("does not emit an HLS download while the existing opt-in is off", () => {
+it("emits supported HLS downloads despite a legacy opt-out", () => {
   const mixed = { ...item, url_video_hd: "https://example.invalid/master.m3u8", url_video_low: "" };
-  expect(createUiNzbDownloads(mixed, false)).not.toHaveProperty("hd");
+  expect(parseNzbContent(createUiNzbDownloads(mixed, false).hd!)?.url).toBe(mixed.url_video_hd);
   expect(parseNzbContent(createUiNzbDownloads(mixed, true).hd!)?.url).toBe(mixed.url_video_hd);
 });
 
@@ -163,7 +163,7 @@ it("uses shared rendition eligibility and exact-URL dedupe for UI releases", () 
     { ...item, url_video: "https://example.invalid/sd.m3u8", url_video_low: "" },
     false
   );
-  expect(Object.keys(onlyHd)).toEqual(["hd"]);
+  expect(Object.keys(onlyHd)).toEqual(["hd", "sd"]);
   const repeated = createUiNzbDownloads(
     { ...item, url_video: item.url_video_hd, url_video_low: item.url_video_hd },
     false

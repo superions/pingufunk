@@ -164,7 +164,7 @@ describe("rendition resolution, not catalogue slot quality", () => {
       ).resolution
     ).toEqual({ width: 1920, height: 800, provenance: "provider_dimensions" });
   });
-  it("does not double-publish one URL or bypass HLS opt-in", () => {
+  it("deduplicates exact URLs and accepts HLS independently of the legacy flag", () => {
     expect(selectRenditions({ ...item, url_video: item.url_video_hd }, "all", false)).toHaveLength(
       1
     );
@@ -176,7 +176,10 @@ describe("rendition resolution, not catalogue slot quality", () => {
       )[0]
     ).toMatchObject({ url: item.url_video_hd, quality: "UNKNOWN", identity: "720p" });
     const source = { ...item, url_video: "", url_video_hd: "https://example.invalid/stream.m3u8" };
-    expect(selectRenditions(source, "all", false)).toEqual([]);
+    expect(selectRenditions(source, "all", false)[0]).toMatchObject({
+      url: source.url_video_hd,
+      quality: "UNKNOWN",
+    });
     expect(selectRenditions(source, "all", true)[0].quality).toBe("UNKNOWN");
   });
   it.each(["generic", "movie", "tv"])(

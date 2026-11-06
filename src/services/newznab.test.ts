@@ -760,7 +760,7 @@ describe("RSS rendition eligibility", () => {
     releaseDate: "2024-01-01",
   };
 
-  it("filters each TV, movie, and generic rendition when HLS is disabled", () => {
+  it("publishes each supported TV, movie and generic rendition despite a legacy HLS opt-out", () => {
     const tvItems = generateRssItems(episodeInfo, "all", false);
     const movieItems = generateMovieRssItems(
       { item, score: 100, titleMatch: "exact", durationDiff: 0 },
@@ -772,12 +772,18 @@ describe("RSS rendition eligibility", () => {
 
     expect(tvItems.map((rssItem) => rssItem.link)).toEqual([
       "https://example.org/progressive-hd.mp4",
+      "https://example.org/720.m3u8",
+      "https://example.org/480.m3u8",
     ]);
     expect(movieItems.map((rssItem) => rssItem.link)).toEqual([
       "https://example.org/progressive-hd.mp4",
+      "https://example.org/720.m3u8",
+      "https://example.org/480.m3u8",
     ]);
     expect(genericItems.map((rssItem) => rssItem.link)).toEqual([
       "https://example.org/progressive-hd.mp4",
+      "https://example.org/720.m3u8",
+      "https://example.org/480.m3u8",
     ]);
   });
 
@@ -801,7 +807,7 @@ describe("RSS rendition eligibility", () => {
       "all",
       false
     );
-    expect(daily).toHaveLength(2);
+    expect(daily).toHaveLength(6);
     expect(daily.every((row) => row.title.startsWith("Canonical.Series."))).toBe(true);
     expect(episodeInfo.showName).toBe("Example Show");
   });
@@ -831,7 +837,7 @@ describe("RSS rendition eligibility", () => {
       "https://www.srf.ch/play/tv/redirect/detail/11111111-1111-4111-8111-111111111111";
     const srfItem = { ...item, url_video: srfUrl, url_video_low: "", url_video_hd: "" };
 
-    expect(generateGenericRssItems(srfItem, "all", false)).toHaveLength(0);
+    expect(generateGenericRssItems(srfItem, "all", false)).toHaveLength(1);
     expect(generateGenericRssItems(srfItem, "all", true).map((rssItem) => rssItem.link)).toEqual([
       srfUrl,
     ]);

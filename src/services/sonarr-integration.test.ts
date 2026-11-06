@@ -929,11 +929,27 @@ it("does not republish a verified Sonarr episode as an unknown candidate or requ
   const own = await GET(
     new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=2&ep=3")
   );
-  expect(await own.text()).toContain('total="1"');
+  const ownItems = (await parseStringPromise(await own.text())).rss.channel[0].item;
+  expect(ownItems).toHaveLength(2);
+  expect(
+    ownItems.filter((item: { title: string[] }) => item.title[0].includes(".S02E03."))
+  ).toHaveLength(1);
+  const neutral = ownItems.filter((item: { title: string[] }) => item.title[0].includes("Trailer"));
+  expect(neutral).toHaveLength(1);
+  expect(
+    neutral[0]["newznab:attr"].some((attr: { $: { name: string } }) => attr.$.name === "tvdbid")
+  ).toBe(false);
   const neighbor = await GET(
     new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=1&ep=1")
   );
-  expect(await neighbor.text()).toContain('total="0"');
+  const neighborItems = (await parseStringPromise(await neighbor.text())).rss.channel[0].item ?? [];
+  expect(neighborItems).toHaveLength(1);
+  expect(
+    neighborItems.every((item: { title: string[] }) => item.title[0].includes("Trailer"))
+  ).toBe(true);
+  expect(
+    neighborItems.every((item: { title: string[] }) => !/\.S\d+E\d+\./.test(item.title[0]))
+  ).toBe(true);
 });
 
 it("does not turn an unavailable missing episode into a cached empty HTTP success", async () => {

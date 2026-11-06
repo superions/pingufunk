@@ -107,7 +107,7 @@ describe("getMinDurationSeconds", () => {
 });
 
 describe("request-scoped settings snapshots", () => {
-  it("preserves SRF's credential/HLS opt-in without inventing an explicit disable", async () => {
+  it("preserves SRF credentials and its provider opt-in independently of HLS", async () => {
     for (const name of ["PINGUFUNK_SRGSSR_CONSUMER_KEY", "PINGUFUNK_SRGSSR_CONSUMER_SECRET"]) {
       vi.stubEnv(name, undefined);
       vi.stubEnv(`${name}_FILE`, undefined);
@@ -131,7 +131,7 @@ describe("request-scoped settings snapshots", () => {
     clearSettingsCache();
     findMany.mockResolvedValue([]);
     await withSettingsSnapshot(async () => {
-      expect(await provider.isEnabled()).toBe(false);
+      expect(await provider.isEnabled()).toBe(true);
     });
     clearSettingsCache();
     findMany.mockResolvedValue([{ key: "download.enableHLS", value: "true" }]);

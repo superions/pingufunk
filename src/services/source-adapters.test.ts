@@ -53,7 +53,7 @@ it("uses an interchangeable source contract without fetching or classifying URLs
     queries,
     50,
     { requestBudget: budget, deferLanguageSelection: true, deadlineAt: budget.deadlineAt },
-    false,
+    true,
     "orf"
   );
   const classifier = vi.spyOn(mediathekSearchAdapter, "providerForItem").mockReturnValue("orf");
