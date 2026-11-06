@@ -4,7 +4,7 @@
 
 # Pingufunk
 
-[![CI](https://github.com/superions/pingufunk/actions/workflows/ci.yml/badge.svg)](https://github.com/superions/pingufunk/actions/workflows/ci.yml)
+[![PR Validation](https://github.com/superions/pingufunk/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/superions/pingufunk/actions/workflows/pr-validation.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 [![GitHub Issues](https://img.shields.io/github/issues/superions/pingufunk?logo=github&label=Issues)](https://github.com/superions/pingufunk/issues)
 

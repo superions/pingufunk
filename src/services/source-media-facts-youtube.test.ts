@@ -102,6 +102,7 @@ it("does not reuse an earlier positive hint after a fresh retained source has fa
   await vi.advanceTimersByTimeAsync(900000);
   expect(store.get(source())).toBeUndefined();
 });
+// Coverage on the shared runner can take over five real seconds for this virtual schedule.
 it("finishes and keeps all 97 retained canonical targets warm across a regular RSS interval within the declared process rate", async () => {
   const sources = Array.from({ length: 97 }, (_, i) => source(i));
   store.enqueue(sources);
@@ -121,7 +122,7 @@ it("finishes and keeps all 97 retained canonical targets warm across a regular R
     ).toBeDefined();
   const calls = state.resolve.mock.calls.map((call) => call[1] as AbortSignal);
   expect(calls.every((signal) => !signal.aborted)).toBe(true);
-});
+}, 20000);
 
 it("owns every cached rendition and rejects a foreign programme or audio-track donor", async () => {
   const { youtubeRenditionFingerprint } = await import("@/lib/youtube-source");
