@@ -48,6 +48,7 @@ for (const provider of ["sqlite", "postgresql"] as const)
       ).toBe(0);
       const { prisma } = await import("../src/lib/db");
       const manager = await import("../src/server/download-manager");
+      const { getDownloadWorkerState } = await import("../src/server/download-worker-state");
       const release = path.join(root, "release");
       const tool = path.join(root, "yt-dlp-fixture");
       await writeFile(
@@ -99,7 +100,7 @@ const timer = setInterval(() => {
           { timeout: 2000 }
         );
         await writeFile(release, "finish");
-        await running;
+        expect(await running).toBeUndefined();
         for (const row of await prisma.download.findMany()) {
           expect(row.status).toBe("completed");
           expect(await readFile(row.filePath!, "utf8")).toBe("synthetic stream bytes");
@@ -107,6 +108,8 @@ const timer = setInterval(() => {
       } finally {
         await manager.shutdownDownloadProcessing();
         await running;
+        getDownloadWorkerState().shuttingDown = false;
+        getDownloadWorkerState().drainRequested = false;
         if (pg) {
           await prisma.download.deleteMany();
           await prisma.config.deleteMany();
