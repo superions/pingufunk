@@ -220,6 +220,8 @@ export async function enrichSourceAudio(
             {
               facts: {
                 audioLanguage: "de",
+                originalVersion: value.originalVersion,
+                clearSpeech: value.clearSpeech,
                 videoDimensions: { width: value.width, height: value.height },
               },
             },
@@ -229,7 +231,11 @@ export async function enrichSourceAudio(
         const selected =
           hls.get(url) ??
           (cached?.facts.audioLanguage === "de" && cached.facts.videoDimensions
-            ? { ...cached.facts.videoDimensions, originalVersion: item.originalVersion ?? false }
+            ? {
+                ...cached.facts.videoDimensions,
+                originalVersion: cached.facts.originalVersion ?? item.originalVersion ?? false,
+                clearSpeech: cached.facts.clearSpeech ?? item.clearSpeech ?? false,
+              }
             : undefined);
         if (!selected && intent === "search") sourceMediaFacts.enqueue([url]);
         if (selected)
@@ -239,6 +245,7 @@ export async function enrichSourceAudio(
             audioLanguage: "de",
             audioDescription: false,
             originalVersion: selected.originalVersion,
+            clearSpeech: selected.clearSpeech,
             sourceAudioEvidence: undefined,
             sourceVideoDimensions: [{ url, width: selected.width, height: selected.height }],
             url_video_hd: "",

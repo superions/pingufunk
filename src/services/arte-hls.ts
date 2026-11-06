@@ -1,6 +1,7 @@
 import { fetchWithRetry, HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderText } from "@/lib/bounded-provider-json";
 import { getStreamHeight } from "@/lib/stream-url";
+import { isGermanLanguageCode } from "@/lib/language-policy";
 
 /** Only ARTE's indexed manifest service owns this multi-audio contract. */
 export function isArteHls(value: string, programmeId?: string): boolean {
@@ -33,7 +34,7 @@ function attributes(line: string): Record<string, string> {
   );
 }
 
-/** Select a concrete German standard audio playlist, never the master's default audio. */
+/** Select explicitly German audio, preferring ordinary speech and excluding AD. */
 export function parseArteHls(text: string, master: string, maximumHeight?: number) {
   if (!isArteHls(master) || !text.startsWith("#EXTM3U")) throw Error("Invalid ARTE manifest");
   const programme = new URL(master).pathname.match(/(\d{6}-\d{3}-[A-Z])\.m3u8$/)![1];
@@ -52,16 +53,21 @@ export function parseArteHls(text: string, master: string, maximumHeight?: numbe
     return url.toString();
   };
   const lines = text.split(/\r?\n/);
-  const audio = lines
+  const germanAudio = lines
     .filter((line) => line.startsWith("#EXT-X-MEDIA:"))
     .map(attributes)
     .filter(
       (row) =>
         row.TYPE === "AUDIO" &&
-        row.LANGUAGE === "de" &&
-        /(?:^|,)tv\.arte\.audio\.version\.(?:va|vo)-deu(?:,|$)/.test(row.CHARACTERISTICS ?? "") &&
+        isGermanLanguageCode(row.LANGUAGE) &&
         !/describes-video|audiodeskription|hörfilm/i.test(`${row.CHARACTERISTICS},${row.NAME}`)
     );
+  // LANGUAGE owns language evidence; version tokens never gate a German track.
+  // Prefer ordinary speech, retaining a labelled clear-speech fallback for the GUI policy.
+  const isClearSpeech = (row: Record<string, string>) =>
+    /enhances-speech-intelligibility|klare\s+sprache/i.test(`${row.CHARACTERISTICS},${row.NAME}`);
+  const standardAudio = germanAudio.filter((row) => !isClearSpeech(row));
+  const audio = standardAudio.length ? standardAudio : germanAudio;
   const unique = [...new Set(audio.map((row) => mediaUrl(row.URI)))];
   if (unique.length !== 1) throw Error("German standard audio unavailable");
   const groups = new Set(audio.map((row) => row["GROUP-ID"]));
@@ -84,7 +90,10 @@ export function parseArteHls(text: string, master: string, maximumHeight?: numbe
   return {
     ...videos[0],
     audioUrl: unique[0],
-    originalVersion: audio[0].CHARACTERISTICS.includes(".vo-deu"),
+    originalVersion: (audio[0].CHARACTERISTICS ?? "")
+      .split(",")
+      .some((value) => value.trim().startsWith("tv.arte.audio.version.vo")),
+    clearSpeech: isClearSpeech(audio[0]),
   };
 }
 

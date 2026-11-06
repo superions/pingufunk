@@ -21,7 +21,7 @@ function validSource(source: MediaFactsSource): boolean {
 export interface CheckedFacts {
   sourceRef?: YoutubeSourceReference;
   renditions?: YoutubeSourceReference[];
-  facts: Mp4MediaFacts;
+  facts: Mp4MediaFacts & { originalVersion?: boolean; clearSpeech?: boolean };
   fingerprint?: string;
 }
 interface PendingSource {
@@ -313,6 +313,8 @@ export class SourceMediaFactsStore {
           result = {
             facts: {
               audioLanguage: "de",
+              originalVersion: selected.originalVersion,
+              clearSpeech: selected.clearSpeech,
               videoDimensions: { width: selected.width, height: selected.height },
             },
           };

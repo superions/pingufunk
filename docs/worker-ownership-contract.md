@@ -28,6 +28,10 @@ deutsche Standardtonspur und Bildrendition aus dem Manifest, auch beim sicheren
 Manifest-Host und abweichendem Reassembly-Suffix. Der HLS-Adapter löst diese
 URLs beim Transfer frisch auf; der Downloader führt die ausdrücklich gewählte
 Tonspur aus und übernimmt ihre Sprachbezeichnung beim Stream-Copy-Mux.
+Das strukturierte `LANGUAGE`-Feld belegt die Sprache unabhängig von ARTE-
+Versionskürzeln. Die normale deutsche Spur hat Vorrang vor klarer Sprache;
+eine verbleibende Klare-Sprache-Fassung bleibt als solche gekennzeichnet,
+auch im Metadatencache, und unterliegt der vorhandenen GUI-Fassungsrichtlinie.
 Die vorhandene GUI-Sprach-/Fassungsrichtlinie, insbesondere der konfigurierte
 AD-Ausschluss, bleibt zuständig. Harte Titelwort-Ausschlüsse entfallen; die
 GUI-konfigurierte Mindestdauer bleibt eine ausdrückliche Benutzereinstellung.

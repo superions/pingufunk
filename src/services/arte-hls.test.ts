@@ -5,6 +5,8 @@ import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { generateMovieRssItems } from "./newznab";
 import type { ApiResultItem } from "@/types";
 import { sourceMediaFacts } from "./source-media-facts";
+import { selectLanguageVariants } from "./language-editions";
+import { DEFAULT_LANGUAGE_POLICY } from "@/lib/language-policy";
 
 const master =
   "https://manifest-arte.akamaized.net/api/manifest/v1/Generate/synthetic/de/XQ/123456-001-B.m3u8";
@@ -12,6 +14,7 @@ const base = "https://fixture.akamaized.net/am/123456-001-B/";
 const manifest = `#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="fr",NAME="Original",DEFAULT=YES,CHARACTERISTICS="tv.arte.audio.version.vo-fra",URI="${base}original.m3u8"
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="de",NAME="Deutsch (Audiodeskription)",CHARACTERISTICS="tv.arte.audio.version.vaaud-deu,public.accessibility.describes-video",URI="${base}ad.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="de",NAME="Deutsch (Klare Sprache)",CHARACTERISTICS="tv.arte.audio.version.voa-deu,public.accessibility.enhances-speech-intelligibility",URI="${base}clear.m3u8"
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="de",NAME="Deutsch",DEFAULT=NO,CHARACTERISTICS="tv.arte.audio.version.va-deu",URI="${base}german.m3u8"
 #EXT-X-STREAM-INF:CODECS="avc1.640028,mp4a.40.2",RESOLUTION=1920x1080,AUDIO="audio"
 ${base}video1080.m3u8
@@ -66,13 +69,17 @@ it("advances past the foreground limit across automatic polls without manual sea
   expect(fetch).toHaveBeenCalledTimes(5);
 });
 
-it("selects German standard audio even when original audio is default and AD precedes it", () => {
-  expect(parseArteHls(manifest, master, 720)).toEqual({
+it("uses the explicit German language without requiring a provider version token", () => {
+  const languageOnly = manifest
+    .replace('LANGUAGE="de",NAME="Deutsch",', 'LANGUAGE="deu",NAME="Deutsch",')
+    .replace('CHARACTERISTICS="tv.arte.audio.version.va-deu",', "");
+  expect(parseArteHls(languageOnly, master, 720)).toEqual({
     audioUrl: base + "german.m3u8",
     videoUrl: base + "video720.m3u8",
     width: 1280,
     height: 720,
     originalVersion: false,
+    clearSpeech: false,
   });
 });
 
@@ -81,7 +88,11 @@ it.each(["only-ad", "foreign-programme", "foreign-host", "ambiguous", "no-video"
   (kind) => {
     let value = manifest;
     if (kind === "only-ad")
-      value = value.replace('LANGUAGE="de",NAME="Deutsch",', 'LANGUAGE="fr",NAME="Deutsch",');
+      value = value
+        .split("\n")
+        .filter((line) => !line.includes("clear.m3u8"))
+        .join("\n")
+        .replace('LANGUAGE="de",NAME="Deutsch",', 'LANGUAGE="fr",NAME="Deutsch",');
     if (kind === "foreign-programme") value = value.replaceAll("/123456-001-B/", "/654321-001-B/");
     if (kind === "foreign-host")
       value = value.replaceAll("fixture.akamaized.net", "example.invalid");
@@ -92,8 +103,9 @@ it.each(["only-ad", "foreign-programme", "foreign-host", "ambiguous", "no-video"
   }
 );
 
-it("publishes German measured movie releases for the automatic feed without the dead HbbTV endpoint", async () => {
-  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(manifest));
+it("publishes the normal German film from a multi-edition master through enrichment and RSS", async () => {
+  const sourceManifest = manifest.replaceAll("version.va-deu", "version.voa-deu");
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(sourceManifest));
   vi.stubGlobal("fetch", fetch);
   const source: ApiResultItem = {
     title: "Synthetic Movie",
@@ -109,7 +121,14 @@ it("publishes German measured movie releases for the automatic feed without the 
     url_video_low: "",
   };
   const [item] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
-  expect(item).toMatchObject({ audioLanguage: "de", audioDescription: false });
+  expect(item).toMatchObject({
+    audioLanguage: "de",
+    audioDescription: false,
+    clearSpeech: false,
+    originalVersion: true,
+  });
+  const [cached] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
+  expect(cached).toMatchObject({ audioLanguage: "de", clearSpeech: false, originalVersion: true });
   const rss = generateMovieRssItems(
     { item, score: 1, titleMatch: "exact", durationDiff: 0 },
     {
@@ -129,4 +148,20 @@ it("publishes German measured movie releases for the automatic feed without the 
   expect(rss[0].title).not.toContain(".AD.");
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch.mock.calls[0][0]).toBe(master);
+
+  sourceMediaFacts.clear();
+  const clearOnly = sourceManifest
+    .split("\n")
+    .filter((line) => !line.includes("german.m3u8"))
+    .join("\n");
+  fetch.mockImplementation(async () => new Response(clearOnly));
+  await enrichSourceAudio([source], new HttpRequestBudget());
+  const [clear] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
+  expect(clear).toMatchObject({ audioLanguage: "de", clearSpeech: true, audioDescription: false });
+  expect(
+    selectLanguageVariants([clear], { ...DEFAULT_LANGUAGE_POLICY, includeClearSpeech: false })
+  ).toEqual([]);
+  expect(
+    selectLanguageVariants([clear], { ...DEFAULT_LANGUAGE_POLICY, includeClearSpeech: true })
+  ).toHaveLength(1);
 });
