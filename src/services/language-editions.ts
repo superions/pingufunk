@@ -111,11 +111,11 @@ export function classifyLanguageEdition(item: ApiResultItem): LanguageEdition {
     ...(clearSpeech ? ["CLEAR"] : []),
   ];
   // Preserve original-version identity below without triggering OV exclusions
-  // for a release whose actual audio is already proved German.
+  // for a release whose actual audio is already proved German. Subtitle-language
+  // metadata does not prove burned-in captions; SUBBED triggers Arr hardcoded-sub exclusions.
   const titleTokens = [
     ...(audioEvidence === "german" ? ["GERMAN"] : []),
     ...(originalVersion && audioEvidence !== "german" ? ["OV"] : []),
-    ...(germanSubtitles ? ["SUBBED"] : []),
     ...(audioEvidence === "german" ? featureTokens : []),
   ];
   const variantKey = [

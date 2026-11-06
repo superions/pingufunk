@@ -221,7 +221,17 @@ it("maps untagged official MP4 editions through RSS, NZB and transfer revalidati
     true
   );
   expect(rss).toHaveLength(1);
-  expect(rss[0].title).toContain("GERMAN.SUBBED.720p");
+  expect(rss[0].title).toContain("GERMAN.720p");
+  expect(rss[0].title).not.toContain("SUBBED");
+  expect(item.subtitleLanguage).toBe("de");
+  const foreignWithSubtitles = { ...item, audioLanguage: "fr", originalVersion: true };
+  expect(selectLanguageVariants([foreignWithSubtitles], DEFAULT_LANGUAGE_POLICY)).toEqual([]);
+  expect(
+    selectLanguageVariants([foreignWithSubtitles], {
+      ...DEFAULT_LANGUAGE_POLICY,
+      includeGermanSubtitleOnly: true,
+    })
+  ).toEqual([foreignWithSubtitles]);
   const nzb = parseNzbContent(
     generateFakeNzb({
       title: rss[0].title,

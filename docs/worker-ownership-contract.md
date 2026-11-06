@@ -33,6 +33,9 @@ Versionskürzeln. Bei fehlender Sprachangabe dient das vorhandene ARTE-
 Sprachmapping als Fallback. Programmgebundene offizielle MP4-Dateinamen
 liefern diesen Beleg auch bei `und` im Container; vorhandene Sprachangaben
 haben Vorrang. Bilddaten kommen vom gemeinsamen begrenzten Metadatenleser.
+Untertitel-Sprachmetadaten bleiben für die Fassungsrichtlinie erhalten, belegen
+aber keine ins Bild eingebrannten Untertitel. Sie erzeugen deshalb kein `SUBBED`
+im Release-Titel; dieser Begriff löst in Arr den Hardcoded-Subs-Ausschluss aus.
 Die normale deutsche Spur hat Vorrang vor klarer Sprache;
 eine verbleibende Klare-Sprache-Fassung bleibt als solche gekennzeichnet,
 auch im Metadatencache, und unterliegt der vorhandenen GUI-Fassungsrichtlinie.
