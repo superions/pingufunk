@@ -103,6 +103,8 @@ request(
     "matching.minDuration": "0",
     "download.quality": "all",
     "download.convertToMkv": "false",
+    // Fault injection below requires a waiting successor, not parallel transfers.
+    "download.parallel.mp4": "1",
   })
 );
 let previousGuid;
@@ -509,6 +511,8 @@ const neighborBefore = run([
 ]);
 request("api/settings", JSON.stringify({ "download.convertToMkv": "false" }));
 const followingId = request("api?mode=addfile&cat=sonarr", nzb("valid.mp4", 2).body).nzo_ids[0];
+if (readJob(followingId).status !== "queued")
+  throw new Error("Mux shutdown fixture did not retain its waiting successor");
 run(["stop", "--time", "15", container]);
 if (run(["inspect", "--format", "{{.State.ExitCode}}", container]).trim() !== "143")
   throw new Error("Writer did not drain through its controlled SIGTERM handler");
