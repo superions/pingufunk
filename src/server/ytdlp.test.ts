@@ -42,6 +42,33 @@ let child: EventEmitter & {
   stderr: EventEmitter;
   kill: ReturnType<typeof vi.fn>;
 };
+
+it("downloads the provider-selected German audio playlist instead of default original or AD", async () => {
+  const audio = "https://fixture.akamaized.net/german.m3u8";
+  const done = downloadHlsStream(
+    "https://fixture.akamaized.net/video.m3u8",
+    "/tmp/result.mkv",
+    undefined,
+    "mkv",
+    undefined,
+    undefined,
+    audio
+  );
+  await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
+  child.emit("close", 0);
+  await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+  expect(spawn.mock.calls[1][1]).toContain(audio);
+  child.emit("close", 0);
+  expect((await done).success).toBe(true);
+  expect(mergeVideoAudio).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    "/tmp/result.mkv",
+    undefined,
+    true,
+    "de"
+  );
+});
 beforeEach(() => {
   child = Object.assign(new EventEmitter(), {
     stdout: new EventEmitter(),

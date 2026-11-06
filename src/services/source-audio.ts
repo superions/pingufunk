@@ -25,6 +25,7 @@ import {
   stableUrlIdentity,
 } from "./language-editions";
 import { sourceMediaFacts } from "./source-media-facts";
+import { isArteHls, resolveArteHls } from "./arte-hls";
 import {
   youtubeRenditionIdentity,
   youtubeSourceIdentitySchema,
@@ -193,14 +194,61 @@ export async function enrichSourceAudio(
     (a, b) =>
       Number(classifyLanguageEdition(a).audioDescription) -
         Number(classifyLanguageEdition(b).audioDescription) ||
+      Number(isArteHls(b.url_video)) - Number(isArteHls(a.url_video)) ||
       a.url_website.localeCompare(b.url_website) ||
       a.url_video.localeCompare(b.url_video)
   );
   const pending: ApiResultItem[] = [];
+  const hls = new Map<string, Awaited<ReturnType<typeof resolveArteHls>>>();
   for (const item of ordered) {
     if (output.has(item)) continue;
     const renditions: ApiResultItem[] = [];
     output.set(item, renditions);
+    if (arteVideoId(item.url_website) && isArteHls(item.url_video)) {
+      // The current ARTE master carries several languages. Its selected standard
+      // German audio, rather than an MP4 tag or the website locale, owns the label.
+      try {
+        const url = item.url_video;
+        if (!isArteHls(url, arteVideoId(item.url_website)!)) continue;
+        const cached = intent === "search" ? sourceMediaFacts.get(url) : undefined;
+        if (!cached && !hls.has(url) && probes < maxIdentities && budget.remainingAttempts > 0) {
+          probes++;
+          hls.set(url, await resolveArteHls(url, budget));
+          const value = hls.get(url)!;
+          sourceMediaFacts.remember(
+            url,
+            {
+              facts: {
+                audioLanguage: "de",
+                videoDimensions: { width: value.width, height: value.height },
+              },
+            },
+            generation
+          );
+        }
+        const selected =
+          hls.get(url) ??
+          (cached?.facts.audioLanguage === "de" && cached.facts.videoDimensions
+            ? { ...cached.facts.videoDimensions, originalVersion: item.originalVersion ?? false }
+            : undefined);
+        if (!selected && intent === "search") sourceMediaFacts.enqueue([url]);
+        if (selected)
+          renditions.push({
+            ...item,
+            releaseVariantKey: item.releaseVariantKey ?? classifyLanguageEdition(item).variantKey,
+            audioLanguage: "de",
+            audioDescription: false,
+            originalVersion: selected.originalVersion,
+            sourceAudioEvidence: undefined,
+            sourceVideoDimensions: [{ url, width: selected.width, height: selected.height }],
+            url_video_hd: "",
+            url_video_low: "",
+          });
+      } catch {
+        recordDecision("language", "source_failed", "unavailable");
+      }
+      continue;
+    }
     if (item.sourceRef) {
       // Ordinary discovery always uses the one bounded background owner. Only
       // an explicit single-source approval may demand a foreground revalidation.

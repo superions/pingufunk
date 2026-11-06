@@ -334,7 +334,8 @@ export async function mergeVideoAudio(
   audioPath: string,
   outputPath: string,
   signal?: AbortSignal,
-  allowInstall = true
+  allowInstall = true,
+  selectedAudioLanguage?: "de"
 ): Promise<ConversionResult> {
   const ffmpegExists = allowInstall
     ? await ensureFfmpegExists()
@@ -351,8 +352,8 @@ export async function mergeVideoAudio(
       resolve({ success: false, error: "Mux interrupted" });
       return;
     }
-    // The HLS consumer selects the audio stream but has no language evidence;
-    // stream-copy its metadata rather than assigning a synthetic German tag.
+    // Only a provider-selected German playlist may supply a language label.
+    // Other HLS callers retain the source metadata.
     const args = [
       "-i",
       videoPath,
@@ -364,6 +365,7 @@ export async function mergeVideoAudio(
       "1:a:0",
       "-c",
       "copy",
+      ...(selectedAudioLanguage === "de" ? ["-metadata:s:a:0", "language=deu"] : []),
       "-n",
       outputPath,
     ];

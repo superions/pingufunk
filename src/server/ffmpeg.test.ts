@@ -48,6 +48,20 @@ beforeEach(() => {
   mkdir.mockClear();
 });
 
+it("labels a provider-selected German audio stream while copying its content", async () => {
+  await mergeVideoAudio(
+    "/synthetic/video.mp4",
+    "/synthetic/audio.mp4",
+    "/synthetic/out.mkv",
+    undefined,
+    false,
+    "de"
+  );
+  expect(state.calls[0]).toEqual(
+    expect.arrayContaining(["-c", "copy", "-metadata:s:a:0", "language=deu"])
+  );
+});
+
 it("aborts a mux without claiming completion before close, even with exit code zero", async () => {
   state.autoClose = false;
   const controller = new AbortController();

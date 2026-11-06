@@ -11,6 +11,7 @@ import {
   type ContentSearchWindow,
 } from "@/services/content-search";
 import { selectLanguageVariants } from "@/services/language-editions";
+import { enrichSourceAudio } from "@/services/source-audio";
 import { eligibleRenditionItem, selectRenditions } from "@/services/rendition-quality";
 import { createUiNzbDownloads, uiNzbFingerprints } from "@/services/ui-nzb";
 import type { ApiResultItem, UiNzbDownloads, UiSearchCoverage } from "@/types";
@@ -220,7 +221,8 @@ async function handleSearchRequest(request: NextRequest) {
       // Eligibility precedes edition dedupe and the UI result limit. One HLS
       // slot cannot hide an independent MP4 slot or fill an absent HD slot.
       const eligible = selectLanguageVariants(
-        window.items
+        [...(await enrichSourceAudio(window.items, requestBudget)).values()]
+          .flat()
           .map((item) => eligibleRenditionItem(item, hlsEnabled))
           .filter(
             (item) =>

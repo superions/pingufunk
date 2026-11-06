@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { LRUCache } from "lru-cache";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
+import { isArteHls, resolveArteHls } from "./arte-hls";
 import { isProbeableMp4, probeMp4MediaFacts, type Mp4MediaFacts } from "@/lib/mp4-audio-language";
 
 import {
@@ -14,7 +15,7 @@ import { youtubeMediaIdentity } from "@/providers/youtube/audio";
 export type MediaFactsSource = string | YoutubeSourceIdentity;
 function validSource(source: MediaFactsSource): boolean {
   return typeof source === "string"
-    ? isProbeableMp4(source)
+    ? isProbeableMp4(source) || isArteHls(source)
     : youtubeSourceIdentitySchema.strip().safeParse(source).success;
 }
 export interface CheckedFacts {
@@ -126,11 +127,15 @@ export class SourceMediaFactsStore {
       ...structuredClone(result),
       expiresAt:
         Date.now() +
-        (result.sourceRef
-          ? 900_000
-          : result.fingerprint && (result.facts.audioLanguage || result.facts.videoDimensions)
-            ? 300_000
-            : 30_000),
+        (typeof url === "string" && isArteHls(url) && result.facts.audioLanguage === "de"
+          ? // Retain metadata across the 30-minute Arr poll so bounded batches
+            // advance beyond the first four films. Transfer resolves fresh URLs.
+            3_600_000
+          : result.sourceRef
+            ? 900_000
+            : result.fingerprint && (result.facts.audioLanguage || result.facts.videoDimensions)
+              ? 300_000
+              : 30_000),
     });
     this.revision++;
     const held = this.retained.get(key(url));
@@ -299,7 +304,19 @@ export class SourceMediaFactsStore {
       this.active = { key: id, controller, source: source.url };
       try {
         let result: CheckedFacts;
-        if (typeof source.url === "string") {
+        if (typeof source.url === "string" && isArteHls(source.url)) {
+          const selected = await resolveArteHls(
+            source.url,
+            new HttpRequestBudget(4),
+            controller.signal
+          );
+          result = {
+            facts: {
+              audioLanguage: "de",
+              videoDimensions: { width: selected.width, height: selected.height },
+            },
+          };
+        } else if (typeof source.url === "string") {
           let fingerprint: string | undefined;
           const facts = await probeMp4MediaFacts(
             source.url,

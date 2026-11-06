@@ -95,6 +95,46 @@ it("does not guess a supported source or fall back to a generic URL downloader",
   expect(downloadHlsStream).not.toHaveBeenCalled();
 });
 
+it.each([true, false])(
+  "binds ARTE transfer to freshly selected German non-AD audio: %s",
+  async (germanAvailable) => {
+    const base = "https://fixture.akamaized.net/am/123456-001-B/";
+    const manifest = `#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",LANGUAGE="de",NAME="Deutsch (Audiodeskription)",CHARACTERISTICS="tv.arte.audio.version.vaaud-deu,public.accessibility.describes-video",URI="${base}ad.m3u8"
+${germanAvailable ? `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",LANGUAGE="de",NAME="Deutsch",CHARACTERISTICS="tv.arte.audio.version.va-deu",URI="${base}german.m3u8"` : ""}
+#EXT-X-STREAM-INF:CODECS="avc1.640028,mp4a.40.2",RESOLUTION=1920x1080,AUDIO="a"
+${base}video.m3u8
+`;
+    vi.mocked(fetch).mockResolvedValue(new Response(manifest));
+    downloadHlsStream.mockImplementation(async (_url, output) => {
+      await writeFile(output, "media");
+      return { success: true, outputPath: output };
+    });
+    const work = transferSource(
+      {
+        family: "mediathek",
+        url: "https://manifest-arte.akamaized.net/api/manifest/v1/Generate/synthetic/de/XQ/123456-001-B.m3u8",
+      },
+      context
+    );
+    if (!germanAvailable) {
+      await expect(work).rejects.toThrow();
+      expect(downloadHlsStream).not.toHaveBeenCalled();
+    } else {
+      const artifact = await work;
+      expect(downloadHlsStream).toHaveBeenCalledWith(
+        base + "video.m3u8",
+        artifact.path,
+        context.onProgress,
+        "mkv",
+        undefined,
+        context.signal,
+        base + "german.m3u8"
+      );
+    }
+  }
+);
+
 it.each(["outside", "symlink", "empty", "directory"])(
   "rejects a %s artifact before shared postprocessing",
   async (kind) => {

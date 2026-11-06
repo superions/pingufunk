@@ -5,6 +5,7 @@ import { downloadHlsStream } from "@/server/ytdlp";
 import { downloadFile } from "@/server/download-transfer";
 import { SourceDownloadError, transferFailureMessage } from "@/server/download-failure";
 import type { SourceDownloadAdapter } from "@/types/provider";
+import { isArteHls, resolveArteHls } from "@/services/arte-hls";
 
 const streamErrors = new Set([
   "Stream download interrupted",
@@ -57,13 +58,17 @@ export const mediathekDownloadAdapter: SourceDownloadAdapter = {
       const extension = `.${container}`;
       const outputPath = path.join(context.stagingDirectory, context.filename + extension);
       await assertNewOutputPath(outputPath);
+      const arte = isArteHls(streamUrl)
+        ? await resolveArteHls(streamUrl, undefined, context.signal, maxHeight)
+        : undefined;
       const result = await downloadHlsStream(
-        streamUrl,
+        arte?.videoUrl ?? streamUrl,
         outputPath,
         context.onProgress,
         container,
         maxHeight,
-        context.signal
+        context.signal,
+        ...(arte ? ([arte.audioUrl] as const) : ([] as const))
       );
       if (!result.success) throw new SourceDownloadError(streamFailure(result.error));
       return { path: result.outputPath || outputPath, extension };
