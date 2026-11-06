@@ -15,8 +15,9 @@ aus:
    sie bestehende öffentliche Historie überschreiben kann.
 2. Sie prüft Prüfsumme, Plattform, Quellrevision und Image-ID des im selben Lauf
    getesteten Images und veröffentlicht es als
-   `ghcr.io/superions/pingufunk:sha-<voller-commit>` sowie `:main`. Das SHA-Tag
-   wird nie auf ein anderes Image umgebogen; ein Konflikt stoppt den Lauf.
+   `ghcr.io/superions/pingufunk:sha-<voller-commit>` sowie `:main`. Vor dem
+   Push prüft die CI, ob das SHA-Tag bereits ein anderes Image bezeichnet; ein
+   Konflikt stoppt den Lauf. Diese CI ist der vorgesehene einzige Schreiber.
    Registry-Digest und Image-ID sind verschiedene Kennungen. `main` ist beweglich;
    für einen unveränderlichen Bezug eignet sich der ausgegebene Registry-Digest.
 
