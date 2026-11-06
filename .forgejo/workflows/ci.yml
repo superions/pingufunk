@@ -138,11 +138,11 @@ jobs:
           set -euo pipefail
           docker pull postgres:18-alpine
           bash scripts/media-container-smoke.sh & media_pid=$!
-          node scripts/tv-delivery-arr-smoke.mjs direct republished & direct_pid=$!
-          node scripts/tv-delivery-arr-smoke.mjs forwarded republished & forwarded_pid=$!
-          trap 'kill -TERM "$media_pid" "$direct_pid" "$forwarded_pid" 2>/dev/null || true; wait || true; exit 143' TERM INT
+          trap 'kill -TERM "$media_pid" 2>/dev/null || true; wait || true; exit 143' TERM INT
           status=0
-          for pid in "$media_pid" "$direct_pid" "$forwarded_pid"; do wait "$pid" || status=1; done
+          node scripts/tv-delivery-arr-smoke.mjs direct republished || status=1
+          node scripts/tv-delivery-arr-smoke.mjs forwarded republished || status=1
+          wait "$media_pid" || status=1
           trap - TERM INT
           exit "$status"
 
