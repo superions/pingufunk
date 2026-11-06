@@ -97,6 +97,67 @@ describe("supplemental duration policy", () => {
 });
 
 describe("identity before duration/identity stamping", () => {
+  it("distinguishes a stated production year from the first broadcast year for a unique title", () => {
+    const target = {
+      ...show,
+      episodes: [
+        {
+          ...show.episodes[0],
+          name: "Investigator - 47 - Missing episode",
+          aired: new Date("2010-09-12T18:15:00Z"),
+        },
+      ],
+    };
+    const source = {
+      ...item,
+      title: "Missing episode (2009)",
+      description: "Fernsehfilm Deutschland 2009 +++ Synthetic synopsis",
+    };
+    const match = (series: TvdbData, candidate: ApiResultItem) =>
+      matchSonarrEpisodes(series, [candidate], 300, 10);
+
+    expect(match(target, source)).toMatchObject([{ episode: target.episodes[0] }]);
+    expect(match(target, { ...source, productionYear: 2009, description: "" })).toMatchObject([
+      { episode: target.episodes[0] },
+    ]);
+    expect(match(target, { ...source, description: "Synthetic synopsis" })).toEqual([]);
+    expect(
+      match(target, {
+        ...source,
+        description: "Fernsehfilm Deutschland 2008 +++ Synthetic synopsis",
+      })
+    ).toEqual([]);
+    expect(match(target, { ...source, topic: "Another series" })).toEqual([]);
+    expect(match(target, { ...source, title: "Another episode (2009)" })).toEqual([]);
+    expect(
+      match({ ...target, episodes: [{ ...target.episodes[0], aired: null }] }, source)
+    ).toEqual([]);
+    expect(
+      match(target, {
+        ...source,
+        title: "Missing episode (2011)",
+        description: "Fernsehfilm Deutschland 2011 +++ Synthetic synopsis",
+      })
+    ).toEqual([]);
+    expect(
+      match(
+        {
+          ...target,
+          episodes: [
+            ...target.episodes,
+            {
+              ...target.episodes[0],
+              episodeNumber: 4,
+              aired: new Date("2012-01-01"),
+              metadataSource: undefined,
+            },
+          ],
+        },
+        source
+      )
+    ).toEqual([]);
+  });
+
   it("treats a word-internal hyphen as spacing without guessing an episode", () => {
     const target = {
       ...show,

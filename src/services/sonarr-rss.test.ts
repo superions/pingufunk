@@ -365,6 +365,47 @@ it("discovers old monitored episodes without guessing across duplicate titles or
   ).toEqual([1]);
 });
 
+it("discovers a missing historical episode when its stated production year precedes broadcast", async () => {
+  episodes.set(1, [
+    {
+      id: 1001,
+      seriesId: 1,
+      seasonNumber: 2010,
+      episodeNumber: 1,
+      title: "Investigator - 47 - Old episode",
+      airDateUtc: "2010-09-12T18:15:00Z",
+      runtime: 2,
+      monitored: true,
+      hasFile: false,
+    },
+  ]);
+  state.query.mockImplementation(async (queries, _size, options: MediathekQueryOptions) => {
+    options.requestBudget!.takeAttempt();
+    return [
+      {
+        channel: "ARD",
+        topic: queries[0].query,
+        title: "Old episode (2009)",
+        description: "Fernsehfilm Deutschland 2009 +++ Synthetic synopsis",
+        filmlisteTimestamp: now / 1000,
+        duration: 120,
+        size: 123,
+        url_video: "https://example.invalid/old.mp4",
+        url_video_hd: "",
+        url_video_low: "",
+        url_website: "https://example.invalid/old",
+      },
+    ];
+  });
+
+  await getSonarrRssMatches(base, new HttpRequestBudget());
+
+  expect(state.deliver).toHaveBeenCalledTimes(1);
+  expect(state.deliver.mock.calls[0][1]).toMatchObject([
+    { episode: { seasonNumber: 2010, episodeNumber: 1 }, item: { title: "Old episode (2009)" } },
+  ]);
+});
+
 it("fairly rotates bounded historical discoveries and retries a failed journal write", async () => {
   episodes.set(
     1,

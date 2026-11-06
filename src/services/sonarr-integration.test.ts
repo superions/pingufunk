@@ -223,6 +223,93 @@ it.each(["global", "global-null", "season", "scene-season", "conditional"])(
   }
 );
 
+it("publishes an exact older episode when a source's stated production year predates broadcast", async () => {
+  const original = fetchMock.getMockImplementation()!;
+  const videoId = Buffer.from("crid://synthetic/production-year").toString("base64url");
+  const mediaUrl = "https://example.invalid/synthetic-production-year.mp4";
+  fetchMock.mockImplementation(async (value: string) => {
+    const url = new URL(value);
+    if (url.pathname.endsWith("/episode"))
+      return Response.json([
+        {
+          id: 45,
+          seriesId: 12,
+          seasonNumber: 2010,
+          episodeNumber: 21,
+          title: "Investigator - 47 - Missing episode",
+          airDateUtc: "2010-09-12T18:15:00Z",
+          monitored: false,
+          hasFile: false,
+          runtime: 2,
+        },
+      ]);
+    if (url.hostname === "mediathekviewweb.de")
+      return Response.json({
+        result: {
+          results: [
+            {
+              ...source,
+              title: "Missing episode (2009)",
+              description: "Fernsehfilm Deutschland 2009 +++ Synthetic synopsis",
+              url_video: mediaUrl,
+              url_website: `https://www.ardmediathek.de/video/synthetic/${videoId}`,
+            },
+          ],
+        },
+        err: null,
+      });
+    if (url.hostname === "api.ardmediathek.de")
+      return Response.json({
+        widgets: [
+          {
+            id: videoId,
+            type: "player_ondemand",
+            blockedByLoginOnly: false,
+            blockedByFsk: false,
+            geoblocked: false,
+            availableTo: "2099-01-01T00:00:00Z",
+            mediaCollection: {
+              embedded: {
+                meta: {},
+                streams: [
+                  {
+                    kind: "main",
+                    media: [
+                      {
+                        url: mediaUrl,
+                        mimeType: "video/mp4",
+                        audios: [{ kind: "standard", languageCode: "deu" }],
+                        maxHResolutionPx: 1280,
+                        maxVResolutionPx: 720,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    return original(value);
+  });
+
+  const response = await GET(
+    new NextRequest("http://localhost/api/newznab?t=tvsearch&tvdbid=123&season=2010&ep=21")
+  );
+  expect(response.status).toBe(200);
+  const channel = (await parseStringPromise(await response.text())).rss.channel[0];
+  expect(channel.item).toHaveLength(2);
+  const release = channel.item.find((item: { title: string[] }) =>
+    item.title[0].includes("S2010E21")
+  );
+  expect(release).toBeDefined();
+  expect(release.title[0]).toContain("S2010E21");
+  expect(release.title[0]).toContain("GERMAN.720p");
+  const nzb = await downloadNzb(new NextRequest(release.enclosure[0].$.url));
+  expect(nzb.status).toBe(200);
+  expect(parseNzbContent(await nzb.text())?.title).toBe(release.title[0]);
+});
+
 it("exposes a source-coordinate-bound future TBA duration conflict consistently without releasing its NZB", async () => {
   const base = fetchMock.getMockImplementation()!;
   state.settings.set("matching.sonarr.tolerancePercent", "15");

@@ -22,6 +22,14 @@ function normalized(value: string): string {
     .replaceAll("ß", "ss");
 }
 
+function sourceProductionYear(item: ApiResultItem): number | null {
+  if (Number.isSafeInteger(item.productionYear)) return item.productionYear!;
+  const labeledYear = item.description.match(
+    /^(?:Fernsehfilm|Spielfilm)\s+[^\d+\r\n]{1,80}\s+((?:19|20)\d{2})(?=\s*(?:\+{3}|$))/iu
+  );
+  return labeledYear ? Number(labeledYear[1]) : null;
+}
+
 function eligibleRenditionUrl(value: string, hlsEnabled: boolean): string {
   try {
     const url = new URL(value);
@@ -73,7 +81,7 @@ export function matchSonarrEpisodes(
     return title.replace(/(?<=\p{L})[-\u2010\u2011](?=\p{L})/gu, " ");
   };
   const episodeTitles = new Map(
-    episodes.map((episode) => {
+    show.episodes.map((episode) => {
       const full = episodeTitle(episode.name);
       return [episode, { full, tail: full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)! }] as const;
     })
@@ -183,6 +191,12 @@ export function matchSonarrEpisodes(
           ))
       );
     };
+    const productionYear = sourceProductionYear(item);
+    // Production may precede broadcast; it cannot identify one of two same-title episodes.
+    const productionTitleMatches =
+      productionYear !== null && sourceYears.includes(productionYear)
+        ? show.episodes.filter(hasMatchingTitle)
+        : [];
     const possible = episodes.filter((episode) => {
       if (sourceSeason !== null && sourceSeason !== episode.seasonNumber) {
         recordDecision("identity", "coordinate_conflict", "conflicting");
@@ -197,7 +211,15 @@ export function matchSonarrEpisodes(
       }
       if (
         sourceYears.some(
-          (year) => !episode.aired || year !== new Date(episode.aired).getUTCFullYear()
+          (year) =>
+            !episode.aired ||
+            (year !== new Date(episode.aired).getUTCFullYear() &&
+              !(
+                year === productionYear &&
+                year < new Date(episode.aired).getUTCFullYear() &&
+                productionTitleMatches.length === 1 &&
+                productionTitleMatches[0] === episode
+              ))
         )
       ) {
         recordDecision("identity", "year_conflict", "conflicting");
