@@ -24,27 +24,11 @@ import {
 export class MediaProbeError extends Error {
   readonly reason: DecisionReason;
   readonly evidence: EvidenceStatus;
-  /** Closed field names only; never retain filesystem paths or attribute values. */
-  readonly changedFields: readonly ("type" | "device" | "inode" | "size" | "mtime")[];
-  constructor(
-    reason: DecisionReason = "media_invalid",
-    evidence: EvidenceStatus = "unavailable",
-    changedFields: readonly ("type" | "device" | "inode" | "size" | "mtime")[] = []
-  ) {
+  constructor(reason: DecisionReason = "media_invalid", evidence: EvidenceStatus = "unavailable") {
     super("Local media validation failed");
     const event = parseDecisionEvent({ stage: "media", reason, evidence, count: 1 });
     this.reason = event?.reason ?? "media_invalid";
     this.evidence = event?.evidence ?? "unavailable";
-    this.changedFields =
-      this.reason === "file_changed"
-        ? [
-            ...new Set(
-              changedFields.filter((field) =>
-                ["type", "device", "inode", "size", "mtime"].includes(field)
-              )
-            ),
-          ]
-        : [];
     recordDecision("media", this.reason, this.evidence);
   }
 }
@@ -313,13 +297,15 @@ export async function probeJobMedia(
     // Refuse replacement/partial writes while probing, including changed inode.
     const after = await lstat(file);
     signal?.throwIfAborted();
-    const changed: Array<"type" | "device" | "inode" | "size" | "mtime"> = [];
-    if (!after.isFile() || after.isSymbolicLink()) changed.push("type");
-    if (after.dev !== stat.dev) changed.push("device");
-    if (after.ino !== stat.ino) changed.push("inode");
-    if (after.size !== stat.size) changed.push("size");
-    if (after.mtimeMs !== stat.mtimeMs) changed.push("mtime");
-    if (changed.length) throw new MediaProbeError("file_changed", "conflicting", changed);
+    if (
+      !after.isFile() ||
+      after.isSymbolicLink() ||
+      after.dev !== stat.dev ||
+      after.ino !== stat.ino ||
+      after.size !== stat.size ||
+      after.mtimeMs !== stat.mtimeMs
+    )
+      throw new MediaProbeError("file_changed", "conflicting");
     return validateMediaProbe(JSON.parse(output), expected, tolerancePercent, proof);
   } catch (error) {
     throw error instanceof MediaProbeError

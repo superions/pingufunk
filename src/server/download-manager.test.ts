@@ -230,25 +230,6 @@ it("persists the media probe's closed cause through the real worker failure path
   expect(failed.data.error).not.toContain(testRoot);
 });
 
-it("retains only changed field names when a media file changes during validation", async () => {
-  const job = progressiveJob();
-  downloadUpdate.mockImplementation(async ({ data }) => Object.assign(job, data));
-  probeJobMedia.mockRejectedValueOnce(
-    new MediaProbeError("file_changed", "conflicting", ["size", "mtime"])
-  );
-  const { processDownload } = await import("./download-manager");
-  await processDownload(job.id);
-  const failed = downloadUpdate.mock.calls.find(([call]) => call.data.status === "failed")?.[0];
-  expect(JSON.parse(failed.data.error.slice("Local media validation failed: ".length))).toEqual({
-    version: 1,
-    stage: "media",
-    reason: "file_changed",
-    evidence: "conflicting",
-    changedFields: ["size", "mtime"],
-  });
-  expect(failed.data.error).not.toContain(testRoot);
-});
-
 it("classifies a progress DB failure separately and redacts both history and logs", async () => {
   const job = progressiveJob();
   const secret = "secret-in-prisma-meta";

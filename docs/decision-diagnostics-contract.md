@@ -76,12 +76,6 @@ und SAB-`fail_message` als String bleiben unverändert lesbar. Positive lokale
 Medienprüfung bleibt im bestehenden `mediaValidation`-Vertrag. Keine DDL,
 Job-/Historyumschreibung, Retryfreigabe oder Importbehauptung.
 
-Bei `file_changed` ergänzt der neue Fehlertext ausschließlich die Namen der
-abweichenden Merkmale (`type`, `device`, `inode`, `size`, `mtime`). Dateipfade,
-Attributwerte und Quell-URLs werden nicht ergänzt. Historische Fehler ohne diese
-Liste bleiben gültig; die Sicherheitsentscheidung und das UI-Grundschema bleiben
-unverändert.
-
 Die Diagnose macht nicht sämtliche historischen Dockerlogs privat. Es gibt
 keine Shell-/Dockerlog-API oder Rohantwortanzeige. Entscheidungen werden an
 ihren Ownern aufgezeichnet, nicht aus Logtexten zurückgeraten.
