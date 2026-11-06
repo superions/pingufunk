@@ -25,6 +25,7 @@ import { createHash } from "node:crypto";
 import * as path from "path";
 import { SourceDownloadError } from "./download-failure";
 import { completeDownload, moveIntoJobDir } from "./download-completion";
+import { correctAudioLanguage } from "./audio-language";
 import { prepareSonarrJobTitle } from "./sonarr-job-title";
 
 async function getDownloadTempPath(): Promise<string> {
@@ -419,6 +420,8 @@ async function processOwnedDownload(
       stagedPath = convertedPath;
       extension = ".mkv";
     }
+
+    await correctAudioLanguage(stagedPath, tempJobDir, download.url, expectations, lease);
 
     // Every backend converges on the same owned move and completion path.
     const finalPath = path.join(completeJobDir, filename + extension);

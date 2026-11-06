@@ -73,6 +73,7 @@ for provider in "${providers[@]}"; do
     --entrypoint /bin/sh "$RUNNER_IMAGE" -ec '
       mkdir -p /app/public/pingufunk-media-qa
       ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=25 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/valid.mp4
+      ffmpeg -y -v error -i /app/public/pingufunk-media-qa/valid.mp4 -map 0 -c copy -metadata:s:a:0 language=eng /app/public/pingufunk-media-qa/audio-label.mp4
       ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=1 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 10 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/slow-mux.mp4
       ffmpeg -y -v error -f lavfi -i color=size=1280x720:rate=1 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/720p.mp4
       ffmpeg -y -v error -i /app/public/pingufunk-media-qa/valid.mp4 -an -c:v copy /app/public/pingufunk-media-qa/no-audio.mp4

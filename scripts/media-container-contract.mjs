@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseStringPromise } from "xml2js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const container = process.argv[2];
 const owner = process.env.PINGUFUNK_MEDIA_QA_OWNER;
@@ -71,9 +71,9 @@ function nzb(filename, duration, resolution = null) {
         };
   return expectedNzb(filename, expected);
 }
-function expectedNzb(filename, expected) {
+function expectedNzb(filename, expected, sourceUrl) {
   const title = `Synthetic.${filename.replaceAll(".", "-")}`;
-  const url = `http://127.0.0.1:6767/pingufunk-media-qa/${filename}`;
+  const url = sourceUrl ?? `http://127.0.0.1:6767/pingufunk-media-qa/${filename}`;
   return {
     expected,
     body: `<?xml version="1.0"?><nzb><!-- ${Buffer.from(title).toString("base64")} --><!-- ${Buffer.from(url).toString("base64")} --><head>${expected === null ? "" : `<meta type="pingufunk-media-expectations">${Buffer.from(JSON.stringify(expected)).toString("base64")}</meta>`}</head></nzb>`,
@@ -164,6 +164,75 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
   terminalSnapshots.set(id, row);
 }
 console.log("Both actual Newznab paths to NZB, queue, downloaded file and SAB history passed");
+
+// Prove the real worker corrects the label without changing either encoded stream.
+const audioSource = "https://synthetic.example.invalid/pingufunk-media-qa/audio-label.mp4";
+const audioId = Buffer.from("crid://synthetic/audio-label").toString("base64url");
+const audioExpected = {
+  version: 2,
+  duration: null,
+  audio: null,
+  resolution: null,
+  sourceAudio: {
+    provider: "ard_media",
+    videoId: audioId,
+    mediaIdentity: createHash("sha256").update(audioSource).digest("hex"),
+    language: "de",
+  },
+};
+const labeledId = request(
+  "api?mode=addfile&cat=sonarr",
+  expectedNzb("audio-label.mp4", audioExpected, audioSource).body
+).nzo_ids[0];
+const labelDeadline = Date.now() + 30_000;
+while (Date.now() < labelDeadline && !["completed", "failed"].includes(readJob(labeledId).status))
+  await delay(200);
+const labeled = readJob(labeledId);
+if (labeled.status !== "completed" || labeled.validation !== null || !labeled.filePath)
+  throw new Error("Audio label fixture did not complete");
+const label = JSON.parse(
+  run([
+    "exec",
+    container,
+    "ffprobe",
+    "-v",
+    "error",
+    "-select_streams",
+    "a",
+    "-show_entries",
+    "stream_tags=language",
+    "-of",
+    "json",
+    labeled.filePath,
+  ])
+);
+if (label.streams?.length !== 1 || !["de", "deu", "ger"].includes(label.streams[0].tags?.language))
+  throw new Error("German source audio label was not corrected");
+for (const stream of ["0:v:0", "0:a:0"]) {
+  const hash = (file) =>
+    run([
+      "exec",
+      container,
+      "ffmpeg",
+      "-v",
+      "error",
+      "-i",
+      file,
+      "-map",
+      stream,
+      "-c",
+      "copy",
+      "-f",
+      "hash",
+      "-hash",
+      "sha256",
+      "-",
+    ]).trim();
+  if (hash(labeled.filePath) !== hash("/app/public/pingufunk-media-qa/audio-label.mp4"))
+    throw new Error("Audio label correction changed an encoded stream");
+}
+terminalSnapshots.set(labeledId, labeled);
+console.log("German audio label corrected without re-encoding audio or video");
 
 // Preserve source references, but do not inspect downloaded media against them.
 request("api/settings", JSON.stringify({ "matching.sonarr.tolerancePercent": "0" }));

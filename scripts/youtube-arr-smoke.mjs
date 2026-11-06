@@ -153,7 +153,7 @@ try {
         "-metadata:s:a:0",
         // Source metadata declares German; exercise the existing native film
         // and series imports with the conflicting container tag from P19.5.
-        "language=deu",
+        "language=eng",
       ],
     ],
   ])

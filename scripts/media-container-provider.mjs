@@ -14,8 +14,44 @@ if (
   throw new Error("Exact disposable media source required");
 
 const nativeFetch = globalThis.fetch;
+const audioSource = "https://synthetic.example.invalid/pingufunk-media-qa/audio-label.mp4";
+const audioId = Buffer.from("crid://synthetic/audio-label").toString("base64url");
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (url.href === audioSource)
+    return nativeFetch("http://127.0.0.1:6767/pingufunk-media-qa/audio-label.mp4", init);
+  if (
+    url.hostname === "api.ardmediathek.de" &&
+    url.pathname === `/page-gateway/pages/ard/item/${audioId}`
+  )
+    return Response.json({
+      widgets: [
+        {
+          id: audioId,
+          type: "player_ondemand",
+          blockedByLoginOnly: false,
+          blockedByFsk: false,
+          geoblocked: false,
+          mediaCollection: {
+            embedded: {
+              meta: {},
+              streams: [
+                {
+                  kind: "main",
+                  media: [
+                    {
+                      url: audioSource,
+                      mimeType: "video/mp4",
+                      audios: [{ languageCode: "de", kind: "standard" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
   if (url.hostname === "mediathekviewweb.de" && url.pathname === "/api/query") {
     const body = JSON.parse(init?.body ?? "{}");
     const rows =

@@ -32,7 +32,12 @@ vi.mock("fs/promises", () => ({
   unlink: vi.fn(async () => undefined),
 }));
 
-import { convertMp4ToMkv, ensureFfmpegExists, mergeVideoAudio } from "./ffmpeg";
+import {
+  convertMp4ToMkv,
+  correctGermanAudioTag,
+  ensureFfmpegExists,
+  mergeVideoAudio,
+} from "./ffmpeg";
 
 beforeEach(() => {
   state.calls.length = 0;
@@ -79,6 +84,23 @@ it("never installs a missing FFmpeg binary during maintenance", async () => {
 });
 
 describe("FFmpeg language metadata", () => {
+  it("changes the audio language label while copying all streams", async () => {
+    await correctGermanAudioTag("/synthetic/input.mp4", "/synthetic/corrected.mp4");
+    expect(state.calls).toHaveLength(1);
+    expect(state.calls[0]).toEqual(
+      expect.arrayContaining([
+        "-map",
+        "0",
+        "-map_metadata",
+        "0",
+        "-c",
+        "copy",
+        "-metadata:s:a:0",
+        "language=deu",
+      ])
+    );
+  });
+
   it.each(["foreign", "OV", "unknown", "multitrack"])(
     "does not invent German track metadata for %s inputs",
     async (fixture) => {

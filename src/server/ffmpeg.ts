@@ -178,6 +178,52 @@ export interface ConversionResult {
   error?: string;
 }
 
+/** Copy streams unchanged while correcting the first audio track's language tag. */
+export async function correctGermanAudioTag(
+  inputPath: string,
+  outputPath: string,
+  signal?: AbortSignal
+): Promise<void> {
+  await fs.access(FFMPEG_PATH);
+  const bounded = AbortSignal.any([
+    ...(signal ? [signal] : []),
+    AbortSignal.timeout(10 * 60 * 1000),
+  ]);
+  bounded.throwIfAborted();
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      FFMPEG_PATH,
+      [
+        "-nostdin",
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file",
+        "-i",
+        inputPath,
+        "-map",
+        "0",
+        "-map_metadata",
+        "0",
+        "-c",
+        "copy",
+        "-metadata:s:a:0",
+        "language=deu",
+        "-n",
+        outputPath,
+      ],
+      { detached: process.platform !== "win32", windowsHide: true }
+    );
+    bindOwnedProcessAbort(child, bounded);
+    child.stderr.on("data", () => {});
+    child.once("error", () => reject(new Error("Audio language tagging failed")));
+    child.once("close", (code) => {
+      if (code === 0 && !bounded.aborted) resolve();
+      else reject(new Error("Audio language tagging failed"));
+    });
+  });
+}
+
 export async function convertMp4ToMkv(
   mp4Path: string,
   mkvPath: string,
