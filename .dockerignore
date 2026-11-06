@@ -12,6 +12,13 @@ dist
 
 # Testing
 coverage
+src/**/*.test.ts
+src/**/*.test.tsx
+
+# CI and agent configuration do not belong to the application build context.
+.forgejo
+.github
+.agents
 
 # Development
 .env*
