@@ -66,6 +66,14 @@ export function matchSonarrEpisodes(
         verified.has(`${episode.seasonNumber}:${episode.episodeNumber}`)) &&
       !blocked.has(`${episode.seasonNumber}:${episode.episodeNumber}`)
   );
+  // A long-running series can have thousands of episodes. Normalization is
+  // independent of each source candidate and must not scale with both lists.
+  const episodeTitles = new Map(
+    episodes.map((episode) => {
+      const full = normalized(episode.name);
+      return [episode, { full, tail: full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)! }] as const;
+    })
+  );
   const matches: MatchedEpisodeInfo[] = [];
   for (const candidate of candidates) {
     if (candidate.sourceRef) {
@@ -157,8 +165,7 @@ export function matchSonarrEpisodes(
         .replace(/\s*\((?:19|20)\d{2}\)\s*$/, "")
     );
     const hasMatchingTitle = (episode: TvdbData["episodes"][number]): boolean => {
-      const full = normalized(episode.name);
-      const tail = full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)!;
+      const { full, tail } = episodeTitles.get(episode)!;
       return (
         [...full].length >= 3 &&
         (title === full ||
