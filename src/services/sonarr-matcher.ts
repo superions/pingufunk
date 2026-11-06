@@ -68,9 +68,13 @@ export function matchSonarrEpisodes(
   );
   // A long-running series can have thousands of episodes. Normalization is
   // independent of each source candidate and must not scale with both lists.
+  const episodeTitle = (value: string) => {
+    const title = normalized(value);
+    return title.replace(/(?<=\p{L})[-\u2010\u2011](?=\p{L})/gu, " ");
+  };
   const episodeTitles = new Map(
     episodes.map((episode) => {
-      const full = normalized(episode.name);
+      const full = episodeTitle(episode.name);
       return [episode, { full, tail: full.split(/\s*[:–—|]\s*|\s+-\s+/).at(-1)! }] as const;
     })
   );
@@ -159,7 +163,7 @@ export function matchSonarrEpisodes(
     const sourceYears = [...parsed.episodeName.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map((match) =>
       Number(match[1])
     );
-    const title = normalized(
+    const title = episodeTitle(
       parsed.episodeName
         .replace(/\s*\((?:klare Sprache|Gebärdensprache)\)\s*$/i, "")
         .replace(/\s*\((?:19|20)\d{2}\)\s*$/, "")

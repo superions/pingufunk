@@ -97,6 +97,31 @@ describe("supplemental duration policy", () => {
 });
 
 describe("identity before duration/identity stamping", () => {
+  it("treats a word-internal hyphen as spacing without guessing an episode", () => {
+    const target = {
+      ...show,
+      episodes: [{ ...show.episodes[0], name: "Investigator - 32 - Undercover-Camping" }],
+    };
+    const source = { ...item, title: "Undercover Camping" };
+    const match = (series: TvdbData, candidate: ApiResultItem) =>
+      matchSonarrEpisodes(series, [candidate], 300, 10);
+    expect(match(target, source)).toMatchObject([
+      { episode: { name: "Investigator - 32 - Undercover-Camping" } },
+    ]);
+    expect(
+      match(
+        { ...target, episodes: [...target.episodes, { ...target.episodes[0], episodeNumber: 4 }] },
+        source
+      )
+    ).toEqual([]);
+    expect(
+      match(
+        { ...target, episodes: [{ ...target.episodes[0], name: "Case 3-1" }] },
+        { ...item, title: "Case 3 1" }
+      )
+    ).toEqual([]);
+    expect(match(target, { ...source, topic: "Another series" })).toEqual([]);
+  });
   it("uses verified complete source coordinates across localized titles without mutating metadata", () => {
     const base = {
       ...show,

@@ -31,6 +31,10 @@ Metadaten-, Staffel-, Folgen-, Jahres- und Laufzeitkonflikte werden nicht durch 
 breitere Abfrage beseitigt. Sprache stammt weiterhin aus Quellenbelegen, nicht
 aus Sender, Suchsprache oder einem pauschalen Deutsch-Default.
 
+Der Sonarr-Episodentitelvergleich behandelt einen Bindestrich zwischen zwei
+Buchstaben wie ein Leerzeichen. Zahlen und ihre Satzzeichen bleiben unverändert;
+mehrere passende Folgen bleiben mehrdeutig und werden nicht automatisch gewählt.
+
 ## TBA ist kein Episodentitelbeleg und kein konkreter Titelkonflikt
 
 `TBA`, `TBD`, `To be announced`, `To be determined` sowie passende `Episode N`/
