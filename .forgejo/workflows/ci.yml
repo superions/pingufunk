@@ -39,13 +39,14 @@ jobs:
         run: npm run typecheck
 
       - name: Run tests with coverage
-        run: npm run test:coverage
+        run: npm run test:coverage -- --maxWorkers=4
 
       - name: Build
         run: npm run build
 
   postgresql-integration:
     runs-on: [self-hosted, linux, x64, ci-build]
+    needs: lint-and-build
     strategy:
       fail-fast: false
       matrix:
