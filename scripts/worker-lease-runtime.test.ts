@@ -152,6 +152,8 @@ for (const provider of ["sqlite", "postgresql"] as const)
           data: [
             { key: "download.path", value: root },
             { key: "download.convertToMkv", value: "false" },
+            // This fixture checks queued handoff, not simultaneous transfers.
+            { key: "download.parallel.mp4", value: "1" },
           ],
         });
         await prisma.download.createMany({
