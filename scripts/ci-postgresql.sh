@@ -128,7 +128,7 @@ PINGUFUNK_REQUIRE_PG_TESTS=1 \
 PINGUFUNK_REQUIRE_PG_TESTS=1 \
   PINGUFUNK_TEST_DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
   DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa" \
-  npx vitest run scripts/download-read-runtime.test.ts scripts/enqueue-runtime.test.ts scripts/worker-lease-runtime.test.ts scripts/source-workers-runtime.test.ts
+  npx vitest run scripts/download-read-runtime.test.ts scripts/enqueue-runtime.test.ts scripts/worker-lease-runtime.test.ts scripts/source-workers-runtime.test.ts scripts/hls-progress-runtime.test.ts
 
 # Pause only this harness-owned container, after the parallel CRUD suites finish.
 DATABASE_URL="postgresql://pingufunk_qa_runtime:${CI_PG_PASSWORD}@127.0.0.1:${port}/pingufunk_qa?schema=p15_reconnect" \

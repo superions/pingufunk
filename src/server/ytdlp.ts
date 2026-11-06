@@ -600,10 +600,16 @@ function parseYtdlpSpeed(speedStr: string): number {
   if (!speedMatch) return 0;
   const value = parseFloat(speedMatch[1]);
   const unit = speedMatch[2].toLowerCase();
-  if (unit.includes("g")) return value * 1024 * 1024 * 1024;
-  if (unit.includes("m")) return value * 1024 * 1024;
-  if (unit.includes("k")) return value * 1024;
-  return value;
+  const multiplier = unit.includes("g")
+    ? 1024 ** 3
+    : unit.includes("m")
+      ? 1024 ** 2
+      : unit.includes("k")
+        ? 1024
+        : 1;
+  // Progress persistence stores whole bytes/second in a BigInt column.
+  const bytes = Math.round(value * multiplier);
+  return Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : 0;
 }
 
 /**

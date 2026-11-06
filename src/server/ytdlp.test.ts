@@ -145,43 +145,13 @@ it.each(["mkv", "mp4"] as const)(
   }
 );
 
-it("removes the partial video temp file when the video download fails", async () => {
-  const done = downloadHlsStream("https://example.org/master.m3u8", "/tmp/result.mkv");
-  await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
-  const videoArgs = spawn.mock.calls[0][1];
-  const videoTempPath = videoArgs[videoArgs.indexOf("-o") + 1];
-  child.stderr.emit("data", Buffer.from("some yt-dlp error\n"));
-  child.emit("close", 1);
-
-  expect(await done).toEqual({ success: false, error: "yt-dlp exited with code 1" });
-  expect(unlink).toHaveBeenCalledWith(videoTempPath);
-  // Audio is never attempted once video already failed.
-  expect(spawn).toHaveBeenCalledTimes(1);
-});
-
-it("removes both temp files when the audio download fails", async () => {
-  const done = downloadHlsStream("https://example.org/master.m3u8", "/tmp/result.mkv");
-  await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
-  const videoArgs = spawn.mock.calls[0][1];
-  const videoTempPath = videoArgs[videoArgs.indexOf("-o") + 1];
-  child.emit("close", 0);
-
-  await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
-  const audioArgs = spawn.mock.calls[1][1];
-  const audioTempPath = audioArgs[audioArgs.indexOf("-o") + 1];
-  child.stderr.emit("data", Buffer.from("audio fetch failed\n"));
-  child.emit("close", 1);
-
-  expect(await done).toEqual({ success: false, error: "yt-dlp exited with code 1" });
-  expect(unlink).toHaveBeenCalledWith(videoTempPath);
-  expect(unlink).toHaveBeenCalledWith(audioTempPath);
-});
-
 it.each(["video", "audio"] as const)(
   "removes %s sidecars on failure without touching other downloads",
   async (stage) => {
     const done = downloadHlsStream("https://example.org/master.m3u8", "/tmp/result.mkv");
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
+    const videoArgs = spawn.mock.calls[0][1];
+    const videoPath = videoArgs[videoArgs.indexOf("-o") + 1];
     if (stage === "audio") {
       child.emit("close", 0);
       await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
@@ -199,7 +169,10 @@ it.each(["video", "audio"] as const)(
     readdir.mockResolvedValueOnce([...sidecars, ...unrelated]);
     child.emit("close", 1);
 
-    expect((await done).success).toBe(false);
+    expect(await done).toEqual({ success: false, error: "yt-dlp exited with code 1" });
+    expect(spawn).toHaveBeenCalledTimes(stage === "video" ? 1 : 2);
+    expect(unlink).toHaveBeenCalledWith(videoPath);
+    expect(unlink).toHaveBeenCalledWith(tempPath);
     for (const name of sidecars) expect(unlink).toHaveBeenCalledWith(`/tmp/${name}`);
     for (const name of unrelated) expect(unlink).not.toHaveBeenCalledWith(`/tmp/${name}`);
   }
