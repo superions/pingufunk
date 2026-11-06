@@ -51,7 +51,6 @@ import {
 import {
   getQualityPreference,
   isHlsEnabled,
-  SKIP_KEYWORDS,
   dedupeNewznabItems,
   assembleTvReleases,
   assembleMovieReleases,
@@ -487,9 +486,7 @@ export async function fetchMovieSearchForRssSync(
     if (fetched === null) throw new Error("Search provider unavailable");
     sources = fetched;
   }
-  const eligible = sources.filter(
-    (item) => !SKIP_KEYWORDS.some((word) => item.title.includes(word))
-  );
+  const eligible = sources;
   // Recent publishes exact source-title/alias candidates only. Index them once
   // instead of parsing every source again for every film in a large library.
   const byTitle = new Map<string, ApiResultItem[]>();
@@ -602,10 +599,7 @@ export async function fetchMovieSearchResults(
 
   console.log(`[Mediathek] Total results for movie matching: ${allResults.length}`);
 
-  // Filter out trailers and other non-movie content
-  const filteredResults = allResults.filter(
-    (item) => !SKIP_KEYWORDS.some((kw) => item.title.includes(kw))
-  );
+  const filteredResults = allResults;
   console.log(`[Mediathek] Results after filtering: ${filteredResults.length}`);
 
   if (filteredResults.length === 0) {
@@ -698,10 +692,8 @@ export async function fetchMovieSearchByQuery(
     return response;
   }
 
-  // Filter trailers and apply the configured minimum duration. Each URL variant
-  // is checked for HLS below so direct alternatives remain available.
+  // Apply only the user-configured minimum duration; both transports are supported.
   const filteredResults = results.filter((item) => {
-    if (SKIP_KEYWORDS.some((kw) => item.title.includes(kw))) return false;
     if (minDuration > 0 && item.duration < minDuration) return false;
     return true;
   });

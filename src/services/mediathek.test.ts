@@ -727,7 +727,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     expect(xml).not.toContain("Example.Film.1998");
   });
 
-  it("preserves progressive HD when the standard rendition is HLS and HLS is disabled", async () => {
+  it("publishes HLS and progressive HD without a transport opt-in", async () => {
     const mixedRenditions = makeItem({
       topic: "Example",
       title: "Example episode",
@@ -739,12 +739,12 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
 
     const xml = await fetchSearchResultsByString(makeTvSearchContext({ query: "Example" }), 100, 0);
 
-    expect(xml).toContain('total="1"');
+    expect(xml).toContain('total="2"');
     expect(xml).toContain("progressive-hd.mp4");
-    expect(xml).not.toContain("standard.m3u8");
+    expect(xml).toContain("standard.m3u8");
   });
 
-  it("does not re-emit a disallowed HLS HD rendition beside a progressive standard rendition", async () => {
+  it("publishes HLS HD beside a progressive standard rendition", async () => {
     mockApi([
       makeItem({
         topic: "Example",
@@ -757,12 +757,12 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
 
     const xml = await fetchSearchResultsByString(makeTvSearchContext({ query: "Example" }), 100, 0);
 
-    expect(xml).toContain('total="1"');
+    expect(xml).toContain('total="2"');
     expect(xml).toContain("progressive-standard.mp4");
-    expect(xml).not.toContain("disallowed-hd.m3u8");
+    expect(xml).toContain("disallowed-hd.m3u8");
   });
 
-  it("changes rendition output with HLS setting without reusing a stale response cache", async () => {
+  it("keeps both transports available across legacy HLS setting changes", async () => {
     mockApi([
       makeItem({
         topic: "Example",
@@ -781,7 +781,7 @@ describe("P00 historical behavior and P01 rendition regressions", () => {
     const enabledXml = await fetchSearchResultsByString(context, 100, 0);
 
     expect(disabledXml).toContain("progressive-hd.mp4");
-    expect(disabledXml).not.toContain("standard.m3u8");
+    expect(disabledXml).toContain("standard.m3u8");
     expect(enabledXml).toContain("progressive-hd.mp4");
     expect(enabledXml).toContain("standard.m3u8");
     expect(mockedFetch).toHaveBeenCalledTimes(2);
@@ -1682,10 +1682,10 @@ it.each(["standard", "high"])("keeps direct movie variants when %s is HLS", asyn
   const xml = await fetchMovieSearchResults(movie, 100, 0);
   expect(xml).toContain("480p");
   expect(xml).toContain(streaming === "standard" ? "1080p" : "720p");
-  expect(xml).not.toContain(streaming === "standard" ? "720p" : "1080p");
+  expect(xml).toContain(streaming === "standard" ? "720p" : "1080p");
   expect(xml).toContain(streaming === "standard" ? "1080.mp4" : "720.mp4");
   expect(xml).toContain("480.mp4");
-  expect(xml).not.toContain(streaming === "standard" ? "720.m3u8" : "1080.m3u8");
+  expect(xml).toContain(streaming === "standard" ? "720.m3u8" : "1080.m3u8");
 });
 
 it.each(["standard", "high"])(
@@ -1705,10 +1705,10 @@ it.each(["standard", "high"])(
     const xml = await fetchMovieSearchByQuery("Mixed Movie", 100, 0);
     expect(xml).toContain("480p");
     expect(xml).toContain(streaming === "standard" ? "1080p" : "720p");
-    expect(xml).not.toContain(streaming === "standard" ? "720p" : "1080p");
+    expect(xml).toContain(streaming === "standard" ? "720p" : "1080p");
     expect(xml).toContain(streaming === "standard" ? "1080.mp4" : "720.mp4");
     expect(xml).toContain("480.mp4");
-    expect(xml).not.toContain(streaming === "standard" ? "720.m3u8" : "1080.m3u8");
+    expect(xml).toContain(streaming === "standard" ? "720.m3u8" : "1080.m3u8");
   }
 );
 
@@ -1734,7 +1734,7 @@ it("preserves HLS movie text-search renditions when HLS is enabled", async () =>
   expect(xml).toContain("480.mp4");
 });
 
-it("uses a direct low-quality variant for best when higher qualities are HLS", async () => {
+it("selects the highest measured rendition for best across supported transports", async () => {
   vi.mocked(getSetting).mockImplementation(async (key) =>
     key === "download.quality" ? "best" : null
   );
@@ -1746,9 +1746,9 @@ it("uses a direct low-quality variant for best when higher qualities are HLS", a
       }),
     ]);
     const xml = await fetchMovieSearchByQuery("Movie", 100, 0);
-    expect(xml).toContain("480p");
+    expect(xml).not.toContain("480p");
     expect(xml).not.toContain("720p");
-    expect(xml).not.toContain("1080p");
+    expect(xml).toContain("1080p");
   } finally {
     vi.mocked(getSetting).mockResolvedValue(null);
   }

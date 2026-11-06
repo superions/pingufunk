@@ -98,7 +98,7 @@ export async function queryContentWindow(
     options.requestBudget?.deadlineAt ?? Infinity
   );
   try {
-    const hlsEnabled = (await getSetting("download.enableHLS")) === "true";
+    const hlsEnabled = true;
     const policy = await getConfiguredLanguagePolicy();
     const [base, supplemental] = await Promise.all([
       providerId === "youtube"

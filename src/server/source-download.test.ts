@@ -65,7 +65,7 @@ it.each(["mkv", "mp4"] as const)(
     });
     const artifact = await transferSource(
       {
-        family: "mediathek",
+        family: "hls",
         url: "https://www.srf.ch/play/tv/redirect/detail/11111111-1111-4111-8111-111111111111#rundfunkarr-height=480",
       },
       context
@@ -112,7 +112,7 @@ ${base}video.m3u8
     });
     const work = transferSource(
       {
-        family: "mediathek",
+        family: "hls",
         url: "https://manifest-arte.akamaized.net/api/manifest/v1/Generate/synthetic/de/XQ/123456-001-B.m3u8",
       },
       context
@@ -200,7 +200,7 @@ it("retains closed HTTP diagnostics and never leaks a tool's raw error or retrie
     error: "https://private.invalid?token=secret",
   });
   await expect(
-    transferSource({ family: "mediathek", url: "https://example.invalid/video.m3u8" }, context)
+    transferSource({ family: "hls", url: "https://example.invalid/video.m3u8" }, context)
   ).rejects.toThrow(/^HLS download failed$/);
   expect(fetch).not.toHaveBeenCalled();
   expect(downloadHlsStream).toHaveBeenCalledOnce();

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { parseArteHls } from "./arte-hls";
+import { parseArteHls, isArteHls } from "./arte-hls";
 import { enrichSourceAudio } from "./source-audio";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { generateMovieRssItems } from "./newznab";
@@ -18,6 +18,16 @@ ${base}video1080.m3u8
 #EXT-X-STREAM-INF:CODECS="avc1.64001F,mp4a.40.2",RESOLUTION=1280x720,AUDIO="audio"
 ${base}video720.m3u8
 `;
+
+it("accepts the official secure manifest host and rejects lookalike hosts", () => {
+  const secure = master.replace("//manifest-arte.", "//secure-manifest-arte.");
+  expect(isArteHls(secure, "123456-001-A")).toBe(true);
+  expect(parseArteHls(manifest, secure, 720).audioUrl).toBe(base + "german.m3u8");
+  const reassembled = secure.replace("001-B.m3u8", "001-C.m3u8");
+  expect(isArteHls(reassembled, "123456-001-A")).toBe(true);
+  expect(parseArteHls(manifest.replaceAll("001-B/", "001-C/"), reassembled, 720).height).toBe(720);
+  expect(isArteHls(secure.replace(".akamaized.net", ".akamaized.net.example.invalid"))).toBe(false);
+});
 afterEach(async () => {
   sourceMediaFacts.clear();
   await sourceMediaFacts.idle();

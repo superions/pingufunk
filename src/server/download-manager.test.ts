@@ -85,6 +85,7 @@ vi.mock("./ffmpeg", () => {
 vi.mock("./ytdlp", () => ({ downloadHlsStream }));
 import type { TransferFailure } from "./download-failure";
 import { mediathekDownloadAdapter } from "@/providers/mediathek/download";
+import { hlsDownloadAdapter } from "@/providers/hls/download";
 import { youtubeDownloadAdapter } from "@/providers/youtube/download";
 import {
   youtubeRenditionFingerprint,
@@ -1459,19 +1460,36 @@ it("runs independent source workers, preserves per-source FIFO and destinations,
   };
   const youtube = vi.spyOn(youtubeDownloadAdapter, "transfer").mockImplementation(run);
   const mediathek = vi.spyOn(mediathekDownloadAdapter, "transfer").mockImplementation(run);
+  const hls = vi.spyOn(hlsDownloadAdapter, "transfer").mockImplementation(run);
+  const stream = {
+    ...media,
+    id: "hls",
+    title: "HLS",
+    url: "https://synthetic.invalid/master.m3u8",
+  };
   const work = startDownloadProcessing();
   try {
     await vi.waitFor(() => expect(started).toEqual(["YouTube-0"]));
     // A new Mediathek job must be noticed while the YouTube worker stays busy,
     // even when more than one database page of older YouTube jobs is waiting.
-    jobs.push(media);
+    jobs.push(media, stream);
     void startDownloadProcessing();
-    await vi.waitFor(() => expect(started).toEqual(["YouTube-0", "Mediathek"]), { timeout: 2500 });
-    expect(getDownloadWorkerState().sourceWorkers).toEqual(new Set(["youtube", "mediathek"]));
+    await vi.waitFor(
+      () => expect(new Set(started)).toEqual(new Set(["YouTube-0", "Mediathek", "HLS"])),
+      {
+        timeout: 2500,
+      }
+    );
+    expect(getDownloadWorkerState().sourceWorkers).toEqual(
+      new Set(["youtube", "mediathek", "hls"])
+    );
     release.get("Mediathek")!();
     await vi.waitFor(() => expect(media.status).toBe("completed"));
     expect(jobs[0].status).toBe("downloading");
     expect(jobs[1].status).toBe("queued");
+    expect(stream.status).toBe("downloading");
+    release.get("HLS")!();
+    await vi.waitFor(() => expect(stream.status).toBe("completed"));
     const completed = downloadUpdate.mock.calls.find(
       ([call]) => call.where.id === "media" && call.data.status === "completed"
     )![0].data;
@@ -1480,13 +1498,18 @@ it("runs independent source workers, preserves per-source FIFO and destinations,
     // Leave only the next same-source job, retaining the long-backlog evidence above.
     jobs.splice(2, 100);
     release.get("YouTube-0")!();
-    await vi.waitFor(() => expect(started).toEqual(["YouTube-0", "Mediathek", "YouTube-1"]));
+    await vi.waitFor(() =>
+      expect(started.filter((name) => name.startsWith("YouTube"))).toEqual([
+        "YouTube-0",
+        "YouTube-1",
+      ])
+    );
     release.get("YouTube-1")!();
     await work;
     expect(
       jobs.filter((job) => job.category === "radarr").every((job) => job.status === "completed")
     ).toBe(true);
-    expect(started).toHaveLength(3);
+    expect(started).toHaveLength(4);
   } finally {
     // Never leave a fixture transfer holding the shared supervisor on a failed assertion.
     jobs.splice(0);
@@ -1494,6 +1517,7 @@ it("runs independent source workers, preserves per-source FIFO and destinations,
     await work;
     youtube.mockRestore();
     mediathek.mockRestore();
+    hls.mockRestore();
   }
 });
 

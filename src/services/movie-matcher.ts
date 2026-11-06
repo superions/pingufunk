@@ -54,7 +54,7 @@ export async function matchMovieItems(
   minDurationSeconds: number,
   hlsEnabledOverride?: boolean
 ): Promise<MovieMatchResult[]> {
-  const hlsEnabled = hlsEnabledOverride ?? (await getSetting("download.enableHLS")) === "true";
+  const hlsEnabled = hlsEnabledOverride ?? true;
   const tolerance = Number(
     configuredSetting(
       "matching.movie.tolerancePercent",

@@ -11,12 +11,13 @@ export function isArteHls(value: string, programmeId?: string): boolean {
       !url.username &&
       !url.password &&
       !url.port &&
-      url.hostname === "manifest-arte.akamaized.net" &&
+      ["manifest-arte.akamaized.net", "secure-manifest-arte.akamaized.net"].includes(
+        url.hostname
+      ) &&
       /^\/api\/manifest\/v1\/Generate\//.test(url.pathname) &&
-      /\/\d{6}-\d{3}-[ABF]\.m3u8$/.test(url.pathname) &&
+      /\/\d{6}-\d{3}-[A-Z]\.m3u8$/.test(url.pathname) &&
       (!programmeId ||
-        url.pathname.endsWith(`/${programmeId.slice(0, 10)}-B.m3u8`) ||
-        url.pathname.endsWith(`/${programmeId}.m3u8`))
+        url.pathname.match(/(\d{6}-\d{3})-[A-Z]\.m3u8$/)?.[1] === programmeId.slice(0, 10))
     );
   } catch {
     return false;
@@ -35,7 +36,7 @@ function attributes(line: string): Record<string, string> {
 /** Select a concrete German standard audio playlist, never the master's default audio. */
 export function parseArteHls(text: string, master: string, maximumHeight?: number) {
   if (!isArteHls(master) || !text.startsWith("#EXTM3U")) throw Error("Invalid ARTE manifest");
-  const programme = new URL(master).pathname.match(/(\d{6}-\d{3}-[ABF])\.m3u8$/)![1];
+  const programme = new URL(master).pathname.match(/(\d{6}-\d{3}-[A-Z])\.m3u8$/)![1];
   const mediaUrl = (value: string) => {
     const url = new URL(value, master);
     if (

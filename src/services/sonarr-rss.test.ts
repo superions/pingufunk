@@ -151,7 +151,7 @@ it("deduplicates OR retrieval and invalidates snapshots on a rule-context change
   expect(state.query.mock.calls.length).toBeGreaterThan(calls * 2);
 });
 
-it("publishes supplemental HLS only when the existing HLS option is explicitly enabled", async () => {
+it("publishes supplemental HLS despite an obsolete disabled HLS option", async () => {
   const load = state.query.getMockImplementation()!;
   state.query.mockImplementation(async (queries, size, options) => {
     const rows = await load(queries, size, options);
@@ -160,8 +160,8 @@ it("publishes supplemental HLS only when the existing HLS option is explicitly e
       url_video: "https://example.invalid/media.m3u8",
     }));
   });
-  expect(await getSonarrRssMatches(base)).toEqual([]);
-  expect(state.query.mock.calls.every((call) => call[2].progressiveOnly)).toBe(true);
+  expect((await getSonarrRssMatches(base)).length).toBeGreaterThan(0);
+  expect(state.query.mock.calls.every((call) => call[2].progressiveOnly === false)).toBe(true);
   state.settings.set("download.enableHLS", "true");
   state.epoch++;
   state.query.mockClear();
@@ -179,7 +179,7 @@ it("bounds cold snapshots to the shared ten attempts and rotates monitored serie
   expect(budget.remainingAttempts).toBe(0);
   expect(
     state.query.mock.calls.every(
-      (call) => call[2].requestBudget === budget && call[2].progressiveOnly
+      (call) => call[2].requestBudget === budget && call[2].progressiveOnly === false
     )
   ).toBe(true);
   expect(await getSonarrRssMatches(base)).toEqual(first);

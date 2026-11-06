@@ -24,7 +24,6 @@ import type {
 const DEFAULT_MIN_DURATION = 5 * 60 * 1000; // milliseconds
 
 // Skip keywords (trailers, clips, etc.)
-const SKIP_KEYWORDS = ["Trailer", "Teaser", "Preview", "Clip"];
 
 /**
  * SRF Provider
@@ -83,7 +82,7 @@ export class SrfProvider extends BaseProvider {
       return false;
     }
 
-    return (await getSetting("download.enableHLS")) === "true";
+    return true;
   }
 
   async search(query: ProviderSearchQuery): Promise<ProviderContentItem[]> {
@@ -215,16 +214,6 @@ export class SrfProvider extends BaseProvider {
 
       // Skip livestreams
       if (result.type === "LIVESTREAM") {
-        continue;
-      }
-
-      // Skip trailers and clips
-      if (result.type === "TRAILER" || result.type === "CLIP") {
-        continue;
-      }
-
-      // Skip items with unwanted keywords in title
-      if (SKIP_KEYWORDS.some((kw) => result.title.toLowerCase().includes(kw.toLowerCase()))) {
         continue;
       }
 

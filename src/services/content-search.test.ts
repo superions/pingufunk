@@ -155,10 +155,10 @@ describe("configured providers in normal search flows", () => {
     });
   });
 
-  it("does not query SRF when HLS is disabled", async () => {
+  it("queries SRF despite an obsolete HLS opt-out", async () => {
     settings.set("download.enableHLS", "false");
-    expect(await queryContent([], 50)).toEqual([]);
-    expect(getLatestVideos).not.toHaveBeenCalled();
+    expect(await queryContent([], 50)).toHaveLength(1);
+    expect(getLatestVideos).toHaveBeenCalled();
   });
 
   it("keeps failed SRF searches out of the cache and recovers on the next request", async () => {
@@ -172,7 +172,7 @@ describe("configured providers in normal search flows", () => {
     expect(searchVideos).toHaveBeenCalledTimes(2);
   });
 
-  it("honors the ORF opt-in and HLS setting", async () => {
+  it("honors the ORF opt-in independently of the obsolete HLS setting", async () => {
     settings.set("provider.srf.enabled", "false");
     vi.mocked(queryMediathekView).mockResolvedValue([
       {
@@ -193,7 +193,7 @@ describe("configured providers in normal search flows", () => {
     settings.set("provider.orf.enabled", "true");
     expect(await queryContent([], 50)).toHaveLength(1);
     settings.set("download.enableHLS", "false");
-    expect(await queryContent([], 50)).toEqual([]);
+    expect(await queryContent([], 50)).toHaveLength(1);
   });
 });
 

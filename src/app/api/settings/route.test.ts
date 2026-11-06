@@ -110,6 +110,27 @@ function post(body: unknown) {
   );
 }
 
+it("persists independent download capacities with MP4 defaulting to four", async () => {
+  const initial = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  expect(initial["download.parallel.mp4"]).toBe("4");
+  expect(initial["download.parallel.hls"]).toBe("1");
+  expect(initial["download.parallel.youtube"]).toBe("1");
+  expect(
+    (
+      await post({
+        "download.parallel.mp4": "2",
+        "download.parallel.hls": "3",
+        "download.parallel.youtube": "1",
+      })
+    ).status
+  ).toBe(200);
+  const loaded = await (await GET(new NextRequest("http://localhost/api/settings"))).json();
+  expect(loaded["download.parallel.mp4"]).toBe("2");
+  expect(loaded["download.parallel.hls"]).toBe("3");
+  expect((await post({ "download.parallel.mp4": "0" })).status).toBe(400);
+  expect((await post({ "download.parallel.hls": "1.5" })).status).toBe(400);
+});
+
 it("never exposes, overwrites or deletes the internal delivery journal through Settings", async () => {
   const key = "internal.tv-delivery.v1";
   values.set(key, "private source discovery");

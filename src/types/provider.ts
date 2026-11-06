@@ -247,7 +247,7 @@ export interface ContentSearchAdapter {
 
 /** Existing persisted jobs have a Mediathek URL, not an inferred YouTube extractor target. */
 export type SourceDownloadReference =
-  | { family: "mediathek"; url: string }
+  | { family: "mediathek" | "hls"; url: string }
   | import("@/lib/youtube-source").YoutubeSourceReference;
 
 /** The worker owns directories, policy and persistence; source modules only transfer bytes. */

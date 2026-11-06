@@ -12,8 +12,7 @@ const VALID_QUALITIES: QualityPreference[] = ["all", "best", "1080p", "720p", "4
 
 /** Publishing policy and exact release dedupe, not a second identity matcher. */
 export async function isHlsEnabled(): Promise<boolean> {
-  const setting = await getSetting("download.enableHLS");
-  return setting === "true";
+  return true;
 }
 
 export async function getQualityPreference(): Promise<QualityPreference> {
@@ -23,9 +22,6 @@ export async function getQualityPreference(): Promise<QualityPreference> {
   }
   return "all"; // Default to all qualities
 }
-
-// Keywords that are always skipped (trailers, outtakes, etc.)
-export const SKIP_KEYWORDS = ["Trailer", "Outtakes:", "(klare Sprache)"];
 
 export function shouldSkipItem(
   item: ApiResultItem,
@@ -40,7 +36,6 @@ export function shouldSkipItem(
     )
   )
     return true;
-  if (SKIP_KEYWORDS.some((kw) => item.title.includes(kw))) return true;
   if (minDuration > 0 && item.duration < minDuration) return true;
   return false;
 }

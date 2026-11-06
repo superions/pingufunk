@@ -22,17 +22,12 @@ export function isStreamingUrl(value: string): boolean {
   return isHlsUrl(value) || srfUrnFromUrl(value) !== null;
 }
 
-/** HLS manifests and stable SRF references are eligible only when enabled. */
-export function isRenditionAllowed(value: string, hlsEnabled: boolean): boolean {
+/** Supported transports are always eligible; the legacy argument is ignored. */
+export function isRenditionAllowed(value: string, _hlsEnabled = true): boolean {
   if (!value || /\s/.test(value)) return false;
   try {
     const url = new URL(value);
-    return (
-      ["http:", "https:"].includes(url.protocol) &&
-      !url.username &&
-      !url.password &&
-      (hlsEnabled || !isStreamingUrl(value))
-    );
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
   } catch {
     return false;
   }

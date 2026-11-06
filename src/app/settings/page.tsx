@@ -307,9 +307,38 @@ export default function SettingsPage() {
                     />
                   </label>
 
+                  <div className="grid grid-cols-3 gap-4">
+                    {(
+                      [
+                        ["download.parallel.mp4", "MP4"],
+                        ["download.parallel.hls", "HLS"],
+                        ["download.parallel.youtube", "YouTube"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key} className="text-sm font-medium">
+                        Parallele Downloads: {label}
+                        <Input
+                          type="number"
+                          min={1}
+                          max={16}
+                          step={1}
+                          value={getFieldValue(key)}
+                          onChange={(event) => setFieldValue(key, event.target.value)}
+                          className="mt-1"
+                        />
+                      </label>
+                    ))}
+                  </div>
                   <Button
                     onClick={() =>
-                      handleSave(["download.path", "download.quality", "download.convertToMkv"])
+                      handleSave([
+                        "download.path",
+                        "download.quality",
+                        "download.convertToMkv",
+                        "download.parallel.mp4",
+                        "download.parallel.hls",
+                        "download.parallel.youtube",
+                      ])
                     }
                     aria-disabled={isSaving}
                     aria-busy={isSaving}
@@ -328,29 +357,11 @@ export default function SettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Streaming-Einstellungen</CardTitle>
-                  <CardDescription>
-                    HLS-Streaming und Proxy-Konfiguration für SRF/ORF-Inhalte
-                  </CardDescription>
+                  <CardDescription>Streaming und Proxy-Konfiguration</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="text-sm font-medium">HLS-Streams aktivieren</label>
-                      <p className="text-xs text-muted-foreground">
-                        Ermöglicht das Herunterladen von HLS-Streams (z. B. SRF, ORF)
-                      </p>
-                    </div>
-                    <select
-                      value={getFieldValue("download.enableHLS")}
-                      onChange={(e) => setFieldValue("download.enableHLS", e.target.value)}
-                      className="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="false">Aus</option>
-                      <option value="true">An</option>
-                    </select>
-                  </div>
                   <label className="flex items-center justify-between gap-4 text-sm">
-                    ORF-Suche aktivieren (benötigt HLS)
+                    ORF-Suche aktivieren
                     <input
                       type="checkbox"
                       checked={getFieldValue("provider.orf.enabled") === "true"}
@@ -384,13 +395,7 @@ export default function SettingsPage() {
                     </Badge>
                   </div>
                   <Button
-                    onClick={() =>
-                      handleSave([
-                        "download.enableHLS",
-                        "download.ytdlpPath",
-                        "provider.orf.enabled",
-                      ])
-                    }
+                    onClick={() => handleSave(["download.ytdlpPath", "provider.orf.enabled"])}
                     aria-disabled={isSaving}
                     aria-busy={isSaving}
                   >

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCategoriesForTopics, type CategoryType } from "@/services/category";
-import { getMinDurationSeconds, getSetting, withSettingsSnapshot } from "@/lib/settings";
+import { getMinDurationSeconds, withSettingsSnapshot } from "@/lib/settings";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import {
   getConfiguredLanguagePolicy,
@@ -12,6 +12,8 @@ import {
 } from "@/services/content-search";
 import { selectLanguageVariants } from "@/services/language-editions";
 import { enrichSourceAudio } from "@/services/source-audio";
+import { isArteHls } from "@/services/arte-hls";
+import { arteVideoId } from "@/services/arte-editions";
 import { eligibleRenditionItem, selectRenditions } from "@/services/rendition-quality";
 import { createUiNzbDownloads, uiNzbFingerprints } from "@/services/ui-nzb";
 import type { ApiResultItem, UiNzbDownloads, UiSearchCoverage } from "@/types";
@@ -210,7 +212,7 @@ async function handleSearchRequest(request: NextRequest) {
       // All selected sources and retries share the same attempts and wallclock.
       // Generic browsing never borrows the larger explicit TV identity budget.
       const requestBudget = new HttpRequestBudget();
-      const hlsEnabled = (await getSetting("download.enableHLS")) === "true";
+      const hlsEnabled = true;
       const minDuration = type === "movie" ? await getMinDurationSeconds() : 0;
       const window = await queryContentWindow(
         [{ fields: ["topic", "title"], query: q }],
@@ -220,9 +222,15 @@ async function handleSearchRequest(request: NextRequest) {
       );
       // Eligibility precedes edition dedupe and the UI result limit. One HLS
       // slot cannot hide an independent MP4 slot or fill an absent HD slot.
+      const arteSources = window.items.filter(
+        (item) => arteVideoId(item.url_website) && isArteHls(item.url_video)
+      );
+      const arteEditions = arteSources.length
+        ? await enrichSourceAudio(arteSources, requestBudget)
+        : new Map<ApiResultItem, ApiResultItem[]>();
       const eligible = selectLanguageVariants(
-        [...(await enrichSourceAudio(window.items, requestBudget)).values()]
-          .flat()
+        window.items
+          .flatMap((item) => arteEditions.get(item) ?? [item])
           .map((item) => eligibleRenditionItem(item, hlsEnabled))
           .filter(
             (item) =>

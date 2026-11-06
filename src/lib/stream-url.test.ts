@@ -20,20 +20,20 @@ describe("isRenditionAllowed", () => {
     expect(isRenditionAllowed(directUrl, true)).toBe(true);
   });
 
-  it("gates HLS manifests on the HLS setting", () => {
+  it("keeps HLS manifests eligible even with a stored legacy false setting", () => {
     const hlsUrl = "https://example.org/video.m3u8?token=synthetic";
 
     expect(isStreamingUrl(hlsUrl)).toBe(true);
-    expect(isRenditionAllowed(hlsUrl, false)).toBe(false);
+    expect(isRenditionAllowed(hlsUrl, false)).toBe(true);
     expect(isRenditionAllowed(hlsUrl, true)).toBe(true);
   });
 
-  it("gates stable SRF references without rewriting their provider identity", () => {
+  it("accepts stable SRF references without rewriting their provider identity", () => {
     const srfUrl =
       "https://www.srf.ch/play/tv/redirect/detail/11111111-1111-4111-8111-111111111111";
 
     expect(srfUrnFromUrl(srfUrl)).toBe("urn:srf:video:11111111-1111-4111-8111-111111111111");
-    expect(isRenditionAllowed(srfUrl, false)).toBe(false);
+    expect(isRenditionAllowed(srfUrl, false)).toBe(true);
     expect(isRenditionAllowed(srfUrl, true)).toBe(true);
   });
 });

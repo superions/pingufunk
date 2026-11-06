@@ -1,6 +1,8 @@
 import path from "node:path";
 import * as fs from "node:fs/promises";
 import { mediathekDownloadAdapter } from "@/providers/mediathek/download";
+import { hlsDownloadAdapter } from "@/providers/hls/download";
+import { isStreamingUrl } from "@/lib/stream-url";
 import { youtubeDownloadAdapter } from "@/providers/youtube/download";
 import { youtubeWatchUrl, rejectUntypedYoutubeUrl } from "@/lib/youtube-source";
 import { readPersistedMediaExpectations, type MediaExpectations } from "@/lib/media-expectations";
@@ -16,10 +18,11 @@ import type {
 // Fixed composition, no runtime plugins or URL-based fallback to another source.
 const adapters: ReadonlyMap<string, SourceDownloadAdapter> = new Map([
   ["mediathek", mediathekDownloadAdapter],
+  ["hls", hlsDownloadAdapter],
   ["youtube", youtubeDownloadAdapter],
 ]);
 
-/** Each registered source owns one independent FIFO transfer worker. */
+/** Each registered transport owns an independent FIFO lane with configurable capacity. */
 export const downloadSourceFamilies = [...adapters.keys()];
 
 /** Invalid persisted payloads still reach the normal closed failure path.
@@ -33,7 +36,7 @@ export function downloadWorkerFamily(url: string, persisted: string | null): str
   }
 }
 
-/** Legacy jobs keep their exact source; typed jobs never infer a backend from a URL. */
+/** Legacy URLs keep their identity and paths; their transport selects the direct/HLS lane. */
 export function downloadSource(
   url: string,
   expectations: MediaExpectations | null
@@ -41,7 +44,7 @@ export function downloadSource(
   const source = expectations && "sourceRef" in expectations ? expectations.sourceRef : undefined;
   if (!source) {
     rejectUntypedYoutubeUrl(url);
-    return { family: "mediathek", url };
+    return { family: isStreamingUrl(url) ? "hls" : "mediathek", url };
   }
   if (url !== youtubeWatchUrl(source)) throw new SourceDownloadError("Source reference mismatch");
   return source;

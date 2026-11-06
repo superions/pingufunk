@@ -14,9 +14,6 @@ import type {
 
 const MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query";
 
-// Keywords that are always skipped (trailers, outtakes, etc.)
-const SKIP_KEYWORDS = ["Trailer", "Outtakes:", "(klare Sprache)"];
-
 /**
  * MediathekView Provider
  *
@@ -50,8 +47,7 @@ export class MediathekViewProvider extends BaseProvider {
       }
     }
 
-    const hlsSetting = await getSetting("download.enableHLS");
-    this.hlsEnabled = hlsSetting === "true";
+    this.hlsEnabled = true;
 
     console.log(
       `[${this.id}] Settings: minDuration=${this.minDuration}s, hlsEnabled=${this.hlsEnabled}`
@@ -60,7 +56,7 @@ export class MediathekViewProvider extends BaseProvider {
 
   async search(query: ProviderSearchQuery): Promise<ProviderContentItem[]> {
     this.minDuration = await getMinDurationSeconds();
-    this.hlsEnabled = (await getSetting("download.enableHLS")) === "true";
+    this.hlsEnabled = true;
     const limit = query.limit || 100;
     const searchQuery = query.query.trim();
 
@@ -130,11 +126,6 @@ export class MediathekViewProvider extends BaseProvider {
       if (/^ORF\b/i.test(result.channel)) continue;
       // Exclude an item only when none of its concrete renditions is eligible.
       if (selectRenditions(result, "all", this.hlsEnabled).length === 0) {
-        continue;
-      }
-
-      // Skip items with unwanted keywords
-      if (SKIP_KEYWORDS.some((kw) => result.title.includes(kw))) {
         continue;
       }
 

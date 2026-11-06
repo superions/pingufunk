@@ -1,7 +1,14 @@
 import type { WorkerLease } from "./worker-lease";
+import { DEFAULT_PRODUCT_SETTINGS, DOWNLOAD_WORKER_SETTINGS } from "@/lib/settings-schema";
 
-// One process-wide fenced supervisor, one independent transfer per source.
-export const DOWNLOAD_CONCURRENCY = 2;
+// One fenced supervisor with independently configured transport capacities.
+const defaultWorkerLimits = () =>
+  Object.fromEntries(
+    Object.entries(DOWNLOAD_WORKER_SETTINGS).map(([family, key]) => [
+      family,
+      Number(DEFAULT_PRODUCT_SETTINGS[key]),
+    ])
+  );
 
 // Semaphore implementation for limiting concurrent downloads
 class Semaphore {
@@ -45,6 +52,7 @@ interface DownloadWorkerState {
   directWork: Set<Promise<void>>;
   pendingFailures: Map<string, string>;
   sourceWorkers: Set<string>;
+  workerLimits: Record<string, number>;
   shutdownHandlersInstalled: boolean;
 }
 
@@ -68,6 +76,7 @@ export function getDownloadWorkerState(): DownloadWorkerState {
     // Unknown writes pause this drain until its interrupted jobs can be reconciled.
     pendingFailures: new Map(),
     sourceWorkers: new Set(),
+    workerLimits: defaultWorkerLimits(),
     shutdownHandlersInstalled: false,
   });
 }

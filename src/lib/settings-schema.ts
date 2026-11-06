@@ -36,11 +36,14 @@ export const SETTING_DEFINITIONS = {
     choices: ["all", "best", "1080p", "720p", "480p"],
   },
   "download.convertToMkv": bool(true),
-  "download.enableHLS": bool(false),
+  "download.parallel.mp4": integer(4, 1, 16, undefined),
+  "download.parallel.hls": integer(1, 1, 16, undefined),
+  "download.parallel.youtube": integer(1, 1, 16, undefined),
+  // Retained for stored-setting compatibility; HLS no longer needs an opt-in.
+  "download.enableHLS": bool(true),
   "provider.mediathekview.enabled": bool(true),
   "provider.orf.enabled": bool(false),
-  // Historically SRF is eligible without this row only when credentials and
-  // HLS are configured. Its provider still enforces both gates independently.
+  // SRF still requires its configured provider credentials.
   "provider.srf.enabled": bool(true),
   "provider.youtube.enabled": bool(false),
   "matching.strategy": { kind: "enum", defaultValue: "fuzzy", choices: ["fuzzy", "strict"] },
@@ -69,6 +72,12 @@ export const SETTING_DEFINITIONS = {
   "system.setupComplete": bool(false),
 } satisfies Record<string, Definition>;
 export type WritableSettingKey = keyof typeof SETTING_DEFINITIONS;
+
+export const DOWNLOAD_WORKER_SETTINGS = {
+  mediathek: "download.parallel.mp4",
+  hls: "download.parallel.hls",
+  youtube: "download.parallel.youtube",
+} as const satisfies Record<string, WritableSettingKey>;
 
 export function isWritableSettingKey(key: string): key is WritableSettingKey {
   return Object.hasOwn(SETTING_DEFINITIONS, key);

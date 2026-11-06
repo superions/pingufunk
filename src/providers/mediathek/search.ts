@@ -65,7 +65,7 @@ async function searchWindow(
     getSetting("provider.orf.enabled"),
   ]);
   const mvEnabled = (!scope || scope.includes("mediathekview")) && mvSetting !== "false";
-  const orfEnabled = (!scope || scope.includes("orf")) && orfSetting === "true" && hlsEnabled;
+  const orfEnabled = (!scope || scope.includes("orf")) && orfSetting === "true";
   // This scope cannot publish HLS/SRF references; avoid spending its bounded
   // Sonarr budget on sources whose only renditions are currently ineligible.
   const srfEnabled =
@@ -194,9 +194,8 @@ export async function queryProviderCatalogue(
   if (provider !== "mediathekview" && provider !== "orf") throw new Error("Unknown content source");
   const term = query.query.trim();
   if (!term || term.length < 2) return [];
-  const hls = (await getSetting("download.enableHLS")) === "true";
   const enabled = await getSetting(`provider.${provider}.enabled`);
-  if (enabled === "false" || (provider === "orf" && (enabled !== "true" || !hls))) return [];
+  if (enabled === "false" || (provider === "orf" && enabled !== "true")) return [];
   const result = await queryMediathekView(
     [
       { fields: ["topic", "title"], query: term },

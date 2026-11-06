@@ -290,7 +290,7 @@ it.each(["", "&providers=true", "&provider=mediathekview"])(
   async (form) => {
     const blocked = {
       ...apiItem("Blocked", 120),
-      url_video: "https://example.invalid/blocked.m3u8",
+      url_video: "file:///invalid/source.m3u8",
     };
     const mixed = {
       ...apiItem("Mixed", 120),
@@ -307,9 +307,9 @@ it.each(["", "&providers=true", "&provider=mediathekview"])(
     const body = await response.json();
     expect(body.results).toHaveLength(1);
     expect(body.results[0].title).toBe("Mixed");
-    expect(body.results[0].url_video).toBe("");
+    expect(body.results[0].url_video).toBe(mixed.url_video);
     expect(body.results[0].url_video_hd).toBe(mixed.url_video_hd);
-    expect(Object.keys(body.results[0].nzbDownloads)).toEqual(["hd", "low"]);
+    expect(Object.keys(body.results[0].nzbDownloads)).toEqual(["hd", "sd", "low"]);
     expect(parseNzbContent(body.results[0].nzbDownloads.hd)?.url).toBe(mixed.url_video_hd);
     expect(body.coverage).toMatchObject({ complete: true, eligibleCount: 1, returnedCount: 1 });
     const [rss] = generateGenericRssItems(mixed, "all", false);
@@ -330,7 +330,7 @@ it.each(["", "&providers=true", "&provider=mediathekview"])(
   async (form) => {
     const source = {
       ...apiItem("Standard only", 120),
-      url_video_hd: "https://example.invalid/high.m3u8",
+      url_video_hd: "",
     };
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ result: { results: [source] } }))

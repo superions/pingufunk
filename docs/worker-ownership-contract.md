@@ -11,6 +11,27 @@ zwei Quellenworker unter einem exklusiven Supervisor ersetzt. Das sind zwei
 asynchrone Transferabläufe im selben Appprozess, keine zusätzlichen Container
 oder ungesicherten DB-Writer. Metadaten-/Belegworker sind davon unabhängig.
 
+Nutzererweiterung 06.11.2026: direkte HTTP-/MP4-Downloads, HLS und YouTube haben
+drei getrennte Adapter und unabhängige Worker-Spuren unter demselben Supervisor.
+Die Parallelität wird in der GUI pro Downloadart eingestellt: standardmäßig
+vier MP4-, ein HLS- und ein YouTube-Download, jeweils 1–16. Eine niedrigere
+Grenze bricht laufende Transfers nicht ab; weitere Aufträge warten auf freie
+Plätze. Die Job-ID wird bereits bei der Aufnahme reserviert, bevor der
+asynchrone Statuswrite erfolgt. So kann dieselbe noch als `queued` sichtbare
+Zeile beim nächsten Poll nicht doppelt starten. Keine zweite Queue, zusätzliche
+Container, Schemaänderungen oder neuen Job-IDs.
+
+HLS ist ein unterstützter Transport und benötigt keine separate Freischaltung.
+Der historische Settingswert `download.enableHLS` sperrt keine Quellen mehr.
+Quellenanreicherung bleibt erhalten: der gemeinsame ARTE-Resolver liest die
+deutsche Standardtonspur und Bildrendition aus dem Manifest, auch beim sicheren
+Manifest-Host und abweichendem Reassembly-Suffix. Der HLS-Adapter löst diese
+URLs beim Transfer frisch auf; der Downloader führt die ausdrücklich gewählte
+Tonspur aus und übernimmt ihre Sprachbezeichnung beim Stream-Copy-Mux.
+Die vorhandene GUI-Sprach-/Fassungsrichtlinie, insbesondere der konfigurierte
+AD-Ausschluss, bleibt zuständig. Harte Titelwort-Ausschlüsse entfallen; die
+GUI-konfigurierte Mindestdauer bleibt eine ausdrückliche Benutzereinstellung.
+
 ## Besitz ist kein Prozessflag
 
 `worker-lease.ts` besitzt eine versionierte interne Configzeile, verborgen und
@@ -49,7 +70,7 @@ Auf Windows ist ein begrenzter PID-bezogener `taskkill`-Pfad implementiert,
 aber nicht als nativ geprüft behauptet. Ein Killaufruf ist kein Abschluss:
 Transfer-/Probe-/Muxowner warten auf tatsächliches `close`.
 
-Der Supervisor reserviert je registrierter Quelle genau einen aktiven Platz.
+Der Supervisor reserviert je registrierter Downloadart die konfigurierten Plätze.
 Die gespeicherte, validierte Quellenreferenz entscheidet über den Worker;
 Legacy-Mediathekaufträge behalten ihren Pfad. Ungültige Referenzen werden durch
 den normalen Jobowner abgelehnt, nicht aus einem Titel oder einer Zielkategorie
@@ -62,9 +83,9 @@ Datenbank umsortiert. Titelvorbereitung, eigene Pfade, Medienprüfung und
 Completion bleiben gemeinsame Owner.
 
 Normale Jobfehler belegen nur den eigenen Quellenworker. Bei Besitz-/DB-Fehlern
-oder Shutdown bricht der Supervisor beide eigenen Abläufe ab und wartet auf
+oder Shutdown bricht der Supervisor alle eigenen Abläufe ab und wartet auf
 ihren Abschluss, bevor er die gemeinsame Lease freigibt. Startup-Recovery
-läuft genau einmal vor beiden Quellenworkern; kein Worker beendet den aktiven
+läuft genau einmal vor den Quellenworkern; kein Worker beendet den aktiven
 Nachbarn als angeblich unterbrochen. Wartende Aufträge und bestehende Artefakte
 werden durch die Architekturänderung nicht migriert oder umbenannt. Ein Update
 darf einen alten laufenden Transfer nicht ungeprüft abbrechen; Betriebswechsel
@@ -111,7 +132,8 @@ bereits. Ein harter Prozessabschluss lässt die Lease konservativ auslaufen.
 Runtime liefert nur geschlossene prozesslokale Zustände `idle`, `waiting`,
 `held`, `lost`, niemals Owner/Fence/Configinhalt. `held` beobachtet diesen
 Leaseowner; es ist kein Download- oder Arr-Importnachweis. Konfiguriert sind
-insgesamt zwei Downloads, höchstens einer je Quelle. `sourceWorkers` meldet
+standardmäßig sechs Downloads (4/1/1), innerhalb der je Downloadart konfigurierten
+Grenze. `sourceWorkers` meldet
 deren geschlossenen Zustand `idle`/`busy`, ohne Job- oder Quelldaten offenzulegen.
 Eine Erhöhung der Appreplikazahl ist damit nicht vorgesehen.
 

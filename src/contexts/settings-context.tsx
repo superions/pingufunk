@@ -18,6 +18,9 @@ interface Settings {
   "download.path": string;
   "download.quality": string;
   "download.convertToMkv": string;
+  "download.parallel.mp4": string;
+  "download.parallel.hls": string;
+  "download.parallel.youtube": string;
 
   // API Keys
   "api.tvdb.key": string;

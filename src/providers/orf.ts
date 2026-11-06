@@ -17,7 +17,6 @@ import type {
 const DEFAULT_MIN_DURATION = 5 * 60;
 
 // Skip keywords (trailers, clips, etc.)
-const SKIP_KEYWORDS = ["Trailer", "Teaser", "Preview", "Clip", "Ausschnitt"];
 
 /**
  * ORF Provider
@@ -73,8 +72,7 @@ export class OrfProvider extends BaseProvider {
   }
 
   /**
-   * Check if provider is enabled. Requires HLS to be enabled (ORF's
-   * MediathekView entries are .m3u8 streams, filtered out otherwise).
+   * Check the explicit provider opt-in. HLS is a supported download transport.
    */
   async isEnabled(): Promise<boolean> {
     // Check if explicitly disabled
@@ -86,13 +84,6 @@ export class OrfProvider extends BaseProvider {
     // If not explicitly enabled, default to disabled
     // ORF is opt-in because it's less stable (no official API)
     if (enabledSetting !== "true") {
-      return false;
-    }
-
-    // Check if HLS is enabled (required for ORF)
-    const hlsEnabled = await getSetting("download.enableHLS");
-    if (hlsEnabled !== "true") {
-      console.log(`[${this.id}] HLS not enabled - provider disabled`);
       return false;
     }
 
@@ -137,15 +128,6 @@ export class OrfProvider extends BaseProvider {
         available: false,
         lastCheck: Date.now(),
         error: "yt-dlp not available (needed for downloads)",
-      };
-    }
-
-    const hlsEnabled = await getSetting("download.enableHLS");
-    if (hlsEnabled !== "true") {
-      return {
-        available: false,
-        lastCheck: Date.now(),
-        error: "HLS downloads not enabled",
       };
     }
 
@@ -229,10 +211,6 @@ export class OrfProvider extends BaseProvider {
     const effectiveMinDuration = this.minDuration;
 
     for (const result of results) {
-      if (SKIP_KEYWORDS.some((kw) => result.title.toLowerCase().includes(kw.toLowerCase()))) {
-        continue;
-      }
-
       if (result.duration < effectiveMinDuration) {
         continue;
       }

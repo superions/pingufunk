@@ -53,7 +53,7 @@ export async function getSonarrRssMatches(
   );
   const minimum = await getMinDurationSeconds();
   const languagePolicy = await getConfiguredLanguagePolicy();
-  const hlsEnabled = (await getSetting("download.enableHLS")) === "true";
+  const hlsEnabled = true;
   if (
     !Number.isSafeInteger(window) ||
     window < 1 ||

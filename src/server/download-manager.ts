@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db";
-import { DOWNLOAD_CONCURRENCY, getDownloadWorkerState } from "./download-worker-state";
+import { getDownloadWorkerState } from "./download-worker-state";
+import { configuredSetting, DOWNLOAD_WORKER_SETTINGS } from "@/lib/settings-schema";
+import { productSettingsContext } from "@/lib/product-settings-context";
 import { acquireWorkerLease, WorkerOwnershipError, type WorkerLease } from "./worker-lease";
 import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
-import { isMkvConversionEnabled } from "@/lib/settings";
+import { isMkvConversionEnabled, getSetting } from "@/lib/settings";
 import { readPersistedMediaExpectations } from "@/lib/media-expectations";
 import { recordDecision } from "./decision-diagnostics";
 import {
@@ -60,7 +62,11 @@ export function getWorkerRuntimeState() {
         : runtime.processingPromise || runtime.directWork.size
           ? "draining"
           : "idle",
-    configuredConcurrency: DOWNLOAD_CONCURRENCY,
+    configuredConcurrency: Object.values(runtime.workerLimits).reduce(
+      (sum, value) => sum + value,
+      0
+    ),
+    workerLimits: { ...runtime.workerLimits },
     drainRequested: runtime.drainRequested,
     sourceWorkers: Object.fromEntries(
       downloadSourceFamilies.map((family) => [
@@ -147,8 +153,8 @@ async function processQueue(): Promise<void> {
   if (!lease) return;
   runtime.activeLease = lease;
   runtime.ownershipState = "held";
-  const active = new Map<string, Promise<void>>();
-  const finished: Array<{ family: string; failed: boolean; error?: unknown }> = [];
+  const active = new Map<string, { family: string; work: Promise<void> }>();
+  const finished: Array<{ id: string; family: string; failed: boolean; error?: unknown }> = [];
   let wake: (() => void) | undefined;
   try {
     for (const [id, error] of runtime.pendingFailures) {
@@ -163,8 +169,31 @@ async function processQueue(): Promise<void> {
       // Scan past a busy source's backlog: a slow YouTube transfer must never
       // occupy the Mediathek worker. FIFO remains stable within each source.
       let cursor: string | undefined;
-      const available = new Set(downloadSourceFamilies.filter((family) => !active.has(family)));
-      while (available.size && !runtime.shuttingDown && !runtime.drainRequested) {
+      runtime.workerLimits = Object.fromEntries(
+        await productSettingsContext.exit(() =>
+          Promise.all(
+            Object.entries(DOWNLOAD_WORKER_SETTINGS).map(async ([family, key]) => [
+              family,
+              Number(configuredSetting(key, await getSetting(key))),
+            ])
+          )
+        )
+      );
+      const available = new Map(
+        downloadSourceFamilies.map((family) => [
+          family,
+          Math.max(
+            0,
+            runtime.workerLimits[family] -
+              [...active.values()].filter((entry) => entry.family === family).length
+          ),
+        ])
+      );
+      while (
+        [...available.values()].some((slots) => slots > 0) &&
+        !runtime.shuttingDown &&
+        !runtime.drainRequested
+      ) {
         const queued = await prisma.download.findMany({
           where: { status: "queued" },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -173,23 +202,28 @@ async function processQueue(): Promise<void> {
         });
         for (const job of queued) {
           if (runtime.drainRequested || runtime.shuttingDown) break;
+          // Admission precedes the asynchronous status write. A subsequent scan
+          // must not start the same still-queued row a second time.
+          if (active.has(job.id)) continue;
           const family = downloadWorkerFamily(job.url, job.mediaExpectations);
-          if (!available.delete(family)) continue;
+          const slots = available.get(family) ?? 0;
+          if (slots <= 0) continue;
+          available.set(family, slots - 1);
           runtime.sourceWorkers.add(family);
           const work = (async () => {
             await prepareSonarrJobTitle(job, lease);
             await processOwnedDownload(job.id, lease, family);
           })();
-          // Keep settled failures observed until the supervisor drains both
-          // workers. No lease release or startup recovery while either is alive.
-          active.set(family, work);
+          // Keep settled failures observed until every transfer has drained.
+          // No lease release or startup recovery while any transfer is alive.
+          active.set(job.id, { family, work });
           void work.then(
             () => {
-              finished.push({ family, failed: false });
+              finished.push({ id: job.id, family, failed: false });
               wake?.();
             },
             (error: unknown) => {
-              finished.push({ family, failed: true, error });
+              finished.push({ id: job.id, family, failed: true, error });
               wake?.();
             }
           );
@@ -209,8 +243,9 @@ async function processQueue(): Promise<void> {
           });
         for (const result of finished.splice(0)) {
           if (result.failed) throw result.error;
-          active.delete(result.family);
-          runtime.sourceWorkers.delete(result.family);
+          active.delete(result.id);
+          if (![...active.values()].some((entry) => entry.family === result.family))
+            runtime.sourceWorkers.delete(result.family);
         }
       } finally {
         wake = undefined;
@@ -219,7 +254,7 @@ async function processQueue(): Promise<void> {
     }
   } finally {
     if (active.size) lease.abort();
-    await Promise.allSettled(active.values());
+    await Promise.allSettled([...active.values()].map((entry) => entry.work));
     runtime.sourceWorkers.clear();
     // Transfers/children have settled before ownership can pass to another process.
     try {
