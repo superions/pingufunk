@@ -8,6 +8,7 @@ import {
   realpathSync,
   lstatSync,
   existsSync,
+  rmSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -86,6 +87,101 @@ function load(root) {
   if (Object.keys(network.Containers).some((id) => !containerIds.includes(id)))
     throw new Error("Foreign container on QA network");
   return manifest;
+}
+
+// Delete only this test's explicitly named, labelled resources. Manual `stop`
+// deliberately keeps its fixtures; automated gates call this after each run.
+function disposeOwned(root, manifest, runDocker = docker) {
+  const parent = realpathSync(resolve("downloads"));
+  if (
+    !root.startsWith(parent + "/arr-qa.") ||
+    lstatSync(root).isSymbolicLink() ||
+    realpathSync(root) !== root ||
+    !/^\d+-\d+$/.test(manifest.owner) ||
+    manifest.network !== `pingufunk-arr-${manifest.owner}` ||
+    JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")).owner !== manifest.owner
+  )
+    throw new Error("Owned QA cleanup identity mismatch");
+
+  const containers = Object.entries(manifest.apps).map(([app, item]) => {
+    if (!(app in ports) || item.name !== `pingufunk-arr-${app}-${manifest.owner}`)
+      throw new Error("Owned QA cleanup container mismatch");
+    return item;
+  });
+  if (manifest.database) {
+    if (
+      manifest.database.provider !== "postgresql" ||
+      manifest.database.name !== `pingufunk-media-pg-${manifest.owner}`
+    )
+      throw new Error("Owned QA cleanup database mismatch");
+    containers.push(manifest.database);
+  }
+  if (manifest.youtube)
+    containers.push({ name: `pingufunk-arr-youtube-rollback-${manifest.owner}` });
+
+  let clean = true;
+  for (const item of containers) {
+    try {
+      const ids = runDocker(["ps", "-aq", "--filter", `name=^/${item.name}$`])
+        .split(/\s+/)
+        .filter(Boolean);
+      if (!ids.length) continue;
+      if (ids.length !== 1) throw new Error("Ambiguous owned container");
+      const container = JSON.parse(runDocker(["inspect", ids[0]]))[0];
+      if (
+        container.Name !== `/${item.name}` ||
+        container.Config.Labels?.[label] !== manifest.owner ||
+        (item.image && container.Image !== item.image)
+      )
+        throw new Error("Owned QA cleanup container identity mismatch");
+      runDocker(["rm", "--force", "--volumes", ids[0]]);
+    } catch {
+      clean = false;
+    }
+  }
+  try {
+    const networks = runDocker(["network", "ls", "--format", "{{.Name}}"])
+      .split("\n")
+      .filter((name) => name === manifest.network);
+    if (networks.length) {
+      if (networks.length !== 1) throw new Error("Ambiguous owned network");
+      const network = JSON.parse(runDocker(["network", "inspect", manifest.network]))[0];
+      if (
+        !network.Internal ||
+        network.Labels?.[label] !== manifest.owner ||
+        Object.keys(network.Containers).length
+      )
+        throw new Error("Owned QA cleanup network mismatch");
+      runDocker(["network", "rm", manifest.network]);
+    }
+    if (clean) rmSync(root, { recursive: true });
+  } catch {
+    clean = false;
+  }
+  if (!clean) throw new Error("Owned QA cleanup incomplete; fixture retained for inspection");
+}
+
+function disposeOnSignal(getFixture) {
+  const handlers = new Map();
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ]) {
+    const handler = () => {
+      try {
+        const [root, manifest] = getFixture();
+        if (root && manifest) disposeOwned(root, manifest);
+      } catch {
+        console.error("Owned QA cleanup incomplete after signal; fixture retained for inspection");
+      }
+      process.exit(code);
+    };
+    handlers.set(signal, handler);
+    process.once(signal, handler);
+  }
+  return () => {
+    for (const [signal, handler] of handlers) process.removeListener(signal, handler);
+  };
 }
 function apiKey(root, app) {
   const key = readFileSync(join(root, app, "config.xml"), "utf8").match(
@@ -215,6 +311,8 @@ async function up(onAllocated) {
   if (backend === "postgresql") {
     const image = docker(["image", "inspect", "postgres:18-alpine", "--format", "{{.Id}}"]);
     const name = `pingufunk-media-pg-${owner}`;
+    manifest.database = { provider: "postgresql", name, image };
+    save(root, manifest);
     docker([
       "run",
       "-d",
@@ -228,8 +326,6 @@ async function up(onAllocated) {
       "POSTGRES_HOST_AUTH_METHOD=trust",
       image,
     ]);
-    manifest.database = { provider: "postgresql", name, image };
-    save(root, manifest);
     let ready = false;
     for (let attempt = 0; attempt < 30; attempt++) {
       try {
@@ -1517,6 +1613,8 @@ async function consumerRemove(root, manifest, app, job, file) {
 export {
   up,
   load,
+  disposeOwned,
+  disposeOnSignal,
   api,
   docker,
   bootstrap,
@@ -1531,10 +1629,27 @@ export {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
   try {
     const command = process.argv[2];
-    if (command === "up") await up();
-    else {
+    if (command === "up") {
+      let allocatedRoot, allocatedManifest;
+      const removeSignalHandlers = disposeOnSignal(() => [allocatedRoot, allocatedManifest]);
+      try {
+        await up((root, manifest) => {
+          allocatedRoot = root;
+          allocatedManifest = manifest;
+        });
+      } catch (error) {
+        if (allocatedManifest) disposeOwned(allocatedRoot, allocatedManifest);
+        throw error;
+      } finally {
+        removeSignalHandlers();
+      }
+    } else {
       const root = resolve(process.argv[3] ?? "invalid");
-      const manifest = load(root);
+      // Disposal must also work after a partially created test has failed.
+      const manifest =
+        command === "dispose"
+          ? JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"))
+          : load(root);
       if (command === "status") await status(root, manifest);
       else if (command === "schemas") await schemas(root, manifest);
       else if (command === "connections") await connections(root, manifest, process.argv[4]);
@@ -1556,6 +1671,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         for (const item of Object.values(manifest.apps)) docker(["stop", item.name]);
         if (manifest.database) docker(["stop", manifest.database.name]);
         console.log("Owned QA instances stopped; configuration retained, no deletion");
+      } else if (command === "dispose") {
+        disposeOwned(root, manifest);
+        console.log("Owned QA instances and fixtures removed");
       } else throw new Error("Use up or a documented QA command with the exact QA directory");
     }
   } catch (error) {

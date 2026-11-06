@@ -1,21 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseStringPromise } from "xml2js";
 import {
   up,
   load,
+  disposeOwned,
+  disposeOnSignal,
   api,
   docker,
   bootstrap,
@@ -36,7 +30,8 @@ const version = paired ? 7 : 6;
 assert(["direct", "forwarded"].includes(transport));
 assert(["sqlite", "postgresql"].includes(backend));
 const candidateTag = process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE;
-const receiverTag = process.env.PINGUFUNK_ARR_QA_RECEIVER_IMAGE ?? "pingufunk-programme-receiver-qa";
+const receiverTag =
+  process.env.PINGUFUNK_ARR_QA_RECEIVER_IMAGE ?? "pingufunk-programme-receiver-qa";
 assert(candidateTag);
 const candidateImage = docker(["image", "inspect", candidateTag, "--format", "{{.Id}}"]);
 const receiverImage = docker(["image", "inspect", receiverTag, "--format", "{{.Id}}"]);
@@ -46,6 +41,7 @@ process.env.PINGUFUNK_ARR_QA_PROGRAMME_SCOPE = scope;
 process.env.PINGUFUNK_ARR_QA_DATABASE = backend;
 process.env.PINGUFUNK_ARR_QA_RUNNER_IMAGE = receiverTag;
 let root, manifest;
+const removeSignalHandlers = disposeOnSignal(() => [root, manifest]);
 const fail = (message) => {
   throw Error("Owned programme: " + message);
 };
@@ -112,6 +108,8 @@ async function replaceRuntime(image) {
     backend === "postgresql"
       ? `postgresql://pingufunk_media_qa@${manifest.database.name}/pingufunk_media_qa`
       : "file:/qa/database.sqlite";
+  manifest.apps.pingufunk.image = image;
+  writeFileSync(join(root, "manifest.json"), JSON.stringify(manifest), { mode: 0o600 });
   docker([
     "run",
     "-d",
@@ -161,8 +159,6 @@ async function replaceRuntime(image) {
     `type=bind,src=${resolve("scripts/media-container-provider.mjs")},dst=/qa/media-provider.mjs,readonly`,
     image,
   ]);
-  manifest.apps.pingufunk.image = image;
-  writeFileSync(join(root, "manifest.json"), JSON.stringify(manifest), { mode: 0o600 });
   await ready();
 }
 const history = async () =>
@@ -812,54 +808,11 @@ try {
   if (line) console.error("Owned programme assertion at source line " + line);
   process.exitCode = 1;
 } finally {
+  removeSignalHandlers();
   if (manifest) {
-    const names = [
-      ...Object.values(manifest.apps).map((row) => row.name),
-      ...(manifest.database ? [manifest.database.name] : []),
-    ];
-    let clean = true;
-    for (const name of names) {
-      try {
-        const ids = docker(["ps", "-aq", "--filter", `name=^/${name}$`])
-          .split(/\s+/)
-          .filter(Boolean);
-        if (!ids.length) continue;
-        assert.equal(ids.length, 1);
-        const container = JSON.parse(docker(["inspect", ids[0]]))[0];
-        assert.equal(container.Config.Labels["pingufunk.arr-qa.owner"], manifest.owner);
-        docker(["stop", name]);
-        docker(["rm", "--volumes", name]);
-      } catch {
-        clean = false;
-      }
-    }
     try {
-      const networks = docker(["network", "ls", "--format", "{{.Name}}"])
-        .split("\n")
-        .filter((name) => name === manifest.network);
-      if (networks.length) {
-        assert.equal(networks.length, 1);
-        const network = JSON.parse(docker(["network", "inspect", networks[0]]))[0];
-        assert(network.Internal && network.Labels["pingufunk.arr-qa.owner"] === manifest.owner);
-        assert.equal(Object.keys(network.Containers).length, 0);
-        docker(["network", "rm", manifest.network]);
-      }
-      if (clean) {
-        assert(
-          root.startsWith(resolve("downloads") + "/arr-qa.") &&
-            !lstatSync(root).isSymbolicLink() &&
-            realpathSync(root) === root
-        );
-        assert.equal(
-          JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")).owner,
-          manifest.owner
-        );
-        rmSync(root, { recursive: true });
-      }
+      disposeOwned(root, manifest);
     } catch {
-      clean = false;
-    }
-    if (!clean) {
       console.error("Owned programme cleanup incomplete; retained exact fixture for inspection");
       process.exitCode = 1;
     }

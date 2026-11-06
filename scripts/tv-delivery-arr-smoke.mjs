@@ -1,6 +1,8 @@
 import {
   up,
   load,
+  disposeOwned,
+  disposeOnSignal,
   api,
   docker,
   bootstrap,
@@ -18,6 +20,7 @@ if (!["direct", "forwarded"].includes(transport))
 if (process.argv[3] && !republished) throw new Error("Unknown TV delivery scenario");
 process.env.PINGUFUNK_ARR_QA_TV_DELIVERY = "1";
 let root, manifest;
+const removeSignalHandlers = disposeOnSignal(() => [root, manifest]);
 const fail = (message) => {
   throw new Error(`Owned TV delivery: ${message}`);
 };
@@ -48,7 +51,10 @@ function journal() {
   );
 }
 try {
-  root = await up();
+  root = await up((allocated, current) => {
+    root = allocated;
+    manifest = current;
+  });
   manifest = load(root);
   await bootstrap(root, manifest);
   await seriesFixture(root, manifest);
@@ -267,5 +273,13 @@ try {
   );
   process.exitCode = 1;
 } finally {
-  if (manifest) for (const item of Object.values(manifest.apps)) docker(["stop", item.name]);
+  removeSignalHandlers();
+  if (manifest) {
+    try {
+      disposeOwned(root, manifest);
+    } catch {
+      console.error("Owned TV delivery cleanup incomplete; fixture retained for inspection");
+      process.exitCode = 1;
+    }
+  }
 }

@@ -2,6 +2,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   up,
   load,
+  disposeOwned,
+  disposeOnSignal,
   api,
   docker,
   bootstrap,
@@ -24,6 +26,7 @@ process.env.PINGUFUNK_ARR_QA_TV_DELIVERY = "1";
 process.env.PINGUFUNK_ARR_QA_YOUTUBE = "1";
 process.env.PINGUFUNK_ARR_QA_DATABASE = backend;
 let root, manifest, rollbackContainer;
+const removeSignalHandlers = disposeOnSignal(() => [root, manifest]);
 const fail = (message) => {
   throw new Error(`Owned TV delivery: ${message}`);
 };
@@ -54,7 +57,10 @@ function journal() {
   );
 }
 try {
-  root = await up();
+  root = await up((allocated, current) => {
+    root = allocated;
+    manifest = current;
+  });
   manifest = load(root);
   await bootstrap(root, manifest);
   await seriesFixture(root, manifest);
@@ -736,12 +742,13 @@ try {
   );
   process.exitCode = 1;
 } finally {
-  if (rollbackContainer) {
-    docker(["stop", rollbackContainer]);
-    docker(["rm", rollbackContainer]);
-  }
+  removeSignalHandlers();
   if (manifest) {
-    for (const item of Object.values(manifest.apps)) docker(["stop", item.name]);
-    if (manifest.database) docker(["stop", manifest.database.name]);
+    try {
+      disposeOwned(root, manifest);
+    } catch {
+      console.error("Owned YouTube cleanup incomplete; fixture retained for inspection");
+      process.exitCode = 1;
+    }
   }
 }

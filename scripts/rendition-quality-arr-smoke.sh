@@ -9,9 +9,11 @@ export PINGUFUNK_ARR_QA_SOURCE_AUDIO=1
 export PINGUFUNK_ARR_QA_MOVIE_CORRELATION=1
 QA_DIRECTORY=""
 cleanup() {
-  if [[ -n "$QA_DIRECTORY" ]]; then node scripts/arr-test-instances.mjs stop "$QA_DIRECTORY"; fi
+  if [[ -n "$QA_DIRECTORY" ]]; then node scripts/arr-test-instances.mjs dispose "$QA_DIRECTORY"; fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 for variant in 720p localized-720p unknown conflicting ard-1080p runtime-conflict arte-missing arte-empty; do
   unset PINGUFUNK_ARR_QA_LOCALIZED_EPISODE PINGUFUNK_ARR_QA_RUNTIME_CONFLICT
   quality="$variant"
@@ -36,7 +38,7 @@ for variant in 720p localized-720p unknown conflicting ard-1080p runtime-conflic
     node scripts/arr-test-instances.mjs episode-search "$QA_DIRECTORY"
   fi
   node scripts/arr-test-instances.mjs boundaries "$QA_DIRECTORY"
-  node scripts/arr-test-instances.mjs stop "$QA_DIRECTORY"
+  node scripts/arr-test-instances.mjs dispose "$QA_DIRECTORY"
   QA_DIRECTORY=""
   echo "Disposable native rendition gate passed: $variant"
 done
