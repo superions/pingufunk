@@ -52,7 +52,7 @@ it("downloads the provider-selected German audio playlist instead of default ori
     "mkv",
     undefined,
     undefined,
-    audio
+    { url: audio, language: "de" }
   );
   await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
   child.emit("close", 0);

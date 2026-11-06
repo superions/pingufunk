@@ -129,7 +129,7 @@ ${base}video.m3u8
         "mkv",
         undefined,
         context.signal,
-        base + "german.m3u8"
+        { url: base + "german.m3u8", language: "de" }
       );
     }
   }

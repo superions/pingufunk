@@ -640,7 +640,7 @@ export async function downloadHlsStream(
   _container: "mkv" | "mp4" = "mkv",
   maxHeight?: 480 | 720 | 1080,
   signal?: AbortSignal,
-  selectedAudioUrl?: string
+  selectedAudio?: { url: string; language: "de" }
 ): Promise<YtdlpDownloadResult> {
   const tempDir = path.dirname(outputPath);
   const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -678,7 +678,7 @@ export async function downloadHlsStream(
       return videoResult;
     }
 
-    const audioResult = await downloadVideo(selectedAudioUrl ?? hlsUrl, {
+    const audioResult = await downloadVideo(selectedAudio?.url ?? hlsUrl, {
       outputPath: audioTempPath,
       container: "mp4",
       // "/best" fallback: some HLS masters only expose combined
@@ -696,8 +696,15 @@ export async function downloadHlsStream(
     }
 
     const { mergeVideoAudio } = await import("./ffmpeg");
-    const mergeResult = selectedAudioUrl
-      ? await mergeVideoAudio(videoOutputPath, audioOutputPath, outputPath, signal, true, "de")
+    const mergeResult = selectedAudio
+      ? await mergeVideoAudio(
+          videoOutputPath,
+          audioOutputPath,
+          outputPath,
+          signal,
+          true,
+          selectedAudio.language
+        )
       : await mergeVideoAudio(videoOutputPath, audioOutputPath, outputPath, signal);
     if (!mergeResult.success) {
       await fs.unlink(outputPath).catch(() => {});

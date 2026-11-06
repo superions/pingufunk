@@ -68,7 +68,7 @@ export const mediathekDownloadAdapter: SourceDownloadAdapter = {
         container,
         maxHeight,
         context.signal,
-        ...(arte ? ([arte.audioUrl] as const) : ([] as const))
+        ...(arte ? ([{ url: arte.audioUrl, language: "de" as const }] as const) : ([] as const))
       );
       if (!result.success) throw new SourceDownloadError(streamFailure(result.error));
       return { path: result.outputPath || outputPath, extension };
