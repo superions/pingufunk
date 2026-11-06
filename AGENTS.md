@@ -51,7 +51,8 @@ request determines scope; a plan or skill never supplies deployment permission.
 
 ## Repository workflow
 
-- `origin`: `superions/pingufunk`; `upstream`: `rundfunkarr/rundfunkarr`.
+- `origin`: the Pingufunk Forgejo repository; `github`: the public
+  `superions/pingufunk` export; `upstream`: `rundfunkarr/rundfunkarr`.
 - Protect Pingufunk's shipped contracts on `main`; upstream parity is not a gate.
   Work on focused `codex/<topic>` branches.
 - Prefer small, coherent commits and causal regression tests.
@@ -61,7 +62,7 @@ request determines scope; a plan or skill never supplies deployment permission.
 - Do not push to upstream or open upstream issues/PRs without user direction.
 - Preserve unrelated dirty work. Do not reset, clean, force-push or rewrite
   published history to simplify a task. Inspect branch, remotes and changes first.
-- Commit and push coherent completed checkpoints to the own fork's topic branch
+- Commit and push coherent completed checkpoints to the own Forgejo topic branch
   during long implementation tasks. A pushed checkpoint is not a release,
   deployment or proof that another checkout or served bundle changed.
 - Generate Prisma clients and other generated artifacts with their actual tools;

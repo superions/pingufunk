@@ -42,9 +42,10 @@ diesem Repository. Buildsignaturschlüssel gelangen nicht ins Runtimeimage.
 
 Die Container-CI prüft Medienabschluss, gemuxte YouTube-Spuren, HLS, Sprach- und
 Qualitätsablehnungen, echte synthetische Sonarr-/Radarr-Imports und beide
-unterstützten Backends. Nach allen Gates exportiert der Pushlauf genau das
-getestete Linux/amd64-Image samt Konfigurations-ID, Quellrevision und Archivhash
-für drei Tage als CI-Artefakt. Das ist keine Registryveröffentlichung und kein
-Deployment. Ein autorisierter lokaler Rollout prüft dieses genaue Archiv,
-verteilt es mit eindeutiger unveränderter Identität und verwendet den bestehenden
-Controller. Datenbankschema und Migrationsrunner ändern sich dadurch nicht.
+unterstützten Backends. Der Forgejo-Pushlauf hält genau das getestete
+Linux/amd64-Image samt Konfigurations-ID, Quellrevision und Archivhash drei Tage
+als CI-Artefakt vor. Nach allen Prüfungen exportiert ein aktueller `main`-Stand
+den Quellcode nach GitHub und veröffentlicht dieses geprüfte Image auf GHCR.
+Der [CI-Leitfaden](ci-release.md) beschreibt die Zuordnung und die Grenzen.
+Veröffentlichung ist kein Deployment. Datenbankschema und Migrationsrunner ändern
+sich dadurch nicht.

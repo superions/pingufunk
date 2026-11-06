@@ -6,17 +6,18 @@ description: Prepare, review or verify Pingufunk OCI releases and inherited GitH
 # Pingufunk Container-Release
 
 AGENTS.md, Dockerfile, package-lock.json, entrypoint.sh und aktuelle Workflows
-lesen. Eigener Fork ist superions/pingufunk, kein Myoxus-Forgejo-/Registrypfad.
-Keine Releasewrapper voraussetzen, die dieses Repository nicht besitzt.
+lesen. Pingufunks eigenes Forgejo ist die Entwicklungsquelle;
+superions/pingufunk ist der öffentliche GitHub-Export. Keine Myoxus-Forgejo- oder
+Registry-Zugangsdaten oder Releasewrapper voraussetzen.
 
 ## Vorbereitung
 
 - Release-Revision, clean worktree, Version/Tag, Zielregistry, Architekturen und
   Freigabeumfang feststellen. Branch-Push ist kein Image-Publish und Publish
   ist kein Deployment. Kein upstream Push/PR ohne Nutzerauftrag.
-- Geerbte Workflows auf Blacksmith-Berechtigung, push/main/tag/schedule-Trigger,
-  Registryowner, Rechte und Secrets prüfen. Nur freigegebene Fork-Test-/Build-
-  Änderungen vornehmen; Container-Publikation nicht versehentlich aktivieren.
+- Forgejo- und GitHub-Workflows auf Trigger, Registryowner, Rechte und Secrets
+  prüfen. Nur den freigegebenen Veröffentlichungsweg nutzen; Container-Publish
+  und Produktion bleiben getrennte Entscheidungen.
 - Buildclient und Migrationsrunner müssen dieselbe Prisma-/Schemaserie tragen.
   Nach P11 PostgreSQL-Entrypoint/-Readiness prüfen; kein verstecktes SQLite-
   Bootstrap oder Debug-Ausgeben der Verbindungs-URL. Native Toolchecks und
