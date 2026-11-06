@@ -468,7 +468,7 @@ async function processOwnedDownload(
         count: 1,
       });
       if (event)
-        failureMessage = `Local media validation failed: ${JSON.stringify({ version: 1, stage: event.stage, reason: event.reason, evidence: event.evidence })}`;
+        failureMessage = `Local media validation failed: ${JSON.stringify({ version: 1, stage: event.stage, reason: event.reason, evidence: event.evidence, ...(error.changedFields.length ? { changedFields: error.changedFields } : {}) })}`;
     }
     console.error(`[Download] Error processing download ${downloadId}`);
     await markAsFailed(

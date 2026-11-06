@@ -122,7 +122,11 @@ it("rejects successful exit accompanied by a media error rather than hiding trun
 
 it("rejects a replaced inode after probing instead of accepting another file", async () => {
   const result = probeJobMedia(file, directory, null, 10);
-  const rejected = expect(result).rejects.toThrow("Local media validation failed");
+  const rejected = expect(result).rejects.toMatchObject({
+    message: "Local media validation failed",
+    reason: "file_changed",
+    changedFields: ["inode"],
+  });
   await started();
   state.lstat.mockResolvedValue({ ...stat, ino: 8 });
   child.stdout.emit("data", output());
