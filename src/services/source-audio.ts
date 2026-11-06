@@ -14,7 +14,12 @@ import type { SourceAudioEvidence } from "@/lib/media-expectations";
 import { fetchWithRetry, FetchBudgetError, type HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
 import { isProbeableMp4, probeMp4MediaFacts, type Mp4MediaFacts } from "@/lib/mp4-audio-language";
-import { arteVideoId, parseArteVersion, progressiveUrl } from "./arte-editions";
+import {
+  arteVideoId,
+  parseArteVersion,
+  parseArteProgressiveEdition,
+  progressiveUrl,
+} from "./arte-editions";
 import { recordDecision, decisionFailure } from "@/server/decision-diagnostics";
 import { productSettingsContext } from "@/lib/product-settings-context";
 import { cacheContextEpoch } from "@/lib/cache";
@@ -123,6 +128,9 @@ export async function verifyArteSourceAudio(
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
   if (!progressiveUrl(url) || mediaSourceIdentity(url) !== expected.mediaIdentity)
     throw decisionFailure("language", "source_evidence_mismatch", "conflicting");
+  // Preserve the shipped provider ID for promises proved by exact rendition metadata.
+  const filenameEdition = parseArteProgressiveEdition(url, expected.videoId);
+  if (filenameEdition?.audioLanguage === expected.language) return expected;
   const streams = await getArteStreams(expected.videoId, budget, signal);
   if (streams === null) throw decisionFailure("language", "source_endpoint_missing", "unavailable");
   if (!streams.length) throw decisionFailure("language", "source_empty", "missing");
@@ -358,7 +366,13 @@ export async function enrichSourceAudio(
       let edition: ReturnType<typeof parseArteVersion> | ReturnType<typeof ardEdition> = null;
       let language: string | null = null;
       if (videoId && progressiveUrl(url)) {
-        if (!arte.has(videoId) && probes < maxIdentities && budget.remainingAttempts > 0) {
+        edition = parseArteProgressiveEdition(url, videoId);
+        if (
+          !edition &&
+          !arte.has(videoId) &&
+          probes < maxIdentities &&
+          budget.remainingAttempts > 0
+        ) {
           probes++;
           const streams = await getArteStreams(videoId, budget);
           arte.set(videoId, streams);
@@ -366,7 +380,7 @@ export async function enrichSourceAudio(
             recordDecision("language", "source_endpoint_missing", "unavailable");
           else if (!streams.length) recordDecision("language", "source_empty", "missing");
         }
-        edition = arteEdition(arte.get(videoId) ?? [], videoId, url);
+        edition ??= arteEdition(arte.get(videoId) ?? [], videoId, url);
         const matches = (arte.get(videoId) ?? []).filter(
           (stream) => stream.programId === videoId && stream.url.replace(/^http:/, "https:") === url
         );
@@ -409,8 +423,11 @@ export async function enrichSourceAudio(
             mediaIdentity: mediaSourceIdentity(url),
             language,
           };
-      } else if (isProbeableMp4(url)) {
-        const cached = reuseSearchFacts ? sourceMediaFacts.get(url) : undefined;
+      }
+      // Container metadata has priority; provider mapping fills missing track language.
+      // Reuse the existing facts owner for dimensions and deferred cold searches.
+      if (!ardId && isProbeableMp4(url) && (!language || !split.sourceVideoDimensions?.length)) {
+        const cached = reuseSearchFacts || videoId ? sourceMediaFacts.get(url) : undefined;
         if (cached) {
           mp4.set(url, cached.facts);
           if (cached.fingerprint) assets.set(url, cached.fingerprint);
@@ -434,10 +451,19 @@ export async function enrichSourceAudio(
             )
           );
         }
-        if (reuseSearchFacts && !mp4.has(url)) warming.push(url);
+        if ((reuseSearchFacts || videoId) && !mp4.has(url)) warming.push(url);
         const facts = mp4.get(url);
         if (assets.has(url)) split.sourceAssetFingerprint = assets.get(url);
-        language = facts?.audioLanguage ?? null;
+        if (facts?.audioLanguage) {
+          language = facts.audioLanguage;
+          if (edition && edition.audioLanguage !== language) {
+            split.audioDescription = edition.audioDescription;
+            split.originalVersion = edition.originalVersion;
+            if ("subtitleLanguage" in edition) split.subtitleLanguage = edition.subtitleLanguage;
+            edition = null;
+            split.sourceAudioEvidence = undefined;
+          }
+        }
         if (facts?.videoDimensions)
           split.sourceVideoDimensions = [{ url, ...facts.videoDimensions }];
       }
@@ -456,7 +482,7 @@ export async function enrichSourceAudio(
     }
   }
   if (Date.now() >= budget.deadlineAt) throw new Error("Source evidence unavailable");
-  if (reuseSearchFacts && generation === sourceMediaFacts.generation)
+  if (warming.length && generation === sourceMediaFacts.generation)
     sourceMediaFacts.enqueue(warming);
   return output;
 }

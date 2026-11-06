@@ -1,3 +1,7 @@
+import { isArteProgressiveUrl as progressiveUrl } from "@/lib/arte-media-url";
+export { isArteProgressiveUrl as progressiveUrl } from "@/lib/arte-media-url";
+import { parseArteVersion } from "./arte-language";
+export { parseArteVersion } from "./arte-language";
 import { z } from "zod";
 import { fetchWithRetry, HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderJson } from "@/lib/bounded-provider-json";
@@ -72,51 +76,13 @@ const playerSchema = z.object({
   }),
 });
 
-/** Fully anchored codes: an unknown suffix must not manufacture a German track. */
-export function parseArteVersion(code: string) {
-  const match =
-    /^V(O?)(A|F|E\[(?:ANG|ESP|ITA|POL)\]|EU)?(AUD)?(?:-ST(M?)(A|F|E\[(?:ANG|ESP|ITA|POL)\]|EU))?$/.exec(
-      code
-    );
-  if (!match) return null;
-  const language = (value: string | undefined) => {
-    const languages: Record<string, string> = {
-      A: "de",
-      F: "fr",
-      "E[ANG]": "en",
-      "E[ESP]": "es",
-      "E[ITA]": "it",
-      "E[POL]": "pl",
-      EU: "mul",
-    };
-    return value ? (languages[value] ?? null) : null;
-  };
-  return {
-    audioLanguage: language(match[2]),
-    originalVersion: match[1] === "O",
-    audioDescription: match[3] === "AUD",
-    subtitleLanguage: language(match[5]),
-  };
-}
-
-export function progressiveUrl(raw: string): boolean {
-  try {
-    const url = new URL(raw);
-    // Only existing ARTE/CDN progressive contracts; no new arbitrary fetch owner
-    // or HLS publication is introduced before the media-validation gate.
-    return (
-      url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      !url.port &&
-      (url.hostname.endsWith(".arte.tv") ||
-        url.hostname.endsWith(".akamaized.net") ||
-        url.hostname === "arteptweb-a.akamaihd.net") &&
-      /\.mp4$/i.test(url.pathname)
-    );
-  } catch {
-    return false;
-  }
+/** Decode only an official, programme-bound ARTE rendition filename. */
+export function parseArteProgressiveEdition(raw: string, videoId: string) {
+  if (!progressiveUrl(raw)) return null;
+  const url = new URL(raw);
+  const match = url.pathname.match(/\/(\d{6}-\d{3})-[A-Z]_[A-Z]+_\d+_([^_]+)_\d+_MP4-/);
+  if (!match || match[1] !== videoId.slice(0, 10)) return null;
+  return parseArteVersion(match[2]);
 }
 
 function coordinates(title: string): string | null {

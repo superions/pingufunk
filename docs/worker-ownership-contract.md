@@ -29,7 +29,11 @@ Manifest-Host und abweichendem Reassembly-Suffix. Der HLS-Adapter löst diese
 URLs beim Transfer frisch auf; der Downloader führt die ausdrücklich gewählte
 Tonspur aus und übernimmt ihre Sprachbezeichnung beim Stream-Copy-Mux.
 Das strukturierte `LANGUAGE`-Feld belegt die Sprache unabhängig von ARTE-
-Versionskürzeln. Die normale deutsche Spur hat Vorrang vor klarer Sprache;
+Versionskürzeln. Bei fehlender Sprachangabe dient das vorhandene ARTE-
+Sprachmapping als Fallback. Programmgebundene offizielle MP4-Dateinamen
+liefern diesen Beleg auch bei `und` im Container; vorhandene Sprachangaben
+haben Vorrang. Bilddaten kommen vom gemeinsamen begrenzten Metadatenleser.
+Die normale deutsche Spur hat Vorrang vor klarer Sprache;
 eine verbleibende Klare-Sprache-Fassung bleibt als solche gekennzeichnet,
 auch im Metadatencache, und unterliegt der vorhandenen GUI-Fassungsrichtlinie.
 Die vorhandene GUI-Sprach-/Fassungsrichtlinie, insbesondere der konfigurierte

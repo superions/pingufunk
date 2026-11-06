@@ -12,7 +12,6 @@ import {
 } from "@/services/content-search";
 import { selectLanguageVariants } from "@/services/language-editions";
 import { enrichSourceAudio } from "@/services/source-audio";
-import { isArteHls } from "@/services/arte-hls";
 import { arteVideoId } from "@/services/arte-editions";
 import { eligibleRenditionItem, selectRenditions } from "@/services/rendition-quality";
 import { createUiNzbDownloads, uiNzbFingerprints } from "@/services/ui-nzb";
@@ -222,9 +221,7 @@ async function handleSearchRequest(request: NextRequest) {
       );
       // Eligibility precedes edition dedupe and the UI result limit. One HLS
       // slot cannot hide an independent MP4 slot or fill an absent HD slot.
-      const arteSources = window.items.filter(
-        (item) => arteVideoId(item.url_website) && isArteHls(item.url_video)
-      );
+      const arteSources = window.items.filter((item) => arteVideoId(item.url_website));
       const arteEditions = arteSources.length
         ? await enrichSourceAudio(arteSources, requestBudget)
         : new Map<ApiResultItem, ApiResultItem[]>();

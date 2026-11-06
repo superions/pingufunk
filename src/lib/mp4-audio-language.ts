@@ -1,3 +1,4 @@
+import { isArteProgressiveUrl } from "./arte-media-url";
 import { readBoundedProviderBytes } from "./bounded-provider-json";
 import { createHash } from "node:crypto";
 import { FetchBudgetError, fetchWithRetry, type HttpRequestBudget } from "./fetch-retry";
@@ -21,7 +22,7 @@ export function isProbeableMp4(raw: string): boolean {
       !url.port &&
       !url.username &&
       !url.password &&
-      hosts.has(url.hostname) &&
+      (hosts.has(url.hostname) || isArteProgressiveUrl(raw)) &&
       /\.mp4$/i.test(url.pathname)
     );
   } catch {

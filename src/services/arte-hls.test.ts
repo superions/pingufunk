@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { parseArteHls, isArteHls } from "./arte-hls";
-import { enrichSourceAudio } from "./source-audio";
+import { enrichSourceAudio, verifySourceAudio } from "./source-audio";
+import { syntheticMp4, mp4RangeResponse } from "@/lib/__fixtures__/mp4";
+import { generateFakeNzb, parseNzbContent } from "./nzb-release";
+import { releaseMediaExpectations } from "./release-media-expectations";
 import { HttpRequestBudget } from "@/lib/fetch-retry";
 import { generateMovieRssItems } from "./newznab";
 import type { ApiResultItem } from "@/types";
@@ -69,7 +72,9 @@ it("advances past the foreground limit across automatic polls without manual sea
   expect(fetch).toHaveBeenCalledTimes(5);
 });
 
-it("uses the explicit German language without requiring a provider version token", () => {
+it("prefers explicit German language and maps a missing language from provider metadata", () => {
+  const unlabelled = manifest.replace('LANGUAGE="de",NAME="Deutsch",', 'NAME="Deutsch",');
+  expect(parseArteHls(unlabelled, master, 720).audioUrl).toBe(base + "german.m3u8");
   const languageOnly = manifest
     .replace('LANGUAGE="de",NAME="Deutsch",', 'LANGUAGE="deu",NAME="Deutsch",')
     .replace('CHARACTERISTICS="tv.arte.audio.version.va-deu",', "");
@@ -87,12 +92,15 @@ it.each(["only-ad", "foreign-programme", "foreign-host", "ambiguous", "no-video"
   "rejects %s instead of silently using original audio",
   (kind) => {
     let value = manifest;
-    if (kind === "only-ad")
+    if (kind === "only-ad") {
       value = value
         .split("\n")
         .filter((line) => !line.includes("clear.m3u8"))
         .join("\n")
-        .replace('LANGUAGE="de",NAME="Deutsch",', 'LANGUAGE="fr",NAME="Deutsch",');
+        .replace('LANGUAGE="de",NAME="Deutsch",', 'LANGUAGE="fr",NAME="Deutsch",')
+        .replace("vaaud-deu,public.accessibility.describes-video", "vaaud-deu")
+        .replace("Deutsch (Audiodeskription)", "Deutsch");
+    }
     if (kind === "foreign-programme") value = value.replaceAll("/123456-001-B/", "/654321-001-B/");
     if (kind === "foreign-host")
       value = value.replaceAll("fixture.akamaized.net", "example.invalid");
@@ -164,4 +172,85 @@ it("publishes the normal German film from a multi-edition master through enrichm
   expect(
     selectLanguageVariants([clear], { ...DEFAULT_LANGUAGE_POLICY, includeClearSpeech: true })
   ).toHaveLength(1);
+});
+
+it("maps untagged official MP4 editions through RSS, NZB and transfer revalidation", async () => {
+  const url =
+    "https://arteptweb-a.akamaihd.net/am/ptweb/123000/123400/123456-001-C_SQ_0_VA-STA_1_MP4-2200_fixture.mp4";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (!String(input).includes("MP4-")) return new Response("retired endpoint", { status: 404 });
+      return mp4RangeResponse(
+        syntheticMp4(1280, 720, [String(input).includes("french") ? "fra" : "und"]),
+        init!
+      );
+    })
+  );
+  const source: ApiResultItem = {
+    title: "Synthetic Movie",
+    topic: "Kino",
+    channel: "ARTE.DE",
+    description: "",
+    duration: 7200,
+    size: 1,
+    filmlisteTimestamp: 1,
+    url_website: "https://www.arte.tv/de/videos/123456-001-A/synthetic/",
+    url_video: url,
+    url_video_hd: "",
+    url_video_low: "",
+  };
+  const [item] = (await enrichSourceAudio([source], new HttpRequestBudget())).get(source)!;
+  expect(item).toMatchObject({
+    audioLanguage: "de",
+    audioDescription: false,
+    sourceVideoDimensions: [{ url, width: 1280, height: 720 }],
+  });
+  const rss = generateMovieRssItems(
+    { item, score: 1, titleMatch: "exact", durationDiff: 0 },
+    {
+      tmdbId: 1,
+      title: source.title,
+      germanTitle: source.title,
+      productionYear: 2020,
+      runtime: 120,
+      imdbId: null,
+      releaseDate: null,
+    },
+    "all",
+    true
+  );
+  expect(rss).toHaveLength(1);
+  expect(rss[0].title).toContain("GERMAN.SUBBED.720p");
+  const nzb = parseNzbContent(
+    generateFakeNzb({
+      title: rss[0].title,
+      url,
+      mediaExpectations: releaseMediaExpectations(item, null, url, "movie"),
+    })
+  )!;
+  expect(nzb.url).toBe(url);
+  expect(item.sourceAudioEvidence?.language).toBe("de");
+  await expect(
+    verifySourceAudio(item.sourceAudioEvidence!, nzb.url, new HttpRequestBudget())
+  ).resolves.toMatchObject({ language: "de" });
+  await expect(
+    verifySourceAudio(
+      item.sourceAudioEvidence!,
+      url.replace("123456-001-C", "654321-001-C"),
+      new HttpRequestBudget()
+    )
+  ).rejects.toThrow();
+  const frenchSource = { ...source, url_video: url + "?french" };
+  const [french] = (await enrichSourceAudio([frenchSource], new HttpRequestBudget())).get(
+    frenchSource
+  )!;
+  expect(french.audioLanguage).toBe("fr");
+  expect(french.sourceAudioEvidence).toBeUndefined();
+  const adSource = { ...source, url_video: url.replace("_VA-STA_", "_VAAUD-STA_") };
+  const [ad] = (await enrichSourceAudio([adSource], new HttpRequestBudget())).get(adSource)!;
+  expect(ad.audioDescription).toBe(true);
+  expect(
+    selectLanguageVariants([ad], { ...DEFAULT_LANGUAGE_POLICY, includeAudioDescription: false })
+  ).toEqual([]);
 });

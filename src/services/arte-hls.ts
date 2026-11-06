@@ -2,6 +2,7 @@ import { fetchWithRetry, HttpRequestBudget } from "@/lib/fetch-retry";
 import { readBoundedProviderText } from "@/lib/bounded-provider-json";
 import { getStreamHeight } from "@/lib/stream-url";
 import { isGermanLanguageCode } from "@/lib/language-policy";
+import { arteHlsAudioMetadata } from "./arte-language";
 
 /** Only ARTE's indexed manifest service owns this multi-audio contract. */
 export function isArteHls(value: string, programmeId?: string): boolean {
@@ -59,7 +60,10 @@ export function parseArteHls(text: string, master: string, maximumHeight?: numbe
     .filter(
       (row) =>
         row.TYPE === "AUDIO" &&
-        isGermanLanguageCode(row.LANGUAGE) &&
+        isGermanLanguageCode(
+          arteHlsAudioMetadata(row.LANGUAGE, row.CHARACTERISTICS).audioLanguage
+        ) &&
+        !arteHlsAudioMetadata(row.LANGUAGE, row.CHARACTERISTICS).audioDescription &&
         !/describes-video|audiodeskription|hörfilm/i.test(`${row.CHARACTERISTICS},${row.NAME}`)
     );
   // LANGUAGE owns language evidence; version tokens never gate a German track.
@@ -90,9 +94,8 @@ export function parseArteHls(text: string, master: string, maximumHeight?: numbe
   return {
     ...videos[0],
     audioUrl: unique[0],
-    originalVersion: (audio[0].CHARACTERISTICS ?? "")
-      .split(",")
-      .some((value) => value.trim().startsWith("tv.arte.audio.version.vo")),
+    originalVersion: arteHlsAudioMetadata(audio[0].LANGUAGE, audio[0].CHARACTERISTICS)
+      .originalVersion,
     clearSpeech: isClearSpeech(audio[0]),
   };
 }
