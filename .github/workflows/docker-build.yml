@@ -81,6 +81,17 @@ jobs:
           docker pull "$PROWLARR_IMAGE"
           git archive c2ae58d8f1741b2657638ff4500f5eea19023e23 | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner -t pingufunk-youtube-source-rollback-qa -
 
+      - name: Verify republished episodes through native Sonarr
+        env:
+          PINGUFUNK_ARR_QA_RUNNER_IMAGE: pingufunk-p11-runtime-qa
+          PINGUFUNK_ARR_QA_MIGRATOR_IMAGE: pingufunk-p11-migrator-qa
+          PINGUFUNK_ARR_QA_SONARR_IMAGE: ghcr.io/linuxserver/sonarr:version-4.0.20.3014
+          PINGUFUNK_ARR_QA_RADARR_IMAGE: ghcr.io/linuxserver/radarr:version-6.4.4.10685
+          PINGUFUNK_ARR_QA_PROWLARR_IMAGE: ghcr.io/linuxserver/prowlarr:version-2.6.5.5623
+        run: |
+          node scripts/tv-delivery-arr-smoke.mjs direct republished
+          node scripts/tv-delivery-arr-smoke.mjs forwarded republished
+
       - name: Build the compatible Mediathek programme receiver without publishing
         run: |
           git archive 3e13fd7363641e342f7cdc4498ab47d347baeee0 | docker buildx build --builder "${{ steps.buildx.outputs.name }}" --load --platform linux/amd64 --target runner --label org.opencontainers.image.revision=3e13fd7363641e342f7cdc4498ab47d347baeee0 -t pingufunk-programme-receiver-qa -
@@ -134,8 +145,6 @@ jobs:
         run: |
           node scripts/tv-delivery-arr-smoke.mjs direct
           node scripts/tv-delivery-arr-smoke.mjs forwarded
-          node scripts/tv-delivery-arr-smoke.mjs direct republished
-          node scripts/tv-delivery-arr-smoke.mjs forwarded republished
 
       - name: Build pinned rollback checkpoints without publishing
         run: |
