@@ -1,6 +1,6 @@
 ---
 name: pingufunk-test-gates
-description: Select and report Pingufunk implementation and CI verification using npm, Vitest, ESLint, TypeScript and Next. Use for regression tests, changed-code gates and evidence reuse; not for unrequested test deletion or production integration.
+description: Select and report Pingufunk implementation and CI verification using npm, Vitest, ESLint, TypeScript and Next. Use for meaningful regression tests, explicit test cleanup, changed-code gates and evidence reuse; production integration requires authorization.
 ---
 
 # Pingufunk Test-Gates
@@ -9,35 +9,40 @@ Lies AGENTS.md, den betroffenen Planvertrag, package.json, vitest.config.ts und
 einschlägige Tests/Workflows. Pingufunk hat keine Myoxus-Testmatrix oder Cargo-
 Wrapper. Befehle und verfügbare Gate-Scripts aus diesem Checkout nehmen.
 
-## Auswahl und Ausführung
+## Testansatz und Bereinigung
 
-1. Geänderte Owner und letzte gültige Evidenz erfassen. Docs-/Skilländerungen
-   brauchen Format-, Link-/Struktur- und Diffprüfung, nicht automatisch einen
-   Produktbuild oder laufende Datenbank. Bereits grüne Tests ohne geänderte
-   Produkt-/Test-/Dependency-/Runtimeinputs als wiederverwendet ausweisen.
-2. Für TS-Implementierung fokussierte Tests zur Diagnose verwenden, dann am
-   kohärenten Abschluss `npm test`, `npm run lint`, `npm run typecheck`,
-   `npm run format:check` und `npm run build` entsprechend dem geänderten Vertrag.
-   Toolchain Node mindestens 24 und npm ci; keine Yarn-/Rust-Annahmen.
-3. Newznab-Matching prüft Identität/Koordinaten/Sprache, negative Kandidaten,
-   total/Pagination und RSS→NZB→Download-Vertrag. Importtests prüfen Jobpfade
-   und tatsächlichen Consumer; eine erfolgreiche HTTP-Antwort reicht nicht.
-4. Provider/Servarr/Downloadnetzwerk mocken. Datenbankvertragsänderungen gegen
-   disposable SQLite **und** PostgreSQL testen, soweit beide Provider betroffen
-   sind. Kein SQLite-Ersatz für den PG-Gate und kein PG-Ersatz für den SQLite-
-   Runtimegate. Migrationsfixtures verwenden ausschließlich synthetische Daten.
-5. Testressourcen durch den Test selbst begrenzt anlegen und in finally/teardown
-   schließen. Cleanupfehler nicht verstecken; keine gemeinsamen DBs/Volumes
-   löschen. Langläufer mit Timeout und owned process-tree cleanup versehen.
-6. Keine blanket skips, geschluckten Exceptions oder schwächeren Assertions
-   für einen grünen Lauf. Bei ausdrücklicher Testkonsolidierung Invariante und
-   ausführbaren Scope vor/nach vergleichen; nur gemessene Einsparungen behaupten.
+Nutzerentscheidung vom 2026-11-06: Trivialtests entfernen, nicht aus Gewohnheit
+behalten. Bei ausdrücklich beauftragter Bereinigung im Zweifel entfernen;
+für diese Bereinigung verbindlich 90 % ± 5 % des gesamten aktuellen Testbestands
+entfernen. Keine Empfehlung; anhand der tatsächlich entdeckten Fälle nachweisen.
+Testanzahl und Coverage sind kein Qualitäts- oder Freigabenachweis.
 
-## Abschluss
+- Wenige aussagekräftige Abläufe über die tatsächlichen Owner-Grenzen prüfen.
+  Beispiel: HLS-Fortschrittsausgabe → Parser → Scheduler → echte disposable
+  Datenbank → abgeschlossener Job. Kein gegenseitiges Wegmocken des Vertrags.
+- Behalten: belegte Regressionen, echte Produktentscheidungen und wesentliche
+  Fehlerfolgen. Externe Dienste und Medienbytes dürfen synthetisch sein;
+  den geschützten Ablauf und seine Persistenz nicht durch Erfolgsmocks ersetzen.
+- Entfernen: triviale Getter/Setter, Frameworkverhalten, Quelltext-/Wortlautchecks,
+  reine Mockaufruf-/Durchreichprüfungen, Implementierungsspiegel und Duplikate.
+  Gleichartige Parameterfälle ohne andere Verzweigung oder Fehlerfolge bündeln.
+- Vor einer Löschung kurz den geschützten Vertrag prüfen; eigenständigen
+  Schutz nur bei konkretem Nutzen behalten. Keine Inventar-/Dokumentationspflicht
+  für jeden gelöschten Test und keine Ersatztests für bloße Implementierungsdetails.
+- Bei einem Fehler muss der aussagekräftige Regressionstest am defekten Stand
+  scheitern und mit der Korrektur bestehen. Einige repräsentative Negativfälle
+  genügen; keine spekulativen Fallmatrizen.
 
-Exakte Commands, Ergebnisse und bestehende vs. neue Fehler berichten.
-Neue, wiederverwendete, durch beobachtete Hooks abgedeckte und bewusst nicht
-erneut ausgeführte Gates unterscheiden. `git diff --check` und Scope-Review.
-Desktop-only UI-Evidenz bei sichtbaren Änderungen separat einholen, nicht durch
-grüne Unit-Tests ersetzen. Ein Gate ist meaningful, wenn es bei Abschalten der
-geschützten Implementierung für die konkrete Regression fehlschlägt.
+## Ausführung und Nachweis
+
+Gates aus aktuellem package.json und CI wählen. Fokusprüfung zur Diagnose,
+danach passende Suite; bestehende grüne Evidenz ohne relevante Änderung nutzen.
+Lint, Typecheck, Format und Build entsprechend dem tatsächlichen Änderungsscope.
+Keine lokalen Container auf diesem Mac. Datenbankabläufe gegen disposable SQLite
+und PostgreSQL prüfen, wenn beide betroffen sind; keine Produktion im Test.
+Ressourcen und eigene Prozesse begrenzen und nach Testende schließen.
+UI-Änderungen separat am ausgelieferten Desktop-Bundle prüfen.
+
+Ergebnis nennt die geprüften Produktabläufe, relevante Grenzen sowie entfernte
+Redundanz. Grüne Mocktests, hohe Testzahlen oder Coverage niemals als Beleg für
+ungeprüfte Downloads oder produktive Importfähigkeit ausgeben.
