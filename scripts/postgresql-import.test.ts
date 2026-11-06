@@ -255,7 +255,9 @@ for (const sourceVariant of ["bootstrap", "current"] as const) {
         await pg.$disconnect();
         rmSync(dir, { recursive: true, force: true });
       }
-    }
+    },
+    // Each variant performs multiple real imports and three bounded CLI calls.
+    30_000
   );
 }
 
