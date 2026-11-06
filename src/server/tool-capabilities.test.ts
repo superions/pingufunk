@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ read: vi.fn(), configured: vi.fn(), ffprobe: vi.fn() }));
 vi.mock("./bounded-process", () => ({ readBoundedProcess: mocks.read }));
 vi.mock("./ffmpeg", () => ({ getFfmpegPath: () => "/synthetic/owned/ffmpeg" }));
-vi.mock("./media-probe", () => ({ getFfprobePath: mocks.ffprobe }));
+vi.mock("./tool-paths", () => ({ getFfprobePath: mocks.ffprobe }));
 vi.mock("./ytdlp", () => ({ getConfiguredYtdlpPath: mocks.configured }));
 
 beforeEach(() => {
@@ -81,7 +81,7 @@ it("does not start another inspection or confirm an old path during configuratio
   expect(mocks.read).toHaveBeenCalledTimes(6);
 });
 
-it("rejects relative ffprobe paths exactly as the real media probe does", async () => {
+it("rejects relative ffprobe paths without invoking them", async () => {
   const { getToolCapabilities } = await import("./tool-capabilities");
   mocks.ffprobe.mockReturnValue("relative/ffprobe");
   expect((await getToolCapabilities()).ffprobe).toEqual({ state: "failed", version: null });

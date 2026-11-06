@@ -12,7 +12,7 @@ import {
 // the phase instead of assuming that every timeout is a network stall.
 const STALL_TIMEOUT_MS = 60_000;
 
-/** Null confirms byte transfer and file finish, not media validation. Failures
+/** Null confirms byte transfer and file close, not media validation. Failures
  * retain only the closed diagnostic contract; raw exceptions never escape. */
 export async function downloadFile(
   url: string,
@@ -234,11 +234,18 @@ export async function downloadFile(
 
     phase = "file_finish";
     completed = await new Promise<boolean>((resolve) => {
-      fileStream!.once("finish", () => resolve(true));
-      fileStream!.once("error", () => {
-        resolve(false);
+      let finished = false;
+      const cancelFile = () => fileStream!.destroy();
+      fileStream!.once("finish", () => {
+        finished = true;
       });
-      fileStream!.end();
+      fileStream!.once("close", () => {
+        abortController.signal.removeEventListener("abort", cancelFile);
+        resolve(finished && !fileError && !abortController.signal.aborted);
+      });
+      abortController.signal.addEventListener("abort", cancelFile, { once: true });
+      if (abortController.signal.aborted) cancelFile();
+      else fileStream!.end();
     });
     if (!completed) fail("exception", fileError);
     return failure;

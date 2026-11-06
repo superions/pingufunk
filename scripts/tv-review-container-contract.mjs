@@ -122,15 +122,11 @@ assert.deepEqual(
   ],
   [72, 60, 15]
 );
-assert.equal(after.facts.metadataDurationCheck, "explicitly_exempted");
-assert.equal(after.facts.expectedChecks.duration, "passed");
+assert.equal(after.facts, null);
 assert.equal(after.file.regular, true);
 assert.ok(after.file.size > 0);
 assert.equal(String(after.file.size), after.dbSize);
 assert.equal(after.file.hash, after.sourceHash);
-assert.deepEqual(after.facts.video, [{ width: 1280, height: 720 }]);
-assert.deepEqual(after.facts.audioLanguages, ["de"]);
-assert.ok(Math.abs(after.facts.durationSeconds - 72) < 1);
 const repeated = request("api/tv-source-review", { ...body, intentId: randomUUID() });
 assert.equal(repeated.status, 200);
 assert.equal(repeated.json().id, id);

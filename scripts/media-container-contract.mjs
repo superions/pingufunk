@@ -89,12 +89,13 @@ function assertCompletedDiagnosis(id, job) {
   const diagnosis = request(`api/downloads/${id}/diagnostics`);
   if (
     diagnosis.job !== "completed" ||
-    diagnosis.file !== "verified_present" ||
+    diagnosis.file !== "unverified" ||
+    Object.values(diagnosis.checks).some((check) => check !== "unknown") ||
     diagnosis.import.state !== "unknown" ||
     diagnosis.import.reason !== "integration_disabled" ||
     JSON.stringify(diagnosis).includes(job.filePath)
   )
-    throw new Error("Closed job diagnosis lost physical evidence or invented an Arr import");
+    throw new Error("Closed job diagnosis invented media verification or an Arr import");
 }
 request(
   "api/settings",
@@ -155,18 +156,16 @@ for (const endpoint of ["api/newznab", "api/newznab/api"]) {
     expected.durations.source.tolerancePercent !== 10 ||
     expected.durations.metadata !== null ||
     expected.audio !== null ||
-    facts?.version !== 3 ||
-    facts?.expectedChecks.duration !== "passed" ||
+    facts !== null ||
     history?.status !== "Completed" ||
     history.storage !== row.filePath.slice(0, row.filePath.lastIndexOf("/"))
   )
-    throw new Error("RSS to verified-media consumer mismatch");
+    throw new Error("RSS to downloaded-file consumer mismatch");
   terminalSnapshots.set(id, row);
 }
-console.log("Both actual Newznab paths to NZB, queue, verified file and SAB history passed");
+console.log("Both actual Newznab paths to NZB, queue, downloaded file and SAB history passed");
 
-// Saved v3 references, not the currently configured legacy series tolerance,
-// own completion. Keep the v1/legacy matrix below unchanged.
+// Preserve source references, but do not inspect downloaded media against them.
 request("api/settings", JSON.stringify({ "matching.sonarr.tolerancePercent": "0" }));
 for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
   ["movie", 2, null, "completed", "valid.mp4"],
@@ -175,9 +174,9 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
   ["unknown", 2, null, "completed", "stream.m3u8"],
   ["series", 2, 120, "failed", "valid.mp4"],
   ["series", 120, 2, "failed", "valid.mp4"],
-  ["series", null, 120, "failed", "valid.mp4"],
-  ["series", 120, null, "failed", "valid.mp4"],
-  ["movie", 120, null, "failed", "valid.mp4"],
+  ["series", null, 120, "completed", "valid.mp4"],
+  ["series", 120, null, "completed", "valid.mp4"],
+  ["movie", 120, null, "completed", "valid.mp4"],
 ]) {
   const expected = {
     version: 3,
@@ -235,13 +234,7 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
   const facts = JSON.parse(job.validation ?? "null");
   if (status === "completed") {
     assertCompletedDiagnosis(id, job);
-    const references = Object.values(expected.durations).filter(Boolean);
-    if (
-      facts?.version !== 3 ||
-      JSON.stringify(facts.durationChecks) !==
-        JSON.stringify(references.map((reference) => ({ ...reference, result: "passed" })))
-    )
-      throw new Error("Frozen duration references were not independently confirmed");
+    if (facts !== null) throw new Error("Completed file unexpectedly acquired media facts");
     const physical = run([
       "exec",
       container,
@@ -255,22 +248,23 @@ for (const [mediaKind, sourceSeconds, metadataSeconds, status, filename] of [
   terminalSnapshots.set(id, job);
 }
 request("api/settings", JSON.stringify({ "matching.sonarr.tolerancePercent": "10" }));
-console.log("Frozen v3 film/series/unknown references, HLS and independent negative gates passed");
+console.log("Frozen source references, HLS and admission conflicts passed");
 
 for (const [filename, duration, status, convert, resolution] of [
   ["valid.mp4", undefined, "completed", false],
   ["valid.mp4", null, "completed", false],
   ["valid.mp4", 2, "completed", false],
-  ["valid.mp4", 120, "failed", false],
-  ["no-audio.mp4", null, "failed", false],
-  ["invalid.mp4", null, "failed", false],
-  ["truncated.mp4", null, "failed", false],
+  ["valid.mp4", 120, "completed", false],
+  ["no-audio.mp4", null, "completed", false],
+  ["invalid.mp4", null, "completed", false],
+  ["truncated.mp4", null, "completed", false],
+  ["missing.mp4", null, "failed", false],
   ["stream.m3u8", 2, "completed", false],
   ["stream.m3u8", 2, "completed", true],
   ["valid.mp4", 2, "completed", true],
   ["720p.mp4", 2, "completed", false, { width: 1280, height: 720 }],
-  ["720p.mp4", 2, "failed", false, { width: 1920, height: 1080 }],
-  ["720p.mp4", 2, "failed", false, { width: 1920, height: 720 }],
+  ["720p.mp4", 2, "completed", false, { width: 1920, height: 1080 }],
+  ["720p.mp4", 2, "completed", false, { width: 1920, height: 720 }],
 ]) {
   request("api/settings", JSON.stringify({ key: "download.convertToMkv", value: String(convert) }));
   const fixture = nzb(filename, duration, resolution);
@@ -300,25 +294,13 @@ for (const [filename, duration, status, convert, resolution] of [
   if (!history || history.status !== (status === "completed" ? "Completed" : "Failed"))
     throw new Error("SAB consumer status mismatch");
   if (status === "completed") {
-    const facts = JSON.parse(job.validation);
     assertCompletedDiagnosis(id, job);
     if (
-      facts.version !== 1 ||
-      !Number.isFinite(facts.durationSeconds) ||
-      facts.durationSeconds <= 0 ||
-      facts.video.length === 0 ||
-      facts.audioLanguages.length !== 0 ||
-      facts.expectedChecks.duration !== (duration == null ? "unknown" : "passed") ||
-      facts.expectedChecks.audio !== "unknown" ||
-      facts.expectedChecks.resolution !== (resolution ? "passed" : "unknown") ||
-      (resolution &&
-        !facts.video.some(
-          (video) => video.width === resolution.width && video.height === resolution.height
-        )) ||
+      job.validation !== null ||
       !job.filePath ||
       history.storage !== job.filePath.slice(0, job.filePath.lastIndexOf("/"))
     )
-      throw new Error("Synthetic completed facts/import path mismatch");
+      throw new Error("Synthetic completed file/import path mismatch");
   } else if (
     job.validation !== null ||
     history.fail_message === "" ||
@@ -366,7 +348,7 @@ console.log(
   "Durable keyed acknowledgement survived real container restart without another transfer"
 );
 console.log(
-  "Real progressive/mux/HLS probe, negative media, queue continuation and SAB history passed"
+  "Real progressive/mux/HLS transfers, HTTP failure, queue continuation and SAB history passed"
 );
 
 // Real consumer mutations use only this harness's rows and private job files.
@@ -417,8 +399,8 @@ if (
   retryRow.expectations !== failedEntry[1].expectations ||
   request("api?mode=history").history.slots.some((row) => row.nzo_id === failedEntry[0])
 )
-  throw new Error("Retry lost expectations or bypassed the failed-media gate");
-console.log("Both SAB aliases, real isolated completed-file removal and re-probed retry passed");
+  throw new Error("Retry lost expectations or bypassed the failed-transfer gate");
+console.log("Both SAB aliases, real isolated completed-file removal and transfer retry passed");
 
 // Stop the actual writing Next process during an actual FFmpeg stream-copy mux,
 // not merely a mocked kill call. The fixture wrapper slows only this next mux.
@@ -511,16 +493,18 @@ if (pgContainer) {
     ]).trim() !== owner
   )
     throw new Error("Exact harness-owned PostgreSQL required");
+  request("api/settings", JSON.stringify({ "download.convertToMkv": "true" }));
   run([
     "exec",
     container,
     "node",
     "-e",
-    'const fs=require("node:fs");for(const p of ["/tmp/media-probe-ready","/tmp/media-probe-release"])fs.rmSync(p,{force:true});fs.writeFileSync("/tmp/pause-next-probe","synthetic test control");fs.chownSync("/tmp/pause-next-probe",Number(process.env.PUID),Number(process.env.PGID));',
+    'const fs=require("node:fs");fs.rmSync("/tmp/media-mux-ready",{force:true});fs.writeFileSync("/tmp/slow-next-mux","synthetic",{flag:"wx"});fs.chownSync("/tmp/slow-next-mux",Number(process.env.PUID),Number(process.env.PGID));',
   ]);
+  const interruptedFixture = nzb("slow-mux.mp4", 10);
   const fixture = nzb("valid.mp4", 2);
-  const interruptedId = request("api?mode=addfile&cat=sonarr", fixture.body).nzo_ids[0];
-  const probeDeadline = Date.now() + 30_000;
+  const interruptedId = request("api?mode=addfile&cat=sonarr", interruptedFixture.body).nzo_ids[0];
+  const muxDeadline = Date.now() + 30_000;
   let ready = false;
   do {
     ready =
@@ -529,16 +513,15 @@ if (pgContainer) {
         container,
         "node",
         "-e",
-        'console.log(require("node:fs").existsSync("/tmp/media-probe-ready"))',
+        'console.log(require("node:fs").existsSync("/tmp/media-mux-ready"))',
       ]).trim() === "true";
     if (!ready) await delay(100);
-  } while (!ready && Date.now() < probeDeadline);
-  if (!ready) throw new Error("Owned probe synchronization failed");
+  } while (!ready && Date.now() < muxDeadline);
+  if (!ready) throw new Error("Owned mux synchronization failed");
   run(["pause", pgContainer]);
   try {
     if (run(["inspect", "--format", "{{.State.Paused}}", pgContainer]).trim() !== "true")
       throw new Error("Owned database pause was not confirmed");
-    run(["exec", container, "sh", "-c", ": > /tmp/media-probe-release"]);
     // Observe the closed runtime contract after the confirmed fault, not a logging catch path.
     const failureDeadline = Date.now() + 30_000;
     let pausedFailure = false;
@@ -565,6 +548,7 @@ if (pgContainer) {
   } finally {
     run(["unpause", pgContainer]);
   }
+  request("api/settings", JSON.stringify({ "download.convertToMkv": "false" }));
   const interrupted = readJob(interruptedId);
   if (
     !["downloading", "converting", "failed"].includes(interrupted.status) ||

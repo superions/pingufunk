@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { getFfmpegPath } from "./ffmpeg";
-import { getFfprobePath } from "./media-probe";
+import { getFfprobePath } from "./tool-paths";
 import { getConfiguredYtdlpPath } from "./ytdlp";
 import { readBoundedProcess, type ProcessReadState } from "./bounded-process";
 
@@ -32,7 +32,7 @@ async function inspect(binary: string, tool: keyof ToolCapabilities): Promise<To
     : { state: "invalid_response", version: null };
 }
 
-/** Inspect exactly the paths used by transfers/probes, without installing anything. */
+/** Inspect exactly the configured tool paths, without installing anything. */
 export async function getToolCapabilities(): Promise<ToolCapabilities> {
   const paths = [getFfmpegPath(), getFfprobePath(), await getConfiguredYtdlpPath()];
   const key = createHash("sha256").update(JSON.stringify(paths)).digest("hex");

@@ -64,14 +64,12 @@ for provider in "${providers[@]}"; do
   DATABASE_URL="$QA_URL" docker run -d --name "$APP_CONTAINER" --network "$QA_TRANSPORT" \
     --label "pingufunk.media-qa.owner=$MEDIA_QA_ID" \
     -e DATABASE_URL -e "DATABASE_PROVIDER=$provider" -e PINGUFUNK_WRITES_ENABLED=1 \
-    -e PINGUFUNK_FFPROBE_PATH=/qa/ffprobe-qa.sh \
     -e PINGUFUNK_PUBLIC_URL=http://127.0.0.1:6767 \
     -e "PINGUFUNK_MEDIA_QA_OWNER=$MEDIA_QA_ID" \
     -e NODE_OPTIONS='--import /qa/provider.mjs' \
     -e "PUID=$(id -u)" -e "PGID=$(id -g)" \
     --mount "type=bind,src=${QA_ROOT}/${provider},dst=/qa" \
     --mount "type=bind,src=$(pwd)/scripts/media-container-provider.mjs,dst=/qa/provider.mjs,readonly" \
-    --mount "type=bind,src=$(pwd)/scripts/media-container-ffprobe.sh,dst=/qa/ffprobe-qa.sh,readonly" \
     --entrypoint /bin/sh "$RUNNER_IMAGE" -ec '
       mkdir -p /app/public/pingufunk-media-qa
       ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=25 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 -c:v libx264 -preset ultrafast -c:a aac /app/public/pingufunk-media-qa/valid.mp4

@@ -4,9 +4,7 @@ import { acquireWorkerLease, WorkerOwnershipError, type WorkerLease } from "./wo
 import { assertWritesEnabled, writesEnabled } from "@/lib/write-gate";
 import { isMkvConversionEnabled } from "@/lib/settings";
 import { readPersistedMediaExpectations } from "@/lib/media-expectations";
-import { MediaProbeError } from "./media-probe";
 import { recordDecision } from "./decision-diagnostics";
-import { parseDecisionEvent } from "@/lib/decision-diagnostics";
 import {
   transferSource,
   downloadSource,
@@ -26,7 +24,7 @@ import * as fs from "fs/promises";
 import { createHash } from "node:crypto";
 import * as path from "path";
 import { SourceDownloadError } from "./download-failure";
-import { completeValidatedDownload, moveIntoJobDir } from "./download-completion";
+import { completeDownload, moveIntoJobDir } from "./download-completion";
 import { prepareSonarrJobTitle } from "./sonarr-job-title";
 
 async function getDownloadTempPath(): Promise<string> {
@@ -422,7 +420,7 @@ async function processOwnedDownload(
       extension = ".mkv";
     }
 
-    // Every backend converges on the same owned move and physical media gate.
+    // Every backend converges on the same owned move and completion path.
     const finalPath = path.join(completeJobDir, filename + extension);
     lease.checkTransfer();
     await moveIntoJobDir(
@@ -435,18 +433,10 @@ async function processOwnedDownload(
     );
     // Retain the original until moving its converted output actually succeeds.
     if (convertedInput) await fs.unlink(convertedInput).catch(() => {});
-    const stats = await fs.stat(finalPath);
-    await completeValidatedDownload(
-      downloadId,
-      finalPath,
-      completeJobDir,
-      expectations,
-      download.url,
-      lease
-    );
+    const size = await completeDownload(downloadId, finalPath, lease);
     const downloadTime = Math.floor((Date.now() - startTime) / 1000);
     console.log(
-      `[Download] Completed: ${download.title} (${Math.round(stats.size / 1024 / 1024)}MB in ${downloadTime}s)`
+      `[Download] Completed: ${download.title} (${Math.round(size / 1024 / 1024)}MB in ${downloadTime}s)`
     );
   } catch (error) {
     if (error instanceof SourceDownloadError) {
@@ -458,17 +448,6 @@ async function processOwnedDownload(
           ...error.transferFailure,
         });
       }
-    }
-    if (error instanceof MediaProbeError) {
-      // Closed probe facts survive persistence; never copy arbitrary exception messages.
-      const event = parseDecisionEvent({
-        stage: "media",
-        reason: error.reason,
-        evidence: error.evidence,
-        count: 1,
-      });
-      if (event)
-        failureMessage = `Local media validation failed: ${JSON.stringify({ version: 1, stage: event.stage, reason: event.reason, evidence: event.evidence })}`;
     }
     console.error(`[Download] Error processing download ${downloadId}`);
     await markAsFailed(

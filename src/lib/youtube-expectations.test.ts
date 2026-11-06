@@ -8,20 +8,6 @@ import {
   durationExpectations,
 } from "./media-expectations";
 import { parseNzbContent, generateFakeNzb } from "@/services/nzb-release";
-import { validateMediaProbe } from "@/server/media-probe";
-const probe = () => ({
-  format: { format_name: "matroska", duration: "120.02" },
-  streams: [
-    { codec_type: "video", codec_name: "h264", width: 1280, height: 720 },
-    {
-      codec_type: "audio",
-      codec_name: "aac",
-      channels: 2,
-      sample_rate: "48000",
-      tags: { language: "und" },
-    },
-  ],
-});
 it("roundtrips fully bound v5 through NZB and persisted expectations while retaining unknown physical tags as provider evidence", () => {
   const expected = syntheticYoutubeExpectations();
   const parsed = parseMediaExpectations(serializeMediaExpectations(expected));
@@ -33,11 +19,6 @@ it("roundtrips fully bound v5 through NZB and persisted expectations while retai
   };
   expect(parseNzbContent(generateFakeNzb(release))).toEqual(release);
   expect(durationExpectations(parsed, 99).map((row) => row.tolerancePercent)).toEqual([10, 10]);
-  expect(validateMediaProbe(probe(), parsed, 0, expected.sourceAudio)).toMatchObject({
-    audioLanguages: [],
-    expectedChecks: { audio: "passed_provider", resolution: "passed", duration: "passed" },
-  });
-  expect(() => validateMediaProbe(probe(), parsed, 0)).toThrow();
 });
 it.each([
   "language",
@@ -106,30 +87,6 @@ it("retains runtime conflict until the internal once-only decision and never acc
     })
   ).toThrow();
 });
-it.each(["foreign", "extra-unknown", "extra-video", "duration", "dimensions"])(
-  "checks actual media against the frozen source contract with %s",
-  (kind) => {
-    const expected = syntheticYoutubeExpectations();
-    const actual = probe();
-    if (kind === "foreign") actual.streams[1].tags!.language = "fra";
-    if (kind === "extra-unknown") actual.streams.push({ ...actual.streams[1] });
-    if (kind === "extra-video") actual.streams.push({ ...actual.streams[0] });
-    if (kind === "duration") actual.format.duration = "180";
-    if (kind === "dimensions") actual.streams[0].height = 1080;
-    if (kind === "foreign") {
-      expect(
-        validateMediaProbe(actual, parseMediaExpectations(expected), 0, expected.sourceAudio)
-          .audioLanguageCorrection
-      ).toEqual({ language: "de", originalLanguages: ["fr"] });
-      expect(() => validateMediaProbe(actual, parseMediaExpectations(expected), 0)).toThrow();
-      return;
-    }
-    expect(() =>
-      validateMediaProbe(actual, parseMediaExpectations(expected), 0, expected.sourceAudio)
-    ).toThrow();
-  }
-);
-
 it("accepts a typed movie without inventing episode metadata and rejects a borrowed episode-duration reference", () => {
   const facts = syntheticYoutubeExpectations();
   const { playlistId: _, ...identity } = facts.sourceRef;

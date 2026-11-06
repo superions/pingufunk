@@ -227,8 +227,9 @@ for (const provider of ["sqlite", "postgresql"] as const)
         });
         expect(await first.call("queue")).toEqual({ drained: true });
         expect(await prisma.download.findUnique({ where: { id: "following" } })).toMatchObject({
-          status: "failed",
-          error: expect.stringContaining("Local media validation failed"),
+          status: "completed",
+          error: null,
+          mediaValidation: null,
         });
         const neighbor = path.join(root, "neighbor.sentinel");
         writeFileSync(neighbor, "untouched");
@@ -272,7 +273,7 @@ for (const provider of ["sqlite", "postgresql"] as const)
         );
         expect(
           (await prisma.download.findUnique({ where: { id: "after-shutdown" } }))?.status
-        ).toBe("failed");
+        ).toBe("completed");
         expect(requests.filter((r) => r === "/hold.mp4")).toHaveLength(1);
         expect(requests.filter((r) => r === "/after.mp4")).toHaveLength(1);
         expect(readFileSync(neighbor, "utf8")).toBe("untouched");

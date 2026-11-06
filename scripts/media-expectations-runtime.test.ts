@@ -246,22 +246,6 @@ for (const provider of ["sqlite", "postgresql"] as const) {
           mediaExpectations: stored.mediaExpectations,
           mediaValidation: null,
         });
-        if (frozen) {
-          const persisted = parseMediaExpectations(stored.mediaExpectations!);
-          const { validateMediaProbe } = await import("@/server/media-probe");
-          const probe = (duration: string) => ({
-            format: { format_name: "mov,mp4", duration },
-            streams: [
-              { codec_type: "video", codec_name: "h264", width: 1280, height: 720 },
-              { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 2 },
-            ],
-          });
-          // A restart and settings write must not re-evaluate the saved policy.
-          expect(validateMediaProbe(probe("130"), persisted, 0).expectedChecks.duration).toBe(
-            "passed"
-          );
-          expect(() => validateMediaProbe(probe("134"), persisted, 25)).toThrow();
-        }
         const legacy = await addToQueue(release.url, release.title, "sonarr");
         expect(
           (await prisma.download.findUniqueOrThrow({ where: { id: legacy.id } })).mediaExpectations

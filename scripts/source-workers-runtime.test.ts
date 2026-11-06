@@ -10,16 +10,7 @@ import {
 } from "../src/lib/youtube-source";
 import { unknownJobMediaExpectations } from "../src/lib/media-expectations";
 
-// Real database/fence/queue/file owners; only network adapters and media probing
-// are synthetic. Public sources and actual library services are never contacted.
-vi.mock("../src/server/media-probe", () => ({
-  MediaProbeError: class extends Error {},
-  probeJobMedia: vi.fn(async () => ({
-    durationSeconds: 120,
-    video: [{ width: 1920, height: 1080 }],
-    audioLanguages: ["de"],
-  })),
-}));
+// Real database, queue and file owners; source network adapters are synthetic.
 const pgEnabled = process.env.PINGUFUNK_REQUIRE_PG_TESTS === "1";
 const pgUrl = process.env.PINGUFUNK_TEST_DATABASE_URL;
 if (pgEnabled) {

@@ -1,6 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { validateMediaProbe } from "@/server/media-probe";
 import { assertMediaRuntimeCompatible, parseMediaExpectations } from "@/lib/media-expectations";
 import { DEFAULT_LANGUAGE_POLICY } from "@/lib/language-policy";
 
@@ -302,38 +301,6 @@ it("refuses unknown source audio and worker-time changed source before transfer"
   state.enrichedLanguage = null;
   await expect(revalidateApprovedTvJob(job, expected)).rejects.toThrow();
   await expect(previewTvSource(value.selector)).rejects.toThrow();
-});
-
-it("exempts only metadata duration; source/sample/quality/audio failures remain failures", async () => {
-  const value = await preview();
-  const id = randomUUID();
-  await confirmTvSource(value.selector, value.fingerprint, id);
-  const expected = parseMediaExpectations(state.jobs.get(id)!.mediaExpectations);
-  const media = {
-    format: { format_name: "mp4", duration: "3540" },
-    streams: [
-      { codec_type: "video", codec_name: "h264", width: 1920, height: 1080 },
-      {
-        codec_type: "audio",
-        codec_name: "aac",
-        sample_rate: "48000",
-        channels: 2,
-        tags: { language: "deu" },
-      },
-    ],
-  };
-  expect(validateMediaProbe(media, expected, 15).expectedChecks).toEqual({
-    duration: "passed",
-    audio: "passed",
-    resolution: "passed",
-  });
-  for (const bad of [
-    { ...media, format: { ...media.format, duration: "120" } },
-    { ...media, streams: [{ ...media.streams[0], height: 720 }, media.streams[1]] },
-    { ...media, streams: [media.streams[0], { ...media.streams[1], tags: { language: "fra" } }] },
-    { ...media, streams: [...media.streams, { ...media.streams[1], tags: { language: "und" } }] },
-  ])
-    expect(() => validateMediaProbe(bad, expected, 25)).toThrow();
 });
 
 it("never uses duration to choose between ambiguous episodes or bypasses a concrete title conflict", async () => {

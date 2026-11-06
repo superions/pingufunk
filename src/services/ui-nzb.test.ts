@@ -6,7 +6,6 @@ import { parseNzbContent } from "./download";
 import { mediaSourceIdentity } from "./source-audio";
 import { productSettingsContext } from "@/lib/product-settings-context";
 import { DEFAULT_PRODUCT_SETTINGS } from "@/lib/settings-schema";
-import { validateMediaProbe } from "@/server/media-probe";
 
 const item: ApiResultItem = {
   channel: "Synthetic",
@@ -64,7 +63,7 @@ it("keeps server-authored UI filenames, current URLs and v3 facts in all renditi
       },
     });
 });
-it("keeps a verified episode's frozen reference through UI NZB to the actual file validator", () => {
+it("keeps a verified episode's frozen reference through UI NZB", () => {
   const downloads = productSettingsContext.run(
     {
       values: { ...DEFAULT_PRODUCT_SETTINGS, "matching.sonarr.tolerancePercent": "0" },
@@ -82,19 +81,6 @@ it("keeps a verified episode's frozen reference through UI NZB to the actual fil
         metadata: { seconds: 120, tolerancePercent: 0 },
       },
     });
-    // Source tolerance alone accepts 130s; the independently frozen episode
-    // reference must still reject it, even if current policy later changes.
-    const probe = {
-      format: { format_name: "mov,mp4", duration: "130" },
-      streams: [
-        { codec_type: "video", codec_name: "h264", width: 1280, height: 720 },
-        { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 2 },
-      ],
-    };
-    expect(() => validateMediaProbe(probe, expected!, 25)).toThrow();
-    expect(() =>
-      validateMediaProbe({ ...probe, format: { ...probe.format, duration: "120" } }, expected!, 25)
-    ).not.toThrow();
   }
 });
 it("declares unknown v3 facts rather than inferring media kind from a UI title", () => {

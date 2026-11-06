@@ -1,76 +1,15 @@
-import { getSetting } from "@/lib/settings";
-import { configuredSetting } from "@/lib/settings-schema";
-import { sourceAudioExpectation, type MediaExpectations } from "@/lib/media-expectations";
 import { ensureOwnedDirectory } from "@/lib/download-paths";
-import { probeJobMedia } from "./media-probe";
 import type { WorkerLease } from "./worker-lease";
 import * as fs from "fs/promises";
 import { constants } from "fs";
 import * as path from "path";
 
-/** All transfer/mux paths converge here before exposing import-ready history. */
-export async function completeValidatedDownload(
+/** Publish a finished transfer without inspecting or rewriting its media content. */
+export async function completeDownload(
   id: string,
   filePath: string,
-  jobDirectory: string,
-  expectations: MediaExpectations | null,
-  sourceUrl: string,
   lease: WorkerLease
-): Promise<void> {
-  // Frozen v3 references never re-read current GUI policy. The dynamic Sonarr
-  // tolerance remains only for shipped unversioned/v1/v2 compatibility.
-  const tolerance =
-    expectations?.version === 3 ||
-    expectations?.version === 4 ||
-    expectations?.version === 5 ||
-    expectations?.version === 6 ||
-    expectations?.version === 7
-      ? 0
-      : Number(
-          configuredSetting(
-            "matching.sonarr.tolerancePercent",
-            await getSetting("matching.sonarr.tolerancePercent")
-          )
-        );
-  const original = await fs.lstat(filePath);
-  let facts = sourceAudioExpectation(expectations)
-    ? await probeJobMedia(filePath, jobDirectory, expectations, tolerance, sourceUrl, lease.signal)
-    : await probeJobMedia(filePath, jobDirectory, expectations, tolerance, undefined, lease.signal);
-  if (facts.audioLanguageCorrection) {
-    const { correctGermanAudioTag } = await import("./ffmpeg");
-    // Arr reads the actual file tags. Publish only the re-probed copy, keeping
-    // the newly downloaded original intact until the replacement is ready.
-    const correction = facts.audioLanguageCorrection;
-    const temporary = await fs.mkdtemp(path.join(jobDirectory, ".audio-language-"));
-    try {
-      const candidate = path.join(temporary, "media" + path.extname(filePath));
-      await correctGermanAudioTag(filePath, candidate, lease.signal);
-      const verified = await probeJobMedia(
-        candidate,
-        temporary,
-        expectations,
-        tolerance,
-        sourceUrl,
-        lease.signal
-      );
-      if (verified.audioLanguageCorrection) throw new Error("Audio metadata correction failed");
-      const current = await fs.lstat(filePath);
-      if (
-        !current.isFile() ||
-        current.isSymbolicLink() ||
-        current.dev !== original.dev ||
-        current.ino !== original.ino ||
-        current.size !== original.size ||
-        current.mtimeMs !== original.mtimeMs
-      )
-        throw new Error("Completed media file changed");
-      lease.checkTransfer();
-      await fs.rename(candidate, filePath);
-      facts = { ...verified, audioLanguageCorrection: correction };
-    } finally {
-      await fs.rm(temporary, { recursive: true, force: true });
-    }
-  }
+): Promise<number> {
   lease.checkTransfer();
   const stats = await fs.lstat(filePath);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0)
@@ -89,10 +28,11 @@ export async function completeValidatedDownload(
         size: stats.size,
         filePath,
         completedAt: new Date(),
-        mediaValidation: JSON.stringify({ version: expectations?.version ?? 1, ...facts }),
+        mediaValidation: null,
       },
     });
   });
+  return stats.size;
 }
 
 /**

@@ -9,7 +9,6 @@ import {
 } from "./newznab";
 import { decodeMediaExpectations, generateFakeNzb } from "./nzb-release";
 import { parseNzbContent } from "./download";
-import { validateMediaProbe } from "@/server/media-probe";
 
 const item: ApiResultItem = {
   channel: "ARTE.DE",
@@ -217,28 +216,6 @@ describe("rendition resolution, not catalogue slot quality", () => {
           generateFakeNzb({ title: release.title, url: release.link, mediaExpectations: expected })
         )?.mediaExpectations
       ).toEqual(expected);
-      const probe = (width: number, height: number) => ({
-        format: { format_name: "matroska", duration: "7200" },
-        streams: [
-          { codec_type: "video", codec_name: "h264", width, height },
-          {
-            codec_type: "audio",
-            codec_name: "aac",
-            channels: 2,
-            sample_rate: "48000",
-            tags: { language: "deu" },
-          },
-        ],
-      });
-      expect(validateMediaProbe(probe(1280, 720), expected, 10).expectedChecks.resolution).toBe(
-        "passed"
-      );
-      expect(() => validateMediaProbe(probe(1920, 1080), expected, 10)).toThrow(
-        "Local media validation failed"
-      );
-      expect(() => validateMediaProbe(probe(1920, 720), expected, 10)).toThrow(
-        "Local media validation failed"
-      );
     }
   );
 });
