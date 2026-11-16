@@ -347,7 +347,9 @@ for (const provider of ["sqlite", "postgresql"] as const) {
               key: { in: ["matching.sonarr.tolerancePercent", "matching.movie.tolerancePercent"] },
             },
           });
-      }
+      },
+      // Migrations, real queue writes and restart must finish before teardown.
+      30_000
     );
   }
 }
