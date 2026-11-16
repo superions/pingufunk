@@ -73,9 +73,11 @@ vom Indexer-Zugriffsweg.
 
 ## Optionale Radarr-Metadatenanbindung
 
-Standardmäßig aus. Eine explizit konfigurierte Instanz, aktuell Radarr 6.x
-mit API v3; andere Hauptversionen werden nicht ohne Feld-/Versionsevidenz
-zugelassen. Produktregressionen verwenden ausschließlich synthetische Daten;
+Standardmäßig aus. Eine explizit konfigurierte Instanz wird über API v3
+angesprochen. Die tatsächlichen API-Antworten und Filmidentitäten bestimmen die
+Kompatibilität; die Produkt-Hauptversion sperrt keine gültigen Antworten.
+Radarr 7 ist über denselben RSS-/Suchvertrag abgedeckt. Produktregressionen
+verwenden ausschließlich synthetische Daten;
 installationsbezogene Betriebsprüfung und Secrets bleiben außerhalb dieses Repos.
 
 Nichtgeheime serverseitige Settings über die vorhandene Settings-API:

@@ -81,10 +81,7 @@ export async function getRadarrMonitoredMovies(
     const stored = inventories.get(key);
     if (stored && Date.now() < stored.expiresAt) return structuredClone(stored.value);
     const client = createReadOnlyArrJsonClient(url, credential.value);
-    const status = z
-      .object({ version: z.string().regex(/^6\.\d+\.\d+(?:\.\d+)?$/) })
-      .safeParse(await client("api/v3/system/status", undefined, { requestBudget: budget }));
-    if (!status.success) throw new RadarrUnavailableError();
+    // The API-v3 payload below defines compatibility; product versions do not.
     const payload = z
       .array(z.unknown())
       .max(2000)
@@ -138,15 +135,12 @@ export async function getRadarrMovie(
     const stored = cache.get(key);
     if (stored && Date.now() < stored.expiresAt) return structuredClone(stored.value);
     const client = createReadOnlyArrJsonClient(baseUrl, credential.value);
-    const status = z
-      .object({ version: z.string().regex(/^6\.\d+\.\d+(?:\.\d+)?$/) })
-      .safeParse(await client("api/v3/system/status", undefined, { requestBudget: budget }));
-    if (!status.success) throw new RadarrUnavailableError();
+    // The API-v3 payload below defines compatibility; product versions do not.
     const query = new URLSearchParams(
       tmdbId !== null ? { tmdbId: String(tmdbId) } : { imdbId: imdbId! }
     );
     // Prefer persisted library metadata: the tmdbId filter is documented by
-    // Radarr 6 and does not depend on Skyhook being reachable during a search.
+    // API v3 and does not depend on Skyhook being reachable during a search.
     // A malformed/mismatched local response must not become a remote fallback.
     let payload: unknown;
     if (tmdbId !== null) {
